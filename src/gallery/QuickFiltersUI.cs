@@ -21,7 +21,6 @@ namespace VPB
         private const float HeaderSortGapRef = 6f;
         /// <summary>Icon pad on ButtonSizeRef squares — matches side-rail / sort chips (glyph fills hit).</summary>
         private const float RowActionIconPadRef = 5f;
-        private const float ChromeIconPadRef = 5f;
         private const float SoftDeleteUndoSeconds = 5f;
 
         // Match Settings float chrome (neutral greys).
@@ -68,10 +67,8 @@ namespace VPB
         private GameObject floatRedoBtnGO;
         private GameObject floatRemoveModeBtnGO;
         private Image floatRemoveModeBtnIconImage;
-        private Text floatRemoveModeBtnText;
         private GameObject floatPresetUndoBtnGO;
         private GameObject searchFilterClearGo;
-        private const float FooterTextBtnWRef = 72f;
         private GameObject resizeHandleGO;
         private GameObject collapsePaletteGO;
         private List<GameObject> activeButtons = new List<GameObject>();
@@ -202,7 +199,7 @@ namespace VPB
                 titleRT.sizeDelta = new Vector2(0f, titleH);
             }
             UI.AddHLG(
-                titleBarGO, spacing: 4f, padding: UI.Pad(6, 6, 4, 4),
+                titleBarGO, spacing: 0f, padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -210,7 +207,8 @@ namespace VPB
             Text grip = UI.CreateLabel(titleBarGO, "\u2807", GalleryUiDesignTokens.PopupMenuRowFontRef,
                 GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
                 raycastTarget: false, name: "Grip");
-            UI.AddLE(grip.gameObject, minWidth: 18f, preferredWidth: 18f);
+            UI.ApplyFloatTitleBarMetrics(
+                titleBarGO.GetComponent<HorizontalLayoutGroup>(), grip.gameObject, 1f);
 
             UI.CreateFloatTitleWindowIcon(
                 titleBarGO, "vpb_icons/filter.png", GalleryUiDesignTokens.FloatTitleWindowIconSizeRef);
@@ -349,7 +347,7 @@ namespace VPB
                     if (clearBg != null) clearBg.color = new Color(0f, 0f, 0f, 0f);
                     try
                     {
-                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", new Color(0.6f, 0.6f, 0.6f));
+                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
                         if (xSpr != null)
                             UI.AddIconToButton(clearGo, xSpr, 6f, new Color(0f, 0f, 0f, 0f));
                     }
@@ -507,7 +505,8 @@ namespace VPB
             ContentSizeFitter csf = scrollContentGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // Float footer: Dock / Undo / Redo / Remove as Settings chrome text buttons + resize.
+            // Float footer: Dock · Undo/Redo/Remove · soft-delete Undo as square icons + resize.
+            // Icons keep chrome under QuickFiltersFloatMinWidthRef (text labels overflowed → squeeze/drift).
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef;
             footerGO = UI.CreateChildRT(containerGO, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
@@ -520,12 +519,11 @@ namespace VPB
                 footerRT.sizeDelta = new Vector2(0f, footerH);
             }
             UI.AddHLG(
-                footerGO, spacing: 6f, padding: UI.Pad(8, 8, 4, 4),
+                footerGO, spacing: 4f, padding: UI.Pad(6, 6, 4, 4),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
-            if (footerGO.GetComponent<RectMask2D>() == null)
-                footerGO.AddComponent<RectMask2D>();
+            // No footer RectMask2D — clips bottom-right resize grip / hover rim (DetailStrip same).
 
             // Full-footer drag hit (behind Dock/Undo/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(footerGO);
@@ -536,11 +534,15 @@ namespace VPB
                 footerDrag.OnMoved = OnFloatMoved;
             }
 
-            floatDockBtnGO = CreateFooterChromeTextBtn(
-                footerGO, FooterTextBtnWRef, chromeSz,
-                VPBTranslation.T("gallery.import.dock", "Dock"),
-                GalleryUiColorTokens.SurfaceMid, CloseAndDock);
-            floatDockBtnGO.name = "FloatDock";
+            Color footerIconBg = GalleryUiColorTokens.ChromeIconWell;
+            floatDockBtnGO = UI.CreateFloatChromeIconButton(
+                footerGO.transform, chromeSz, "vpb_icons/panel_bottom.png", footerIconBg, CloseAndDock);
+            if (floatDockBtnGO != null)
+            {
+                floatDockBtnGO.name = "FloatDock";
+                if (floatDockBtnGO.transform.Find("Icon") == null)
+                    StyleChromeIconBtn(floatDockBtnGO, chromeSz, "vpb_icons/chevron_down.png", footerIconBg);
+            }
             var dockHover = floatDockBtnGO.AddComponent<UIHoverDelegate>();
             dockHover.OnHoverChange += (enter) =>
             {
@@ -551,14 +553,12 @@ namespace VPB
                 else panel.SetStatus(null);
             };
 
-            floatUndoBtnGO = CreateFooterChromeTextBtn(
-                footerGO, FooterTextBtnWRef, chromeSz,
-                VPBTranslation.T("gallery.tooltip.undo_short", "Undo"),
-                GalleryUiColorTokens.SurfaceMid, () =>
+            floatUndoBtnGO = UI.CreateFloatChromeIconButton(
+                footerGO.transform, chromeSz, "vpb_icons/undo.png", footerIconBg, () =>
                 {
                     if (panel != null) panel.QuickMenu_Undo();
                 });
-            floatUndoBtnGO.name = "FloatUndo";
+            if (floatUndoBtnGO != null) floatUndoBtnGO.name = "FloatUndo";
             var undoHover = floatUndoBtnGO.AddComponent<UIHoverDelegate>();
             undoHover.OnHoverChange += (enter) =>
             {
@@ -567,14 +567,12 @@ namespace VPB
                 else panel.SetStatus(null);
             };
 
-            floatRedoBtnGO = CreateFooterChromeTextBtn(
-                footerGO, FooterTextBtnWRef, chromeSz,
-                VPBTranslation.T("gallery.tooltip.redo_short", "Redo"),
-                GalleryUiColorTokens.SurfaceMid, () =>
+            floatRedoBtnGO = UI.CreateFloatChromeIconButton(
+                footerGO.transform, chromeSz, "vpb_icons/redo.png", footerIconBg, () =>
                 {
                     if (panel != null) panel.QuickMenu_Redo();
                 });
-            floatRedoBtnGO.name = "FloatRedo";
+            if (floatRedoBtnGO != null) floatRedoBtnGO.name = "FloatRedo";
             var redoHover = floatRedoBtnGO.AddComponent<UIHoverDelegate>();
             redoHover.OnHoverChange += (enter) =>
             {
@@ -583,19 +581,23 @@ namespace VPB
                 else panel.SetStatus(null);
             };
 
-            // Scene Remove Item Mode (not preset delete).
-            floatRemoveModeBtnGO = CreateFooterChromeTextBtn(
-                footerGO, FooterTextBtnWRef + 16f, chromeSz,
-                VPBTranslation.T("quickfilters.footer_remove", "Remove"),
-                GalleryUiColorTokens.SurfaceMid, () =>
+            // Scene Remove Item Mode (not preset delete) — gallery_remove glyph to avoid trash collision.
+            floatRemoveModeBtnGO = UI.CreateFloatChromeIconButton(
+                footerGO.transform, chromeSz, "vpb_icons/gallery_remove.png",
+                RemoveModeRailBackdrop, () =>
                 {
                     if (panel != null) panel.ToggleRemoveMode(false, false);
                 });
-            floatRemoveModeBtnGO.name = "FloatRemoveMode";
-            floatRemoveModeBtnIconImage = null;
-            floatRemoveModeBtnText = floatRemoveModeBtnGO.GetComponentInChildren<Text>(true);
-            if (floatRemoveModeBtnGO.GetComponent<UIHoverBorder>() == null)
-                floatRemoveModeBtnGO.AddComponent<UIHoverBorder>();
+            if (floatRemoveModeBtnGO != null)
+            {
+                floatRemoveModeBtnGO.name = "FloatRemoveMode";
+                if (floatRemoveModeBtnGO.transform.Find("Icon") == null)
+                    StyleChromeIconBtn(floatRemoveModeBtnGO, chromeSz, "vpb_icons/list_remove.png", RemoveModeRailBackdrop);
+                Transform rmIconTr = floatRemoveModeBtnGO.transform.Find("Icon");
+                floatRemoveModeBtnIconImage = rmIconTr != null ? rmIconTr.GetComponent<Image>() : null;
+                if (floatRemoveModeBtnGO.GetComponent<UIHoverBorder>() == null)
+                    floatRemoveModeBtnGO.AddComponent<UIHoverBorder>();
+            }
             var rmHover = floatRemoveModeBtnGO.AddComponent<UIHoverDelegate>();
             rmHover.OnHoverChange += (enter) =>
             {
@@ -610,11 +612,10 @@ namespace VPB
             };
             try { SyncRemoveModeButton(panel != null && panel.IsRemoveModeActive); } catch { }
 
-            floatPresetUndoBtnGO = CreateFooterChromeTextBtn(
-                footerGO, FooterTextBtnWRef + 24f, chromeSz,
-                VPBTranslation.T("quickfilters.footer_soft_undo", "Undelete"),
-                GalleryUiColorTokens.SurfaceMid, TryUndoSoftDelete);
-            floatPresetUndoBtnGO.name = "FloatPresetUndo";
+            floatPresetUndoBtnGO = UI.CreateFloatChromeIconButton(
+                footerGO.transform, chromeSz, "vpb_icons/undo.png",
+                new Color(0.16f, 0.36f, 0.28f, 1f), TryUndoSoftDelete);
+            if (floatPresetUndoBtnGO != null) floatPresetUndoBtnGO.name = "FloatPresetUndo";
             var presetUndoHover = floatPresetUndoBtnGO.AddComponent<UIHoverDelegate>();
             presetUndoHover.OnHoverChange += (enter) =>
             {
@@ -643,6 +644,7 @@ namespace VPB
             resizeHandleGO.name = "ResizeHandle";
             Image rhImg = resizeHandleGO.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
+            UI.EnsureFloatChromeHoverBorder(resizeHandleGO);
             StyleChromeIconBtn(resizeHandleGO, rh, "vpb_icons/chevrons_down_right.png", UI.IconButtonBackdrop);
             var resizer = resizeHandleGO.AddComponent<UIFloatPanelResize>();
             resizer.Target = containerRT;
@@ -666,79 +668,12 @@ namespace VPB
 
         private static void StyleChromeIconBtn(GameObject go, float size, string iconPath, Color? backdropOverride = null)
         {
-            if (go == null) return;
-            Image img = go.GetComponent<Image>();
-            if (img != null)
-                img.color = backdropOverride.HasValue ? backdropOverride.Value : new Color(0f, 0f, 0f, 0.01f);
-            Button btn = go.GetComponent<Button>();
-            if (btn != null) btn.transition = Selectable.Transition.None;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = size;
-            le.preferredHeight = size;
-            le.minWidth = size;
-            le.minHeight = size;
-            le.flexibleWidth = 0f;
-            le.flexibleHeight = 0f;
-            Text label = go.GetComponentInChildren<Text>(true);
-            if (label != null) label.gameObject.SetActive(false);
-            float pad = ChromeIconPadRef;
-            try
-            {
-                Sprite spr = UI.LoadIconSprite(iconPath, UI.BarIconGlyphTint);
-                if (spr != null)
-                {
-                    Transform existing = go.transform.Find("Icon");
-                    if (existing != null)
-                    {
-                        Image iconImg = existing.GetComponent<Image>();
-                        if (iconImg != null)
-                        {
-                            iconImg.sprite = spr;
-                            iconImg.color = Color.white;
-                            RectTransform irt = existing as RectTransform;
-                            if (irt != null)
-                                irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
-                        }
-                    }
-                    else
-                        UI.AddIconToButton(go, spr, pad, backdropOverride ?? new Color(0f, 0f, 0f, 0f));
-                }
-            }
-            catch { }
+            UI.StyleFloatChromeIconButton(go, size, iconPath, backdropOverride);
         }
 
-        private static GameObject CreateFooterChromeTextBtn(
-            GameObject parent, float width, float height, string label, Color bg, UnityEngine.Events.UnityAction onClick)
+        private static void ScaleChromeIconBtn(GameObject go, float size, float s)
         {
-            GameObject go = UI.CreateChromeLayoutButton(
-                parent.transform, width, height, label,
-                GalleryUiDesignTokens.PopupMenuRowFontRef, bg, onClick);
-            LayoutElement le = go != null ? go.GetComponent<LayoutElement>() : null;
-            if (le == null && go != null) le = go.AddComponent<LayoutElement>();
-            if (le != null)
-            {
-                le.minWidth = width;
-                le.preferredWidth = width;
-                le.minHeight = height;
-                le.preferredHeight = height;
-                le.flexibleWidth = 0f;
-            }
-            return go;
-        }
-
-        private static void ScaleFooterChromeTextBtn(GameObject go, float width, float height, float s = 1f)
-        {
-            if (go == null) return;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) le = go.AddComponent<LayoutElement>();
-            le.minWidth = width;
-            le.preferredWidth = width;
-            le.minHeight = height;
-            le.preferredHeight = height;
-            Text t = go.GetComponentInChildren<Text>(true);
-            if (t != null)
-                GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
+            UI.ScaleFloatChromeIconButton(go, size, s);
         }
 
         private void RefreshPresetsFilterClearVisible(GameObject clearGo)
@@ -747,29 +682,6 @@ namespace VPB
             if (clearGo == null) return;
             bool has = searchInput != null && !string.IsNullOrEmpty(searchInput.text);
             try { clearGo.SetActive(has); } catch { }
-        }
-
-        private static void ScaleChromeIconBtn(GameObject go, float size, float s)
-        {
-            if (go == null || size <= 0f) return;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = size;
-            le.preferredHeight = size;
-            le.minWidth = size;
-            le.minHeight = size;
-            RectTransform rt = go.GetComponent<RectTransform>();
-            if (rt != null) rt.sizeDelta = new Vector2(size, size);
-            Transform iconTr = go.transform.Find("Icon");
-            if (iconTr != null)
-            {
-                RectTransform irt = iconTr as RectTransform;
-                if (irt != null)
-                {
-                    float pad = ChromeIconPadRef * s;
-                    irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
-                }
-            }
         }
 
         private string GetSortStatusTip()
@@ -868,11 +780,9 @@ namespace VPB
                     GalleryUiMetrics.ApplyFont(titleBarLabel, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
                 UI.LayoutFloatTitleWindowIcon(titleBarGO, GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s);
                 HorizontalLayoutGroup titleHlg = titleBarGO.GetComponent<HorizontalLayoutGroup>();
-                if (titleHlg != null)
-                {
-                    titleHlg.spacing = 4f * s;
-                    titleHlg.padding = UI.Pad(6, 6, 4, 4, s);
-                }
+                Transform gripTr = titleBarGO.transform.Find("Grip");
+                UI.ApplyFloatTitleBarMetrics(
+                    titleHlg, gripTr != null ? gripTr.gameObject : null, s);
                 ScaleChromeIconBtn(collapseBtnGO, sortSq, s);
                 ScaleChromeIconBtn(closeBtnGO, sortSq, s);
                 ScaleCollapsePaletteChrome(sortSq, s);
@@ -1207,15 +1117,14 @@ namespace VPB
                 HorizontalLayoutGroup footerHlg = footerGO.GetComponent<HorizontalLayoutGroup>();
                 if (footerHlg != null)
                 {
-                    footerHlg.spacing = 6f * s;
-                    footerHlg.padding = UI.Pad(8, 8, 4, 4, s);
+                    footerHlg.spacing = 4f * s;
+                    footerHlg.padding = UI.Pad(6, 6, 4, 4, s);
                 }
-                float textBtnW = FooterTextBtnWRef * s;
-                ScaleFooterChromeTextBtn(floatDockBtnGO, textBtnW, sortSq, s);
-                ScaleFooterChromeTextBtn(floatUndoBtnGO, textBtnW, sortSq, s);
-                ScaleFooterChromeTextBtn(floatRedoBtnGO, textBtnW, sortSq, s);
-                ScaleFooterChromeTextBtn(floatRemoveModeBtnGO, (FooterTextBtnWRef + 16f) * s, sortSq, s);
-                ScaleFooterChromeTextBtn(floatPresetUndoBtnGO, (FooterTextBtnWRef + 24f) * s, sortSq, s);
+                ScaleChromeIconBtn(floatDockBtnGO, sortSq, s);
+                ScaleChromeIconBtn(floatUndoBtnGO, sortSq, s);
+                ScaleChromeIconBtn(floatRedoBtnGO, sortSq, s);
+                ScaleChromeIconBtn(floatRemoveModeBtnGO, sortSq, s);
+                ScaleChromeIconBtn(floatPresetUndoBtnGO, sortSq, s);
                 ScaleChromeIconBtn(resizeHandleGO, sortSq, s);
                 SyncMergeChrome();
                 SyncSoftDeleteUndoButton();
@@ -2407,7 +2316,7 @@ namespace VPB
             Refresh();
         }
 
-        /// <summary>Match side-rail Remove Item Mode selected rim + label tint.</summary>
+        /// <summary>Match side-rail Remove Item Mode selected rim + glyph tint.</summary>
         public void SyncRemoveModeButton(bool active)
         {
             Color c = active ? RemoveModeOutlineActive : RemoveModeOutlineIdle;
@@ -2419,16 +2328,7 @@ namespace VPB
             catch { }
             try
             {
-                if (floatRemoveModeBtnText != null)
-                    floatRemoveModeBtnText.color = active ? c : UI.PopupText;
-            }
-            catch { }
-            try
-            {
                 if (floatRemoveModeBtnGO == null) return;
-                Image bg = floatRemoveModeBtnGO.GetComponent<Image>();
-                if (bg != null)
-                    bg.color = active ? RemoveModeRailBackdrop : GalleryUiColorTokens.SurfaceMid;
                 UIHoverBorder hb = floatRemoveModeBtnGO.GetComponent<UIHoverBorder>();
                 if (hb == null) return;
                 hb.isSelected = active;
@@ -3017,8 +2917,11 @@ namespace VPB
 
         private void OnFloatResizing()
         {
+            // Capture live size only — full ApplyLayout rewrites sizeDelta via ref÷scale×scale
+            // every tick (drift) and rebuilds chrome (jitter / grip clip). End-drag applies layout.
+            // Same contract as ImportSidebar OnImportSidebarFloatResizing.
             CaptureFloatGeometryToMemory();
-            try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
+            try { SyncFloatScrollHostInsetsDuringResize(); } catch { }
         }
 
         private void OnFloatResized()
@@ -3026,6 +2929,20 @@ namespace VPB
             CaptureFloatGeometryToMemory();
             PersistGeometry();
             try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
+        }
+
+        /// <summary>Live resize: keep scroll band under title/header and above footer without full ApplyLayout.</summary>
+        private void SyncFloatScrollHostInsetsDuringResize()
+        {
+            if (!detached || floatCollapsed || scrollHostGO == null) return;
+            float s = panel != null && panel.ChromeScale > 0f ? panel.ChromeScale : 1f;
+            float titleH = GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef * s;
+            float headerH = GalleryUiDesignTokens.FloatSearchRowHeightRef * s;
+            float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef * s;
+            RectTransform shRT = scrollHostGO.GetComponent<RectTransform>();
+            if (shRT == null) return;
+            shRT.offsetMin = new Vector2(0f, footerH);
+            shRT.offsetMax = new Vector2(0f, -(titleH + headerH));
         }
 
         private void CaptureFloatGeometryToMemory()

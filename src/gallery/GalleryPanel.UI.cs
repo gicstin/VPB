@@ -2423,8 +2423,13 @@ namespace VPB
 
         private void ToggleGalleryShowHiddenPackages()
         {
-            // Quick-menu / overflow: same tri-state cycle as Filter menu Hidden row.
-            CycleBrowseHiddenFilter();
+            // Quick-menu / overflow: cycle Off → Show → Only → Off (Filter menu uses visible 3-way).
+            BrowseFilterCycle next = BrowseFilterCycle.Off;
+            if (_browseHiddenCycle == BrowseFilterCycle.Off)
+                next = BrowseFilterCycle.Apply;
+            else if (_browseHiddenCycle == BrowseFilterCycle.Apply)
+                next = BrowseFilterCycle.Only;
+            SetBrowseHiddenCycle(next, refresh: true);
         }
 
         private void ToggleAutoHideMode()

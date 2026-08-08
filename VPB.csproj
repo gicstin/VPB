@@ -414,6 +414,8 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.SceneAtomCache.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.FilterPresets.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PluginsCatalog.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.PkgNewest.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.PkgLicense.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />

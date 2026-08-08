@@ -40,7 +40,7 @@ namespace VPB
         public SortState SortState;
         public int BrowseHiddenMode = 0;
         public int BrowseAlwaysLoadedMode = 0;
-        public int BrowseOldVersionsMode = 0;
+        public int BrowseOldVersionsMode = 1;
         public int BrowseLoadedMode = 0;
         public int BrowseUnusedMode = 0;
         /// <summary>Title-bar Filter license type. Empty = off.</summary>
@@ -297,8 +297,9 @@ namespace VPB
             {
                 QuickFilterEntry L = leaves[i];
                 if (L == null) continue;
-                if (L.UserTagAvailFilterMode == 2) utMode = 2; // FilterUntagged wins if any leaf
-                else if (utMode != 2 && L.UserTagAvailFilterMode == 1) utMode = 1;
+                if (L.UserTagAvailFilterMode == 2 || L.UserTagAvailFilterMode == 3)
+                    utMode = L.UserTagAvailFilterMode; // presence browse wins if any leaf
+                else if (utMode != 2 && utMode != 3 && L.UserTagAvailFilterMode == 1) utMode = 1;
                 if (L.UserTagInheritVarToChildren != 0) utInherit = 1;
                 AppendUniqueStrings(dest.UserTags, utSeen, L.UserTags);
                 AppendUniqueStrings(dest.ExcludedUserTags, xutSeen, L.ExcludedUserTags);
@@ -312,7 +313,7 @@ namespace VPB
             dest.LicenseFilter = AgreeLicense(leaves);
             dest.BrowseHiddenMode = AgreeIntField(leaves, 1, 0);
             dest.BrowseAlwaysLoadedMode = AgreeIntField(leaves, 2, 0);
-            dest.BrowseOldVersionsMode = AgreeIntField(leaves, 3, 0);
+            dest.BrowseOldVersionsMode = AgreeIntField(leaves, 3, 1);
             dest.BrowseLoadedMode = AgreeIntField(leaves, 4, 0);
             dest.BrowseUnusedMode = AgreeIntField(leaves, 5, 0);
 
@@ -485,7 +486,7 @@ namespace VPB
             {
                 entry.BrowseHiddenMode = node["BrowseHiddenMode"] != null ? node["BrowseHiddenMode"].AsInt : 0;
                 entry.BrowseAlwaysLoadedMode = node["BrowseAlwaysLoadedMode"] != null ? node["BrowseAlwaysLoadedMode"].AsInt : 0;
-                entry.BrowseOldVersionsMode = node["BrowseOldVersionsMode"] != null ? node["BrowseOldVersionsMode"].AsInt : 0;
+                entry.BrowseOldVersionsMode = node["BrowseOldVersionsMode"] != null ? node["BrowseOldVersionsMode"].AsInt : 1;
                 entry.BrowseLoadedMode = node["BrowseLoadedMode"] != null ? node["BrowseLoadedMode"].AsInt : 0;
                 entry.BrowseUnusedMode = node["BrowseUnusedMode"] != null ? node["BrowseUnusedMode"].AsInt : 0;
             }

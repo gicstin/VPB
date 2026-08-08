@@ -716,8 +716,9 @@ namespace VPB
             GameObject expandBtn = UI.CreateUIButton(
                 row, expandW, rowH, "", font, 0, 0, AnchorPresets.middleLeft, null);
             expandBtn.name = "Expand";
+            // Square well — same ratio as Strip Keep (expandW == rowH).
             UI.AddLE(expandBtn, minWidth: expandW, preferredWidth: expandW, flexibleWidth: 0f,
-                minHeight: rowH, preferredHeight: rowH, flexibleHeight: 0f);
+                minHeight: expandW, preferredHeight: expandW, flexibleHeight: 0f);
 
             GameObject dragHost = new GameObject("DragHost");
             dragHost.transform.SetParent(row.transform, false);
@@ -899,21 +900,7 @@ namespace VPB
             if (expandTr != null)
             {
                 Button expandBtn = expandTr.GetComponent<Button>();
-                Image expandBg = expandTr.GetComponent<Image>();
-                if (expandBg != null)
-                {
-                    expandBg.color = canExpand
-                        ? new Color(0.16f, 0.17f, 0.20f, 1f)
-                        : new Color(0.10f, 0.10f, 0.12f, 0f);
-                }
-                Text expandGlyph = expandTr.GetComponentInChildren<Text>(true);
-                if (expandGlyph != null)
-                {
-                    expandGlyph.text = !canExpand ? "" : (expanded ? "▼" : "▶");
-                    expandGlyph.color = canExpand
-                        ? new Color(0.82f, 0.84f, 0.88f, 1f)
-                        : new Color(0.35f, 0.35f, 0.38f, 0f);
-                }
+                UI.ApplyTreeRowExpandIcon(expandTr.gameObject, canExpand, expanded, s, transparentWhenEmpty: true);
                 if (expandBtn != null)
                 {
                     expandBtn.onClick.RemoveAllListeners();
@@ -923,9 +910,6 @@ namespace VPB
                         expandBtn.onClick.AddListener(() => TogglePluginsFloatExpand(key));
                     }
                 }
-                Transform iconTr = expandTr.Find("Icon");
-                if (iconTr != null) iconTr.gameObject.SetActive(false);
-                if (expandGlyph != null) expandGlyph.gameObject.SetActive(true);
             }
 
             Transform dragTr = row.transform.Find("DragHost");

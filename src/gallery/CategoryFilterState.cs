@@ -28,8 +28,8 @@ namespace VPB
         public int BrowseHiddenMode = 0;
         /// <summary>Title-bar Filter Always-loaded cycle: 0=Off, 1=Prefer/sort, 2=Only.</summary>
         public int BrowseAlwaysLoadedMode = 0;
-        /// <summary>Title-bar Filter Old-versions cycle: 0=Off, 1=Hide old, 2=Old only.</summary>
-        public int BrowseOldVersionsMode = 0;
+        /// <summary>Title-bar Filter Old-versions: 0=All versions, 1=Newest only (default), 2=Old only.</summary>
+        public int BrowseOldVersionsMode = 1;
         /// <summary>Title-bar Filter Loaded cycle: 0=Off, 1=All Loaded, 2=All Unloaded.</summary>
         public int BrowseLoadedMode = 0;
         /// <summary>Title-bar Filter Unused cycle: 0=Off, 1=Unused first, 2=Unused only.</summary>

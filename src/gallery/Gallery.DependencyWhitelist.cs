@@ -298,9 +298,7 @@ namespace VPB
             UI.CreateLabel(resizeHandle, "◢", GalleryUiMetrics.GlyphFontFromControlHeight(40f, 1f, GalleryUiDesignTokens.FontMinRef), new Color(0.6f, 0.6f, 0.6f, 1f), TextAnchor.MiddleCenter, raycastTarget: false, name: "Triangle");
 
             // Border-only hover (no fill/text color change)
-            var rhHoverBorder = resizeHandle.AddComponent<UIHoverBorder>();
-            rhHoverBorder.hoverColor = new Color(1f, 1f, 0f, 1f);
-            rhHoverBorder.borderSize = 2f;
+            UI.EnsureFloatChromeHoverBorder(resizeHandle, inward: false);
 
             var resizer = resizeHandle.AddComponent<UIFloatPanelResize>();
             resizer.Target = panelRT;

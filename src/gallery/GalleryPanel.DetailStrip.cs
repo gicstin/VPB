@@ -6637,8 +6637,9 @@ namespace VPB
                 norm = VpbLocalDatabase.NormalizeGalleryUserTagName(norm);
                 if (string.IsNullOrEmpty(norm)) return;
 
-                // Exit Not-tagged browse if armed; restore prior F/T work mode without forcing Filter mode.
-                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                // Exit presence browse if armed; restore prior F/T work mode without forcing Filter mode.
+                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                    || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
                 {
                     try { ClearUntaggedTaggedPinKeys(); } catch { }
                     UserTagAvailMode restore = _userTagModeBeforeUntagged == UserTagAvailMode.Tag
@@ -7191,8 +7192,8 @@ namespace VPB
             if (headerImg != null) headerImg.raycastTarget = true;
             UI.AddHLG(
                 _detailStripTagMenuHeaderGO,
-                spacing: 4f,
-                padding: UI.Pad(6f, 6f, 4f, 4f),
+                spacing: 0f,
+                padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true,
                 childControlHeight: true,
@@ -7216,7 +7217,9 @@ namespace VPB
                 raycastTarget: false,
                 name: "Grip");
             GalleryUiMetrics.ApplyFont(grip, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            UI.AddLE(grip.gameObject, minWidth: 18f, preferredWidth: 18f);
+            UI.ApplyFloatTitleBarMetrics(
+                _detailStripTagMenuHeaderGO.GetComponent<HorizontalLayoutGroup>(),
+                grip.gameObject, s);
 
             UI.CreateFloatTitleWindowIcon(
                 _detailStripTagMenuHeaderGO, "vpb_icons/tags.png",
@@ -7328,7 +7331,7 @@ namespace VPB
                     if (clearBg != null) clearBg.color = new Color(0f, 0f, 0f, 0f);
                     try
                     {
-                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", new Color(0.6f, 0.6f, 0.6f));
+                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
                         if (xSpr != null)
                             UI.AddIconToButton(_detailStripTagMenuFilterClearGo, xSpr, 6f, new Color(0f, 0f, 0f, 0f));
                     }
@@ -7507,6 +7510,7 @@ namespace VPB
             _detailStripTagMenuResizeGO.name = "ResizeHandle";
             Image rhImg = _detailStripTagMenuResizeGO.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
+            UI.EnsureFloatChromeHoverBorder(_detailStripTagMenuResizeGO);
             try
             {
                 Sprite rhSpr = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
@@ -8809,21 +8813,21 @@ namespace VPB
                     headerLe.minHeight = headerH;
                 }
                 HorizontalLayoutGroup headerHlg = _detailStripTagMenuHeaderGO.GetComponent<HorizontalLayoutGroup>();
+                Transform gripTr = _detailStripTagMenuHeaderGO.transform.Find("Grip");
+                UI.ApplyFloatTitleBarMetrics(
+                    headerHlg, gripTr != null ? gripTr.gameObject : null, s);
                 if (headerHlg != null)
                 {
                     headerHlg.childForceExpandHeight = false;
                     headerHlg.childForceExpandWidth = false;
                     headerHlg.childControlWidth = true;
                     headerHlg.childControlHeight = true;
-                    headerHlg.padding = UI.Pad(6f, 6f, 4f, 4f, s);
-                    headerHlg.spacing = 4f * s;
                 }
                 if (_detailStripTagMenuSelText != null)
                 {
                     GalleryUiMetrics.ApplyFont(_detailStripTagMenuSelText, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
                     _detailStripTagMenuSelText.alignment = TextAnchor.MiddleLeft;
                 }
-                Transform gripTr = _detailStripTagMenuHeaderGO.transform.Find("Grip");
                 Text grip = gripTr != null ? gripTr.GetComponent<Text>() : null;
                 if (grip != null)
                     GalleryUiMetrics.ApplyFont(grip, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);

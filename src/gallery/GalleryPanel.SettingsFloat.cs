@@ -128,7 +128,7 @@ namespace VPB
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef * s;
             float filterH = GalleryUiDesignTokens.FloatSearchRowHeightRef * s;
             float searchH = GalleryUiDesignTokens.SearchFieldHeightRef * s;
-            float rowH = 80f * s;
+            float rowH = GalleryUiDesignTokens.SettingsFloatRowHeightRef * s;
 
             LoadSettingsFloatGeometryFromConfig();
             float panelWRef = GalleryUiDesignTokens.SettingsFloatDefaultWidthRef;
@@ -184,8 +184,8 @@ namespace VPB
                 _settingsFloatTitleBarRT.anchoredPosition = Vector2.zero;
                 _settingsFloatTitleBarRT.sizeDelta = new Vector2(0f, titleH);
             }
-            UI.AddHLG(
-                titleBar, spacing: 4f * s, padding: UI.Pad(6, 6, 4, 4, s),
+            HorizontalLayoutGroup titleHlg = UI.AddHLG(
+                titleBar, spacing: 0f, padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -196,7 +196,7 @@ namespace VPB
                 GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
                 raycastTarget: false, name: "Grip");
             GalleryUiMetrics.ApplyFont(grip, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            UI.AddLE(grip.gameObject, minWidth: 18f * s, preferredWidth: 18f * s);
+            UI.ApplyFloatTitleBarMetrics(titleHlg, grip.gameObject, s);
 
             float winIconSz = GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s;
             UI.CreateFloatTitleWindowIcon(titleBar, "vpb_icons/settings.png", winIconSz);
@@ -302,7 +302,7 @@ namespace VPB
                     if (clearBg != null) clearBg.color = new Color(0f, 0f, 0f, 0f);
                     try
                     {
-                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", new Color(0.6f, 0.6f, 0.6f));
+                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
                         if (xSpr != null)
                             UI.AddIconToButton(_settingsFloatFilterClearGo, xSpr, 6f * s, new Color(0f, 0f, 0f, 0f));
                     }
@@ -408,6 +408,7 @@ namespace VPB
             resizeHandle.name = "ResizeHandle";
             Image rhImg = resizeHandle.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
+            UI.EnsureFloatChromeHoverBorder(resizeHandle);
             LayoutElement rhLe = resizeHandle.GetComponent<LayoutElement>();
             if (rhLe == null) rhLe = resizeHandle.AddComponent<LayoutElement>();
             rhLe.minWidth = rhLe.preferredWidth = chromeSz;
@@ -447,7 +448,7 @@ namespace VPB
             _settingsFloatScrollRect.horizontal = false;
             _settingsFloatScrollRect.vertical = true;
             _settingsFloatScrollRect.movementType = ScrollRect.MovementType.Clamped;
-            _settingsFloatScrollRect.scrollSensitivity = 25f;
+            _settingsFloatScrollRect.scrollSensitivity = GalleryUiDesignTokens.SettingsFloatScrollSensitivityRef;
             _settingsFloatScrollRect.verticalScrollbar = null;
 
             GameObject viewport = UI.CreateChildRT(_settingsFloatScrollHost, "Viewport", AnchorPresets.stretchAll);
@@ -474,7 +475,7 @@ namespace VPB
             GameObject content = UI.CreateChildRT(viewport, "Content", AnchorPresets.hStretchTop);
             RectTransform contentRt = content.GetComponent<RectTransform>();
             _settingsFloatScrollRect.content = contentRt;
-            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: 4f * s, padding: UI.Pad(6, 6, 6, 6, s));
+            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: 2f * s, padding: UI.Pad(6, 6, 6, 6, s));
             cv.childForceExpandHeight = false;
             cv.childForceExpandWidth = true;
             ContentSizeFitter csf = content.AddComponent<ContentSizeFitter>();
@@ -688,9 +689,17 @@ namespace VPB
 
         private void BuildSettingsFloatRow(InternalSettingRowEntry row, InternalSettingDefinition def, int font, float s, float rowH)
         {
+            float effectiveRowH = rowH;
+            if (def != null
+                && def.ControlType == InternalSettingControlType.TextArea
+                && !string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
+            {
+                effectiveRowH = GalleryUiDesignTokens.SettingsFloatTextAreaRowHeightRef * s;
+            }
+
             GameObject rowGO = new GameObject("SettingsRow_" + (row.RowKey ?? "row"));
             rowGO.transform.SetParent(_settingsFloatRowsParent, false);
-            UI.AddLE(rowGO, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
+            UI.AddLE(rowGO, minHeight: effectiveRowH, preferredHeight: effectiveRowH, flexibleWidth: 1f);
             Image rowBg = UI.AddImage(rowGO, SettingsFloatRowBg);
 
             GameObject listRowGO = new GameObject("ListRow");
@@ -699,11 +708,11 @@ namespace VPB
             RectTransform listRowRT = listRowGO.AddComponent<RectTransform>();
             listRowRT.anchorMin = Vector2.zero;
             listRowRT.anchorMax = Vector2.one;
-            listRowRT.offsetMin = new Vector2(8f * s, 4f * s);
-            listRowRT.offsetMax = new Vector2(-8f * s, -4f * s);
+            listRowRT.offsetMin = new Vector2(8f * s, 2f * s);
+            listRowRT.offsetMax = new Vector2(-8f * s, -2f * s);
 
             HorizontalLayoutGroup listHlg = UI.AddHLG(
-                listRowGO, spacing: 8f * s, padding: UI.Pad(4, 4, 4, 4, s),
+                listRowGO, spacing: 8f * s, padding: UI.Pad(2, 2, 4, 4, s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: true);
@@ -713,12 +722,12 @@ namespace VPB
                 Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate,
                 raycastTarget: false, name: "Name");
             GalleryUiMetrics.ApplyFont(nameText, GalleryUiDesignTokens.SettingsListRowNameFontRef, s, GalleryUiDesignTokens.FontMinRef);
-            UI.AddLE(nameText.gameObject, flexibleWidth: 0.45f, minWidth: 80f * s, preferredHeight: rowH * 0.9f);
+            UI.AddLE(nameText.gameObject, flexibleWidth: 0.45f, minWidth: 80f * s, preferredHeight: effectiveRowH * 0.9f);
 
             GameObject detailsRowGO = new GameObject("Details");
             detailsRowGO.transform.SetParent(listRowGO.transform, false);
             UI.AddHLG(detailsRowGO, spacing: 6f * s, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
-            UI.AddLE(detailsRowGO, flexibleWidth: 0.55f, minHeight: rowH * 0.85f, preferredHeight: rowH * 0.85f);
+            UI.AddLE(detailsRowGO, flexibleWidth: 0.55f, minHeight: effectiveRowH * 0.85f, preferredHeight: effectiveRowH * 0.85f);
 
             RebuildSettingsRowControls(rowGO, def);
         }
@@ -904,6 +913,10 @@ namespace VPB
                 UI.LayoutFloatTitleWindowIcon(
                     _settingsFloatTitleBarRT.gameObject,
                     GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s);
+                HorizontalLayoutGroup titleHlg = _settingsFloatTitleBarRT.GetComponent<HorizontalLayoutGroup>();
+                Transform gripTr = _settingsFloatTitleBarRT.Find("Grip");
+                UI.ApplyFloatTitleBarMetrics(
+                    titleHlg, gripTr != null ? gripTr.gameObject : null, s);
             }
 
             if (_settingsFloatFilterRow != null)
@@ -969,12 +982,12 @@ namespace VPB
                     footerRT.sizeDelta = new Vector2(0f, footerH);
             }
 
-            RescaleSettingsFloatSquareChrome(_settingsFloatCollapseBtn, chromeSz);
+            RescaleSettingsFloatSquareChrome(_settingsFloatCollapseBtn, chromeSz, s);
             if (_settingsFloatTitleBarRT != null)
             {
                 Transform closeTr = _settingsFloatTitleBarRT.Find("TitleClose");
                 if (closeTr != null)
-                    RescaleSettingsFloatSquareChrome(closeTr.gameObject, chromeSz);
+                    RescaleSettingsFloatSquareChrome(closeTr.gameObject, chromeSz, s);
             }
 
             SyncSettingsFloatCollapseChrome(titleH);
@@ -986,13 +999,9 @@ namespace VPB
             PersistSettingsFloatGeometry();
         }
 
-        private static void RescaleSettingsFloatSquareChrome(GameObject go, float size)
+        private static void RescaleSettingsFloatSquareChrome(GameObject go, float size, float scale)
         {
-            if (go == null) return;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) return;
-            le.minWidth = le.preferredWidth = size;
-            le.minHeight = le.preferredHeight = size;
+            UI.ScaleFloatChromeIconButton(go, size, scale);
         }
 
         private void LoadSettingsFloatGeometryFromConfig()
@@ -1089,24 +1098,7 @@ namespace VPB
         private static GameObject SettingsFloatSquareIconButton(
             Transform parent, float size, string iconPath, Color backdrop, UnityAction onClick)
         {
-            GameObject go = UI.CreateUIButton(
-                parent.gameObject, size, size, " ", 14, 0, 0, AnchorPresets.middleCenter, onClick);
-            if (go == null) return null;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) le = go.AddComponent<LayoutElement>();
-            le.minWidth = le.preferredWidth = size;
-            le.minHeight = le.preferredHeight = size;
-            le.flexibleWidth = 0f;
-            le.flexibleHeight = 0f;
-            Image bg = go.GetComponent<Image>();
-            if (bg != null) bg.color = backdrop;
-            try
-            {
-                Sprite spr = UI.LoadIconSprite(iconPath, UI.BarIconGlyphTint);
-                if (spr != null) UI.AddIconToButton(go, spr, 6f, backdrop);
-            }
-            catch { }
-            return go;
+            return UI.CreateFloatChromeIconButton(parent, size, iconPath, backdrop, onClick);
         }
 
         private static GameObject SettingsFloatChromeButton(

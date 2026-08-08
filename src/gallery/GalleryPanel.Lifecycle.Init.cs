@@ -419,6 +419,7 @@ namespace VPB
 
             // Init File Sort State
             try { SyncBrowseFilterCyclesFromMirroredSettings(); } catch { }
+            try { SyncHideOldVersionsFromCycle(); } catch { }
             try { MigrateLegacyExclusiveFileSortIfNeeded(); } catch { }
             UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
             try { UpdateGlobalSourceFilterButtonLabel(); } catch { }

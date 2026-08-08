@@ -249,6 +249,10 @@ namespace VPB
                 UI.LayoutFloatTitleWindowIcon(
                     importSidebarFloatTitleBarGO,
                     GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s);
+                HorizontalLayoutGroup titleHlg = importSidebarFloatTitleBarGO.GetComponent<HorizontalLayoutGroup>();
+                Transform gripTr = importSidebarFloatTitleBarGO.transform.Find("Grip");
+                UI.ApplyFloatTitleBarMetrics(
+                    titleHlg, gripTr != null ? gripTr.gameObject : null, s);
             }
             if (importSidebarFloatFooterGO != null)
             {

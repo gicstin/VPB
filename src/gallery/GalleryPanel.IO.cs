@@ -1681,10 +1681,12 @@ namespace VPB
             }
 
             // Gallery SQLite user tags. Include/exclude filter always live (orthogonal to F/T work mode).
-            // FilterUntagged browse is exclusive. VAR rows from SQLite bulk query already match tags;
+            // FilterUntagged / FilterTaggedOnly browse is exclusive. VAR rows from SQLite bulk query already match tags;
             // loose Custom/Saves files merged afterward must still be checked (same keys as gallery_item_user_tag).
             if (activeContentType == ContentType.Category && VpbSqlite3.IsAvailable
-                && (_userTagAvailMode == UserTagAvailMode.FilterUntagged || IsUserTagIncludeExcludeFilterArmed()))
+                && (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                    || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly
+                    || IsUserTagIncludeExcludeFilterArmed()))
             {
                 VarFileEntry vfeUt = entry as VarFileEntry;
                 bool bulkSqlAlreadyFilteredVar =
@@ -1707,6 +1709,11 @@ namespace VPB
                                     || _untaggedTaggedPinKeys.Contains(selKeyUt));
                             if (!keepTaggedVisible) return false;
                         }
+                    }
+                    else if (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
+                    {
+                        if (VpbLocalDatabase.TryGalleryRowHasNoUserTags(catUt, pkgK, ipK))
+                            return false;
                     }
                     else
                     {
@@ -2127,9 +2134,10 @@ namespace VPB
                     {
                         GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState);
                         GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState);
+                        // Legacy cfg / non-SQL safety: SQL path already used pkg.is_newest on full refresh.
                         try { GallerySortManager.ApplyHideOldVersionsFilter(currentFilteredFiles); } catch { }
                         try { GallerySortManager.ApplyHideOldVersionsFilter(lastFilteredFiles); } catch { }
-                        if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
+                        if (_browseOldVersionsCycle == BrowseFilterCycle.Only && !_fileListHadSqlPkgVersionFilter)
                         {
                             try { GallerySortManager.ApplyOldVersionsOnlyFilter(currentFilteredFiles); } catch { }
                             try { GallerySortManager.ApplyOldVersionsOnlyFilter(lastFilteredFiles); } catch { }
@@ -2367,7 +2375,8 @@ namespace VPB
         {
             if (HasRatingPresenceFilter()) return false;
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
-            if (HasLicenseFilter()) return false;
+            // License filter is applied in SQL (pkg.license); in-memory PassesLicenseFilter no-ops when flag set.
+            if (HasLicenseFilter() && !_fileListHadSqlLicenseFilter) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
             // bulk (cat_mem, VAR-only) is fast-appended without per-entry PassesFilters, where the source gate lives;
             // a bulk AddRange under Source:Local would leak every var row, so force the gated drain when it's active.
@@ -3034,13 +3043,27 @@ namespace VPB
 
             SortState fileListSortSnapForWorker = null;
             int[] sqliteBulkSortedOnWorkerFlag = null;
+            int[] sqlPkgVersionFilterAppliedFlag = null;
+            int[] sqlLicenseFilterAppliedFlag = null;
             int[] sysLooseFilesAddedCount = null;
             long refreshDrainWallMs = 0;
             if (!fileListFromCache)
             {
                 fileListSortSnapForWorker = GetSortState("Files").Clone();
                 sqliteBulkSortedOnWorkerFlag = new int[1];
+                sqlPkgVersionFilterAppliedFlag = new int[1];
+                sqlLicenseFilterAppliedFlag = new int[1];
                 sysLooseFilesAddedCount = new int[1];
+                _fileListHadSqlPkgVersionFilter = false;
+                _fileListHadSqlLicenseFilter = false;
+            }
+            else
+            {
+                // Sibling/cache snapshot already matched browse Old-versions mode in cache key.
+                _fileListHadSqlPkgVersionFilter = _browseOldVersionsCycle != BrowseFilterCycle.Off
+                    || (Settings.Instance != null && Settings.Instance.HideOldVersions != null
+                        && Settings.Instance.HideOldVersions.Value);
+                _fileListHadSqlLicenseFilter = HasLicenseFilter();
             }
 
             // Start creator/category metadata build immediately so it overlaps package scanning (same work as the block after the grid, previously sequential).
@@ -3275,6 +3298,19 @@ namespace VPB
                     else if (FilesSortWantsUnloadedOnly()) wantsLoadedStateForIndexMain = 0;
                 }
                 catch { }
+                int pkgVersionFilterForIndexMain = VpbLocalDatabase.PkgVersionFilterOff;
+                try
+                {
+                    if (_browseOldVersionsCycle == BrowseFilterCycle.Apply)
+                        pkgVersionFilterForIndexMain = VpbLocalDatabase.PkgVersionFilterNewestOnly;
+                    else if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
+                        pkgVersionFilterForIndexMain = VpbLocalDatabase.PkgVersionFilterOldOnly;
+                    else if (Settings.Instance != null && Settings.Instance.HideOldVersions != null
+                        && Settings.Instance.HideOldVersions.Value)
+                        pkgVersionFilterForIndexMain = VpbLocalDatabase.PkgVersionFilterNewestOnly;
+                }
+                catch { }
+                string licenseFilterForIndexMain = currentLicenseFilter ?? "";
                 ContentType activeContentSnap = activeContentType;
                 GalleryHistoryFilterMode histFilterSnap = galleryHistoryFilterMode;
                 ClothingSubfilter sqliteWorkerClothingSub = clothingSubfilter;
@@ -3302,7 +3338,10 @@ namespace VPB
                 VpbLocalDatabase.GalleryCategoryQueryStats catQueryStats = new VpbLocalDatabase.GalleryCategoryQueryStats();
 
                 bool userTagGridFilterUntaggedSnap = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
-                bool userTagIncludeExcludeArmedSnap = !userTagGridFilterUntaggedSnap && IsUserTagIncludeExcludeFilterArmed();
+                bool userTagGridFilterTaggedOnlySnap = _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly;
+                bool userTagIncludeExcludeArmedSnap = !userTagGridFilterUntaggedSnap
+                    && !userTagGridFilterTaggedOnlySnap
+                    && IsUserTagIncludeExcludeFilterArmed();
                 bool userTagFilterIsolateSnap = userTagIncludeExcludeArmedSnap
                     && activeUserTags != null && activeUserTags.Count > 0
                     && UserTagFilterRequiresAllTags();
@@ -3321,6 +3360,12 @@ namespace VPB
                     bool useSqliteIndex = false;
                     try
                     {
+                        // One-shot: fill pkg.license from live packages (ZIP ok on worker).
+                        if (!string.IsNullOrEmpty(licenseFilterForIndexMain))
+                        {
+                            try { VpbLocalDatabase.TryBackfillPkgLicensesFromLivePackagesIfNeeded(); } catch { }
+                        }
+
                         List<VpbLocalDatabase.Row> idxRows = new List<VpbLocalDatabase.Row>();
                         List<string> pathExclusions = null;
                         // SQLite index usage must not depend on snapshot-cache key availability.
@@ -3382,7 +3427,16 @@ namespace VPB
                                 fileListSortSnapForWorker,
                                 userTagGridFilterUntaggedSnap,
                                 userTagFilterIsolateSnap,
-                                excludedUserTagNamesForGridSqlSnap);
+                                excludedUserTagNamesForGridSqlSnap,
+                                pkgVersionFilterForIndexMain,
+                                userTagGridFilterTaggedOnlySnap,
+                                licenseFilterForIndexMain);
+                            if (useSqliteIndex && pkgVersionFilterForIndexMain != VpbLocalDatabase.PkgVersionFilterOff
+                                && sqlPkgVersionFilterAppliedFlag != null)
+                                sqlPkgVersionFilterAppliedFlag[0] = 1;
+                            if (useSqliteIndex && !string.IsNullOrEmpty(licenseFilterForIndexMain)
+                                && sqlLicenseFilterAppliedFlag != null)
+                                sqlLicenseFilterAppliedFlag[0] = 1;
                             }
                         }
                         else
@@ -3554,6 +3608,7 @@ namespace VPB
                                 if (activeContentSnap == ContentType.Category
                                     && (userTagGridFilterUntaggedSnap
                                         || (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0))
+                                    && !userTagGridFilterTaggedOnlySnap
                                     && !string.IsNullOrEmpty(titleForIndexMain) && VpbSqlite3.IsAvailable)
                                 {
                                     var utBuilt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3590,8 +3645,16 @@ namespace VPB
                                                 wantsLoadedStateForIndexMain,
                                                 nameTerms,
                                                 fileListSortSnapForWorker,
-                                                rows))
+                                                rows,
+                                                pkgVersionFilterForIndexMain,
+                                                licenseFilterForIndexMain))
                                             {
+                                                if (pkgVersionFilterForIndexMain != VpbLocalDatabase.PkgVersionFilterOff
+                                                    && sqlPkgVersionFilterAppliedFlag != null)
+                                                    sqlPkgVersionFilterAppliedFlag[0] = 1;
+                                                if (!string.IsNullOrEmpty(licenseFilterForIndexMain)
+                                                    && sqlLicenseFilterAppliedFlag != null)
+                                                    sqlLicenseFilterAppliedFlag[0] = 1;
                                                 for (int ri = 0; ri < rows.Count; ri++)
                                                 {
                                                     if (localLoadingGroupId != currentLoadingGroupId) return;
@@ -3637,6 +3700,19 @@ namespace VPB
                                             if (hasNameFilter
                                                 && !MatchesPackageFallbackSearch(searchQuerySnap, pkg.Uid ?? "", pkg.Path ?? "", null))
                                                 continue;
+                                            if (!string.IsNullOrEmpty(licenseFilterForIndexMain))
+                                            {
+                                                string plic = "";
+                                                try
+                                                {
+                                                    if (string.IsNullOrEmpty(pkg.LicenseType))
+                                                        pkg.TryEnsureMetaJsonLiteFields();
+                                                    plic = pkg.LicenseType ?? "";
+                                                }
+                                                catch { plic = ""; }
+                                                if (!string.Equals(plic, licenseFilterForIndexMain, StringComparison.OrdinalIgnoreCase))
+                                                    continue;
+                                            }
                                             if (utCatMemKeyHits != null)
                                             {
                                                 string utk = VpbLocalDatabase.FormatCatMemRowLookupKey(pkg.Uid, "meta.json");
@@ -3754,6 +3830,7 @@ namespace VPB
                         {
                             if (useSqliteIndex && activeContentSnap == ContentType.Category
                                 && (userTagGridFilterUntaggedSnap
+                                    || userTagGridFilterTaggedOnlySnap
                                     || (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
                                     || (excludedUserTagNamesForGridSqlSnap != null && excludedUserTagNamesForGridSqlSnap.Count > 0)))
                                 refreshDrainUtSqlFilterApplied[0] = 1;
@@ -3830,6 +3907,10 @@ namespace VPB
                         sqliteBulkList = null;
                         sqliteBulkConsumed = true;
                         _refreshSqliteBulkIncludedUserTagGridFilter = refreshDrainUtSqlFilterApplied[0] != 0;
+                        if (sqlPkgVersionFilterAppliedFlag != null)
+                            _fileListHadSqlPkgVersionFilter = sqlPkgVersionFilterAppliedFlag[0] != 0;
+                        if (sqlLicenseFilterAppliedFlag != null)
+                            _fileListHadSqlLicenseFilter = sqlLicenseFilterAppliedFlag[0] != 0;
                         if (activeContentSnap == ContentType.History)
                             SyncHistoryBrowseFailureFlagsFromStats(activeContentSnap, catQueryStats, searchQuerySnap);
                         long bulkBudgetMs = maxMsPerFrame;
@@ -3922,6 +4003,10 @@ namespace VPB
                 }
                 swDrainMain.Stop();
                 refreshDrainWallMs = swDrainMain.ElapsedMilliseconds;
+                if (sqlPkgVersionFilterAppliedFlag != null)
+                    _fileListHadSqlPkgVersionFilter = sqlPkgVersionFilterAppliedFlag[0] != 0;
+                if (sqlLicenseFilterAppliedFlag != null)
+                    _fileListHadSqlLicenseFilter = sqlLicenseFilterAppliedFlag[0] != 0;
             }
             }
             if (swDeep != null)
@@ -4886,7 +4971,7 @@ namespace VPB
                 }
             }
 
-            if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
+            if (_browseOldVersionsCycle == BrowseFilterCycle.Only && !_fileListHadSqlPkgVersionFilter)
             {
                 try { GallerySortManager.ApplyOldVersionsOnlyFilter(list); } catch { }
             }

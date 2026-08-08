@@ -78,7 +78,19 @@ namespace VPB
         /// <summary>Window-type glyph in float title bars (settings gear, tags, filter, import).</summary>
         public const float FloatTitleWindowIconSizeRef = 22f;
         /// <summary>Space after window icon before title label (design px at scale 1).</summary>
-        public const float FloatTitleWindowIconGapRef = 10f;
+        public const float FloatTitleWindowIconGapRef = 6f;
+        /// <summary>Float title bar L/R pad — keep icon near left (grip + this).</summary>
+        public const float FloatTitleBarPadHRef = 4f;
+        /// <summary>Float title bar T/B pad.</summary>
+        public const float FloatTitleBarPadVRef = 4f;
+        /// <summary>HLG spacing between grip · icon · title · chrome.</summary>
+        public const float FloatTitleBarSpacingRef = 2f;
+        /// <summary>Drag-grip column width before window icon.</summary>
+        public const float FloatTitleGripWidthRef = 12f;
+        /// <summary>Pad inside float title/footer chrome icon buttons (collapse / close / resize).</summary>
+        public const float FloatChromeIconPadRef = 5f;
+        /// <summary>Pad inside tree-row expand chevron wells (Plugins / Strip Keep).</summary>
+        public const float TreeRowExpandIconPadRef = 6f;
 
         // Resize handles — sized/positioned like the corner-most bar button (40px, seated in the bar).
         // Horizontal centre inset = EdgeMargin + half button (mirrors the footer's 10px right padding).
@@ -302,7 +314,11 @@ namespace VPB
 
         /// <summary>Floating filter-presets window defaults / clamps (design px at scale 1).</summary>
         public const float QuickFiltersFloatDefaultHeightRef = 420f;
-        public const float QuickFiltersFloatMinWidthRef = 220f;
+        /// <summary>
+        /// Fits footer icon row (Dock/Undo/Redo/Remove/resize + pad/gaps); soft-delete Undo may appear.
+        /// Text footer labels overflowed this and caused HLG squeeze / reopen drift.
+        /// </summary>
+        public const float QuickFiltersFloatMinWidthRef = 240f;
         /// <summary>Title + search header + footer + one row — room for float chrome.</summary>
         public const float QuickFiltersFloatMinHeightRef = 260f;
         public const float QuickFiltersFloatMaxWidthRef = 640f;
@@ -320,6 +336,22 @@ namespace VPB
         public const float SettingsFloatMinHeightRef = 320f;
         public const float SettingsFloatMaxWidthRef = 900f;
         public const float SettingsFloatMaxHeightRef = 1200f;
+        /// <summary>Fits <see cref="ButtonSizeRef"/> control chips + row pad (was 80 — too tall for float).</summary>
+        public const float SettingsFloatRowHeightRef = 48f;
+        /// <summary>Multi-line TextArea rows — host prefers 72 + chrome pad.</summary>
+        public const float SettingsFloatTextAreaRowHeightRef = 112f;
+        /// <summary>Wheel step (UGUI). 25 jumped ~2 viewports on large Win deltas.</summary>
+        public const float SettingsFloatScrollSensitivityRef = 8f;
+        /// <summary>Creator Strip Scene keep selector float — same chrome family as Settings/Plugins.</summary>
+        public const float StripKeepFloatDefaultWidthRef = 560f;
+        public const float StripKeepFloatDefaultHeightRef = 420f;
+        public const float StripKeepFloatMinWidthRef = 420f;
+        public const float StripKeepFloatMinHeightRef = 300f;
+        public const float StripKeepFloatMaxWidthRef = 1200f;
+        public const float StripKeepFloatMaxHeightRef = 1000f;
+        public const float StripKeepFloatFooterCancelBtnWRef = 96f;
+        public const float StripKeepFloatFooterConfirmBtnWRef = 120f;
+        public const float StripKeepFloatScrollBarWidthRef = 14f;
         /// <summary>Plugins float tree palette (creator→package→cs) — dense power-user browse + drag.</summary>
         public const float PluginsFloatDefaultWidthRef = 460f;
         public const float PluginsFloatDefaultHeightRef = 560f;
@@ -328,7 +360,7 @@ namespace VPB
         public const float PluginsFloatMaxWidthRef = 800f;
         public const float PluginsFloatMaxHeightRef = 1100f;
         public const float PluginsFloatRowHeightRef = 36f;
-        public const float PluginsFloatExpandWidthRef = 28f;
+        public const float PluginsFloatExpandWidthRef = PluginsFloatRowHeightRef;
         public const float PluginsFloatChildIndentRef = 14f;
         /// <summary>Fixed version column width (vN) — recognition over recall.</summary>
         public const float PluginsFloatVersionWidthRef = 44f;

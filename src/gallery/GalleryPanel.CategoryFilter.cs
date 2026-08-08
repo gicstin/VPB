@@ -177,9 +177,10 @@ namespace VPB
                         if (!string.IsNullOrEmpty(n)) excludedUserTags.Add(n);
                     }
                 int utfm = state.UserTagAvailFilterMode;
-                if (utfm < 0 || utfm > (int)UserTagAvailMode.FilterUntagged) utfm = utfm != 0 ? 1 : 0;
+                if (utfm < 0 || utfm > (int)UserTagAvailMode.FilterTaggedOnly) utfm = utfm != 0 ? 1 : 0;
                 _userTagAvailMode = (UserTagAvailMode)utfm;
-                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                    || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
                     _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
             }
             else
@@ -189,7 +190,8 @@ namespace VPB
                     _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
             }
             _userTagShowUnusedBucket = false;
-            if (_userTagAvailMode != UserTagAvailMode.FilterUntagged)
+            if (_userTagAvailMode != UserTagAvailMode.FilterUntagged
+                && _userTagAvailMode != UserTagAvailMode.FilterTaggedOnly)
                 try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = state.UserTagInheritVarToChildren != 0;
 
@@ -286,7 +288,8 @@ namespace VPB
                 _browseAlwaysLoadedSavedSort = null;
             }
             _browseHiddenCycle = BrowseFilterCycle.Off;
-            _browseOldVersionsCycle = BrowseFilterCycle.Off;
+            _browseOldVersionsCycle = BrowseFilterCycle.Apply;
+            try { SyncHideOldVersionsFromCycle(); } catch { }
             _browseLoadedMode = BrowseLoadedMode.Off;
             if (_browseUnusedCycle != BrowseFilterCycle.Off)
             {
@@ -300,7 +303,6 @@ namespace VPB
                 _browseUnusedSavedSort = null;
             }
             currentLicenseFilter = "";
-            CancelLicenseFilterHydrate();
             try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
             SyncBrowseFilterChipChrome();
         }

@@ -26,8 +26,8 @@ namespace VPB
         public static readonly Color RowIdle = new Color(0.22f, 0.22f, 0.22f, 1f);
         /// <summary>Zero-count / disabled path row fill.</summary>
         public static readonly Color RowZero = new Color(0.15f, 0.15f, 0.15f, 1f);
-        /// <summary>Popup menu panel fill (alpha applied by callers).</summary>
-        public static readonly Color PopupSurface = new Color(0.12f, 0.12f, 0.12f, 0.72f);
+        /// <summary>Popup menu panel fill — opaque dark shell (same ladder as SurfaceDeep).</summary>
+        public static readonly Color PopupSurface = SurfaceDeep;
         /// <summary>Popup row resting.</summary>
         public static readonly Color PopupRowIdle = new Color(0.18f, 0.18f, 0.18f, 1f);
         /// <summary>Popup row active / hovered.</summary>
@@ -63,6 +63,16 @@ namespace VPB
         public static readonly Color ActiveUtility = new Color(0.30f, 0.30f, 0.30f, 1f);
         /// <summary>Title-bar collapse/close well.</summary>
         public static readonly Color ChromeIconWell = new Color(0f, 0f, 0f, 0.5f);
+        /// <summary>Search-field clear (X) glyph — shared by all float filters.</summary>
+        public static readonly Color SearchClearIconTint = new Color(0.6f, 0.6f, 0.6f, 1f);
+        /// <summary>Tree-row expand chevron (Plugins / Strip Keep).</summary>
+        public static readonly Color TreeExpandIconTint = new Color(0.82f, 0.84f, 0.88f, 1f);
+        /// <summary>Tree-row expand well when row can expand.</summary>
+        public static readonly Color TreeExpandWell = new Color(0.16f, 0.17f, 0.20f, 1f);
+        /// <summary>Tree-row expand well when leaf / empty (opaque placeholder).</summary>
+        public static readonly Color TreeExpandWellEmpty = new Color(0.10f, 0.10f, 0.12f, 1f);
+        /// <summary>Tree-row expand well when leaf / empty (no fill).</summary>
+        public static readonly Color TreeExpandWellEmptyClear = new Color(0.10f, 0.10f, 0.12f, 0f);
         /// <summary>Magnifying-glass glyph in search fields.</summary>
         public static readonly Color SearchIconTint = new Color(0.55f, 0.55f, 0.55f, 1f);
         /// <summary>Window-type icon in float title bars.</summary>

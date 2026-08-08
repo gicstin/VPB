@@ -245,8 +245,8 @@ namespace VPB
                 _pluginsFloatTitleBarRT.anchoredPosition = Vector2.zero;
                 _pluginsFloatTitleBarRT.sizeDelta = new Vector2(0f, titleH);
             }
-            UI.AddHLG(
-                titleBar, spacing: 4f * s, padding: UI.Pad(6, 6, 4, 4, s),
+            HorizontalLayoutGroup titleHlg = UI.AddHLG(
+                titleBar, spacing: 0f, padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -257,7 +257,7 @@ namespace VPB
                 GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
                 raycastTarget: false, name: "Grip");
             GalleryUiMetrics.ApplyFont(grip, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            UI.AddLE(grip.gameObject, minWidth: 18f * s, preferredWidth: 18f * s);
+            UI.ApplyFloatTitleBarMetrics(titleHlg, grip.gameObject, s);
 
             float winIconSz = GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s;
             UI.CreateFloatTitleWindowIcon(titleBar, "vpb_icons/c_plugins.png", winIconSz);
@@ -366,7 +366,7 @@ namespace VPB
                     if (clearBg != null) clearBg.color = new Color(0f, 0f, 0f, 0f);
                     try
                     {
-                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", new Color(0.6f, 0.6f, 0.6f));
+                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
                         if (xSpr != null)
                             UI.AddIconToButton(_pluginsFloatFilterClearGo, xSpr, 6f * s, new Color(0f, 0f, 0f, 0f));
                     }
@@ -514,7 +514,7 @@ namespace VPB
             {
                 _pluginsFloatExpandAllBtn.name = "ExpandAll";
                 AddTooltip(_pluginsFloatExpandAllBtn, "gallery.tooltip.plugins_expand_all",
-                    "Expand all creators (shows packages). Open ▸ on a package for scripts.");
+                    "Expand all creators (shows packages). Open row chevron for scripts.");
             }
             _pluginsFloatCollapseAllBtn = PluginsFloatSquareIconButton(
                 _pluginsFloatFooter.transform, chromeSz, "vpb_icons/chevron_up.png",
@@ -545,6 +545,7 @@ namespace VPB
             resizeHandle.name = "ResizeHandle";
             Image rhImg = resizeHandle.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
+            UI.EnsureFloatChromeHoverBorder(resizeHandle);
             LayoutElement rhLe = resizeHandle.GetComponent<LayoutElement>();
             if (rhLe == null) rhLe = resizeHandle.AddComponent<LayoutElement>();
             rhLe.minWidth = rhLe.preferredWidth = chromeSz;
@@ -842,6 +843,10 @@ namespace VPB
                 UI.LayoutFloatTitleWindowIcon(
                     _pluginsFloatTitleBarRT.gameObject,
                     GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s);
+                HorizontalLayoutGroup titleHlg = _pluginsFloatTitleBarRT.GetComponent<HorizontalLayoutGroup>();
+                Transform gripTr = _pluginsFloatTitleBarRT.Find("Grip");
+                UI.ApplyFloatTitleBarMetrics(
+                    titleHlg, gripTr != null ? gripTr.gameObject : null, s);
             }
 
             if (_pluginsFloatFilterRow != null)
@@ -893,10 +898,10 @@ namespace VPB
                 }
             }
 
-            RescalePluginsFloatSquareChrome(_pluginsFloatCollapseBtn, chromeSz);
-            RescalePluginsFloatSquareChrome(_pluginsFloatExpandAllBtn, chromeSz);
-            RescalePluginsFloatSquareChrome(_pluginsFloatCollapseAllBtn, chromeSz);
-            RescalePluginsFloatSquareChrome(_pluginsFloatRatedOnlyBtn, chromeSz);
+            RescalePluginsFloatSquareChrome(_pluginsFloatCollapseBtn, chromeSz, s);
+            RescalePluginsFloatSquareChrome(_pluginsFloatExpandAllBtn, chromeSz, s);
+            RescalePluginsFloatSquareChrome(_pluginsFloatCollapseAllBtn, chromeSz, s);
+            RescalePluginsFloatSquareChrome(_pluginsFloatRatedOnlyBtn, chromeSz, s);
             if (_pluginsFloatDestHost != null)
             {
                 LayoutElement destLe = _pluginsFloatDestHost.GetComponent<LayoutElement>();
@@ -934,7 +939,7 @@ namespace VPB
             {
                 Transform closeTr = _pluginsFloatTitleBarRT.Find("TitleClose");
                 if (closeTr != null)
-                    RescalePluginsFloatSquareChrome(closeTr.gameObject, chromeSz);
+                    RescalePluginsFloatSquareChrome(closeTr.gameObject, chromeSz, s);
             }
 
             SyncPluginsFloatCollapseChrome(titleH);
@@ -944,13 +949,9 @@ namespace VPB
             PersistPluginsFloatGeometry();
         }
 
-        private static void RescalePluginsFloatSquareChrome(GameObject go, float size)
+        private static void RescalePluginsFloatSquareChrome(GameObject go, float size, float scale)
         {
-            if (go == null) return;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) return;
-            le.minWidth = le.preferredWidth = size;
-            le.minHeight = le.preferredHeight = size;
+            UI.ScaleFloatChromeIconButton(go, size, scale);
         }
 
         private void LoadPluginsFloatGeometryFromConfig()
@@ -1068,24 +1069,7 @@ namespace VPB
         private static GameObject PluginsFloatSquareIconButton(
             Transform parent, float size, string iconPath, Color backdrop, UnityAction onClick)
         {
-            GameObject go = UI.CreateUIButton(
-                parent.gameObject, size, size, " ", 14, 0, 0, AnchorPresets.middleCenter, onClick);
-            if (go == null) return null;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) le = go.AddComponent<LayoutElement>();
-            le.minWidth = le.preferredWidth = size;
-            le.minHeight = le.preferredHeight = size;
-            le.flexibleWidth = 0f;
-            le.flexibleHeight = 0f;
-            Image bg = go.GetComponent<Image>();
-            if (bg != null) bg.color = backdrop;
-            try
-            {
-                Sprite spr = UI.LoadIconSprite(iconPath, UI.BarIconGlyphTint);
-                if (spr != null) UI.AddIconToButton(go, spr, 6f, backdrop);
-            }
-            catch { }
-            return go;
+            return UI.CreateFloatChromeIconButton(parent, size, iconPath, backdrop, onClick);
         }
 
         /// <summary>Grid refresh no longer feeds Plugins float (independent catalog).</summary>

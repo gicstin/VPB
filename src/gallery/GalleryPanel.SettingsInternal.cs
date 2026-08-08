@@ -1785,7 +1785,7 @@ namespace VPB
         private void EnsureInternalSettingsSession()
         {
             if (internalSettingsSessionActive) return;
-            internalSettingsListRowHeightSession = 80f;
+            internalSettingsListRowHeightSession = GalleryUiDesignTokens.SettingsFloatRowHeightRef;
             internalSettingsBackup = CreateInternalSettingsSnapshot();
             PluginSettingsBeginSession();
             internalSettingsSessionActive = true;
@@ -1927,7 +1927,7 @@ namespace VPB
             catch { }
             EnsureInternalSettingsSession();
             float paneScale = ChromeScale;
-            internalSettingsListRowHeightSession = 80f * Mathf.Clamp(paneScale, 0.01f, 100f);
+            internalSettingsListRowHeightSession = GalleryUiDesignTokens.SettingsFloatRowHeightRef * Mathf.Clamp(paneScale, 0.01f, 100f);
 
             float s = InternalSettingsChromeScale();
             GalleryModalTypography type = new GalleryModalTypography(s);
@@ -2459,7 +2459,10 @@ namespace VPB
 
             HideSettingsFloat();
 
-            try { ApplySidePanelDefaultsFromConfig(); } catch { }
+            // Do not ApplySidePanelDefaultsFromConfig here — that re-syncs Last*/Default side rails
+            // (incl. Import) and reopens Scene Import after Cancel/Save even when user closed it.
+            // Settings is a float; Default* still apply on cold pane open. Scale/chrome restore
+            // already ran in Cancel/Save session helpers; UpdateLayout below refreshes rails as-is.
             try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
             try { UpdateLayout(); } catch { }
             try { UpdateTabs(); } catch { }

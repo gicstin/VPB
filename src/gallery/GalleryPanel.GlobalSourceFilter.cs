@@ -13,7 +13,7 @@ namespace VPB
         private const int GlobalSourceFilterButtonWidth = 88;
         private const float GlobalSourceFilterButtonHeight = GalleryUiDesignTokens.TitleBarChipRef;
         private const float GlobalSourceFilterButtonCenterRelativeX = -398f;
-        private const float BrowseFilterMenuPanelWidthRef = GalleryUiDesignTokens.FileSortMenuPanelWidthRef;
+        private const float BrowseFilterMenuPanelWidthRef = 320f;
 
         public void SetupGlobalSourceFilterDropdown(GameObject titleBarGO, GameObject backgroundBoxGO)
         {
@@ -84,7 +84,7 @@ namespace VPB
             }
 
             AddTooltip(globalSourceFilterBtn, "gallery.tooltip.browse_filter",
-                "Filter: source + visibility. Click row: on/off. Shift+click or right-click row: only-mode. Right-click this button clears.");
+                "Filter: source + visibility. Each row is a 3-way choice. Right-click this button clears non-default filters.");
 
             // Compact: filter_off idle / filter_on when active (filter.png is Filter Presets).
             try
@@ -194,81 +194,186 @@ namespace VPB
 
             UI.DestroyAllChildren(globalSourceFilterMenuPanelGO.transform);
 
+            // Opaque fill — thumbs behind must not bleed through.
+            Image panelImg = globalSourceFilterMenuPanelGO.GetComponent<Image>();
+            if (panelImg != null)
+                panelImg.color = GalleryUiColorTokens.PopupSurface;
+
             AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_source", "Source"));
-
-            int allCount = 0, localCount = 0, varCount = 0;
-            ComputeGlobalSourceFilterRowCounts(out allCount, out localCount, out varCount);
-
-            AddGlobalSourceFilterMenuRow(
-                VPBConfig.GlobalSourceFilterValue.All,
-                VPBTranslation.T("gallery.filter.source_all", "All"),
-                allCount,
-                currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.All);
-            AddGlobalSourceFilterMenuRow(
-                VPBConfig.GlobalSourceFilterValue.Local,
-                VPBTranslation.T("gallery.filter.source_local", "Local"),
-                localCount,
-                currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local);
-            AddGlobalSourceFilterMenuRow(
-                VPBConfig.GlobalSourceFilterValue.Var,
-                VPBTranslation.T("gallery.filter.source_var", ".var"),
-                varCount,
-                currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var);
+            int sourceSeg = currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local
+                ? 1
+                : (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var ? 2 : 0);
+            AddBrowseFilterSegmentRow(
+                new string[]
+                {
+                    VPBTranslation.T("gallery.filter.source_all", "All"),
+                    VPBTranslation.T("gallery.filter.source_local", "Local"),
+                    VPBTranslation.T("gallery.filter.source_var", ".var")
+                },
+                sourceSeg,
+                i =>
+                {
+                    VPBConfig.GlobalSourceFilterValue v = i == 1
+                        ? VPBConfig.GlobalSourceFilterValue.Local
+                        : (i == 2 ? VPBConfig.GlobalSourceFilterValue.Var : VPBConfig.GlobalSourceFilterValue.All);
+                    OnGlobalSourceFilterRowClicked(v);
+                });
 
             AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_visibility", "Visibility"));
 
-            // Daily: Hidden, Old versions, Not tagged.
-            AddBrowseFilterCycleRow(
-                ResolveBrowseHiddenCycleLabel(),
-                _browseHiddenCycle,
-                CycleBrowseHiddenFilter,
-                CycleBrowseHiddenFilterOnly);
+            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.hidden", "Hidden"));
+            AddBrowseFilterSegmentRow(
+                new string[]
+                {
+                    VPBTranslation.T("gallery.filter.seg_off", "Off"),
+                    VPBTranslation.T("gallery.filter.seg_show", "Show"),
+                    VPBTranslation.T("gallery.filter.seg_only", "Only")
+                },
+                (int)_browseHiddenCycle,
+                i => SetBrowseHiddenCycle((BrowseFilterCycle)i, refresh: true));
 
-            AddBrowseFilterCycleRow(
-                ResolveBrowseOldVersionsCycleLabel(),
-                _browseOldVersionsCycle,
-                CycleBrowseOldVersionsFilter,
-                CycleBrowseOldVersionsFilterOnly);
+            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.old_versions", "Old versions"));
+            AddBrowseFilterSegmentRow(
+                new string[]
+                {
+                    VPBTranslation.T("gallery.filter.seg_all_versions", "All"),
+                    VPBTranslation.T("gallery.filter.seg_newest", "Newest"),
+                    VPBTranslation.T("gallery.filter.seg_old_only", "Old only")
+                },
+                (int)_browseOldVersionsCycle,
+                i => SetBrowseOldVersionsCycle((BrowseFilterCycle)i, refresh: true));
 
-            AddBrowseFilterToggleRow(
-                VPBTranslation.T("gallery.filter.not_tagged", "Not tagged"),
-                _userTagAvailMode == UserTagAvailMode.FilterUntagged,
-                ToggleBrowseNotTaggedFilter);
+            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.user_tags", "User tags"));
+            int tagSeg = _userTagAvailMode == UserTagAvailMode.FilterUntagged
+                ? 1
+                : (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly ? 2 : 0);
+            AddBrowseFilterSegmentRow(
+                new string[]
+                {
+                    VPBTranslation.T("gallery.filter.seg_off", "Off"),
+                    VPBTranslation.T("gallery.filter.seg_untagged", "Untagged"),
+                    VPBTranslation.T("gallery.filter.seg_tagged", "Tagged")
+                },
+                tagSeg,
+                i => SetBrowseTagPresenceSegment(i));
 
             AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_more", "More"));
 
-            // Less frequent: Always loaded, Loaded, Unused.
-            AddBrowseFilterCycleRow(
-                ResolveBrowseAlwaysLoadedCycleLabel(),
-                _browseAlwaysLoadedCycle,
-                CycleBrowseAlwaysLoadedFilter,
-                CycleBrowseAlwaysLoadedFilterOnly);
+            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.always_loaded", "Always loaded"));
+            AddBrowseFilterSegmentRow(
+                new string[]
+                {
+                    VPBTranslation.T("gallery.filter.seg_off", "Off"),
+                    VPBTranslation.T("gallery.filter.seg_first", "First"),
+                    VPBTranslation.T("gallery.filter.seg_only", "Only")
+                },
+                (int)_browseAlwaysLoadedCycle,
+                i => SetBrowseAlwaysLoadedCycle((BrowseFilterCycle)i, refresh: true));
 
-            AddBrowseFilterCycleRow(
-                ResolveBrowseLoadedModeLabel(),
-                _browseLoadedMode == BrowseLoadedMode.Off
-                    ? BrowseFilterCycle.Off
-                    : (_browseLoadedMode == BrowseLoadedMode.LoadedOnly ? BrowseFilterCycle.Apply : BrowseFilterCycle.Only),
-                CycleBrowseLoadedFilter,
-                CycleBrowseLoadedFilterOnly);
+            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.loaded", "Loaded"));
+            int loadedSeg = _browseLoadedMode == BrowseLoadedMode.Off
+                ? 0
+                : (_browseLoadedMode == BrowseLoadedMode.LoadedOnly ? 1 : 2);
+            AddBrowseFilterSegmentRow(
+                new string[]
+                {
+                    VPBTranslation.T("gallery.filter.seg_all", "All"),
+                    VPBTranslation.T("gallery.filter.seg_loaded", "Loaded"),
+                    VPBTranslation.T("gallery.filter.seg_unloaded", "Unloaded")
+                },
+                loadedSeg,
+                i =>
+                {
+                    BrowseLoadedMode m = i == 0
+                        ? BrowseLoadedMode.Off
+                        : (i == 1 ? BrowseLoadedMode.LoadedOnly : BrowseLoadedMode.UnloadedOnly);
+                    SetBrowseLoadedMode(m, refresh: true);
+                });
 
-            AddBrowseFilterCycleRow(
-                ResolveBrowseUnusedCycleLabel(),
-                _browseUnusedCycle,
-                CycleBrowseUnusedFilter,
-                CycleBrowseUnusedFilterOnly);
+            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.unused", "Unused"));
+            AddBrowseFilterSegmentRow(
+                new string[]
+                {
+                    VPBTranslation.T("gallery.filter.seg_off", "Off"),
+                    VPBTranslation.T("gallery.filter.seg_first", "First"),
+                    VPBTranslation.T("gallery.filter.seg_only", "Only")
+                },
+                (int)_browseUnusedCycle,
+                i => SetBrowseUnusedCycle((BrowseFilterCycle)i, refresh: true));
 
             AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_license", "License"));
-            for (int i = 0; i < KnownPackageLicenseTypes.Length; i++)
-            {
-                string lic = KnownPackageLicenseTypes[i];
-                bool isActive = HasLicenseFilter()
-                    && string.Equals(currentLicenseFilter, lic, StringComparison.OrdinalIgnoreCase);
-                AddBrowseFilterLicenseRow(lic, isActive);
-            }
+            AddBrowseFilterLicenseSegmentGrid();
 
             try { RescaleGlobalSourceFilterMenuInternal(ChromeScale); } catch { }
             LayoutRebuilder.ForceRebuildLayoutImmediate(globalSourceFilterMenuPanelGO.GetComponent<RectTransform>());
+        }
+
+        private void SetBrowseTagPresenceSegment(int seg)
+        {
+            if (seg <= 0)
+            {
+                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                    || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
+                {
+                    UserTagAvailMode restore = _userTagModeBeforeUntagged == UserTagAvailMode.Tag
+                        ? UserTagAvailMode.Tag
+                        : UserTagAvailMode.FilterByTags;
+                    SetUserTagAvailMode(restore);
+                }
+                return;
+            }
+            if (seg == 1)
+                SetUserTagAvailMode(UserTagAvailMode.FilterUntagged);
+            else
+                SetUserTagAvailMode(UserTagAvailMode.FilterTaggedOnly);
+        }
+
+        private void AddBrowseFilterLicenseSegmentGrid()
+        {
+            if (KnownPackageLicenseTypes == null || KnownPackageLicenseTypes.Length == 0) return;
+            const int cols = 3;
+            // Leading "Any" clears license filter — keeps grid consistent with Off/All pattern.
+            int total = KnownPackageLicenseTypes.Length + 1;
+            int rows = (total + cols - 1) / cols;
+            for (int r = 0; r < rows; r++)
+            {
+                var labels = new string[cols];
+                var indices = new int[cols];
+                int selectedInRow = -1;
+                for (int c = 0; c < cols; c++)
+                {
+                    int flat = r * cols + c;
+                    if (flat >= total)
+                    {
+                        labels[c] = "";
+                        indices[c] = -1;
+                        continue;
+                    }
+                    if (flat == 0)
+                    {
+                        labels[c] = VPBTranslation.T("gallery.filter.seg_any", "Any");
+                        indices[c] = -1;
+                        if (!HasLicenseFilter()) selectedInRow = c;
+                    }
+                    else
+                    {
+                        string lic = KnownPackageLicenseTypes[flat - 1];
+                        labels[c] = lic;
+                        indices[c] = flat - 1;
+                        if (HasLicenseFilter()
+                            && string.Equals(currentLicenseFilter, lic, StringComparison.OrdinalIgnoreCase))
+                            selectedInRow = c;
+                    }
+                }
+                AddBrowseFilterSegmentRow(labels, selectedInRow, c =>
+                {
+                    int licIdx = indices[c];
+                    if (licIdx < 0)
+                        ClearLicenseFilter(refresh: true);
+                    else
+                        SetLicenseFilter(KnownPackageLicenseTypes[licIdx], refresh: true);
+                }, allowEmptySlots: true);
+            }
         }
 
         private void AddBrowseFilterMenuHeader(string text)
@@ -308,109 +413,93 @@ namespace VPB
             }
         }
 
-        private void AddBrowseFilterCycleRow(string name, BrowseFilterCycle cycle, Action onPrimary, Action onOnly)
+        /// <summary>
+        /// Visible exclusive segment row (usually 3). Recognition over Shift+click.
+        /// Empty labels skipped when <paramref name="allowEmptySlots"/>.
+        /// </summary>
+        private void AddBrowseFilterSegmentRow(
+            string[] labels,
+            int selectedIndex,
+            Action<int> onSelect,
+            bool allowEmptySlots = false)
         {
-            string mark = cycle == BrowseFilterCycle.Only ? "\u25cf  "
-                : (cycle == BrowseFilterCycle.Apply ? "\u2713  " : "    ");
-            bool active = cycle != BrowseFilterCycle.Off;
-            GameObject row = UI.AddPopupMenuRow(
-                globalSourceFilterMenuPanelGO,
-                BrowseFilterMenuPanelWidthRef - 12f,
-                GalleryUiDesignTokens.PopupMenuRowHeightRef,
-                mark + name,
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                active,
-                () =>
+            if (globalSourceFilterMenuPanelGO == null || labels == null || labels.Length == 0 || onSelect == null)
+                return;
+
+            GameObject row = new GameObject("BrowseFilterSegments");
+            row.transform.SetParent(globalSourceFilterMenuPanelGO.transform, false);
+            UI.AddHLG(row, spacing: 3f, padding: UI.Pad(0, 0, 0, 0),
+                childAlignment: TextAnchor.MiddleCenter,
+                childControlWidth: true,
+                childControlHeight: true,
+                childForceExpandWidth: true,
+                childForceExpandHeight: true);
+            UI.AddLE(row,
+                preferredHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                flexibleWidth: 1f);
+
+            if (selectedIndex < -1) selectedIndex = -1;
+            if (selectedIndex >= labels.Length) selectedIndex = -1;
+
+            for (int i = 0; i < labels.Length; i++)
+            {
+                int idx = i;
+                string lab = labels[i] ?? "";
+                if (allowEmptySlots && lab.Length == 0)
                 {
-                    try
+                    GameObject spacer = new GameObject("SegSpacer");
+                    spacer.transform.SetParent(row.transform, false);
+                    LayoutElement sle = spacer.AddComponent<LayoutElement>();
+                    sle.flexibleWidth = 1f;
+                    sle.minWidth = 0f;
+                    continue;
+                }
+
+                bool active = idx == selectedIndex;
+                GameObject seg = UI.CreateUIButton(
+                    row,
+                    0f,
+                    GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                    lab,
+                    GalleryUiDesignTokens.FontCaptionRef,
+                    0f, 0f,
+                    AnchorPresets.stretchAll,
+                    () =>
                     {
-                        if (IsBrowseFilterOnlyModifierHeld() && onOnly != null)
-                            onOnly.Invoke();
-                        else if (onPrimary != null)
-                            onPrimary.Invoke();
-                    }
-                    catch { }
-                },
-                GalleryUiDesignTokens.PopupMenuRowHeightRef);
-            if (row != null && onOnly != null)
-            {
-                UIRightClickDelegate rc = row.GetComponent<UIRightClickDelegate>();
-                if (rc == null) rc = row.AddComponent<UIRightClickDelegate>();
-                rc.OnRightClick = () =>
+                        try { onSelect.Invoke(idx); } catch { }
+                    });
+                if (seg == null) continue;
+                seg.name = "Seg" + idx;
+                Image img = seg.GetComponent<Image>();
+                if (img != null)
+                    img.color = active ? GalleryUiColorTokens.AccentSelected : GalleryUiColorTokens.SegmentIdle;
+                Text t = seg.GetComponentInChildren<Text>(true);
+                if (t != null)
                 {
-                    try { onOnly.Invoke(); } catch { }
-                };
+                    t.alignment = TextAnchor.MiddleCenter;
+                    t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                    t.verticalOverflow = VerticalWrapMode.Truncate;
+                    t.color = active ? GalleryUiColorTokens.TextOnAccent : GalleryUiColorTokens.SegmentIdleText;
+                    VPBUiFont.ApplyTo(t);
+                }
+                LayoutElement fle = seg.GetComponent<LayoutElement>();
+                if (fle == null) fle = seg.AddComponent<LayoutElement>();
+                fle.flexibleWidth = 1f;
+                fle.minWidth = 0f;
+                fle.preferredWidth = 0f;
+                fle.flexibleHeight = 1f;
             }
         }
 
-        private static bool IsBrowseFilterOnlyModifierHeld()
+        /// <summary>Default browse mode: newest package per family.</summary>
+        private static BrowseFilterCycle DefaultBrowseOldVersionsCycle
         {
-            return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            get { return BrowseFilterCycle.Apply; }
         }
 
-        private void AddBrowseFilterToggleRow(string name, bool isOn, Action onToggle)
+        private static bool IsBrowseOldVersionsNonDefault(BrowseFilterCycle cycle)
         {
-            string mark = isOn ? "\u2713  " : "    ";
-            UI.AddPopupMenuRow(
-                globalSourceFilterMenuPanelGO,
-                BrowseFilterMenuPanelWidthRef - 12f,
-                GalleryUiDesignTokens.PopupMenuRowHeightRef,
-                mark + name,
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                isOn,
-                () =>
-                {
-                    try { onToggle?.Invoke(); } catch { }
-                },
-                GalleryUiDesignTokens.PopupMenuRowHeightRef);
-        }
-
-        private void AddBrowseFilterLicenseRow(string licenseType, bool isActive)
-        {
-            if (string.IsNullOrEmpty(licenseType)) return;
-            string mark = isActive ? "\u2713  " : "    ";
-            string snap = licenseType;
-            UI.AddPopupMenuRow(
-                globalSourceFilterMenuPanelGO,
-                BrowseFilterMenuPanelWidthRef - 12f,
-                GalleryUiDesignTokens.PopupMenuRowHeightRef,
-                mark + licenseType,
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                isActive,
-                () =>
-                {
-                    try { SetLicenseFilter(snap, refresh: true); } catch { }
-                },
-                GalleryUiDesignTokens.PopupMenuRowHeightRef);
-        }
-
-        private void ToggleBrowseNotTaggedFilter()
-        {
-            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
-            {
-                UserTagAvailMode restore = _userTagModeBeforeUntagged == UserTagAvailMode.Tag
-                    ? UserTagAvailMode.Tag
-                    : UserTagAvailMode.FilterByTags;
-                SetUserTagAvailMode(restore);
-            }
-            else
-            {
-                SetUserTagAvailMode(UserTagAvailMode.FilterUntagged);
-            }
-        }
-
-        /// <summary>Primary click: Off ↔ Apply. Only → Off.</summary>
-        private static BrowseFilterCycle PrimaryToggleBrowseFilterCycle(BrowseFilterCycle cur)
-        {
-            if (cur == BrowseFilterCycle.Off) return BrowseFilterCycle.Apply;
-            return BrowseFilterCycle.Off;
-        }
-
-        /// <summary>RMB / Shift+click: arm Only; if already Only → Apply.</summary>
-        private static BrowseFilterCycle SecondaryToggleBrowseFilterOnly(BrowseFilterCycle cur)
-        {
-            if (cur == BrowseFilterCycle.Only) return BrowseFilterCycle.Apply;
-            return BrowseFilterCycle.Only;
+            return cycle != DefaultBrowseOldVersionsCycle;
         }
 
         private string ResolveBrowseHiddenCycleLabel()
@@ -436,8 +525,8 @@ namespace VPB
             if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
                 return VPBTranslation.T("gallery.filter.old_versions_only", "Old versions only");
             if (_browseOldVersionsCycle == BrowseFilterCycle.Apply)
-                return VPBTranslation.T("gallery.filter.hide_old_versions", "Hide old versions");
-            return VPBTranslation.T("gallery.filter.old_versions", "Old versions");
+                return VPBTranslation.T("gallery.filter.newest_only", "Newest only");
+            return VPBTranslation.T("gallery.filter.all_versions", "All versions");
         }
 
         private string ResolveBrowseLoadedModeLabel()
@@ -458,24 +547,6 @@ namespace VPB
             return VPBTranslation.T("gallery.filter.unused", "Unused");
         }
 
-        private void AddGlobalSourceFilterMenuRow(
-            VPBConfig.GlobalSourceFilterValue value,
-            string name,
-            int count,
-            bool isActive)
-        {
-            string label = (isActive ? "\u2713  " : "    ") + name + " (" + count + ")";
-            UI.AddPopupMenuRow(
-                globalSourceFilterMenuPanelGO,
-                BrowseFilterMenuPanelWidthRef - 12f,
-                GalleryUiDesignTokens.PopupMenuRowHeightRef,
-                label,
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                isActive,
-                () => OnGlobalSourceFilterRowClicked(value),
-                GalleryUiDesignTokens.PopupMenuRowHeightRef);
-        }
-
         private void RescaleGlobalSourceFilterMenuInternal(float s)
         {
             if (globalSourceFilterMenuPanelGO == null) return;
@@ -487,6 +558,29 @@ namespace VPB
                 GalleryUiDesignTokens.PopupMenuRowHeightRef,
                 GalleryUiDesignTokens.PopupMenuRowFontRef,
                 BrowseFilterMenuPanelWidthRef);
+
+            // Segment rows: scale caption font on each Seg* child (ScaleVerticalPopupMenuRows only hits first Text).
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
+            Transform panel = globalSourceFilterMenuPanelGO.transform;
+            for (int i = 0; i < panel.childCount; i++)
+            {
+                Transform ch = panel.GetChild(i);
+                if (ch == null || ch.name != "BrowseFilterSegments") continue;
+                LayoutElement le = ch.GetComponent<LayoutElement>();
+                if (le != null)
+                {
+                    le.preferredHeight = rowH;
+                    le.minHeight = rowH;
+                }
+                for (int c = 0; c < ch.childCount; c++)
+                {
+                    Transform seg = ch.GetChild(c);
+                    if (seg == null) continue;
+                    Text t = seg.GetComponentInChildren<Text>(true);
+                    if (t != null)
+                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
+                }
+            }
 
             RectTransform panelRT = globalSourceFilterMenuPanelGO.GetComponent<RectTransform>();
             if (panelRT == null) return;
@@ -541,64 +635,6 @@ namespace VPB
             SyncBrowseFilterChipChrome();
             if (globalSourceFilterMenuRoot != null && globalSourceFilterMenuRoot.activeSelf)
                 RebuildGlobalSourceFilterMenuOptions();
-        }
-
-        private void CycleBrowseHiddenFilter()
-        {
-            SetBrowseHiddenCycle(PrimaryToggleBrowseFilterCycle(_browseHiddenCycle), refresh: true);
-        }
-
-        private void CycleBrowseHiddenFilterOnly()
-        {
-            SetBrowseHiddenCycle(SecondaryToggleBrowseFilterOnly(_browseHiddenCycle), refresh: true);
-        }
-
-        private void CycleBrowseAlwaysLoadedFilter()
-        {
-            SetBrowseAlwaysLoadedCycle(PrimaryToggleBrowseFilterCycle(_browseAlwaysLoadedCycle), refresh: true);
-        }
-
-        private void CycleBrowseAlwaysLoadedFilterOnly()
-        {
-            SetBrowseAlwaysLoadedCycle(SecondaryToggleBrowseFilterOnly(_browseAlwaysLoadedCycle), refresh: true);
-        }
-
-        private void CycleBrowseOldVersionsFilter()
-        {
-            SetBrowseOldVersionsCycle(PrimaryToggleBrowseFilterCycle(_browseOldVersionsCycle), refresh: true);
-        }
-
-        private void CycleBrowseOldVersionsFilterOnly()
-        {
-            SetBrowseOldVersionsCycle(SecondaryToggleBrowseFilterOnly(_browseOldVersionsCycle), refresh: true);
-        }
-
-        private void CycleBrowseLoadedFilter()
-        {
-            // Off ↔ All Loaded. UnloadedOnly + click → Off.
-            BrowseLoadedMode next = _browseLoadedMode == BrowseLoadedMode.Off
-                ? BrowseLoadedMode.LoadedOnly
-                : BrowseLoadedMode.Off;
-            SetBrowseLoadedMode(next, refresh: true);
-        }
-
-        private void CycleBrowseLoadedFilterOnly()
-        {
-            // RMB/Shift: Off/Loaded → Unloaded; Unloaded → Loaded.
-            BrowseLoadedMode next = _browseLoadedMode == BrowseLoadedMode.UnloadedOnly
-                ? BrowseLoadedMode.LoadedOnly
-                : BrowseLoadedMode.UnloadedOnly;
-            SetBrowseLoadedMode(next, refresh: true);
-        }
-
-        private void CycleBrowseUnusedFilter()
-        {
-            SetBrowseUnusedCycle(PrimaryToggleBrowseFilterCycle(_browseUnusedCycle), refresh: true);
-        }
-
-        private void CycleBrowseUnusedFilterOnly()
-        {
-            SetBrowseUnusedCycle(SecondaryToggleBrowseFilterOnly(_browseUnusedCycle), refresh: true);
         }
 
         private void SetBrowseHiddenCycle(BrowseFilterCycle cycle, bool refresh)
@@ -793,9 +829,9 @@ namespace VPB
                 ApplyAlwaysLoadedCycleSortSideEffects(prevAl, BrowseFilterCycle.Off);
                 changed = true;
             }
-            if (_browseOldVersionsCycle != BrowseFilterCycle.Off)
+            if (_browseOldVersionsCycle != DefaultBrowseOldVersionsCycle)
             {
-                _browseOldVersionsCycle = BrowseFilterCycle.Off;
+                _browseOldVersionsCycle = DefaultBrowseOldVersionsCycle;
                 SyncHideOldVersionsFromCycle();
                 changed = true;
             }
@@ -811,7 +847,8 @@ namespace VPB
                 ApplyUnusedCycleSortSideEffects(prevU, BrowseFilterCycle.Off);
                 changed = true;
             }
-            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
             {
                 UserTagAvailMode restore = _userTagModeBeforeUntagged == UserTagAvailMode.Tag
                     ? UserTagAvailMode.Tag
@@ -824,7 +861,6 @@ namespace VPB
             if (HasLicenseFilter())
             {
                 currentLicenseFilter = "";
-                CancelLicenseFilterHydrate();
                 changed = true;
             }
 
@@ -847,10 +883,11 @@ namespace VPB
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return true;
             if (_browseHiddenCycle != BrowseFilterCycle.Off) return true;
             if (_browseAlwaysLoadedCycle != BrowseFilterCycle.Off) return true;
-            if (_browseOldVersionsCycle != BrowseFilterCycle.Off) return true;
+            if (IsBrowseOldVersionsNonDefault(_browseOldVersionsCycle)) return true;
             if (_browseLoadedMode != BrowseLoadedMode.Off) return true;
             if (_browseUnusedCycle != BrowseFilterCycle.Off) return true;
-            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return true;
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly) return true;
             if (HasLicenseFilter()) return true;
             return false;
         }
@@ -861,10 +898,11 @@ namespace VPB
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) n++;
             if (_browseHiddenCycle != BrowseFilterCycle.Off) n++;
             if (_browseAlwaysLoadedCycle != BrowseFilterCycle.Off) n++;
-            if (_browseOldVersionsCycle != BrowseFilterCycle.Off) n++;
+            if (IsBrowseOldVersionsNonDefault(_browseOldVersionsCycle)) n++;
             if (_browseLoadedMode != BrowseLoadedMode.Off) n++;
             if (_browseUnusedCycle != BrowseFilterCycle.Off) n++;
-            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) n++;
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly) n++;
             if (HasLicenseFilter()) n++;
             return n;
         }
@@ -917,10 +955,12 @@ namespace VPB
                 return VPBTranslation.T("gallery.filter.source_var", ".var");
             if (_browseHiddenCycle != BrowseFilterCycle.Off)
                 return ResolveBrowseHiddenCycleLabel();
-            if (_browseOldVersionsCycle != BrowseFilterCycle.Off)
+            if (IsBrowseOldVersionsNonDefault(_browseOldVersionsCycle))
                 return ResolveBrowseOldVersionsCycleLabel();
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
                 return VPBTranslation.T("gallery.filter.not_tagged", "Not tagged");
+            if (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
+                return VPBTranslation.T("gallery.filter.tagged_only", "Tagged only");
             if (_browseAlwaysLoadedCycle != BrowseFilterCycle.Off)
                 return ResolveBrowseAlwaysLoadedCycleLabel();
             if (_browseLoadedMode != BrowseLoadedMode.Off)
@@ -930,22 +970,6 @@ namespace VPB
             if (HasLicenseFilter())
                 return ResolveBrowseLicenseFilterLabel();
             return VPBTranslation.T("gallery.filter.button_active", "Filter") + " \u00b7 1";
-        }
-
-        private void ComputeGlobalSourceFilterRowCounts(out int allCount, out int localCount, out int varCount)
-        {
-            allCount = 0;
-            localCount = 0;
-            varCount = 0;
-            if (lastFilteredFiles == null) return;
-            for (int i = 0; i < lastFilteredFiles.Count; i++)
-            {
-                FileEntry e = lastFilteredFiles[i];
-                if (e == null) continue;
-                allCount++;
-                if (IsVarBacked(e)) varCount++;
-                else localCount++;
-            }
         }
 
         public void HideGlobalSourceFilterDropdownIfOpen()
@@ -1042,7 +1066,9 @@ namespace VPB
             {
                 try
                 {
-                    if (Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value)
+                    // Legacy cfg: HideOldVersions true → Newest. False keeps All versions (Off).
+                    if (Settings.Instance != null && Settings.Instance.HideOldVersions != null
+                        && Settings.Instance.HideOldVersions.Value)
                         _browseOldVersionsCycle = BrowseFilterCycle.Apply;
                 }
                 catch { }

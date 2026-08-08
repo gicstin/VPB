@@ -1,7 +1,4 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
 
 namespace VPB
 {
@@ -22,9 +19,6 @@ namespace VPB
             "CC BY-NC-ND"
         };
 
-        private Coroutine _licenseFilterHydrateCo;
-        private int _licenseFilterHydrateGen;
-
         private bool HasLicenseFilter()
         {
             return !string.IsNullOrEmpty(currentLicenseFilter);
@@ -34,7 +28,6 @@ namespace VPB
         {
             if (!HasLicenseFilter()) return;
             currentLicenseFilter = "";
-            CancelLicenseFilterHydrate();
             if (refresh) AfterLicenseFilterChanged();
             else
             {
@@ -46,6 +39,7 @@ namespace VPB
         /// <summary>
         /// Arm or toggle off license type filter. Re-pick same type clears.
         /// Forces Source → All (license is .var meta only).
+        /// Filter runs in SQLite via <c>pkg.license</c> (no main-thread ZIP hydrate).
         /// </summary>
         private void SetLicenseFilter(string license, bool refresh)
         {
@@ -80,78 +74,12 @@ namespace VPB
                 }
             }
 
-            if (refresh)
-            {
-                CancelLicenseFilterHydrate();
-                _licenseFilterHydrateCo = StartCoroutine(LicenseFilterHydrateThenRefreshCo());
-            }
+            if (refresh) AfterLicenseFilterChanged();
             else
             {
                 try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
                 SyncBrowseFilterChipChrome();
             }
-        }
-
-        private void CancelLicenseFilterHydrate()
-        {
-            _licenseFilterHydrateGen++;
-            if (_licenseFilterHydrateCo == null) return;
-            try { StopCoroutine(_licenseFilterHydrateCo); } catch { }
-            _licenseFilterHydrateCo = null;
-        }
-
-        /// <summary>
-        /// Hydrate package licenses once per package (not per grid row), then refresh.
-        /// Yields so large libraries do not stall the main thread past Doherty threshold.
-        /// </summary>
-        private IEnumerator LicenseFilterHydrateThenRefreshCo()
-        {
-            int gen = ++_licenseFilterHydrateGen;
-            try
-            {
-                ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.filter.license_loading", "Loading licenses…"),
-                    2.5f);
-            }
-            catch { }
-
-            VarPackage[] snap = null;
-            try
-            {
-                Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
-                if (byUid != null && byUid.Count > 0)
-                {
-                    snap = new VarPackage[byUid.Count];
-                    int i = 0;
-                    foreach (KeyValuePair<string, VarPackage> kv in byUid)
-                    {
-                        if (gen != _licenseFilterHydrateGen) yield break;
-                        snap[i++] = kv.Value;
-                    }
-                }
-            }
-            catch { snap = null; }
-
-            if (snap != null)
-            {
-                const int yieldEvery = 12;
-                int n = 0;
-                for (int i = 0; i < snap.Length; i++)
-                {
-                    if (gen != _licenseFilterHydrateGen) yield break;
-                    VarPackage pkg = snap[i];
-                    if (pkg == null) continue;
-                    if (!string.IsNullOrEmpty(pkg.LicenseType)) continue;
-                    try { pkg.TryEnsureMetaJsonLiteFields(); } catch { }
-                    n++;
-                    if ((n % yieldEvery) == 0)
-                        yield return null;
-                }
-            }
-
-            if (gen != _licenseFilterHydrateGen) yield break;
-            _licenseFilterHydrateCo = null;
-            AfterLicenseFilterChanged();
         }
 
         private void AfterLicenseFilterChanged()
@@ -168,6 +96,8 @@ namespace VPB
         private bool PassesLicenseFilter(FileEntry entry)
         {
             if (!HasLicenseFilter()) return true;
+            // SQL path already narrowed cat_mem/pkg rows — skip per-row meta ZIP.
+            if (_fileListHadSqlLicenseFilter) return true;
             if (entry == null) return false;
 
             string lic = ResolveLicenseTypeForFilter(entry);

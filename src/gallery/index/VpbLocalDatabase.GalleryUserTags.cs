@@ -301,6 +301,20 @@ namespace VPB
             sb.Append(')');
         }
 
+        /// <summary>Restrict <c>cat_mem</c> rows to items that have at least one SQLite user tag.</summary>
+        internal static void AppendSqlHasAnyUserTagExists(StringBuilder sb, string mAlias, string categoryTitle, bool everythingView = false)
+        {
+            if (sb == null || string.IsNullOrEmpty(mAlias)) return;
+            sb.Append(" AND EXISTS (SELECT 1 FROM gallery_item_user_tag gut WHERE ");
+            if (IsGalleryAllVarPseudoCategory(categoryTitle))
+                sb.Append("gut.pkg_uid=").Append(mAlias).Append(".pkg_uid");
+            else if (everythingView)
+                sb.Append("gut.pkg_uid=").Append(mAlias).Append(".pkg_uid AND gut.internal_path=").Append(mAlias).Append(".internal_path");
+            else
+                sb.Append("gut.category=").Append(mAlias).Append(".category AND gut.pkg_uid=").Append(mAlias).Append(".pkg_uid AND gut.internal_path=").Append(mAlias).Append(".internal_path");
+            sb.Append(')');
+        }
+
         /// <summary>True when row has no user tags for current browse semantics (ALL VAR package rows use package-wide check).</summary>
         internal static bool TryGalleryRowHasNoUserTags(string categoryTitle, string pkgUid, string internalPath)
         {

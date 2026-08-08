@@ -449,7 +449,7 @@ namespace VPB
         private bool internalSettingsSessionActive = false;
         private InternalSettingsSnapshot internalSettingsBackup;
         /// <summary>Isolated list zoom while internal Settings panel open; does not persist to <see cref="ListRowHeight"/>.</summary>
-        private float internalSettingsListRowHeightSession = 100f;
+        private float internalSettingsListRowHeightSession = GalleryUiDesignTokens.SettingsFloatRowHeightRef;
 
         private GameObject footerUndoBtnGO;
         private GameObject footerRedoBtnGO;
@@ -653,7 +653,7 @@ namespace VPB
         // applied as the early gate in PassesFilters. Scene/Appearance side "Local only" mirrors this.
         private VPBConfig.GlobalSourceFilterValue currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
 
-        /// <summary>Filter menu cycle: Off / Apply (prefer) / Only. Primary click toggles Off↔Apply; RMB or Shift+click arms Only.</summary>
+        /// <summary>Filter menu cycle: Off / Apply (prefer) / Only. Visible 3-way segment (no Shift+click).</summary>
         private enum BrowseFilterCycle : byte
         {
             Off = 0,
@@ -661,7 +661,7 @@ namespace VPB
             Only = 2
         }
 
-        /// <summary>Loaded path filter: Off / LoadedOnly / UnloadedOnly. Click Off↔Loaded; RMB/Shift → Unloaded.</summary>
+        /// <summary>Loaded path filter: Off / LoadedOnly / UnloadedOnly. Visible 3-way segment.</summary>
         private enum BrowseLoadedMode : byte
         {
             Off = 0,
@@ -683,7 +683,12 @@ namespace VPB
         // Title-bar Filter cycles (per-category via CategoryFilterState; settings mirrored when applied).
         private BrowseFilterCycle _browseHiddenCycle;
         private BrowseFilterCycle _browseAlwaysLoadedCycle;
-        private BrowseFilterCycle _browseOldVersionsCycle;
+        /// <summary>Default <see cref="BrowseFilterCycle.Apply"/> = newest only (hide old).</summary>
+        private BrowseFilterCycle _browseOldVersionsCycle = BrowseFilterCycle.Apply;
+        /// <summary>True when current file list was narrowed by SQL <c>pkg.is_newest</c> (skip C# Old-only re-filter).</summary>
+        private bool _fileListHadSqlPkgVersionFilter;
+        /// <summary>True when current file list was narrowed by SQL <c>pkg.license</c> (skip per-row license PassesFilters).</summary>
+        private bool _fileListHadSqlLicenseFilter;
         private BrowseFilterCycle _browseUnusedCycle;
         /// <summary>Cached armed count for Filter button chrome — skip icon reload when unchanged.</summary>
         private int _globalSourceFilterBtnArmedCount = -1;

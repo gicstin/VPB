@@ -3337,8 +3337,9 @@ namespace VPB
                 catch { }
 
                 // User tag filter params (mirrors RefreshFilesRoutine worker snapshot).
-                // Include/exclude arm independent of F/T; FilterUntagged is exclusive.
+                // Include/exclude arm independent of F/T; presence browse is exclusive.
                 bool utUntaggedOnly = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
+                bool utTaggedOnly = _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly;
                 bool utIncludeExcludeArmed = IsUserTagIncludeExcludeFilterArmed();
                 bool utRequireAll = utIncludeExcludeArmed && UserTagFilterRequiresAllTags();
                 HashSet<string> utNames = null;
@@ -3362,11 +3363,24 @@ namespace VPB
                     try { hideOldVersions = Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; }
                     catch { }
 
+                    int pkgVersionFilter = VpbLocalDatabase.PkgVersionFilterOff;
+                    try
+                    {
+                        if (_browseOldVersionsCycle == BrowseFilterCycle.Apply)
+                            pkgVersionFilter = VpbLocalDatabase.PkgVersionFilterNewestOnly;
+                        else if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
+                            pkgVersionFilter = VpbLocalDatabase.PkgVersionFilterOldOnly;
+                        else if (hideOldVersions)
+                            pkgVersionFilter = VpbLocalDatabase.PkgVersionFilterNewestOnly;
+                    }
+                    catch { }
+
                     if (!VpbLocalDatabase.TryQueryClothingChipCounts(
                         creator, loadedState, nameFilterQuery ?? GallerySearchQuery.Empty,
                         null, null, // pathExclusions/pathInclusions: both null for Clothing
                         activeTags, utNames, utUntaggedOnly, utRequireAll,
-                        sourceFilterMode, hideOldVersions, out chips, utExcludeNames)) return;
+                        sourceFilterMode, pkgVersionFilter, out chips, utExcludeNames, utTaggedOnly,
+                        currentLicenseFilter)) return;
                     _clothingChipCountsCached = chips;
                     _clothingChipCountsSession = session;
                 }

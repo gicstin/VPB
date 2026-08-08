@@ -619,13 +619,13 @@ namespace VPB
                 });
             }
 
-            if (_browseOldVersionsCycle != BrowseFilterCycle.Off)
+            if (IsBrowseOldVersionsNonDefault(_browseOldVersionsCycle))
             {
                 specs.Add(new ActiveFilterChipSpec
                 {
                     Label = ResolveBrowseOldVersionsCycleLabel(),
                     Kind = FilterChipKind.HideOldVersions,
-                    OnDismiss = () => SetBrowseOldVersionsCycle(BrowseFilterCycle.Off, refresh: true)
+                    OnDismiss = () => SetBrowseOldVersionsCycle(DefaultBrowseOldVersionsCycle, refresh: true)
                 });
             }
 
@@ -678,6 +678,15 @@ namespace VPB
                 specs.Add(new ActiveFilterChipSpec
                 {
                     Label = VPBTranslation.T("gallery.filter_chip.untagged_only", "Untagged only"),
+                    Kind = FilterChipKind.UntaggedOnly,
+                    OnDismiss = () => DismissUntaggedOnlyFilterChip()
+                });
+            }
+            else if (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = VPBTranslation.T("gallery.filter_chip.tagged_only", "Tagged only"),
                     Kind = FilterChipKind.UntaggedOnly,
                     OnDismiss = () => DismissUntaggedOnlyFilterChip()
                 });

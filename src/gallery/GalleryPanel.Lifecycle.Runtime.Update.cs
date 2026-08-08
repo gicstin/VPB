@@ -843,9 +843,10 @@ namespace VPB
             }
             if (IsStripKeepSelectorOpen() && StripKeepHandleKeyboard())
                 return;
+            // Dismiss strip float + Scene Tools (Cancel/X same). Soft-confirm/overlays handled above.
             if (Input.GetKeyDown(KeyCode.Escape) && IsStripKeepSelectorOpen())
             {
-                HideStripKeepSelector();
+                ExitCreatorMode();
                 return;
             }
 

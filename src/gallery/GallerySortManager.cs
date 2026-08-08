@@ -728,6 +728,8 @@ namespace VPB
         /// Drop VAR rows whose uid version is less than the family's highest version.
         /// No-op when <c>Settings.HideOldVersions</c> is off. Mutates the list in place.
         /// Non-VAR entries (scenes, JSONs) are left untouched.
+        /// Prefer SQL <c>pkg.is_newest</c> filter on gallery queries; this remains for non-SQL
+        /// fallback paths and package-delta appends (legacy cfg flag).
         /// </summary>
         public static void ApplyHideOldVersionsFilter(List<FileEntry> files)
         {

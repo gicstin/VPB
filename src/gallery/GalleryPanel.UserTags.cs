@@ -1778,6 +1778,7 @@ namespace VPB
         private bool ShouldShowUserTagRemoveForRow(bool appliedRow, UserTagSelectionState availSelectionState = UserTagSelectionState.Off)
         {
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            if (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly) return false;
             if (selectedFiles == null || selectedFiles.Count == 0) return false;
             if (appliedRow) return true;
             return availSelectionState == UserTagSelectionState.On
@@ -3048,6 +3049,7 @@ namespace VPB
         private bool IsUserTagIncludeExcludeFilterArmed()
         {
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            if (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly) return false;
             if (activeUserTags != null && activeUserTags.Count > 0) return true;
             if (excludedUserTags != null && excludedUserTags.Count > 0) return true;
             return false;
@@ -3056,12 +3058,14 @@ namespace VPB
         private bool IsUserTagIncludeFilterArmed()
         {
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            if (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly) return false;
             return activeUserTags != null && activeUserTags.Count > 0;
         }
 
         private bool IsUserTagExcludeFilterArmed()
         {
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            if (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly) return false;
             return excludedUserTags != null && excludedUserTags.Count > 0;
         }
 
@@ -3107,8 +3111,9 @@ namespace VPB
         internal void ApplyDefaultUserTagAvailModeOnTagsPanelOpen()
         {
             UserTagAvailMode mode = ResolveDefaultUserTagAvailMode();
-            // Opening the tags rail must not dismiss title-bar Not tagged (browse filter ≠ panel work mode).
-            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            // Opening the tags rail must not dismiss title-bar presence browse (≠ panel work mode).
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
             {
                 if (mode == UserTagAvailMode.Tag || mode == UserTagAvailMode.FilterByTags)
                     _userTagModeBeforeUntagged = mode;
@@ -3152,7 +3157,8 @@ namespace VPB
                 SetUserTagAvailMode(mode);
                 return;
             }
-            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
             {
                 if (_userTagModeBeforeUntagged == mode)
                 {
@@ -3178,13 +3184,14 @@ namespace VPB
         {
             UserTagAvailMode prev = _userTagAvailMode;
             if (prev == mode) return;
-            if (mode == UserTagAvailMode.FilterUntagged
-                && prev != UserTagAvailMode.FilterUntagged)
+            bool enteringPresence = mode == UserTagAvailMode.FilterUntagged || mode == UserTagAvailMode.FilterTaggedOnly;
+            bool leavingPresence = prev == UserTagAvailMode.FilterUntagged || prev == UserTagAvailMode.FilterTaggedOnly;
+            if (enteringPresence && !leavingPresence)
                 _userTagModeBeforeUntagged = prev == UserTagAvailMode.Tag
                     ? UserTagAvailMode.Tag
                     : UserTagAvailMode.FilterByTags;
             _userTagAvailMode = mode;
-            if (prev == UserTagAvailMode.FilterUntagged || _userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            if (leavingPresence || enteringPresence)
                 ClearUntaggedTaggedPinKeys();
             try
             {
@@ -3202,11 +3209,9 @@ namespace VPB
                 try { RebuildGlobalSourceFilterMenuOptions(); } catch { }
             }
 
-            // Grid only changes when untagged browse toggles. Include/exclude filters stay live across F↔T
-            // (work mode is list density + click binding only — never re-arm/disarm filter sets).
-            bool untaggedInvolved = prev == UserTagAvailMode.FilterUntagged
-                || mode == UserTagAvailMode.FilterUntagged;
-            if (untaggedInvolved)
+            // Grid only changes when presence browse toggles. Include/exclude stay live across F↔T.
+            bool presenceInvolved = leavingPresence || enteringPresence;
+            if (presenceInvolved)
             {
                 try { RefreshFiles(true, false, false, null); } catch { }
             }
@@ -3258,7 +3263,8 @@ namespace VPB
         /// <summary>Work mode shown on side-rail chrome while Not tagged browse filter is on.</summary>
         private UserTagAvailMode ResolveUserTagWorkModeForChrome()
         {
-            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
+                || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
             {
                 return _userTagModeBeforeUntagged == UserTagAvailMode.Tag
                     ? UserTagAvailMode.Tag

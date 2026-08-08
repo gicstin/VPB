@@ -217,7 +217,33 @@ namespace VPB
             public int Decals;
         }
 
-        // sourceMode: 0=All, 1=Local-only, 2=VAR-only; loose rows are never HOV-filtered.
+        // sourceMode: 0=All, 1=Local-only, 2=VAR-only; loose rows are never version-filtered.
+        // pkgVersionFilter: PkgVersionFilterOff / NewestOnly / OldOnly (library-global pkg.is_newest).
+        internal static bool TryQueryClothingChipCounts(
+            string creatorFilter,
+            int loadedState,
+            string[] nameTerms,
+            List<string> pathExclusions,
+            List<string> pathInclusions,
+            HashSet<string> activeTags,
+            HashSet<string> activeUserTags,
+            bool userTagsUntaggedOnly,
+            bool userTagsRequireAll,
+            int sourceMode,
+            int pkgVersionFilter,
+            out ClothingChipCounts counts,
+            HashSet<string> excludedUserTags = null,
+            bool userTagsTaggedOnly = false,
+            string licenseFilter = null)
+        {
+            return TryQueryClothingChipCounts(
+                creatorFilter, loadedState, GallerySearchQuery.FromLegacyNameTerms(nameTerms),
+                pathExclusions, pathInclusions, activeTags, activeUserTags,
+                userTagsUntaggedOnly, userTagsRequireAll, sourceMode, pkgVersionFilter,
+                out counts, excludedUserTags, userTagsTaggedOnly, licenseFilter);
+        }
+
+        /// <summary>Legacy bool overload: hideOldVersions → NewestOnly.</summary>
         internal static bool TryQueryClothingChipCounts(
             string creatorFilter,
             int loadedState,
@@ -231,13 +257,15 @@ namespace VPB
             int sourceMode,
             bool hideOldVersions,
             out ClothingChipCounts counts,
-            HashSet<string> excludedUserTags = null)
+            HashSet<string> excludedUserTags = null,
+            bool userTagsTaggedOnly = false,
+            string licenseFilter = null)
         {
             return TryQueryClothingChipCounts(
-                creatorFilter, loadedState, GallerySearchQuery.FromLegacyNameTerms(nameTerms),
-                pathExclusions, pathInclusions, activeTags, activeUserTags,
-                userTagsUntaggedOnly, userTagsRequireAll, sourceMode, hideOldVersions,
-                out counts, excludedUserTags);
+                creatorFilter, loadedState, nameTerms, pathExclusions, pathInclusions,
+                activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, sourceMode,
+                hideOldVersions ? PkgVersionFilterNewestOnly : PkgVersionFilterOff,
+                out counts, excludedUserTags, userTagsTaggedOnly, licenseFilter);
         }
 
         internal static bool TryQueryClothingChipCounts(
@@ -251,9 +279,11 @@ namespace VPB
             bool userTagsUntaggedOnly,
             bool userTagsRequireAll,
             int sourceMode,
-            bool hideOldVersions,
+            int pkgVersionFilter,
             out ClothingChipCounts counts,
-            HashSet<string> excludedUserTags = null)
+            HashSet<string> excludedUserTags = null,
+            bool userTagsTaggedOnly = false,
+            string licenseFilter = null)
         {
             counts = new ClothingChipCounts();
             if (!VpbSqlite3.IsAvailable) return false;
@@ -279,9 +309,11 @@ namespace VPB
                     var ctx = BuildGalleryCategoryWhere(
                         conn, "Clothing", creatorFilter, loadedState,
                         searchQuery ?? GallerySearchQuery.Empty, pathExclusions, pathInclusions,
-                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
+                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags,
+                        pkgVersionFilter, userTagsTaggedOnly, licenseFilter);
 
-                    string afterClothFragments = ctx.LoadedAndFragment + ctx.NameAndFragment
+                    string afterClothFragments = ctx.LoadedAndFragment + ctx.VersionAndFragment + ctx.LicenseAndFragment
+                        + ctx.NameAndFragment
                         + ctx.SearchTimeAndFragment
                         + ctx.ExclusionAndFragment + ctx.InclusionAndFragment
                         + ctx.TagAndFragment + ctx.UserTagAndFragment + ctx.ExcludedUserTagAndFragment;
@@ -329,30 +361,10 @@ namespace VPB
                         {
                             var chip = chips[ci];
                             // Male/Female allows Unknown gender; VAR rows are never Custom/CustomPreset.
-                            if (!hideOldVersions)
-                            {
-                                for (int i = 0; i < rows.Count; i++)
-                                    if (ClothingPackedAttrMatchesSubfilter(rows[i].Attr, chip))
-                                        varCounts[ci] += rows[i].Cnt;
-                                continue;
-                            }
-
-                            // Per-chip HOV: highest version per family among this chip's rows only; global newest would wrongly drop a family whose latest package carries no clothing.
-                            var highest = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                            // Version filter already applied in SQL via pkg.is_newest — tally all matching rows.
                             for (int i = 0; i < rows.Count; i++)
-                            {
-                                if (!ClothingPackedAttrMatchesSubfilter(rows[i].Attr, chip)) continue;
-                                int cur;
-                                if (!highest.TryGetValue(rows[i].Family, out cur) || rows[i].Version > cur)
-                                    highest[rows[i].Family] = rows[i].Version;
-                            }
-                            for (int i = 0; i < rows.Count; i++)
-                            {
-                                if (!ClothingPackedAttrMatchesSubfilter(rows[i].Attr, chip)) continue;
-                                int hi;
-                                if (highest.TryGetValue(rows[i].Family, out hi) && rows[i].Version < hi) continue;
-                                varCounts[ci] += rows[i].Cnt;
-                            }
+                                if (ClothingPackedAttrMatchesSubfilter(rows[i].Attr, chip))
+                                    varCounts[ci] += rows[i].Cnt;
                         }
                     }
 

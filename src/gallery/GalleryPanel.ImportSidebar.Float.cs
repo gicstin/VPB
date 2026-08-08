@@ -12,7 +12,6 @@ namespace VPB
     public partial class GalleryPanel
     {
         // Float shell colors live in ImportSidebar.Chrome (Settings Surface* ladder).
-        private const float ImportSidebarFloatChromeIconPadRef = 5f;
 
         private bool importSidebarDetached;
         private bool importSidebarFloatCollapsed;
@@ -234,7 +233,7 @@ namespace VPB
                 titleRT.sizeDelta = new Vector2(0f, titleH);
             }
             UI.AddHLG(
-                importSidebarFloatTitleBarGO, spacing: 4f, padding: UI.Pad(6, 6, 4, 4),
+                importSidebarFloatTitleBarGO, spacing: 0f, padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -242,7 +241,9 @@ namespace VPB
             Text grip = UI.CreateLabel(importSidebarFloatTitleBarGO, "\u2807", GalleryUiDesignTokens.PopupMenuRowFontRef,
                 GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
                 raycastTarget: false, name: "Grip");
-            UI.AddLE(grip.gameObject, minWidth: 18f, preferredWidth: 18f);
+            UI.ApplyFloatTitleBarMetrics(
+                importSidebarFloatTitleBarGO.GetComponent<HorizontalLayoutGroup>(),
+                grip.gameObject, 1f);
 
             UI.CreateFloatTitleWindowIcon(
                 importSidebarFloatTitleBarGO, "vpb_icons/import.png",
@@ -383,6 +384,7 @@ namespace VPB
             importSidebarFloatResizeHandleGO.name = "ResizeHandle";
             Image rhImg = importSidebarFloatResizeHandleGO.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
+            UI.EnsureFloatChromeHoverBorder(importSidebarFloatResizeHandleGO);
             StyleImportSidebarFloatChromeIconBtn(
                 importSidebarFloatResizeHandleGO, rh, "vpb_icons/chevrons_down_right.png", UI.IconButtonBackdrop);
             var resizer = importSidebarFloatResizeHandleGO.AddComponent<UIFloatPanelResize>();
@@ -472,46 +474,9 @@ namespace VPB
         private static void StyleImportSidebarFloatChromeIconBtn(
             GameObject go, float size, string iconPath, Color? backdropOverride = null)
         {
-            if (go == null) return;
-            Image img = go.GetComponent<Image>();
-            if (img != null)
-                img.color = backdropOverride.HasValue ? backdropOverride.Value : ImportSidebarFloatChromeIconBg;
-            Button btn = go.GetComponent<Button>();
-            if (btn != null) btn.transition = Selectable.Transition.None;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = size;
-            le.preferredHeight = size;
-            le.minWidth = size;
-            le.minHeight = size;
-            le.flexibleWidth = 0f;
-            le.flexibleHeight = 0f;
-            Text label = go.GetComponentInChildren<Text>(true);
-            if (label != null) label.gameObject.SetActive(false);
-            float pad = ImportSidebarFloatChromeIconPadRef;
-            try
-            {
-                Sprite spr = UI.LoadIconSprite(iconPath, UI.BarIconGlyphTint);
-                if (spr != null)
-                {
-                    Transform existing = go.transform.Find("Icon");
-                    if (existing != null)
-                    {
-                        Image iconImg = existing.GetComponent<Image>();
-                        if (iconImg != null)
-                        {
-                            iconImg.sprite = spr;
-                            iconImg.color = Color.white;
-                            RectTransform irt = existing as RectTransform;
-                            if (irt != null)
-                                irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
-                        }
-                    }
-                    else
-                        UI.AddIconToButton(go, spr, pad, backdropOverride ?? ImportSidebarFloatChromeIconBg);
-                }
-            }
-            catch { }
+            UI.StyleFloatChromeIconButton(
+                go, size, iconPath,
+                backdropOverride.HasValue ? backdropOverride.Value : ImportSidebarFloatChromeIconBg);
         }
 
         private void LoadImportSidebarFloatGeometryFromConfig()

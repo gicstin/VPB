@@ -143,7 +143,7 @@ namespace VPB
                 _stripKeepCreateOptionsHost, spacing: 2f * s, padding: UI.Pad(0, 0, 0, 0));
             v.childForceExpandHeight = false;
             v.childControlHeight = true;
-            UI.AddImage(_stripKeepCreateOptionsHost, new Color(0.07f, 0.11f, 0.14f, 1f));
+            UI.AddImage(_stripKeepCreateOptionsHost, GalleryUiColorTokens.SurfaceDarker);
             UI.AddLE(_stripKeepCreateOptionsHost, flexibleWidth: 1f, flexibleHeight: 0f);
 
             BuildStripKeepDefault3PRow(_stripKeepCreateOptionsHost.transform, btnH, font, s);
@@ -159,7 +159,7 @@ namespace VPB
                 _stripKeepImportSubSceneHost,
                 minHeight: btnH, preferredHeight: btnH,
                 flexibleWidth: 1f, flexibleHeight: 0f);
-            UI.AddImage(_stripKeepImportSubSceneHost, new Color(0.09f, 0.14f, 0.18f, 1f));
+            UI.AddImage(_stripKeepImportSubSceneHost, GalleryUiColorTokens.SurfacePanel);
             UI.AddHLG(
                 _stripKeepImportSubSceneHost, spacing: 4f * s, padding: UI.Pad(4, 4, 2, 2, s),
                 childForceExpandWidth: false, childForceExpandHeight: false,
@@ -198,7 +198,7 @@ namespace VPB
                     toggleLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 toggleLabel.raycastTarget = false;
                 StripKeepClampText(toggleLabel);
-                toggleLabel.color = new Color(0.70f, 0.88f, 0.72f, 1f);
+                toggleLabel.color = GalleryUiColorTokens.TextMuted;
                 RectTransform lrt = toggleLabel.GetComponent<RectTransform>();
                 if (lrt != null)
                 {
@@ -217,7 +217,7 @@ namespace VPB
                 pathHost,
                 flexibleWidth: 1f, minWidth: 48f * s,
                 minHeight: btnH * 0.85f, preferredHeight: btnH * 0.85f, flexibleHeight: 0f);
-            UI.AddImage(pathHost, new Color(0.12f, 0.13f, 0.16f, 1f));
+            UI.AddImage(pathHost, GalleryUiColorTokens.SurfaceDarker);
             if (pathHost.GetComponent<RectMask2D>() == null)
                 pathHost.AddComponent<RectMask2D>();
 
@@ -225,7 +225,7 @@ namespace VPB
                 pathHost,
                 "",
                 font,
-                new Color(0.78f, 0.80f, 0.84f, 1f),
+                GalleryUiColorTokens.TextMuted,
                 TextAnchor.MiddleLeft,
                 raycastTarget: false,
                 name: "PathLabel");
@@ -246,7 +246,7 @@ namespace VPB
                 _stripKeepImportSubSceneHost.transform, 0f, chipH,
                 VPBTranslation.T("gallery.creator.strip_subscene_pick", "Pick"),
                 font, s,
-                new Color(0.22f, 0.32f, 0.42f, 1f),
+                GalleryUiColorTokens.SurfaceMid,
                 OnStripKeepBrowseDefaultSubSceneClicked);
             AddTooltipPlain(
                 browseGo,
@@ -258,7 +258,7 @@ namespace VPB
                 _stripKeepImportSubSceneHost.transform, 0f, chipH,
                 VPBTranslation.T("gallery.creator.strip_subscene_clear", "×"),
                 font, s,
-                new Color(0.28f, 0.18f, 0.18f, 1f),
+                GalleryUiColorTokens.AccentDanger,
                 OnStripKeepClearDefaultSubSceneClicked);
             AddTooltipPlain(
                 clearGo,
@@ -283,7 +283,7 @@ namespace VPB
                 _stripKeepImportSubScenePathLabel.text = VPBTranslation.T(
                     "gallery.creator.strip_subscene_none",
                     "(none — Pick)");
-                _stripKeepImportSubScenePathLabel.color = new Color(0.55f, 0.58f, 0.62f, 1f);
+                _stripKeepImportSubScenePathLabel.color = GalleryUiColorTokens.TextDim;
             }
             else
             {
@@ -291,8 +291,8 @@ namespace VPB
                     StripKeepSubSceneDisplayName(_stripKeepDefaultSubScenePath);
                 bool exists = StripKeepSubScenePathExists(_stripKeepDefaultSubScenePath);
                 _stripKeepImportSubScenePathLabel.color = exists
-                    ? new Color(0.78f, 0.90f, 0.82f, 1f)
-                    : new Color(0.92f, 0.55f, 0.45f, 1f);
+                    ? GalleryUiColorTokens.TextMuted
+                    : GalleryUiColorTokens.AccentDangerStrong;
             }
 
             if (_stripKeepImportSubSceneHost != null

@@ -1944,6 +1944,22 @@ namespace VPB
         }
 
         /// <summary>
+        /// Hover rim for float chrome that is not a <see cref="Button"/> (resize grip, etc.).
+        /// <see cref="ApplyGalleryPaneHoverPolicy"/> only auto-adds borders on Buttons.
+        /// Inward by default so footer/title <see cref="RectMask2D"/> does not clip the rim.
+        /// </summary>
+        public static UIHoverBorder EnsureFloatChromeHoverBorder(GameObject go, bool inward = true)
+        {
+            if (go == null) return null;
+            UIHoverBorder hb = go.GetComponent<UIHoverBorder>();
+            if (hb == null) hb = go.AddComponent<UIHoverBorder>();
+            if (hb.inward != inward)
+                hb.inward = inward;
+            try { hb.ApplyBorderSettings(); } catch { }
+            return hb;
+        }
+
+        /// <summary>
         /// Non-interactive window-type glyph for float title bars (after grip, before title).
         /// Host includes trailing gap so label is not stuck to icon.
         /// </summary>
@@ -1992,6 +2008,209 @@ namespace VPB
                 flexibleWidth: 0f, flexibleHeight: 0f);
 
             return host;
+        }
+
+        /// <summary>
+        /// Shared float title HLG pad/spacing + grip column width (tight icon inset).
+        /// Call at create and on ChromeScale rescale.
+        /// </summary>
+        public static void ApplyFloatTitleBarMetrics(HorizontalLayoutGroup hlg, GameObject grip, float scale)
+        {
+            float s = scale > 0f ? scale : 1f;
+            if (hlg != null)
+            {
+                hlg.spacing = GalleryUiDesignTokens.FloatTitleBarSpacingRef * s;
+                hlg.padding = Pad(
+                    GalleryUiDesignTokens.FloatTitleBarPadHRef,
+                    GalleryUiDesignTokens.FloatTitleBarPadHRef,
+                    GalleryUiDesignTokens.FloatTitleBarPadVRef,
+                    GalleryUiDesignTokens.FloatTitleBarPadVRef, s);
+            }
+            if (grip != null)
+            {
+                float gw = GalleryUiDesignTokens.FloatTitleGripWidthRef * s;
+                LayoutElement le = grip.GetComponent<LayoutElement>();
+                if (le == null) le = grip.AddComponent<LayoutElement>();
+                le.minWidth = gw;
+                le.preferredWidth = gw;
+                le.flexibleWidth = 0f;
+            }
+        }
+
+        /// <summary>
+        /// Shared float chrome square icon button (collapse / close / footer tools).
+        /// Cold/warm create only — not per-frame. net35-safe.
+        /// </summary>
+        public static GameObject CreateFloatChromeIconButton(
+            Transform parent, float size, string iconPath, Color backdrop, UnityAction onClick)
+        {
+            if (parent == null || size <= 0f) return null;
+            GameObject go = CreateUIButton(
+                parent.gameObject, size, size, " ", 14, 0, 0, AnchorPresets.middleCenter, onClick);
+            if (go == null) return null;
+            StyleFloatChromeIconButton(go, size, iconPath, backdrop);
+            return go;
+        }
+
+        /// <summary>
+        /// Style existing square chrome button (CreateUIButton → this). Same pad/tint as
+        /// <see cref="CreateFloatChromeIconButton"/>.
+        /// </summary>
+        public static void StyleFloatChromeIconButton(
+            GameObject go, float size, string iconPath, Color? backdropOverride = null)
+        {
+            if (go == null || size <= 0f) return;
+            Color backdrop = backdropOverride.HasValue
+                ? backdropOverride.Value
+                : GalleryUiColorTokens.ChromeIconWell;
+            Image img = go.GetComponent<Image>();
+            if (img != null) img.color = backdrop;
+            Button btn = go.GetComponent<Button>();
+            if (btn != null) btn.transition = Selectable.Transition.None;
+            LayoutElement le = go.GetComponent<LayoutElement>();
+            if (le == null) le = go.AddComponent<LayoutElement>();
+            le.preferredWidth = size;
+            le.preferredHeight = size;
+            le.minWidth = size;
+            le.minHeight = size;
+            le.flexibleWidth = 0f;
+            le.flexibleHeight = 0f;
+            Text label = go.GetComponentInChildren<Text>(true);
+            if (label != null) label.gameObject.SetActive(false);
+            float pad = GalleryUiDesignTokens.FloatChromeIconPadRef;
+            if (string.IsNullOrEmpty(iconPath)) return;
+            try
+            {
+                Sprite spr = LoadIconSprite(iconPath, BarIconGlyphTint);
+                if (spr == null) return;
+                Transform existing = go.transform.Find("Icon");
+                if (existing != null)
+                {
+                    Image iconImg = existing.GetComponent<Image>();
+                    if (iconImg != null)
+                    {
+                        iconImg.sprite = spr;
+                        iconImg.color = Color.white;
+                        RectTransform irt = existing as RectTransform;
+                        if (irt != null)
+                            irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
+                    }
+                }
+                else
+                    AddIconToButton(go, spr, pad, backdrop);
+            }
+            catch { }
+        }
+
+        /// <summary>Rescale float chrome icon button + Icon child pad (ChromeScale adapt).</summary>
+        public static void ScaleFloatChromeIconButton(GameObject go, float size, float scale = 1f)
+        {
+            if (go == null || size <= 0f) return;
+            LayoutElement le = go.GetComponent<LayoutElement>();
+            if (le == null) le = go.AddComponent<LayoutElement>();
+            le.preferredWidth = size;
+            le.preferredHeight = size;
+            le.minWidth = size;
+            le.minHeight = size;
+            le.flexibleWidth = 0f;
+            le.flexibleHeight = 0f;
+            RectTransform rt = go.GetComponent<RectTransform>();
+            if (rt != null) rt.sizeDelta = new Vector2(size, size);
+            Transform iconTr = go.transform.Find("Icon");
+            if (iconTr != null)
+            {
+                RectTransform irt = iconTr as RectTransform;
+                if (irt != null)
+                {
+                    float pad = GalleryUiDesignTokens.FloatChromeIconPadRef * (scale > 0f ? scale : 1f);
+                    irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Tree-row expand affordance: <c>chevron_right</c> collapsed / <c>chevron_down</c> open.
+        /// Warm bind path — uses icon sprite cache; no new Icon GO after first apply.
+        /// </summary>
+        /// <param name="transparentWhenEmpty">
+        /// Plugins leaf rows: clear well. Strip Keep empty categories: opaque placeholder well.
+        /// </param>
+        public static void ApplyTreeRowExpandIcon(
+            GameObject expandBtn, bool canExpand, bool expanded, float scale,
+            bool transparentWhenEmpty = true)
+        {
+            if (expandBtn == null) return;
+            float s = scale > 0f ? scale : 1f;
+            Image expandBg = expandBtn.GetComponent<Image>();
+            if (expandBg != null)
+            {
+                if (canExpand)
+                    expandBg.color = GalleryUiColorTokens.TreeExpandWell;
+                else
+                    expandBg.color = transparentWhenEmpty
+                        ? GalleryUiColorTokens.TreeExpandWellEmptyClear
+                        : GalleryUiColorTokens.TreeExpandWellEmpty;
+            }
+
+            Text expandGlyph = expandBtn.GetComponentInChildren<Text>(true);
+            Transform iconTr = expandBtn.transform.Find("Icon");
+            Image iconImg = iconTr != null ? iconTr.GetComponent<Image>() : null;
+
+            if (!canExpand)
+            {
+                if (expandGlyph != null)
+                {
+                    expandGlyph.text = "";
+                    expandGlyph.gameObject.SetActive(false);
+                }
+                if (iconImg != null) iconImg.gameObject.SetActive(false);
+                return;
+            }
+
+            string path = expanded
+                ? "vpb_icons/chevron_down.png"
+                : "vpb_icons/chevron_right.png";
+            Sprite spr = null;
+            try { spr = LoadIconSprite(path, GalleryUiColorTokens.TreeExpandIconTint); }
+            catch { spr = null; }
+
+            float pad = GalleryUiDesignTokens.TreeRowExpandIconPadRef * s;
+            if (spr != null)
+            {
+                if (iconImg != null)
+                {
+                    iconImg.sprite = spr;
+                    iconImg.color = Color.white;
+                    iconImg.gameObject.SetActive(true);
+                    RectTransform irt = iconTr as RectTransform;
+                    if (irt != null)
+                        irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
+                }
+                else
+                {
+                    AddIconToButton(expandBtn, spr, pad, expandBg != null ? expandBg.color : GalleryUiColorTokens.TreeExpandWell);
+                    iconTr = expandBtn.transform.Find("Icon");
+                    iconImg = iconTr != null ? iconTr.GetComponent<Image>() : null;
+                    if (iconImg != null) iconImg.gameObject.SetActive(true);
+                }
+                if (expandGlyph != null)
+                {
+                    expandGlyph.text = "";
+                    expandGlyph.gameObject.SetActive(false);
+                }
+                return;
+            }
+
+            // Fallback glyphs when icon load fails (cold / missing asset).
+            if (iconImg != null) iconImg.gameObject.SetActive(false);
+            if (expandGlyph != null)
+            {
+                expandGlyph.gameObject.SetActive(true);
+                expandGlyph.text = expanded ? "\u25BC" : "\u25B6";
+                expandGlyph.alignment = TextAnchor.MiddleCenter;
+                expandGlyph.raycastTarget = false;
+                expandGlyph.color = GalleryUiColorTokens.TreeExpandIconTint;
+            }
         }
 
         /// <summary>Rescale <c>WindowIcon</c> host + glyph + trailing gap under a float title bar.</summary>
@@ -2118,7 +2337,7 @@ namespace VPB
             Action<VerticalLayoutGroup> configureVlg = null)
         {
             GameObject panelGO = CreateChildRT(rootGO, panelName, anchorPreset, size, anchoredPosition);
-            AddImage(panelGO, new Color(PopupBackdrop.r, PopupBackdrop.g, PopupBackdrop.b, 0.92f));
+            AddImage(panelGO, PopupBackdrop);
             VerticalLayoutGroup vlg = AddVLG(panelGO, 4f, Pad(6f, 6f, 6f, 6f), childAlignment);
             configureVlg?.Invoke(vlg);
             ContentSizeFitter csf = panelGO.AddComponent<ContentSizeFitter>();

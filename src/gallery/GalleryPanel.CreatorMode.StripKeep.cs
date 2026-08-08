@@ -25,14 +25,12 @@ namespace VPB
 
         /// <summary>Synthetic uid: spawn appearance-import 3P after strip rebuild (not a live atom).</summary>
         private const string StripKeepSyntheticDefault3PUid = "VPB_SYNTH_DEFAULT_3P_LIGHTS";
-        private const float StripKeepScrollBarWidthRef = 14f;
 
         private GameObject _stripKeepModalRoot;
         private Transform _stripKeepListParent;
         private LayoutElement _stripKeepScrollHostLe;
         private GameObject _stripKeepDefault3PHost;
         private Toggle _stripKeepDefault3PToggle;
-        private Text _stripKeepSummaryText;
         private Button _stripKeepConfirmBtn;
         private Image _stripKeepConfirmImg;
         private GameObject _stripKeepPresetsHost;
@@ -42,7 +40,6 @@ namespace VPB
         private int _stripKeepDropCount;
         private int _stripKeepKeepCount;
         private bool _stripKeepAwaitingSoftConfirm;
-        private Text _stripKeepRulesHintText;
         private Text _stripKeepConfirmBtnLabel;
         private Text _stripKeepCancelBtnLabel;
         private readonly int[] _stripKeepCounts = new int[12];
@@ -387,8 +384,6 @@ namespace VPB
             _stripKeepListParent = null;
             _stripKeepScrollHostLe = null;
             StripKeepCreateOptionsResetUiRefs();
-            _stripKeepSummaryText = null;
-            _stripKeepRulesHintText = null;
             _stripKeepConfirmBtn = null;
             _stripKeepConfirmImg = null;
             _stripKeepConfirmBtnLabel = null;
@@ -452,18 +447,18 @@ namespace VPB
             if (s <= 0.01f) s = 1f;
             GalleryModalTypography type = new GalleryModalTypography(s);
             int font = type.Body;
-            float btnH = GalleryUiDesignTokens.ButtonSizeRef * s;
-            float headerH = Mathf.Max(btnH, 28f * s);
-            float closeSz = headerH - 4f * s;
+            float chromeSz = GalleryUiDesignTokens.ButtonSizeRef * s;
+            float titleH = GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef * s;
+            float footerBtnH = chromeSz;
             Vector2 panelSize = StripKeepResolvePanelSize(s);
             Vector2 panelPos = StripKeepResolvePanelPos();
 
-            // Floating panel on canvas (sibling of pane) — survives collapse/hide of backgroundBoxGO.
+            // Floating panel on canvas (sibling of pane) — same host pattern as Settings float.
             GameObject host = StripKeepResolveUiHost();
             if (host == null) return;
-            _stripKeepModalRoot = UI.CreateChildRT(host, "VPB_StripKeepModal", AnchorPresets.stretchAll);
+            _stripKeepModalRoot = UI.CreateChildRT(host, "VPB_StripKeepFloat", AnchorPresets.stretchAll);
             try { _stripKeepModalRoot.transform.SetAsLastSibling(); } catch { }
-            UI.CreateDimBlocker(_stripKeepModalRoot, "Dim", HideStripKeepSelector, 0.45f);
+            // No dim — work-surface float like Settings / Plugins (not locked modal).
 
             // Top-left pivot — resize from BR keeps TL fixed. Config still stores center pos.
             GameObject panel = UI.CreateChildRT(
@@ -473,63 +468,67 @@ namespace VPB
             if (_stripKeepPanelRT != null)
             {
                 _stripKeepPanelRT.pivot = new Vector2(0f, 1f);
+                _stripKeepPanelRT.anchorMin = new Vector2(0.5f, 0.5f);
+                _stripKeepPanelRT.anchorMax = new Vector2(0.5f, 0.5f);
                 _stripKeepPanelRT.sizeDelta = panelSize;
                 _stripKeepPanelRT.anchoredPosition = StripKeepCenterPosToTopLeft(panelPos, panelSize);
             }
             UI.AddImage(panel, StripKeepPanelBg);
+            if (panel.GetComponent<RectMask2D>() == null)
+                panel.AddComponent<RectMask2D>();
 
             VerticalLayoutGroup panelVlg = UI.AddVLG(panel, spacing: 0f, padding: UI.Pad(0, 0, 0, 0));
             panelVlg.childForceExpandHeight = false;
             panelVlg.childControlHeight = true;
             panelVlg.childForceExpandWidth = true;
 
-            // --- Titlebar: grip · title · X (drag handle) ---
-            GameObject header = new GameObject("Header");
+            // --- Titlebar: grip · window icon · title · X (drag handle) ---
+            GameObject header = new GameObject("TitleBar");
             header.transform.SetParent(panel.transform, false);
             Image headerImg = UI.AddImage(header, StripKeepTitleBarBg);
             if (headerImg != null) headerImg.raycastTarget = true;
-            HorizontalLayoutGroup hh = UI.AddHLG(
-                header, spacing: 4f * s, padding: UI.Pad(6, 6, 4, 4, s),
+            HorizontalLayoutGroup headerHlg = UI.AddHLG(
+                header, spacing: 0f, padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
-            UI.AddLE(header, minHeight: headerH, preferredHeight: headerH, flexibleWidth: 1f, flexibleHeight: 0f);
-
-            Text grip = UI.CreateLabel(header, "\u2807", font,
-                new Color(0.65f, 0.72f, 0.80f, 1f), TextAnchor.MiddleCenter,
-                raycastTarget: false, name: "Grip");
-            GalleryUiMetrics.ApplyFont(grip, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            UI.AddLE(grip.gameObject, minWidth: closeSz * 0.7f, preferredWidth: closeSz * 0.7f);
-
-            Text title = UI.CreateLabel(header,
-                VPBTranslation.T("gallery.creator.strip_keep_title", "Strip Scene — Keep"),
-                font, Color.white, TextAnchor.MiddleLeft, raycastTarget: false, name: "Title");
-            GalleryUiMetrics.ApplyFont(title, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            StripKeepClampText(title);
-            UI.AddLE(title.gameObject, flexibleWidth: 1f, minWidth: 80f * s);
+            UI.AddLE(header, minHeight: titleH, preferredHeight: titleH, flexibleWidth: 1f, flexibleHeight: 0f);
             if (header.GetComponent<RectMask2D>() == null)
                 header.AddComponent<RectMask2D>();
+
+            Text grip = UI.CreateLabel(header, "\u2807", font,
+                GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
+                raycastTarget: false, name: "Grip");
+            GalleryUiMetrics.ApplyFont(grip, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            UI.ApplyFloatTitleBarMetrics(headerHlg, grip.gameObject, s);
+
+            float winIconSz = GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s;
+            UI.CreateFloatTitleWindowIcon(header, "vpb_icons/creator_mode.png", winIconSz);
+
+            Text title = UI.CreateEmphasisTitleLabel(
+                header,
+                VPBTranslation.T("gallery.creator.strip_keep_title", "Strip Scene — Keep"),
+                font, Color.white, TextAnchor.MiddleLeft, name: "Title");
+            UI.AddLE(title.gameObject, flexibleWidth: 1f, minWidth: 80f * s);
             AddTooltipPlain(header,
                 VPBTranslation.T(
                     "gallery.creator.strip_keep_hint_short",
                     "/ filter · ? shortcuts · Space/F2/Enter"));
 
-            GameObject closeGo = UI.CreateUIButton(
-                header, closeSz, closeSz, "", font, 0, 0, AnchorPresets.middleCenter,
-                HideStripKeepSelector);
-            closeGo.name = "TitleClose";
-            StripKeepStyleTitleClose(closeGo, closeSz);
-            AddTooltipPlain(closeGo, VPBTranslation.T("gallery.creator.strip_close_tip", "Close (Esc)"));
+            // X / Cancel dismiss Scene Tools — Settings Cancel/X parity (not panel-only hide).
+            GameObject closeGo = SettingsFloatSquareIconButton(
+                header.transform, chromeSz, "vpb_icons/x.png",
+                GalleryUiColorTokens.ChromeIconWell, () => ExitCreatorMode());
+            if (closeGo != null)
+            {
+                closeGo.name = "TitleClose";
+                AddTooltipPlain(closeGo,
+                    VPBTranslation.T("gallery.creator.strip_close_tip", "Close — exit Scene Tools (Esc)"));
+            }
 
             var headerDrag = header.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = _stripKeepPanelRT;
             headerDrag.OnMoved = StripKeepOnPanelMoved;
-
-            // Hairline
-            GameObject rule = new GameObject("HeaderRule");
-            rule.transform.SetParent(panel.transform, false);
-            UI.AddImage(rule, StripKeepRuleColor, raycastTarget: false);
-            UI.AddLE(rule, minHeight: 1f, preferredHeight: 1f, flexibleWidth: 1f, flexibleHeight: 0f);
 
             // Body — flush under titlebar; list owns flex space (no dead zone above footer).
             GameObject body = new GameObject("Body");
@@ -540,19 +539,18 @@ namespace VPB
             UI.AddLE(body, flexibleHeight: 1f, flexibleWidth: 1f, minHeight: 200f * s);
 
             // Presets + recipes always shown. Category picks live in list only (no type chips).
-            BuildStripKeepPresetsCollapseSection(body.transform, btnH, font, s);
+            BuildStripKeepPresetsCollapseSection(body.transform, footerBtnH, font, s);
 
-            BuildStripKeepToolbarRows(body.transform, btnH, font, s);
-            BuildStripKeepShortcutHelpRow(body.transform, btnH, font, s);
-            BuildStripKeepCreateOptionsSection(body.transform, btnH, font, s);
+            BuildStripKeepToolbarRows(body.transform, footerBtnH, font, s);
+            BuildStripKeepShortcutHelpRow(body.transform, footerBtnH, font, s);
+            BuildStripKeepCreateOptionsSection(body.transform, footerBtnH, font, s);
 
             GameObject scrollHost = new GameObject("ScrollHost");
             scrollHost.transform.SetParent(body.transform, false);
             _stripKeepScrollHostLe = UI.AddLE(scrollHost, flexibleHeight: 1f, minHeight: 80f * s, flexibleWidth: 1f);
-            // Match panel — empty viewport must not read as dead gap above footer.
-            UI.AddImage(scrollHost, StripKeepPanelBg);
+            UI.AddImage(scrollHost, StripKeepScrollBg);
 
-            float sbW = StripKeepScrollBarWidthRef * s;
+            float sbW = GalleryUiDesignTokens.StripKeepFloatScrollBarWidthRef * s;
             GameObject viewport = new GameObject("Viewport");
             viewport.transform.SetParent(scrollHost.transform, false);
             RectTransform vpRt = viewport.AddComponent<RectTransform>();
@@ -606,18 +604,22 @@ namespace VPB
             RebuildStripKeepToggleRows();
             RefreshStripKeepDefault3PChrome();
 
-            // Footer stack: summary flush above Cancel | Strip (no marketing gap).
-            GameObject footerStack = new GameObject("FooterStack");
-            footerStack.transform.SetParent(panel.transform, false);
-            VerticalLayoutGroup fsv = UI.AddVLG(footerStack, spacing: 2f * s, padding: UI.Pad(8, 8, 4, 6, s));
-            fsv.childForceExpandHeight = false;
-            fsv.childControlHeight = true;
-            fsv.childForceExpandWidth = true;
-            UI.AddLE(footerStack, flexibleHeight: 0f, flexibleWidth: 1f);
-            UI.AddImage(footerStack, new Color(0.07f, 0.075f, 0.09f, 1f));
+            // Footer actions only — Keep/Remove counts live on Strip button tooltip + status.
+            float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef * s;
+            GameObject footer = new GameObject("Footer");
+            footer.transform.SetParent(panel.transform, false);
+            UI.AddImage(footer, StripKeepFooterBarBg);
+            UI.AddLE(footer, minHeight: footerH, preferredHeight: footerH, flexibleWidth: 1f, flexibleHeight: 0f);
+            UI.AddHLG(
+                footer, spacing: 6f * s, padding: UI.Pad(8, 8, 4, 4, s),
+                childAlignment: TextAnchor.MiddleRight,
+                childControlWidth: true, childControlHeight: true,
+                childForceExpandWidth: false, childForceExpandHeight: false);
+            if (footer.GetComponent<RectMask2D>() == null)
+                footer.AddComponent<RectMask2D>();
 
             // Full-footer drag hit (behind Cancel/Strip/resize) — same job as title bar.
-            GameObject footerDragArea = UI.CreateFloatFooterDragArea(footerStack);
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(footer);
             if (footerDragArea != null)
             {
                 var footerDrag = footerDragArea.AddComponent<UIFloatPanelDrag>();
@@ -625,102 +627,66 @@ namespace VPB
                 footerDrag.OnMoved = StripKeepOnPanelMoved;
             }
 
-            float summaryH = Mathf.Max(16f * s, btnH * 0.45f);
-            float rulesH = Mathf.Max(14f * s, btnH * 0.38f);
-            _stripKeepRulesHintText = UI.CreateLabel(footerStack,
-                VPBTranslation.T(
-                    "gallery.creator.strip_rules_hint",
-                    "Sky blanked · Environment removed · CoreControl kept · More: possess / rename"),
-                font, new Color(0.55f, 0.58f, 0.62f, 1f), TextAnchor.MiddleLeft,
-                raycastTarget: false, name: "RulesHint");
-            GalleryUiMetrics.ApplyFont(_stripKeepRulesHintText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            StripKeepClampText(_stripKeepRulesHintText);
-            UI.AddLE(_stripKeepRulesHintText.gameObject, minHeight: rulesH, preferredHeight: rulesH, flexibleWidth: 1f, flexibleHeight: 0f);
-            if (_stripKeepRulesHintText.gameObject.GetComponent<RectMask2D>() == null)
-                _stripKeepRulesHintText.gameObject.AddComponent<RectMask2D>();
+            // Flex spacer pushes actions right; drag hit for empty footer area.
+            GameObject footerSpacer = new GameObject("Spacer");
+            footerSpacer.transform.SetParent(footer.transform, false);
+            footerSpacer.AddComponent<RectTransform>();
+            UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f * s);
+            UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
+            var spacerDrag = footerSpacer.AddComponent<UIFloatPanelDrag>();
+            spacerDrag.Target = _stripKeepPanelRT;
+            spacerDrag.OnMoved = StripKeepOnPanelMoved;
 
-            _stripKeepSummaryText = UI.CreateLabel(footerStack, "", font,
-                new Color(0.85f, 0.86f, 0.88f, 1f), TextAnchor.MiddleLeft,
-                raycastTarget: false, name: "Summary");
-            GalleryUiMetrics.ApplyFont(_stripKeepSummaryText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            StripKeepClampText(_stripKeepSummaryText);
-            UI.AddLE(_stripKeepSummaryText.gameObject, minHeight: summaryH, preferredHeight: summaryH, flexibleWidth: 1f, flexibleHeight: 0f);
-            if (_stripKeepSummaryText.gameObject.GetComponent<RectMask2D>() == null)
-                _stripKeepSummaryText.gameObject.AddComponent<RectMask2D>();
+            float cancelW = GalleryUiDesignTokens.StripKeepFloatFooterCancelBtnWRef * s;
+            float confirmW = GalleryUiDesignTokens.StripKeepFloatFooterConfirmBtnWRef * s;
 
-            GameObject footer = new GameObject("FooterRow");
-            footer.transform.SetParent(footerStack.transform, false);
-            HorizontalLayoutGroup fh = UI.AddHLG(
-                footer, spacing: 8f * s, padding: UI.Pad(0, 0, 0, 0),
-                childForceExpandWidth: false, childForceExpandHeight: false,
-                childControlWidth: true, childControlHeight: true,
-                childAlignment: TextAnchor.MiddleCenter);
-            UI.AddLE(footer, minHeight: btnH, preferredHeight: btnH, flexibleWidth: 1f, flexibleHeight: 0f);
-
-            GameObject cancelGo = StripKeepChromeButton(footer.transform, 0f, btnH,
+            GameObject cancelGo = StripKeepChromeButton(footer.transform, cancelW, chromeSz,
                 VPBTranslation.T("gallery.creator.strip_keep_cancel", "Cancel"), font, s,
-                new Color(0.26f, 0.24f, 0.22f, 1f), OnStripKeepCancelOrBackClicked, flexibleWidth: true);
+                StripKeepCancelBg, OnStripKeepCancelOrBackClicked, flexibleWidth: false);
             if (cancelGo != null)
-            {
                 _stripKeepCancelBtnLabel = cancelGo.GetComponentInChildren<Text>(true);
-                LayoutElement cle = cancelGo.GetComponent<LayoutElement>();
-                if (cle != null)
-                {
-                    cle.flexibleWidth = 0.85f;
-                    cle.minWidth = 72f * s;
-                }
-            }
 
-            GameObject confirmGo = StripKeepChromeButton(footer.transform, 0f, btnH,
+            GameObject confirmGo = StripKeepChromeButton(footer.transform, confirmW, chromeSz,
                 VPBTranslation.T("gallery.creator.strip_keep_confirm", "Strip Scene"), font, s,
-                new Color(0.62f, 0.16f, 0.16f, 1f), OnStripKeepConfirmClicked, flexibleWidth: true);
+                GalleryUiColorTokens.AccentDanger, OnStripKeepConfirmClicked, flexibleWidth: false);
             if (confirmGo != null)
             {
                 _stripKeepConfirmBtn = confirmGo.GetComponent<Button>();
                 _stripKeepConfirmImg = confirmGo.GetComponent<Image>();
                 _stripKeepConfirmBtnLabel = confirmGo.GetComponentInChildren<Text>(true);
-                LayoutElement sle = confirmGo.GetComponent<LayoutElement>();
-                if (sle != null)
-                {
-                    sle.flexibleWidth = 1.45f;
-                    sle.minWidth = 110f * s;
-                }
             }
 
-            // Resize — layout sibling right of Strip, same btnH (tag-menu pattern).
+            // Resize — right of Strip (Settings float pattern).
             _stripKeepResizeGO = UI.AddChildGOImage(
                 footer, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
-                btnH, btnH, Vector2.zero, rounded: true);
+                chromeSz, chromeSz, Vector2.zero, rounded: true);
             _stripKeepResizeGO.name = "ResizeHandle";
             Image rhImg = _stripKeepResizeGO.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
-            UIHoverBorder rhHb = _stripKeepResizeGO.AddComponent<UIHoverBorder>();
-            if (rhHb != null)
-            {
-                rhHb.inward = true;
-                try { rhHb.ApplyBorderSettings(); } catch { }
-            }
+            UI.EnsureFloatChromeHoverBorder(_stripKeepResizeGO);
             try
             {
                 Sprite rhChevron = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
                 if (rhChevron != null)
-                    UI.AddIconToButton(_stripKeepResizeGO, rhChevron);
+                    UI.AddIconToButton(_stripKeepResizeGO, rhChevron, 5f * s, UI.IconButtonBackdrop);
             }
             catch { }
             UI.AddLE(
                 _stripKeepResizeGO,
-                preferredWidth: btnH, preferredHeight: btnH,
-                minWidth: btnH, minHeight: btnH,
+                preferredWidth: chromeSz, preferredHeight: chromeSz,
+                minWidth: chromeSz, minHeight: chromeSz,
                 flexibleWidth: 0f, flexibleHeight: 0f);
             var resizer = _stripKeepResizeGO.AddComponent<UIFloatPanelResize>();
             resizer.Target = _stripKeepPanelRT;
             resizer.GetMinSize = StripKeepPanelMinSizeScaled;
             resizer.GetMaxSize = StripKeepPanelMaxSizeScaled;
+            // Live wrap while dragging; persist + final wrap on release.
+            resizer.OnResizing = StripKeepPresetChipFlowNow;
             resizer.OnResized = StripKeepOnPanelResized;
             AddTooltipPlain(_stripKeepResizeGO,
                 VPBTranslation.T("gallery.creator.strip_resize_tip", "Drag to resize"));
 
-            // Block clicks through panel into dim
+            // Block clicks through panel into gallery
             Image panelHit = panel.GetComponent<Image>();
             if (panelHit != null) panelHit.raycastTarget = true;
 
@@ -760,7 +726,7 @@ namespace VPB
             _stripKeepDefault3PHost = new GameObject("Default3PRow");
             _stripKeepDefault3PHost.transform.SetParent(parent, false);
             UI.AddLE(_stripKeepDefault3PHost, minHeight: btnH, preferredHeight: btnH, flexibleWidth: 1f, flexibleHeight: 0f);
-            UI.AddImage(_stripKeepDefault3PHost, new Color(0.09f, 0.14f, 0.18f, 1f));
+            UI.AddImage(_stripKeepDefault3PHost, GalleryUiColorTokens.SurfaceDarker);
             HorizontalLayoutGroup hlg = UI.AddHLG(
                 _stripKeepDefault3PHost, spacing: 4f * s, padding: UI.Pad(4, 4, 2, 2, s),
                 childForceExpandWidth: false, childForceExpandHeight: false,
@@ -791,7 +757,7 @@ namespace VPB
                 GalleryUiMetrics.ApplyFont(toggleLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 toggleLabel.raycastTarget = false;
                 StripKeepClampText(toggleLabel);
-                toggleLabel.color = new Color(0.55f, 0.82f, 0.95f, 1f);
+                toggleLabel.color = GalleryUiColorTokens.TextMuted;
                 RectTransform lrt = toggleLabel.GetComponent<RectTransform>();
                 if (lrt != null)
                 {
@@ -1086,42 +1052,20 @@ namespace VPB
             bool canExpand = count > 0;
             bool expanded = canExpand && _stripKeepExpanded.Contains(kind);
 
-            // Expand affordance: ▶ / ▼ (text; icons when load works).
+            // Expand affordance: chevron_right / chevron_down (shared tree language).
             GameObject expandBtn = UI.CreateUIButton(
                 row, expandW, rowH, "", font, 0, 0, AnchorPresets.middleLeft,
                 canExpand ? (UnityAction)(() => ToggleStripKeepExpand(captured)) : null);
             expandBtn.name = "Expand_" + kind;
             StripKeepFixedLayoutChild(expandBtn, expandW, rowH);
-            Image expandBg = expandBtn.GetComponent<Image>();
-            if (expandBg != null)
-                expandBg.color = canExpand
-                    ? new Color(0.16f, 0.17f, 0.20f, 1f)
-                    : new Color(0.10f, 0.10f, 0.12f, 1f);
             UI.AddLE(expandBtn, minWidth: expandW, preferredWidth: expandW, flexibleWidth: 0f, minHeight: rowH, preferredHeight: rowH, flexibleHeight: 0f);
-
-            Text expandGlyph = expandBtn.GetComponentInChildren<Text>();
+            UI.ApplyTreeRowExpandIcon(expandBtn, canExpand, expanded, s, transparentWhenEmpty: false);
+            Text expandGlyph = expandBtn.GetComponentInChildren<Text>(true);
             if (expandGlyph != null)
             {
-                expandGlyph.text = !canExpand ? "" : (expanded ? "▼" : "▶");
-                expandGlyph.alignment = TextAnchor.MiddleCenter;
-                expandGlyph.raycastTarget = false;
-                expandGlyph.color = canExpand
-                    ? new Color(0.82f, 0.84f, 0.88f, 1f)
-                    : new Color(0.35f, 0.35f, 0.38f, 1f);
                 GalleryUiMetrics.ApplyFont(expandGlyph, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 _stripKeepExpandGlyphs[kind] = expandGlyph;
             }
-            try
-            {
-                string iconPath = expanded ? "vpb_icons/chevron_down.png" : "vpb_icons/chevron_right.png";
-                Sprite spr = canExpand ? UI.LoadIconSprite(iconPath, new Color(0.82f, 0.84f, 0.88f, 1f)) : null;
-                if (spr != null)
-                {
-                    UI.AddIconToButton(expandBtn, spr, padding: 6f * s);
-                    if (expandGlyph != null) expandGlyph.text = "";
-                }
-            }
-            catch { }
 
             string labelKey = "gallery.creator.strip_kind_" + kind.ToString().ToLowerInvariant();
             string labelBase = VPBTranslation.T(labelKey, SceneUtils.CreatorStripKeepKindLabel(kind));
@@ -1434,51 +1378,22 @@ namespace VPB
 
         private void RefreshStripKeepSummaryAndConfirm()
         {
-            if (_stripKeepSummaryText != null)
-            {
-                int renameCount = 0;
-                if (_stripKeepRenames.Count > 0)
-                {
-                    Dictionary<string, string>.Enumerator en = _stripKeepRenames.GetEnumerator();
-                    while (en.MoveNext())
-                    {
-                        string k = en.Current.Key;
-                        string v = en.Current.Value;
-                        if (string.IsNullOrEmpty(k) || string.IsNullOrEmpty(v)) continue;
-                        if (!string.Equals(k, v, StringComparison.Ordinal))
-                            renameCount++;
-                    }
-                }
+            string summary = BuildStripKeepSummaryLine();
+            string rules = VPBTranslation.T(
+                "gallery.creator.strip_rules_hint",
+                "Sky blanked · Environment removed · CoreControl kept · More: possess / rename");
+            string tip = string.IsNullOrEmpty(summary) ? rules : (summary + "\n" + rules);
 
-                if (_stripKeepAwaitingSoftConfirm)
-                {
-                    _stripKeepSummaryText.text = string.Format(
-                        VPBTranslation.T(
-                            "gallery.creator.strip_keep_summary_confirm",
-                            "Confirm: remove {0} atom(s)? Enter again or Confirm."),
-                        _stripKeepDropCount);
-                }
-                else if (renameCount > 0)
-                {
-                    _stripKeepSummaryText.text = string.Format(
-                        VPBTranslation.T(
-                            "gallery.creator.strip_keep_summary_renames",
-                            "Keep {0}  ·  Remove {1}  ·  Renames {2}"),
-                        _stripKeepKeepCount, _stripKeepDropCount, renameCount)
-                        + StripKeepPossessSummarySuffix()
-                        + StripKeepCreateOptionsSummarySuffix();
-                }
-                else
-                {
-                    _stripKeepSummaryText.text = string.Format(
-                        VPBTranslation.T(
-                            "gallery.creator.strip_keep_summary",
-                            "Keep {0}  ·  Remove {1}"),
-                        _stripKeepKeepCount, _stripKeepDropCount)
-                        + StripKeepPossessSummarySuffix()
-                        + StripKeepCreateOptionsSummarySuffix();
-                }
+            if (_stripKeepConfirmBtn != null)
+                AddTooltipPlain(_stripKeepConfirmBtn.gameObject, tip);
+
+            // Soft-confirm / count feedback — status strip (footer stays buttons-only).
+            try
+            {
+                if (_stripKeepAwaitingSoftConfirm || _stripKeepDropCount > 0)
+                    SetStatus(summary);
             }
+            catch { }
 
             bool canStrip = _stripKeepDropCount > 0;
             // Always clickable — explain-why when empty (no silent disabled primary).
@@ -1487,11 +1402,11 @@ namespace VPB
             if (_stripKeepConfirmImg != null)
             {
                 if (_stripKeepAwaitingSoftConfirm)
-                    _stripKeepConfirmImg.color = new Color(0.72f, 0.22f, 0.14f, 1f);
+                    _stripKeepConfirmImg.color = GalleryUiColorTokens.AccentDangerStrong;
                 else if (canStrip)
-                    _stripKeepConfirmImg.color = new Color(0.62f, 0.16f, 0.16f, 1f);
+                    _stripKeepConfirmImg.color = GalleryUiColorTokens.AccentDanger;
                 else
-                    _stripKeepConfirmImg.color = new Color(0.32f, 0.24f, 0.24f, 1f);
+                    _stripKeepConfirmImg.color = GalleryUiColorTokens.SurfaceMid;
             }
             if (_stripKeepConfirmBtnLabel != null)
             {
@@ -1507,6 +1422,49 @@ namespace VPB
             }
         }
 
+        private string BuildStripKeepSummaryLine()
+        {
+            int renameCount = 0;
+            if (_stripKeepRenames.Count > 0)
+            {
+                Dictionary<string, string>.Enumerator en = _stripKeepRenames.GetEnumerator();
+                while (en.MoveNext())
+                {
+                    string k = en.Current.Key;
+                    string v = en.Current.Value;
+                    if (string.IsNullOrEmpty(k) || string.IsNullOrEmpty(v)) continue;
+                    if (!string.Equals(k, v, StringComparison.Ordinal))
+                        renameCount++;
+                }
+            }
+
+            if (_stripKeepAwaitingSoftConfirm)
+            {
+                return string.Format(
+                    VPBTranslation.T(
+                        "gallery.creator.strip_keep_summary_confirm",
+                        "Confirm: remove {0} atom(s)? Enter again or Confirm."),
+                    _stripKeepDropCount);
+            }
+            if (renameCount > 0)
+            {
+                return string.Format(
+                    VPBTranslation.T(
+                        "gallery.creator.strip_keep_summary_renames",
+                        "Keep {0}  ·  Remove {1}  ·  Renames {2}"),
+                    _stripKeepKeepCount, _stripKeepDropCount, renameCount)
+                    + StripKeepPossessSummarySuffix()
+                    + StripKeepCreateOptionsSummarySuffix();
+            }
+            return string.Format(
+                VPBTranslation.T(
+                    "gallery.creator.strip_keep_summary",
+                    "Keep {0}  ·  Remove {1}"),
+                _stripKeepKeepCount, _stripKeepDropCount)
+                + StripKeepPossessSummarySuffix()
+                + StripKeepCreateOptionsSummarySuffix();
+        }
+
         private void OnStripKeepCancelOrBackClicked()
         {
             if (_stripKeepAwaitingSoftConfirm)
@@ -1515,7 +1473,7 @@ namespace VPB
                 RefreshStripKeepSummaryAndConfirm();
                 return;
             }
-            HideStripKeepSelector();
+            ExitCreatorMode();
         }
 
         private void OnStripKeepConfirmClicked()

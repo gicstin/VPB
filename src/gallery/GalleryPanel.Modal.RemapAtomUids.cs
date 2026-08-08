@@ -10,8 +10,8 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        private static readonly Color RemapFloatTitleBarBg = new Color(0.10f, 0.22f, 0.34f, 1f);
-        private static readonly Color RemapFloatFooterBarBg = new Color(0.08f, 0.10f, 0.13f, 1f);
+        private static readonly Color RemapFloatTitleBarBg = GalleryUiColorTokens.SurfaceDark;
+        private static readonly Color RemapFloatFooterBarBg = GalleryUiColorTokens.SurfaceDarker;
         private static readonly Color RemapRowBg = new Color(0.10f, 0.11f, 0.13f, 1f);
         private static readonly Color RemapRowExpandedBg = new Color(0.12f, 0.16f, 0.20f, 1f);
         private static readonly Color RemapRowUnresolvedBg = new Color(0.16f, 0.10f, 0.09f, 1f);
@@ -38,6 +38,15 @@ namespace VPB
 
         private GameObject _remapAtomUidsModalRoot;
         private RectTransform _remapAtomUidsPanelRT;
+        private RectTransform _remapAtomUidsTitleBarRT;
+        private GameObject _remapAtomUidsColHeaderGO;
+        private GameObject _remapAtomUidsScrollHostGO;
+        private GameObject _remapAtomUidsFooterGO;
+        private GameObject _remapAtomUidsCollapseBtn;
+        private Image _remapAtomUidsCollapseIcon;
+        private bool _remapAtomUidsCollapsed;
+        private float? _remapAtomUidsExpandHeightRef;
+        private Vector2? _remapAtomUidsCollapsedTopLeftPos;
         private Transform _remapAtomUidsListParent;
         private List<SceneAtomImporter.BrokenUidRef> _remapAtomUidsRows;
         private readonly Dictionary<string, string> _remapAtomUidsChoices
@@ -194,6 +203,15 @@ namespace VPB
                 _remapAtomUidsModalRoot = null;
             }
             _remapAtomUidsPanelRT = null;
+            _remapAtomUidsTitleBarRT = null;
+            _remapAtomUidsColHeaderGO = null;
+            _remapAtomUidsScrollHostGO = null;
+            _remapAtomUidsFooterGO = null;
+            _remapAtomUidsCollapseBtn = null;
+            _remapAtomUidsCollapseIcon = null;
+            _remapAtomUidsCollapsed = false;
+            _remapAtomUidsExpandHeightRef = null;
+            _remapAtomUidsCollapsedTopLeftPos = null;
             _remapAtomUidsListParent = null;
             _remapAtomUidsUnresolvedText = null;
             _remapAtomUidsImportLabel = null;
@@ -222,7 +240,8 @@ namespace VPB
         }
 
         /// <summary>
-        /// Esc ladder before InputField gate: clear expand filter → collapse picker → cancel float.
+        /// Esc ladder before InputField gate: clear expand filter → collapse picker →
+        /// expand window if collapsed → cancel float.
         /// </summary>
         internal bool TryHandleRemapAtomUidsEsc()
         {
@@ -240,6 +259,12 @@ namespace VPB
                     return true;
                 }
                 CollapseRemapAtomUidsExpand();
+                return true;
+            }
+
+            if (_remapAtomUidsCollapsed)
+            {
+                ToggleRemapAtomUidsCollapsed();
                 return true;
             }
 
@@ -761,15 +786,15 @@ namespace VPB
                 new Vector2(0f, titleH), Vector2.zero);
             Image titleBg = UI.AddImage(titleBar, RemapFloatTitleBarBg);
             if (titleBg != null) titleBg.raycastTarget = true;
-            RectTransform titleRT = titleBar.GetComponent<RectTransform>();
-            if (titleRT != null)
+            _remapAtomUidsTitleBarRT = titleBar.GetComponent<RectTransform>();
+            if (_remapAtomUidsTitleBarRT != null)
             {
-                titleRT.pivot = new Vector2(0.5f, 1f);
-                titleRT.anchoredPosition = Vector2.zero;
-                titleRT.sizeDelta = new Vector2(0f, titleH);
+                _remapAtomUidsTitleBarRT.pivot = new Vector2(0.5f, 1f);
+                _remapAtomUidsTitleBarRT.anchoredPosition = Vector2.zero;
+                _remapAtomUidsTitleBarRT.sizeDelta = new Vector2(0f, titleH);
             }
-            UI.AddHLG(
-                titleBar, spacing: 4f * s, padding: UI.Pad(6, 6, 4, 4, s),
+            HorizontalLayoutGroup titleHlg = UI.AddHLG(
+                titleBar, spacing: 0f, padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -777,10 +802,13 @@ namespace VPB
                 titleBar.AddComponent<RectMask2D>();
 
             Text grip = UI.CreateLabel(titleBar, "\u2807", font,
-                new Color(0.65f, 0.72f, 0.80f, 1f), TextAnchor.MiddleCenter,
+                GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
                 raycastTarget: false, name: "Grip");
             GalleryUiMetrics.ApplyFont(grip, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            UI.AddLE(grip.gameObject, minWidth: 18f * s, preferredWidth: 18f * s);
+            UI.ApplyFloatTitleBarMetrics(titleHlg, grip.gameObject, s);
+
+            float winIconSz = GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s;
+            UI.CreateFloatTitleWindowIcon(titleBar, "vpb_icons/rename.png", winIconSz);
 
             Text title = UI.CreateEmphasisTitleLabel(
                 titleBar,
@@ -788,9 +816,30 @@ namespace VPB
                 font, RemapTitleEmphasis, TextAnchor.MiddleLeft, name: "Title");
             UI.AddLE(title.gameObject, flexibleWidth: 1f, minWidth: 60f * s);
 
+            _remapAtomUidsCollapseBtn = RemapAtomUidsSquareIconButton(
+                titleBar.transform, chromeSz, "vpb_icons/chevron_up.png",
+                GalleryUiColorTokens.ChromeIconWell, ToggleRemapAtomUidsCollapsed);
+            if (_remapAtomUidsCollapseBtn != null)
+            {
+                _remapAtomUidsCollapseBtn.name = "CollapseBtn";
+                Transform collapseIconTr = _remapAtomUidsCollapseBtn.transform.Find("Icon");
+                _remapAtomUidsCollapseIcon = collapseIconTr != null ? collapseIconTr.GetComponent<Image>() : null;
+                var collapseHover = _remapAtomUidsCollapseBtn.AddComponent<UIHoverDelegate>();
+                collapseHover.OnHoverChange += (enter) =>
+                {
+                    if (enter)
+                    {
+                        SetStatus(_remapAtomUidsCollapsed
+                            ? VPBTranslation.T("gallery.import.remap_uids.tip_expand", "Expand window")
+                            : VPBTranslation.T("gallery.import.remap_uids.tip_collapse", "Collapse to title bar"));
+                    }
+                    else SetStatus(null);
+                };
+            }
+
             GameObject closeBtn = RemapAtomUidsSquareIconButton(
                 titleBar.transform, chromeSz, "vpb_icons/x.png",
-                new Color(0f, 0f, 0f, 0.5f), CancelRemapAtomUidsModal);
+                GalleryUiColorTokens.ChromeIconWell, CancelRemapAtomUidsModal);
             if (closeBtn != null)
             {
                 closeBtn.name = "TitleClose";
@@ -809,6 +858,7 @@ namespace VPB
             // ── Column headers (Source → Destination) ─────────────────────
             GameObject colHdr = UI.CreateChildRT(panel, "ColHeader", AnchorPresets.hStretchTop,
                 new Vector2(0f, colHdrH), new Vector2(0f, -titleH));
+            _remapAtomUidsColHeaderGO = colHdr;
             RectTransform colRT = colHdr.GetComponent<RectTransform>();
             if (colRT != null)
             {
@@ -837,6 +887,7 @@ namespace VPB
             // ── Footer ────────────────────────────────────────────────────
             GameObject footer = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
+            _remapAtomUidsFooterGO = footer;
             UI.AddImage(footer, RemapFloatFooterBarBg);
             RectTransform footerRT = footer.GetComponent<RectTransform>();
             if (footerRT != null)
@@ -931,6 +982,7 @@ namespace VPB
             resizeHandle.name = "ResizeHandle";
             Image rhImg = resizeHandle.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
+            UI.EnsureFloatChromeHoverBorder(resizeHandle);
             LayoutElement rhLe = resizeHandle.GetComponent<LayoutElement>();
             if (rhLe == null) rhLe = resizeHandle.AddComponent<LayoutElement>();
             rhLe.minWidth = rhLe.preferredWidth = chromeSz;
@@ -940,7 +992,7 @@ namespace VPB
             {
                 Sprite rhSpr = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
                 if (rhSpr != null)
-                    UI.AddIconToButton(resizeHandle, rhSpr, 5f * s, UI.IconButtonBackdrop);
+                    UI.AddIconToButton(resizeHandle, rhSpr, GalleryUiDesignTokens.FloatChromeIconPadRef * s, UI.IconButtonBackdrop);
             }
             catch { }
             var resizer = resizeHandle.AddComponent<UIFloatPanelResize>();
@@ -957,6 +1009,7 @@ namespace VPB
 
             // ── Scroll list between col header + footer ───────────────────
             GameObject scrollHost = UI.CreateChildRT(panel, "ScrollHost", AnchorPresets.stretchAll);
+            _remapAtomUidsScrollHostGO = scrollHost;
             RectTransform scrollRT = scrollHost.GetComponent<RectTransform>();
             if (scrollRT != null)
             {
@@ -1008,6 +1061,9 @@ namespace VPB
 
             RebuildRemapAtomUidsRows(font, s, rowH);
             RefreshRemapAtomUidsUnresolvedUi();
+            _remapAtomUidsCollapsed = false;
+            _remapAtomUidsExpandHeightRef = null;
+            _remapAtomUidsCollapsedTopLeftPos = null;
             _remapAtomUidsModalRoot.transform.SetAsLastSibling();
         }
 
@@ -1965,12 +2021,25 @@ namespace VPB
             PersistRemapAtomUidsGeometry();
             CollapseRemapAtomUidsExpand();
 
+            bool wasCollapsed = _remapAtomUidsCollapsed;
+            float? expandHRef = _remapAtomUidsExpandHeightRef;
+            Vector2? collapsedTL = _remapAtomUidsCollapsedTopLeftPos;
+
             if (_remapAtomUidsModalRoot != null)
             {
                 try { UnityEngine.Object.Destroy(_remapAtomUidsModalRoot); } catch { }
                 _remapAtomUidsModalRoot = null;
             }
             _remapAtomUidsPanelRT = null;
+            _remapAtomUidsTitleBarRT = null;
+            _remapAtomUidsColHeaderGO = null;
+            _remapAtomUidsScrollHostGO = null;
+            _remapAtomUidsFooterGO = null;
+            _remapAtomUidsCollapseBtn = null;
+            _remapAtomUidsCollapseIcon = null;
+            _remapAtomUidsCollapsed = false;
+            _remapAtomUidsExpandHeightRef = null;
+            _remapAtomUidsCollapsedTopLeftPos = null;
             _remapAtomUidsListParent = null;
             _remapAtomUidsUnresolvedText = null;
             _remapAtomUidsImportLabel = null;
@@ -1986,6 +2055,15 @@ namespace VPB
             _remapAtomUidsOpenPickerFor = null;
 
             BuildRemapAtomUidsModal();
+
+            if (wasCollapsed)
+            {
+                _remapAtomUidsCollapsed = true;
+                _remapAtomUidsExpandHeightRef = expandHRef;
+                _remapAtomUidsCollapsedTopLeftPos = collapsedTL;
+                float titleH = GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef * s;
+                SyncRemapAtomUidsCollapseChrome(titleH);
+            }
         }
 
         private void LoadRemapAtomUidsGeometryFromConfig()
@@ -2022,9 +2100,12 @@ namespace VPB
             float s = _remapAtomUidsChromeScale > 0f ? _remapAtomUidsChromeScale : 1f;
             _remapAtomUidsSavedPosCenter = RemapAtomUidsTopLeftToCenter(
                 _remapAtomUidsPanelRT.anchoredPosition, _remapAtomUidsPanelRT.sizeDelta);
-            _remapAtomUidsSavedSizeRef = new Vector2(
-                Mathf.Clamp(_remapAtomUidsPanelRT.sizeDelta.x / s, RemapFloatMinWRef, RemapFloatMaxWRef),
-                Mathf.Clamp(_remapAtomUidsPanelRT.sizeDelta.y / s, RemapFloatMinHRef, RemapFloatMaxHRef));
+            if (!_remapAtomUidsCollapsed)
+            {
+                _remapAtomUidsSavedSizeRef = new Vector2(
+                    Mathf.Clamp(_remapAtomUidsPanelRT.sizeDelta.x / s, RemapFloatMinWRef, RemapFloatMaxWRef),
+                    Mathf.Clamp(_remapAtomUidsPanelRT.sizeDelta.y / s, RemapFloatMinHRef, RemapFloatMaxHRef));
+            }
         }
 
         private void PersistRemapAtomUidsGeometry()
@@ -2057,8 +2138,86 @@ namespace VPB
 
         private void OnRemapAtomUidsFloatResized()
         {
+            if (_remapAtomUidsCollapsed) return;
             CaptureRemapAtomUidsGeometryToMemory();
             PersistRemapAtomUidsGeometry();
+        }
+
+        private void ToggleRemapAtomUidsCollapsed()
+        {
+            if (_remapAtomUidsPanelRT == null) return;
+            float s = _remapAtomUidsChromeScale > 0f ? _remapAtomUidsChromeScale : 1f;
+            float titleH = GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef * s;
+
+            if (!_remapAtomUidsCollapsed)
+            {
+                CaptureRemapAtomUidsGeometryToMemory();
+                _remapAtomUidsExpandHeightRef = _remapAtomUidsSavedSizeRef.HasValue
+                    ? _remapAtomUidsSavedSizeRef.Value.y
+                    : RemapFloatDefaultHRef;
+                _remapAtomUidsCollapsedTopLeftPos = _remapAtomUidsPanelRT.anchoredPosition;
+                _remapAtomUidsCollapsed = true;
+            }
+            else
+            {
+                float h = _remapAtomUidsExpandHeightRef.HasValue
+                    ? _remapAtomUidsExpandHeightRef.Value
+                    : RemapFloatDefaultHRef;
+                h = Mathf.Clamp(h, RemapFloatMinHRef, RemapFloatMaxHRef);
+                float w = _remapAtomUidsSavedSizeRef.HasValue
+                    ? _remapAtomUidsSavedSizeRef.Value.x
+                    : RemapFloatDefaultWRef;
+                _remapAtomUidsSavedSizeRef = new Vector2(
+                    Mathf.Clamp(w, RemapFloatMinWRef, RemapFloatMaxWRef), h);
+                _remapAtomUidsCollapsed = false;
+                _remapAtomUidsCollapsedTopLeftPos = null;
+            }
+
+            SyncRemapAtomUidsCollapseChrome(titleH);
+            CaptureRemapAtomUidsGeometryToMemory();
+            PersistRemapAtomUidsGeometry();
+        }
+
+        private void SyncRemapAtomUidsCollapseChrome(float titleH)
+        {
+            if (_remapAtomUidsColHeaderGO != null)
+                _remapAtomUidsColHeaderGO.SetActive(!_remapAtomUidsCollapsed);
+            if (_remapAtomUidsScrollHostGO != null)
+                _remapAtomUidsScrollHostGO.SetActive(!_remapAtomUidsCollapsed);
+            if (_remapAtomUidsFooterGO != null)
+                _remapAtomUidsFooterGO.SetActive(!_remapAtomUidsCollapsed);
+
+            if (_remapAtomUidsCollapseIcon != null)
+            {
+                string path = _remapAtomUidsCollapsed
+                    ? "vpb_icons/chevron_down.png"
+                    : "vpb_icons/chevron_up.png";
+                Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
+                if (spr != null)
+                {
+                    _remapAtomUidsCollapseIcon.sprite = spr;
+                    _remapAtomUidsCollapseIcon.color = Color.white;
+                }
+            }
+
+            if (_remapAtomUidsPanelRT != null)
+            {
+                float s = _remapAtomUidsChromeScale > 0f ? _remapAtomUidsChromeScale : 1f;
+                if (_remapAtomUidsCollapsed)
+                {
+                    Vector2 size = _remapAtomUidsPanelRT.sizeDelta;
+                    size.y = titleH;
+                    _remapAtomUidsPanelRT.sizeDelta = size;
+                    if (_remapAtomUidsCollapsedTopLeftPos.HasValue)
+                        _remapAtomUidsPanelRT.anchoredPosition = _remapAtomUidsCollapsedTopLeftPos.Value;
+                }
+                else if (_remapAtomUidsSavedSizeRef.HasValue)
+                {
+                    _remapAtomUidsPanelRT.sizeDelta = new Vector2(
+                        _remapAtomUidsSavedSizeRef.Value.x * s,
+                        _remapAtomUidsSavedSizeRef.Value.y * s);
+                }
+            }
         }
 
         private static Vector2 RemapAtomUidsCenterToTopLeft(Vector2 center, Vector2 size)
@@ -2100,36 +2259,7 @@ namespace VPB
         private static GameObject RemapAtomUidsSquareIconButton(
             Transform parent, float size, string iconPath, Color backdrop, UnityAction onClick)
         {
-            GameObject go = UI.CreateUIButton(
-                parent.gameObject, size, size, " ", 14, 0, 0, AnchorPresets.middleCenter, onClick);
-            if (go == null) return null;
-            LayoutElement le = go.GetComponent<LayoutElement>();
-            if (le == null) le = go.AddComponent<LayoutElement>();
-            le.minWidth = le.preferredWidth = size;
-            le.minHeight = le.preferredHeight = size;
-            le.flexibleWidth = 0f;
-            le.flexibleHeight = 0f;
-            Button btn = go.GetComponent<Button>();
-            if (btn != null) btn.transition = Selectable.Transition.None;
-            Text label = go.GetComponentInChildren<Text>(true);
-            if (label != null) label.gameObject.SetActive(false);
-            try
-            {
-                Sprite spr = UI.LoadIconSprite(iconPath, UI.BarIconGlyphTint);
-                if (spr != null)
-                    UI.AddIconToButton(go, spr, Mathf.Max(4f, size * 0.16f), backdrop);
-                else
-                {
-                    Image img = go.GetComponent<Image>();
-                    if (img != null) img.color = backdrop;
-                }
-            }
-            catch
-            {
-                Image img = go.GetComponent<Image>();
-                if (img != null) img.color = backdrop;
-            }
-            return go;
+            return UI.CreateFloatChromeIconButton(parent, size, iconPath, backdrop, onClick);
         }
 
         private static GameObject RemapAtomUidsChromeButton(

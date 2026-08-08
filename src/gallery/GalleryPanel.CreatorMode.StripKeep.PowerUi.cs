@@ -623,79 +623,21 @@ namespace VPB
         }
 
         /// <summary>
-        /// Shrink panel height to chrome + list content so footer sits under rows (no dead well).
-        /// Grows up to max when list needs more; user resize still works after.
+        /// Scroll list fills leftover height. Panel size = saved/default — never auto-snug to row count.
         /// </summary>
         private void ScheduleStripKeepSnugPanelHeight()
         {
-            if (_stripKeepSnugPanelCo != null)
-            {
-                try { StopCoroutine(_stripKeepSnugPanelCo); } catch { }
-                _stripKeepSnugPanelCo = null;
-            }
-            if (!IsStripKeepSelectorOpen()) return;
-            try { _stripKeepSnugPanelCo = StartCoroutine(StripKeepSnugPanelHeightCo()); }
-            catch { StripKeepSnugPanelHeightNow(); }
+            StripKeepEnsureScrollFlex();
         }
 
-        private System.Collections.IEnumerator StripKeepSnugPanelHeightCo()
+        private void StripKeepEnsureScrollFlex()
         {
-            yield return null;
-            try { Canvas.ForceUpdateCanvases(); } catch { }
-            StripKeepSnugPanelHeightNow();
-            _stripKeepSnugPanelCo = null;
-        }
-
-        private void StripKeepSnugPanelHeightNow()
-        {
-            if (_stripKeepPanelRT == null || _stripKeepListParent == null) return;
+            if (_stripKeepScrollHostLe == null) return;
             float s = ChromeScale;
             if (s <= 0.01f) s = 1f;
-
-            RectTransform listRt = _stripKeepListParent as RectTransform;
-            if (listRt != null)
-            {
-                try { LayoutRebuilder.ForceRebuildLayoutImmediate(listRt); } catch { }
-            }
-
-            float listH = 0f;
-            if (listRt != null)
-            {
-                listH = LayoutUtility.GetPreferredHeight(listRt);
-                if (listH < 1f) listH = listRt.sizeDelta.y;
-            }
-            // Viewport pad (4+4) inside ScrollHost.
-            float scrollNeed = Mathf.Max(listH + 8f * s, 72f * s);
-            if (_stripKeepScrollHostLe != null)
-            {
-                _stripKeepScrollHostLe.minHeight = Mathf.Min(80f * s, scrollNeed);
-                _stripKeepScrollHostLe.preferredHeight = scrollNeed;
-                // Keep flex so manual resize taller still fills; snug shrinks panel itself.
-                _stripKeepScrollHostLe.flexibleHeight = 1f;
-            }
-
-            try { LayoutRebuilder.ForceRebuildLayoutImmediate(_stripKeepPanelRT); } catch { }
-            try { Canvas.ForceUpdateCanvases(); } catch { }
-
-            float wantH = LayoutUtility.GetPreferredHeight(_stripKeepPanelRT);
-            if (wantH < 1f)
-            {
-                // Fallback estimate when preferred not ready.
-                float btnH = GalleryUiDesignTokens.ButtonSizeRef * s;
-                wantH = btnH * 2.2f + scrollNeed + btnH * 2.6f + 48f * s;
-            }
-
-            float minH = StripKeepPanelMinHRef * s;
-            float maxH = StripKeepPanelMaxHRef * s;
-            wantH = Mathf.Clamp(wantH, minH, maxH);
-
-            Vector2 size = _stripKeepPanelRT.sizeDelta;
-            if (Mathf.Abs(size.y - wantH) < 0.5f) return;
-
-            // Top-left pivot — keep top edge fixed while height changes.
-            size.y = wantH;
-            _stripKeepPanelRT.sizeDelta = size;
-            try { LayoutRebuilder.ForceRebuildLayoutImmediate(_stripKeepPanelRT); } catch { }
+            _stripKeepScrollHostLe.minHeight = 80f * s;
+            _stripKeepScrollHostLe.preferredHeight = -1f;
+            _stripKeepScrollHostLe.flexibleHeight = 1f;
         }
 
         private void BuildStripKeepToolbarRows(Transform panel, float btnH, int font, float s)
@@ -714,8 +656,8 @@ namespace VPB
             UI.AddLE(filterHost, minHeight: btnH, preferredHeight: btnH, flexibleWidth: 1f, minWidth: 80f * s);
 
             // Raised inset vs panel — looks like textbox, not section header.
-            Color filterBg = new Color(0.16f, 0.17f, 0.21f, 1f);
-            Color filterBorder = new Color(0.42f, 0.45f, 0.52f, 1f);
+            Color filterBg = GalleryUiColorTokens.SurfaceDarker;
+            Color filterBorder = GalleryUiColorTokens.SurfaceMid;
             _stripKeepFilterInput = UI.CreateChromeLayoutInputField(
                 filterHost.transform, font, btnH, 1f, 8f * s, 4f * s,
                 filterBg, UI.InputFieldPlaceholderColor,
@@ -780,7 +722,7 @@ namespace VPB
                 }
             }
 
-            float clearSz = btnH * 0.85f;
+            float clearSz = GalleryUiDesignTokens.SearchClearBtnSizeRef * s;
             _stripKeepFilterClearGo = UI.CreateUIButton(
                 filterHost, clearSz, clearSz, "X", font, 0, 0, AnchorPresets.middleRight,
                 StripKeepClearFilter);
@@ -800,9 +742,9 @@ namespace VPB
                 if (clearImg != null) clearImg.color = new Color(0f, 0f, 0f, 0.01f);
                 try
                 {
-                    Sprite clearSpr = UI.LoadIconSprite("vpb_icons/x.png", new Color(0.7f, 0.7f, 0.72f, 1f));
+                    Sprite clearSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
                     if (clearSpr != null)
-                        UI.AddIconToButton(_stripKeepFilterClearGo, clearSpr, 5f * s, new Color(0f, 0f, 0f, 0f));
+                        UI.AddIconToButton(_stripKeepFilterClearGo, clearSpr, GalleryUiDesignTokens.FloatChromeIconPadRef * s, new Color(0f, 0f, 0f, 0f));
                 }
                 catch { }
                 Text clearLabel = _stripKeepFilterClearGo.GetComponentInChildren<Text>(true);
@@ -1097,18 +1039,31 @@ namespace VPB
                 ? _stripKeepRecipeRowHostH
                 : GalleryUiDesignTokens.ButtonSizeRef * s * 0.85f;
 
+            // Prefer panel width (stable during resize) — body pad 8+8.
             float availW = 0f;
             try
             {
-                if (_stripKeepRecipeRowHost != null)
-                {
-                    RectTransform hostRt = _stripKeepRecipeRowHost.GetComponent<RectTransform>();
-                    if (hostRt != null) availW = hostRt.rect.width - 4f * s;
-                }
+                if (_stripKeepPanelRT != null)
+                    availW = _stripKeepPanelRT.rect.width - 20f * s;
             }
             catch { }
-            if (availW <= 1f && _stripKeepPanelRT != null)
-                availW = _stripKeepPanelRT.rect.width - 24f * s;
+            if (availW <= 1f)
+            {
+                try
+                {
+                    if (_stripKeepRecipeRowHost != null)
+                    {
+                        RectTransform hostRt = _stripKeepRecipeRowHost.GetComponent<RectTransform>();
+                        if (hostRt != null) availW = hostRt.rect.width - 4f * s;
+                    }
+                }
+                catch { }
+            }
+            if (availW <= 1f)
+            {
+                try { availW = _stripKeepPresetChipContentRt.rect.width; } catch { availW = 0f; }
+            }
+            if (availW <= 1f) availW = 400f * s;
 
             StripKeepFlowWrapChips(
                 _stripKeepPresetChipContentRt, _stripKeepRecipeRowHostLe, rowH, s, availW);

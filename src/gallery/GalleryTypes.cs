@@ -36,9 +36,9 @@ namespace VPB
     /// <summary>
     /// User Tags Available pane work mode: Tag (click applies) or FilterByTags (click arms include/exclude).
     /// Include/exclude filter sets are orthogonal and stay live across Tag↔FilterByTags.
-    /// FilterUntagged is a title-bar browse filter (exclusive of include/exclude).
+    /// FilterUntagged / FilterTaggedOnly are title-bar presence browse (exclusive of include/exclude).
     /// </summary>
-    public enum UserTagAvailMode { Tag = 0, FilterByTags = 1, FilterUntagged = 2 }
+    public enum UserTagAvailMode { Tag = 0, FilterByTags = 1, FilterUntagged = 2, FilterTaggedOnly = 3 }
     
     public struct CreatorCacheEntry 
     { 

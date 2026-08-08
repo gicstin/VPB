@@ -277,21 +277,13 @@ namespace VPB
             if (!quietUi && entry.HasSideTabState)
                 ApplyQuickFilterSideTabState(entry);
 
-            // 4. Refresh (license filter hydrates package meta first)
+            // 4. Refresh (license filter applied in SQLite via pkg.license)
             if (!quietUi)
             {
                 UpdateLayout();
                 UpdateTabs();
             }
-            if (HasLicenseFilter())
-            {
-                CancelLicenseFilterHydrate();
-                _licenseFilterHydrateCo = StartCoroutine(LicenseFilterHydrateThenRefreshCo());
-            }
-            else
-            {
-                RefreshFiles();
-            }
+            RefreshFiles();
             if (!quietUi)
             {
                 try { SyncSidePaneTopSortButtonVisuals(); } catch { }

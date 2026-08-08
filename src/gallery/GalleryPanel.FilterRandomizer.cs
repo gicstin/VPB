@@ -122,7 +122,7 @@ namespace VPB
             if (gen != _filterRandomizeGen) yield break;
 
             int guard = 0;
-            while ((refreshCoroutine != null || _licenseFilterHydrateCo != null) && guard < 600)
+            while (refreshCoroutine != null && guard < 600)
             {
                 if (gen != _filterRandomizeGen) yield break;
                 guard++;

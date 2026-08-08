@@ -635,6 +635,8 @@ namespace VPB
             EnsurePackageManifestSchema(conn);
             EnsureGalleryUserTagTables(conn);
             EnsureFilterPresetTables(conn);
+            EnsurePkgNewestSchema(conn);
+            EnsurePkgLicenseSchema(conn);
         }
 
         /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process. Returns true on success (including no-op).</summary>
@@ -3503,7 +3505,7 @@ namespace VPB
             long classifyTicks = 0;
             long catMemSqlTicks = 0;
 
-            using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned) VALUES(?,?,?,?,?,?,?,?,?)"))
+            using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned,family,ver,is_newest,license) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"))
             using (var insDep = conn.Prepare("INSERT OR IGNORE INTO pkg_dep(src_uid,dep_uid) VALUES(?,?)"))
             {
                 long depTicksIgnored = 0;
@@ -4290,6 +4292,10 @@ namespace VPB
                             && packagesMissingCatMem == 0
                             && string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal);
 
+                        // Always recompute after remove and/or add (IndexVarPackages may no-op on empty add).
+                        try { RefreshAllPkgNewestFlags(conn); } catch { }
+                        try { MarkPkgLicenseBackfillComplete(conn); } catch { }
+
                         // Ready meta describes whole live inventory. Never publish it over a partial delta.
                         if (indexComplete)
                             WriteGalleryIndexReadyMeta(conn, scanAtStart, catSig, invSigForMeta);
@@ -4929,6 +4935,15 @@ namespace VPB
             insPkg.BindInt64(7, ict);
             insPkg.BindInt64(8, loaded);
             insPkg.BindInt64(9, firstScannedBin);
+            string familyLower;
+            int verNum;
+            ResolvePkgFamilyVerForInsert(pkg, uid, out familyLower, out verNum);
+            insPkg.BindText(10, familyLower ?? "");
+            insPkg.BindInt64(11, verNum);
+            // Stamped 0; RefreshAllPkgNewestFlags after batch sets winners (and unparseable → 1).
+            insPkg.BindInt64(12, 0);
+            string license = ResolveLicenseForInsert(pkg);
+            insPkg.BindText(13, license ?? "");
             insPkg.Step();
             insPkg.Reset();
             nPkgInserted++;
@@ -5353,7 +5368,7 @@ namespace VPB
                             ? new List<CatMemRow>[rebuildClassifyWorkers]
                             : null;
 
-                        using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned) VALUES(?,?,?,?,?,?,?,?,?)"))
+                        using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned,family,ver,is_newest,license) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"))
                         using (var insDep = conn.Prepare("INSERT OR IGNORE INTO pkg_dep(src_uid,dep_uid) VALUES(?,?)"))
                         {
                             VpbSqlite3.Statement insMem = null;
@@ -5454,6 +5469,9 @@ namespace VPB
                         catMemIndexComplete = pkgRowsAfter == pkgSnap.Count
                             && packagesMissingCatMem == 0
                             && string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal);
+
+                        try { RefreshAllPkgNewestFlags(conn); } catch { }
+                        try { MarkPkgLicenseBackfillComplete(conn); } catch { }
 
                         long tMeta0 = Stopwatch.GetTimestamp();
                         if (catMemIndexComplete)
@@ -6582,6 +6600,8 @@ namespace VPB
             // Append clothAnd, then any additional per-query suffix (ORDER BY / LIMIT).
             public string CreatorAndFragment;  // " AND (p.creator = ? ...)" or ""
             public string LoadedAndFragment;   // " AND ifnull(p.loaded,0)..." or ""
+            public string VersionAndFragment;  // newest/old-only via pkg.is_newest, or ""
+            public string LicenseAndFragment;  // " AND ifnull(p.license,'') = ? COLLATE NOCASE" or ""
             public string NameAndFragment;     // title-bar search AST (broad OR + tag:/creator:) or ""
             public string SearchTimeAndFragment; // time window (int64 binds after text) or ""
             public string ExclusionAndFragment;// " AND m.internal_path NOT LIKE ? ..." or ""
@@ -6591,8 +6611,9 @@ namespace VPB
             public string ExcludedUserTagAndFragment; // " AND NOT EXISTS (... IN (excluded))" or ""
 
             // Bind values in the order they appear after the cloth AND slot.
-            // category bind comes first (slot 1), then creatorBindValues, then the rest.
+            // category bind comes first (slot 1), then creatorBindValues, then license, then the rest.
             public List<string> CreatorBindValues;
+            public string LicenseBindValue; // null/empty = no license filter bind
             public List<string> NameBindValues;  // already LIKE-escaped pairs
             public List<string> ExclusionBindValues;
             public List<string> InclusionBindValues;
@@ -6621,13 +6642,17 @@ namespace VPB
             HashSet<string> activeUserTags,
             bool userTagsUntaggedOnly,
             bool userTagsRequireAll,
-            HashSet<string> excludedUserTags = null)
+            HashSet<string> excludedUserTags = null,
+            int pkgVersionFilter = PkgVersionFilterOff,
+            bool userTagsTaggedOnly = false,
+            string licenseFilter = null)
         {
             return BuildGalleryCategoryWhere(
                 conn, categoryTitle, creatorFilter, loadedState,
                 GallerySearchQuery.FromLegacyNameTerms(nameTerms),
                 pathExclusions, pathInclusions,
-                activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
+                activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags,
+                pkgVersionFilter, userTagsTaggedOnly, licenseFilter);
         }
 
         internal static GalleryCategoryWhereContext BuildGalleryCategoryWhere(
@@ -6642,7 +6667,10 @@ namespace VPB
             HashSet<string> activeUserTags,
             bool userTagsUntaggedOnly,
             bool userTagsRequireAll,
-            HashSet<string> excludedUserTags = null)
+            HashSet<string> excludedUserTags = null,
+            int pkgVersionFilter = PkgVersionFilterOff,
+            bool userTagsTaggedOnly = false,
+            string licenseFilter = null)
         {
             var ctx = new GalleryCategoryWhereContext();
             ctx.CategoryTitle = categoryTitle;
@@ -6657,6 +6685,15 @@ namespace VPB
             else if (loadedState == 0 && ctx.PkgHasLoadedCol)
                 ctx.LoadedAndFragment = " AND ifnull(p.loaded,0) = 0";
 
+            // library-global newest / old-only (pkg.is_newest maintained on index rebuild)
+            ctx.VersionAndFragment = "";
+            if (pkgVersionFilter != PkgVersionFilterOff)
+            {
+                bool hasCol = false;
+                try { hasCol = PkgHasIsNewestColumn(conn); } catch { hasCol = false; }
+                if (hasCol)
+                    ctx.VersionAndFragment = BuildPkgVersionFilterFragment("p", pkgVersionFilter);
+            }
             // creator
             var creatorList = SplitCreatorFilterList(creatorFilter);
             ctx.CreatorBindValues = creatorList;
@@ -6669,6 +6706,26 @@ namespace VPB
             else
             {
                 ctx.CreatorAndFragment = "";
+            }
+
+            // license type (pkg.license from meta.json)
+            ctx.LicenseBindValue = null;
+            ctx.LicenseAndFragment = "";
+            string licNorm = NormalizePkgLicense(licenseFilter);
+            if (licNorm.Length > 0)
+            {
+                bool hasLicCol = false;
+                try { hasLicCol = PkgHasLicenseColumn(conn); } catch { hasLicCol = false; }
+                if (hasLicCol)
+                {
+                    ctx.LicenseAndFragment = BuildPkgLicenseFilterFragment("p", licNorm);
+                    ctx.LicenseBindValue = licNorm;
+                }
+                else
+                {
+                    // Column missing (pre-migration): fail closed so UI does not flash unfiltered rows.
+                    ctx.LicenseAndFragment = " AND 0";
+                }
             }
 
             // title-bar search (bare terms OR into tags; tag:/creator:/time structured)
@@ -6743,6 +6800,8 @@ namespace VPB
             var sbUt = new StringBuilder();
             if (userTagsUntaggedOnly)
                 AppendSqlNoUserTagExists(sbUt, "m", categoryTitle, ctx.IsEverything);
+            else if (userTagsTaggedOnly)
+                AppendSqlHasAnyUserTagExists(sbUt, "m", categoryTitle, ctx.IsEverything);
             else
                 AppendSqlActiveUserTagFilter(sbUt, ctx.UserTagBindValues, activeUserTags, "m", userTagsRequireAll, ctx.IsEverything ? Gallery.EverythingCategoryName : null);
             ctx.UserTagAndFragment = sbUt.ToString();
@@ -6750,8 +6809,8 @@ namespace VPB
             // excluded user tags (none-of): row must carry none of the excluded tags.
             ctx.ExcludedUserTagBindValues = new List<string>();
             var sbXut = new StringBuilder();
-            // Untagged-only already guarantees no user tags, so exclusion is redundant there.
-            if (!userTagsUntaggedOnly)
+            // Presence browse (untagged / tagged-only) already gates by tag existence.
+            if (!userTagsUntaggedOnly && !userTagsTaggedOnly)
                 AppendSqlExcludedUserTagNoneExists(sbXut, ctx.ExcludedUserTagBindValues, excludedUserTags, "m", ctx.IsEverything ? Gallery.EverythingCategoryName : null);
             ctx.ExcludedUserTagAndFragment = sbXut.ToString();
 
@@ -6760,7 +6819,7 @@ namespace VPB
 
         // Applies binds from a GalleryCategoryWhereContext to a prepared statement, starting at bind slot `bindStart`.
         // Order must match SQL fragment order in TryQueryGalleryCategoryRows:
-        // category, creator, name/search text, search time (int64), exclusions, inclusions, tags, userTags, excluded userTags.
+        // category, creator, license, name/search text, search time (int64), exclusions, inclusions, tags, userTags, excluded userTags.
         // Returns next available bind slot.
         internal static int BindGalleryCategoryWhere(VpbSqlite3.Statement stmt, GalleryCategoryWhereContext ctx, int bindStart)
         {
@@ -6768,6 +6827,8 @@ namespace VPB
             if (!ctx.IsEverything) stmt.BindText(b++, ctx.CategoryTitle);
             if (ctx.CreatorBindValues != null)
                 for (int i = 0; i < ctx.CreatorBindValues.Count; i++) stmt.BindText(b++, ctx.CreatorBindValues[i] ?? "");
+            if (!string.IsNullOrEmpty(ctx.LicenseAndFragment) && !string.IsNullOrEmpty(ctx.LicenseBindValue))
+                stmt.BindText(b++, ctx.LicenseBindValue);
             if (ctx.NameBindValues != null)
                 for (int i = 0; i < ctx.NameBindValues.Count; i++) stmt.BindText(b++, ctx.NameBindValues[i] ?? "");
             // Only bind int64 time values when SearchTimeAndFragment actually has placeholders.
@@ -6805,6 +6866,7 @@ namespace VPB
         {
             int n = ctx.IsEverything ? 0 : 1;
             if (ctx.CreatorBindValues != null) n += ctx.CreatorBindValues.Count;
+            if (!string.IsNullOrEmpty(ctx.LicenseAndFragment) && !string.IsNullOrEmpty(ctx.LicenseBindValue)) n++;
             if (ctx.NameBindValues != null) n += ctx.NameBindValues.Count;
             if (!string.IsNullOrEmpty(ctx.SearchTimeAndFragment) && ctx.SearchInt64BindValues != null)
                 n += ctx.SearchInt64BindValues.Count;
@@ -6836,14 +6898,18 @@ namespace VPB
             SortState sortState = null,
             bool userTagsUntaggedOnly = false,
             bool userTagsRequireAll = false,
-            HashSet<string> excludedUserTags = null)
+            HashSet<string> excludedUserTags = null,
+            int pkgVersionFilter = PkgVersionFilterOff,
+            bool userTagsTaggedOnly = false,
+            string licenseFilter = null)
         {
             return TryQueryGalleryCategoryRows(
                 categoryTitle, currentExtension, creatorFilter, outRows, out stats,
                 clothingSubfilterForSql, loadedState,
                 GallerySearchQuery.FromLegacyNameTerms(nameTerms),
                 pathExclusions, pathInclusions, activeTags, activeUserTags, sortState,
-                userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
+                userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags, pkgVersionFilter,
+                userTagsTaggedOnly, licenseFilter);
         }
 
         internal static bool TryQueryGalleryCategoryRows(
@@ -6862,7 +6928,10 @@ namespace VPB
             SortState sortState,
             bool userTagsUntaggedOnly,
             bool userTagsRequireAll,
-            HashSet<string> excludedUserTags)
+            HashSet<string> excludedUserTags,
+            int pkgVersionFilter = PkgVersionFilterOff,
+            bool userTagsTaggedOnly = false,
+            string licenseFilter = null)
         {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
@@ -6933,7 +7002,8 @@ namespace VPB
                     var ctx = BuildGalleryCategoryWhere(
                         conn, categoryTitle, creatorFilter, loadedState,
                         searchQuery ?? GallerySearchQuery.Empty, pathExclusions, pathInclusions,
-                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
+                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags,
+                        pkgVersionFilter, userTagsTaggedOnly, licenseFilter);
 
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
                     string loadedSelect = ctx.PkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
@@ -6967,7 +7037,8 @@ namespace VPB
                         sbSql.Append("m.category = ?");
                     sbSql.Append(ctx.CreatorAndFragment);
                     sbSql.Append(clothSqlAnd);
-                    sbSql.Append(ctx.LoadedAndFragment).Append(ctx.NameAndFragment)
+                    sbSql.Append(ctx.LoadedAndFragment).Append(ctx.VersionAndFragment).Append(ctx.LicenseAndFragment)
+                         .Append(ctx.NameAndFragment)
                          .Append(ctx.SearchTimeAndFragment)
                          .Append(ctx.ExclusionAndFragment).Append(ctx.InclusionAndFragment)
                          .Append(ctx.TagAndFragment).Append(ctx.UserTagAndFragment)
@@ -7546,7 +7617,9 @@ namespace VPB
             int loadedState,
             string[] nameTerms,
             SortState sortState,
-            List<PackageRow> outRows)
+            List<PackageRow> outRows,
+            int pkgVersionFilter = PkgVersionFilterOff,
+            string licenseFilter = null)
         {
             if (outRows == null) return false;
             outRows.Clear();
@@ -7604,6 +7677,31 @@ namespace VPB
                         if (pkgHasLoadedCol) loadedSqlAnd = " AND ifnull(p.loaded,0) = 0";
                     }
 
+                    string versionSqlAnd = "";
+                    if (pkgVersionFilter != PkgVersionFilterOff)
+                    {
+                        bool hasNewest = false;
+                        try { hasNewest = PkgHasIsNewestColumn(conn); } catch { hasNewest = false; }
+                        if (hasNewest)
+                            versionSqlAnd = BuildPkgVersionFilterFragment("p", pkgVersionFilter);
+                    }
+
+                    string licenseSqlAnd = "";
+                    string licenseBind = null;
+                    string licNorm = NormalizePkgLicense(licenseFilter);
+                    if (licNorm.Length > 0)
+                    {
+                        bool hasLic = false;
+                        try { hasLic = PkgHasLicenseColumn(conn); } catch { hasLic = false; }
+                        if (hasLic)
+                        {
+                            licenseSqlAnd = BuildPkgLicenseFilterFragment("p", licNorm);
+                            licenseBind = licNorm;
+                        }
+                        else
+                            licenseSqlAnd = " AND 0";
+                    }
+
                     string nameSqlAnd = "";
                     if (nameTerms != null && nameTerms.Length > 0)
                     {
@@ -7633,13 +7731,14 @@ namespace VPB
                     sbSql.Append("SELECT p.uid, ifnull(p.var_path,''), p.wtime, p.psize, ifnull(p.ictime, p.pctime), ").Append(loadedSelect).Append(", ifnull(p.first_scanned, 0) FROM pkg p WHERE 1=1");
                     if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
                     if (hasPath) sbSql.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
-                    sbSql.Append(loadedSqlAnd).Append(nameSqlAnd).Append(orderBy);
+                    sbSql.Append(loadedSqlAnd).Append(versionSqlAnd).Append(licenseSqlAnd).Append(nameSqlAnd).Append(orderBy);
 
                     using (var st = conn.Prepare(sbSql.ToString()))
                     {
                         int bind = 1;
                         if (hasCreator) BindCreatorFilterSql(st, ref bind, creatorList);
                         if (hasPath) st.BindText(bind++, EscapeLike(normalizedPath.ToLowerInvariant()) + "/%");
+                        if (!string.IsNullOrEmpty(licenseBind)) st.BindText(bind++, licenseBind);
                         if (nameTerms != null && nameTerms.Length > 0)
                         {
                             for (int i = 0; i < nameTerms.Length; i++)
