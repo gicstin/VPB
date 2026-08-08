@@ -113,6 +113,7 @@ namespace VPB
             try { ApplyFooterOverflowLayout(chromeS); } catch { }
             try { if (IsFixedTopDockMode()) ApplyTopDockSideButtonsLayout(chromeS); } catch { }
             try { RescaleRemapAtomUidsIfOpen(chromeS); } catch { }
+            try { RescaleCommandPaletteIfOpen(); } catch { }
         }
 
         /// <summary>Scales hover-path tooltip text, collapsed tbox labels, and detail strip chrome.</summary>

@@ -264,7 +264,7 @@ Press **?** or **F1** anytime the gallery is focused to jump here. **Esc** close
 ### Gallery chrome
 - **Ctrl+V** (default) — show / hide gallery (configurable)
 - **?** / **F1** — open / close this Hotkeys sheet
-- **Ctrl+Shift+P** — command palette (undo, apply, clear filters/selection, Scene Tools, Scene Eraser, Import, Cleanup, Try-On toggle, Hold-launch, Delete, …)
+- **Ctrl+Shift+P** — command palette (also footer left chip next to Undo/Redo). Type to filter commands + categories; ↑↓ / Enter / Esc. Groups: Edit, Browse, Modes, Selection, Packages, View, Help. Recent list on open. Grey rows = unavailable (need selection / mode).
 - **Esc** — close help/menus/search, then exit Scene Tools / Scene Eraser / Try-On (revert) / Cleanup / Import, else clear selection (ladder: innermost first)
 - **Ctrl+Alt+= / Ctrl+Alt+-** — gallery UI scale up / down (also keypad +/-; separate from grid zoom). New installs auto-pick a desktop starting scale from screen height; desktop chrome also multiplies by VaM Monitor UI Scale.
 - **Ctrl + mouse wheel** — grid columns (+ / − in footer too)

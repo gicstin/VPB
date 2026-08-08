@@ -1027,6 +1027,12 @@ namespace VPB
             footerRedoBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             { var s = UI.LoadIconSprite("vpb_icons/redo.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerRedoBtnGO, s); }
 
+            footerCommandPaletteBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,
+                VPBTranslation.T("gallery.footer.cmd_abbrev", "P"), 14, 0, 0, AnchorPresets.middleCenter, ToggleCommandPalette);
+            footerCommandPaletteBtnGO.name = "FooterCommandPaletteBtn";
+            footerCommandPaletteBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
+            { var s = UI.LoadIconSprite("vpb_icons/list_search.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerCommandPaletteBtnGO, s); }
+
             footerHubBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
                 VamHookPlugin.singleton?.OpenHubBrowse();
                 Hide();
@@ -1240,6 +1246,8 @@ namespace VPB
             AddDynamicTooltip(footerUndoBtnGO, BuildUndoTooltip);
             AddHoverDelegate(footerRedoBtnGO);
             AddDynamicTooltip(footerRedoBtnGO, BuildRedoTooltip);
+            AddHoverDelegate(footerCommandPaletteBtnGO);
+            AddTooltip(footerCommandPaletteBtnGO, "gallery.tooltip.command_palette", "Command palette (Ctrl+Shift+P)");
             AddHoverDelegate(footerHubBtnGO);
             AddTooltip(footerHubBtnGO, "gallery.tooltip.hub", "Hub browse / dev Hub panel");
             AddHoverDelegate(footerFollowAngleBtn);
@@ -1257,14 +1265,18 @@ namespace VPB
                 var rRT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponent<RectTransform>() : null;
                 var uT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponentInChildren<Text>() : null;
                 var rT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponentInChildren<Text>() : null;
+                var pRT = footerCommandPaletteBtnGO != null ? footerCommandPaletteBtnGO.GetComponent<RectTransform>() : null;
+                var pT = footerCommandPaletteBtnGO != null ? footerCommandPaletteBtnGO.GetComponentInChildren<Text>() : null;
                 var hRT = footerHubBtnGO != null ? footerHubBtnGO.GetComponent<RectTransform>() : null;
                 var hT = footerHubBtnText;
                 innerPaneScaleActions.Add(s => {
                     if (uRT != null) uRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (rRT != null) rRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
+                    if (pRT != null) pRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (hRT != null) hRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     GalleryUiMetrics.ApplyFont(uT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(rT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    GalleryUiMetrics.ApplyFont(pT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(hT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }

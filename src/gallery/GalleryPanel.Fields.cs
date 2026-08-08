@@ -460,6 +460,7 @@ namespace VPB
 
         private GameObject footerUndoBtnGO;
         private GameObject footerRedoBtnGO;
+        private GameObject footerCommandPaletteBtnGO;
 
         private GameObject rightRemoveAllClothingBtn;
         private Image rightRemoveAllClothingBtnIconImage;

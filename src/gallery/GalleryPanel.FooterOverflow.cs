@@ -109,6 +109,7 @@ namespace VPB
             if (footerPerfMinusBtn != null) into.Add(footerPerfMinusBtn);
             if (footerPerfToggleBtn != null) into.Add(footerPerfToggleBtn);
             if (footerHubBtnGO != null) into.Add(footerHubBtnGO);
+            if (footerCommandPaletteBtnGO != null) into.Add(footerCommandPaletteBtnGO);
             // Redo may collapse; Undo stays pinned (never added) for recovery Fitts path.
             if (footerRedoBtnGO != null) into.Add(footerRedoBtnGO);
         }
@@ -386,6 +387,12 @@ namespace VPB
                         Hide();
                     }, icon: icon,
                     tipKey: "gallery.tooltip.hub", tipDefault: "Hub browse / dev Hub panel");
+            }
+            else if (go == footerCommandPaletteBtnGO)
+            {
+                AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_command_palette", "Command palette"),
+                    () => { CloseFooterOverflowMenu(); ToggleCommandPalette(); }, icon: icon,
+                    tipKey: "gallery.tooltip.command_palette", tipDefault: "Command palette (Ctrl+Shift+P)");
             }
             else if (go == footerUndoBtnGO)
             {
