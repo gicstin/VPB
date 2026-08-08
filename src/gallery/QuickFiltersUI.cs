@@ -511,8 +511,7 @@ namespace VPB
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef;
             footerGO = UI.CreateChildRT(containerGO, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
-            Image footerBg = UI.AddImage(footerGO, FloatFooterBarBg);
-            if (footerBg != null) footerBg.raycastTarget = true;
+            UI.AddImage(footerGO, FloatFooterBarBg);
             RectTransform footerRT = footerGO.GetComponent<RectTransform>();
             if (footerRT != null)
             {
@@ -527,6 +526,15 @@ namespace VPB
                 childForceExpandWidth: false, childForceExpandHeight: false);
             if (footerGO.GetComponent<RectMask2D>() == null)
                 footerGO.AddComponent<RectMask2D>();
+
+            // Full-footer drag hit (behind Dock/Undo/resize) — same job as title bar.
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(footerGO);
+            if (footerDragArea != null)
+            {
+                var footerDrag = footerDragArea.AddComponent<QuickFiltersPanelDrag>();
+                footerDrag.Target = containerRT;
+                footerDrag.OnMoved = OnFloatMoved;
+            }
 
             floatDockBtnGO = CreateFooterChromeTextBtn(
                 footerGO, FooterTextBtnWRef, chromeSz,
@@ -623,6 +631,10 @@ namespace VPB
             footerSpacer.transform.SetParent(footerGO.transform, false);
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f);
+            UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
+            var spacerDrag = footerSpacer.AddComponent<QuickFiltersPanelDrag>();
+            spacerDrag.Target = containerRT;
+            spacerDrag.OnMoved = OnFloatMoved;
 
             float rh = GalleryUiDesignTokens.ButtonSizeRef;
             resizeHandleGO = UI.AddChildGOImage(

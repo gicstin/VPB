@@ -1906,6 +1906,44 @@ namespace VPB
         }
 
         /// <summary>
+        /// Full-footer drag hit behind chrome buttons (same job as title-bar drag).
+        /// Disables footer tint raycasts; stretch Graphic + ignoreLayout so HLG/VLG does not crush it.
+        /// Caller AddComponent panel-drag on returned GO (init-time only).
+        /// </summary>
+        public static GameObject CreateFloatFooterDragArea(GameObject footer)
+        {
+            if (footer == null) return null;
+            Image footerBg = footer.GetComponent<Image>();
+            if (footerBg != null) footerBg.raycastTarget = false;
+
+            GameObject footerDragArea = AddChildGOImage(
+                footer, new Color(0f, 0f, 0f, 0.01f),
+                AnchorPresets.stretchAll, 0f, 0f, Vector2.zero);
+            footerDragArea.name = "FooterDragArea";
+            footerDragArea.transform.SetAsFirstSibling();
+            Image footerDragImg = footerDragArea.GetComponent<Image>();
+            if (footerDragImg != null) footerDragImg.raycastTarget = true;
+            LayoutElement footerDragLe = footerDragArea.GetComponent<LayoutElement>();
+            if (footerDragLe == null) footerDragLe = footerDragArea.AddComponent<LayoutElement>();
+            footerDragLe.ignoreLayout = true;
+            return footerDragArea;
+        }
+
+        /// <summary>
+        /// Flexible footer spacer needs a Graphic to receive drags (empty RT does not).
+        /// Caller AddComponent panel-drag after this (init-time only).
+        /// </summary>
+        public static Image EnsureFloatFooterSpacerDragHit(GameObject spacer)
+        {
+            if (spacer == null) return null;
+            Image spacerImg = spacer.GetComponent<Image>();
+            if (spacerImg == null) spacerImg = spacer.AddComponent<Image>();
+            spacerImg.color = new Color(0f, 0f, 0f, 0.01f);
+            spacerImg.raycastTarget = true;
+            return spacerImg;
+        }
+
+        /// <summary>
         /// Non-interactive window-type glyph for float title bars (after grip, before title).
         /// Host includes trailing gap so label is not stuck to icon.
         /// </summary>

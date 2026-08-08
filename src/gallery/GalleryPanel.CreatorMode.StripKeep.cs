@@ -616,6 +616,15 @@ namespace VPB
             UI.AddLE(footerStack, flexibleHeight: 0f, flexibleWidth: 1f);
             UI.AddImage(footerStack, new Color(0.07f, 0.075f, 0.09f, 1f));
 
+            // Full-footer drag hit (behind Cancel/Strip/resize) — same job as title bar.
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(footerStack);
+            if (footerDragArea != null)
+            {
+                var footerDrag = footerDragArea.AddComponent<StripKeepPanelDrag>();
+                footerDrag.Target = _stripKeepPanelRT;
+                footerDrag.OnMoved = StripKeepOnPanelMoved;
+            }
+
             float summaryH = Mathf.Max(16f * s, btnH * 0.45f);
             float rulesH = Mathf.Max(14f * s, btnH * 0.38f);
             _stripKeepRulesHintText = UI.CreateLabel(footerStack,

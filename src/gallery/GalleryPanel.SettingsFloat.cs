@@ -360,8 +360,7 @@ namespace VPB
             // Footer
             _settingsFloatFooter = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
-            Image footerBg = UI.AddImage(_settingsFloatFooter, SettingsFloatFooterBarBg);
-            if (footerBg != null) footerBg.raycastTarget = true;
+            UI.AddImage(_settingsFloatFooter, SettingsFloatFooterBarBg);
             RectTransform footerRT = _settingsFloatFooter.GetComponent<RectTransform>();
             if (footerRT != null)
             {
@@ -377,10 +376,23 @@ namespace VPB
             if (_settingsFloatFooter.GetComponent<RectMask2D>() == null)
                 _settingsFloatFooter.AddComponent<RectMask2D>();
 
+            // Full-footer drag hit (behind Cancel/Save/resize) — same job as title bar.
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(_settingsFloatFooter);
+            if (footerDragArea != null)
+            {
+                var footerDrag = footerDragArea.AddComponent<RemapAtomUidsPanelDrag>();
+                footerDrag.Target = _settingsFloatPanelRT;
+                footerDrag.OnMoved = OnSettingsFloatMoved;
+            }
+
             GameObject footerSpacer = new GameObject("Spacer");
             footerSpacer.transform.SetParent(_settingsFloatFooter.transform, false);
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f * s);
+            UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
+            var spacerDrag = footerSpacer.AddComponent<RemapAtomUidsPanelDrag>();
+            spacerDrag.Target = _settingsFloatPanelRT;
+            spacerDrag.OnMoved = OnSettingsFloatMoved;
 
             SettingsFloatChromeButton(_settingsFloatFooter.transform, SettingsFloatFooterBtnWRef * s, chromeSz,
                 VPBTranslation.T("settings.tbox.cancel", "Cancel"), font, s,

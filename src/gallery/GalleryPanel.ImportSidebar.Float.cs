@@ -290,15 +290,12 @@ namespace VPB
 
             var headerDrag = importSidebarFloatTitleBarGO.AddComponent<ImportSidebarPanelDrag>();
             headerDrag.Target = importSidebarRT;
-            headerDrag.OnDragging = ClampImportSidebarFloatIntoHost;
             headerDrag.OnMoved = OnImportSidebarFloatMoved;
 
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef;
             importSidebarFloatFooterGO = UI.CreateChildRT(importSidebarRoot, "FloatFooter", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
             Image footerBg = UI.AddImage(importSidebarFloatFooterGO, ImportSidebarFloatFooterBarBg);
-            // Drag strip owns hits; footer tint is visual only.
-            if (footerBg != null) footerBg.raycastTarget = false;
             RectTransform footerRT = importSidebarFloatFooterGO.GetComponent<RectTransform>();
             if (footerRT != null)
             {
@@ -312,22 +309,14 @@ namespace VPB
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
 
-            // Full-footer drag hit (behind Dock/resize) — title-bar pattern needs a Graphic.
-            // ignoreLayout so HLG does not crush stretch anchors into a layout cell.
-            GameObject footerDragArea = UI.AddChildGOImage(
-                importSidebarFloatFooterGO, new Color(0f, 0f, 0f, 0.01f),
-                AnchorPresets.stretchAll, 0f, 0f, Vector2.zero);
-            footerDragArea.name = "FooterDragArea";
-            footerDragArea.transform.SetAsFirstSibling();
-            Image footerDragImg = footerDragArea.GetComponent<Image>();
-            if (footerDragImg != null) footerDragImg.raycastTarget = true;
-            LayoutElement footerDragLe = footerDragArea.GetComponent<LayoutElement>();
-            if (footerDragLe == null) footerDragLe = footerDragArea.AddComponent<LayoutElement>();
-            footerDragLe.ignoreLayout = true;
-            var footerDrag = footerDragArea.AddComponent<ImportSidebarPanelDrag>();
-            footerDrag.Target = importSidebarRT;
-            footerDrag.OnDragging = ClampImportSidebarFloatIntoHost;
-            footerDrag.OnMoved = OnImportSidebarFloatMoved;
+            // Full-footer drag hit (behind Dock/resize) — same job as title bar.
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(importSidebarFloatFooterGO);
+            if (footerDragArea != null)
+            {
+                var footerDrag = footerDragArea.AddComponent<ImportSidebarPanelDrag>();
+                footerDrag.Target = importSidebarRT;
+                footerDrag.OnMoved = OnImportSidebarFloatMoved;
+            }
 
             importSidebarFloatDockBtnGO = UI.CreateUIButton(
                 importSidebarFloatFooterGO, 72f, chromeSz,
@@ -366,13 +355,9 @@ namespace VPB
             footerSpacer.transform.SetParent(importSidebarFloatFooterGO.transform, false);
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f);
-            // Spacer needs a Graphic — empty RT does not receive drags.
-            Image spacerImg = footerSpacer.AddComponent<Image>();
-            spacerImg.color = new Color(0f, 0f, 0f, 0.01f);
-            spacerImg.raycastTarget = true;
+            UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
             var spacerDrag = footerSpacer.AddComponent<ImportSidebarPanelDrag>();
             spacerDrag.Target = importSidebarRT;
-            spacerDrag.OnDragging = ClampImportSidebarFloatIntoHost;
             spacerDrag.OnMoved = OnImportSidebarFloatMoved;
             Text footerGrip = UI.CreateLabel(footerSpacer, "\u2807", GalleryUiDesignTokens.PopupMenuRowFontRef,
                 GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
@@ -726,66 +711,11 @@ namespace VPB
         }
 
         /// <summary>
-        /// Soft clamp on float host (canvas): keep title (+ footer strip) grabable.
-        /// Body may leave gallery pane — do not pin whole panel inside backgroundBox.
+        /// Free float like Settings/Plugins — no host clamp (user may park off-screen).
+        /// Call sites kept for layout/resize hooks; body intentionally empty.
         /// </summary>
         private void ClampImportSidebarFloatIntoHost()
         {
-            if (importSidebarRT == null || !importSidebarDetached) return;
-            RectTransform hostRT = importSidebarRT.parent as RectTransform;
-            if (hostRT == null) return;
-
-            float s = ChromeScale > 0f ? ChromeScale : 1f;
-            float margin = GalleryUiDesignTokens.ImportSidebarFloatHostMarginRef * s;
-            Vector2 size = importSidebarRT.sizeDelta;
-            if (size.x < 1f || size.y < 1f) return;
-
-            Rect h = hostRT.rect;
-            float hostW = Mathf.Abs(h.width);
-            float hostH = Mathf.Abs(h.height);
-            if (hostW < 8f || hostH < 8f) return;
-
-            float titleH = GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef * s;
-            float footerH = (!importSidebarFloatCollapsed && importSidebarFloatFooterGO != null
-                && importSidebarFloatFooterGO.activeSelf)
-                ? GalleryUiDesignTokens.QuickFiltersFooterHeightRef * s
-                : 0f;
-            // Keep enough width of chrome on-host to grab (not full panel).
-            float keepW = Mathf.Min(size.x, Mathf.Max(120f * s, size.x * 0.35f));
-
-            Vector2 pos = importSidebarRT.anchoredPosition;
-            float minX = h.xMin + margin - (size.x - keepW);
-            float maxX = h.xMax - margin - keepW;
-            // Title strip [pos.y - titleH, pos.y] stays in host.
-            float minY = h.yMin + margin + titleH;
-            float maxY = h.yMax - margin;
-
-            if (maxX < minX)
-                pos.x = (h.xMin + h.xMax) * 0.5f - size.x * 0.5f;
-            else
-                pos.x = Mathf.Clamp(pos.x, minX, maxX);
-
-            if (maxY < minY)
-                pos.y = maxY; // pin title into host when canvas is short
-            else
-                pos.y = Mathf.Clamp(pos.y, minY, maxY);
-
-            // If footer exists, nudge so footer strip still intersects host (title already in).
-            if (footerH > 1f && maxY >= minY)
-            {
-                float footerBottom = pos.y - size.y;
-                float footerTop = footerBottom + footerH;
-                if (footerTop < h.yMin + margin)
-                    pos.y = h.yMin + margin + size.y;
-                else if (footerBottom > h.yMax - margin)
-                    pos.y = h.yMax - margin + footerH;
-                pos.y = Mathf.Clamp(pos.y, minY, maxY);
-            }
-
-            importSidebarRT.anchoredPosition = pos;
-            // Visual clamp only — do not rewrite saved center here. Layout under a wrong /
-            // interim host used to corrupt canvas-local restore coords. Drag/resize end
-            // captures via OnImportSidebarFloatMoved / CaptureImportSidebarFloatGeometryToMemory.
         }
 
         private float ResolveImportSidebarFloatWidthRef()
@@ -1046,7 +976,6 @@ namespace VPB
         private sealed class ImportSidebarPanelDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
         {
             public RectTransform Target;
-            public Action OnDragging;
             public Action OnMoved;
 
             public void OnBeginDrag(PointerEventData eventData) { }
@@ -1055,12 +984,10 @@ namespace VPB
             {
                 if (Target == null || eventData == null) return;
                 Target.anchoredPosition += eventData.delta;
-                if (OnDragging != null) OnDragging();
             }
 
             public void OnEndDrag(PointerEventData eventData)
             {
-                if (OnDragging != null) OnDragging();
                 if (OnMoved != null) OnMoved();
             }
         }

@@ -692,6 +692,8 @@ namespace VPB
             bool tagMenuMissingResize = _detailStripTagMenuResizeGO == null
                 || (_detailStripTagMenuSearchRowGO != null
                     && !_detailStripTagMenuResizeGO.transform.IsChildOf(_detailStripTagMenuSearchRowGO.transform));
+            // Soft-attach footer drag chrome without hard rebuild.
+            try { DetailStripEnsureTagMenuFooterDrag(); } catch { }
             // Prefer attach ModeTabs / DatabaseHost over destroying an open menu (flash-close).
             if (_detailStripTagMenuRoot != null && DetailStripTagMenuNeedsUnifiedRebuild())
             {
@@ -7446,8 +7448,7 @@ namespace VPB
             // Footer — Settings master: Close text + Dock text + spacer + resize.
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef;
             _detailStripTagMenuSearchRowGO = UI.CreateChildRT(_detailStripTagMenuPanelGO, "Footer");
-            Image footerBg = UI.AddImage(_detailStripTagMenuSearchRowGO, GalleryUiColorTokens.SurfaceDarker);
-            if (footerBg != null) footerBg.raycastTarget = true;
+            UI.AddImage(_detailStripTagMenuSearchRowGO, GalleryUiColorTokens.SurfaceDarker);
             UI.AddHLG(
                 _detailStripTagMenuSearchRowGO,
                 spacing: 6f,
@@ -7465,6 +7466,15 @@ namespace VPB
                 flexibleHeight: 0f);
             if (_detailStripTagMenuSearchRowGO.GetComponent<RectMask2D>() == null)
                 _detailStripTagMenuSearchRowGO.AddComponent<RectMask2D>();
+
+            // Full-footer drag hit (behind Close/Dock/resize) — same job as title bar.
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(_detailStripTagMenuSearchRowGO);
+            if (footerDragArea != null)
+            {
+                var footerDrag = footerDragArea.AddComponent<DetailStripTagMenuDrag>();
+                footerDrag.Target = _detailStripTagMenuPanelRT;
+                footerDrag.OnMoved = DetailStripOnTagMenuDragged;
+            }
 
             float footerBtnW = 96f;
             _detailStripTagMenuFooterCloseGO = SettingsFloatChromeButton(
@@ -7485,6 +7495,10 @@ namespace VPB
             footerSpacer.transform.SetParent(_detailStripTagMenuSearchRowGO.transform, false);
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f);
+            UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
+            var spacerDrag = footerSpacer.AddComponent<DetailStripTagMenuDrag>();
+            spacerDrag.Target = _detailStripTagMenuPanelRT;
+            spacerDrag.OnMoved = DetailStripOnTagMenuDragged;
 
             float rhSz = GalleryUiDesignTokens.ButtonSizeRef;
             _detailStripTagMenuResizeGO = UI.AddChildGOImage(
@@ -8083,7 +8097,6 @@ namespace VPB
         private void DetailStripOnTagMenuDragged()
         {
             _detailStripTagMenuDragged = true;
-            DetailStripClampTagMenuPanelInView();
             if (_detailStripTagMenuPanelRT != null)
             {
                 // Persist as center (legacy + Settings/QuickFilters) — panel uses top-left pivot.
@@ -8094,9 +8107,38 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Soft-wire footer drag on existing tag menus built before FooterDragArea existed.
+        /// </summary>
+        private void DetailStripEnsureTagMenuFooterDrag()
+        {
+            if (_detailStripTagMenuSearchRowGO == null || _detailStripTagMenuPanelRT == null) return;
+            if (_detailStripTagMenuSearchRowGO.transform.Find("FooterDragArea") != null) return;
+
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(_detailStripTagMenuSearchRowGO);
+            if (footerDragArea != null)
+            {
+                var footerDrag = footerDragArea.AddComponent<DetailStripTagMenuDrag>();
+                footerDrag.Target = _detailStripTagMenuPanelRT;
+                footerDrag.OnMoved = DetailStripOnTagMenuDragged;
+            }
+
+            Transform spacerTr = _detailStripTagMenuSearchRowGO.transform.Find("Spacer");
+            if (spacerTr != null)
+            {
+                GameObject spacer = spacerTr.gameObject;
+                if (spacer.GetComponent<DetailStripTagMenuDrag>() == null)
+                {
+                    UI.EnsureFloatFooterSpacerDragHit(spacer);
+                    var spacerDrag = spacer.AddComponent<DetailStripTagMenuDrag>();
+                    spacerDrag.Target = _detailStripTagMenuPanelRT;
+                    spacerDrag.OnMoved = DetailStripOnTagMenuDragged;
+                }
+            }
+        }
+
         private void DetailStripOnTagMenuResized()
         {
-            DetailStripClampTagMenuPanelInView();
             if (_detailStripTagMenuPanelRT == null) return;
             float s = ChromeScale > 0f ? ChromeScale : 1f;
             Vector2 sizePx = _detailStripTagMenuPanelRT.sizeDelta;
@@ -8225,15 +8267,12 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Keep quick-tag panel inside stretch root (same clamp as other popups).</summary>
+        /// <summary>
+        /// Free float like Settings/Plugins — no host clamp (user may park off-screen).
+        /// Kept as call-site hook so open/layout paths stay stable.
+        /// </summary>
         private void DetailStripClampTagMenuPanelInView()
         {
-            if (_detailStripTagMenuPanelRT == null || _detailStripTagMenuRoot == null) return;
-            RectTransform overlayRT = _detailStripTagMenuRoot.GetComponent<RectTransform>();
-            if (overlayRT == null) return;
-            float pad = 8f * (ChromeScale > 0f ? ChromeScale : 1f);
-            UI.ClampPopupMenuPanelX(_detailStripTagMenuPanelRT, overlayRT, pad);
-            UI.ClampPopupMenuPanelY(_detailStripTagMenuPanelRT, overlayRT, pad);
         }
 
         /// <summary>Saved tag-menu pos is panel center (legacy center-pivot + Settings/QuickFilters).</summary>
@@ -10346,8 +10385,8 @@ namespace VPB
             return result;
         }
 
-        /// <summary>Screen-space drag for detail-strip tag popup (same pattern as dep-whitelist).</summary>
-        private sealed class DetailStripTagMenuDrag : MonoBehaviour, IBeginDragHandler, IDragHandler
+        /// <summary>Screen-space drag for detail-strip tag popup (Settings float pattern).</summary>
+        private sealed class DetailStripTagMenuDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
         {
             public RectTransform Target;
             public Action OnMoved;
@@ -10358,6 +10397,10 @@ namespace VPB
             {
                 if (Target == null || eventData == null) return;
                 Target.anchoredPosition += eventData.delta;
+            }
+
+            public void OnEndDrag(PointerEventData eventData)
+            {
                 if (OnMoved != null) OnMoved();
             }
         }

@@ -482,8 +482,7 @@ namespace VPB
             // Footer: expand/collapse tree + hint + resize
             _pluginsFloatFooter = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
-            Image footerBg = UI.AddImage(_pluginsFloatFooter, PluginsFloatFooterBarBg);
-            if (footerBg != null) footerBg.raycastTarget = true;
+            UI.AddImage(_pluginsFloatFooter, PluginsFloatFooterBarBg);
             RectTransform footerRT = _pluginsFloatFooter.GetComponent<RectTransform>();
             if (footerRT != null)
             {
@@ -498,6 +497,15 @@ namespace VPB
                 childForceExpandWidth: false, childForceExpandHeight: false);
             if (_pluginsFloatFooter.GetComponent<RectMask2D>() == null)
                 _pluginsFloatFooter.AddComponent<RectMask2D>();
+
+            // Full-footer drag hit (behind expand/hint/resize) — same job as title bar.
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(_pluginsFloatFooter);
+            if (footerDragArea != null)
+            {
+                var footerDrag = footerDragArea.AddComponent<RemapAtomUidsPanelDrag>();
+                footerDrag.Target = _pluginsFloatPanelRT;
+                footerDrag.OnMoved = OnPluginsFloatMoved;
+            }
 
             _pluginsFloatExpandAllBtn = PluginsFloatSquareIconButton(
                 _pluginsFloatFooter.transform, chromeSz, "vpb_icons/chevrons_down.png",

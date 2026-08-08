@@ -837,8 +837,7 @@ namespace VPB
             // ── Footer ────────────────────────────────────────────────────
             GameObject footer = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
-            Image footerBg = UI.AddImage(footer, RemapFloatFooterBarBg);
-            if (footerBg != null) footerBg.raycastTarget = true;
+            UI.AddImage(footer, RemapFloatFooterBarBg);
             RectTransform footerRT = footer.GetComponent<RectTransform>();
             if (footerRT != null)
             {
@@ -854,11 +853,24 @@ namespace VPB
             if (footer.GetComponent<RectMask2D>() == null)
                 footer.AddComponent<RectMask2D>();
 
+            // Full-footer drag hit (behind Cancel/Import/resize) — same job as title bar.
+            GameObject footerDragArea = UI.CreateFloatFooterDragArea(footer);
+            if (footerDragArea != null)
+            {
+                var footerDrag = footerDragArea.AddComponent<RemapAtomUidsPanelDrag>();
+                footerDrag.Target = _remapAtomUidsPanelRT;
+                footerDrag.OnMoved = OnRemapAtomUidsFloatMoved;
+            }
+
             // Spacer pushes actions right (primary Import rightmost before resize).
             GameObject footerSpacer = new GameObject("Spacer");
             footerSpacer.transform.SetParent(footer.transform, false);
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f * s);
+            UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
+            var spacerDrag = footerSpacer.AddComponent<RemapAtomUidsPanelDrag>();
+            spacerDrag.Target = _remapAtomUidsPanelRT;
+            spacerDrag.OnMoved = OnRemapAtomUidsFloatMoved;
 
             Text unresolvedTxt = UI.CreateLabel(
                 footer,
