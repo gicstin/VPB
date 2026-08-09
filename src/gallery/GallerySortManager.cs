@@ -174,9 +174,18 @@ namespace VPB
 
         public void SortFiles(List<FileEntry> files, SortState state)
         {
+            SortFiles(files, state, false);
+        }
+
+        /// <param name="skipHideOldVersions">
+        /// True when gallery SQL already applied <c>pkg.is_newest</c> (or old-only) — avoid O(N) family re-scan.
+        /// </param>
+        public void SortFiles(List<FileEntry> files, SortState state, bool skipHideOldVersions)
+        {
             if (files == null || state == null) return;
 
-            ApplyHideOldVersionsFilter(files);
+            if (!skipHideOldVersions)
+                ApplyHideOldVersionsFilter(files);
 
             switch (state.Type)
             {
@@ -445,10 +454,17 @@ namespace VPB
         /// <returns><c>true</c> if the list was sorted (or trivially needs no sort); <c>false</c> if the caller must run <see cref="SortFiles"/> on the main thread.</returns>
         public static bool TrySortFilesEntryFieldsOnly(List<FileEntry> files, SortState state)
         {
+            return TrySortFilesEntryFieldsOnly(files, state, false);
+        }
+
+        /// <param name="skipHideOldVersions">True when SQL already filtered newest/old via <c>pkg.is_newest</c>.</param>
+        public static bool TrySortFilesEntryFieldsOnly(List<FileEntry> files, SortState state, bool skipHideOldVersions)
+        {
             if (files == null || state == null) return false;
             if (files.Count < 2) return true;
 
-            ApplyHideOldVersionsFilter(files);
+            if (!skipHideOldVersions)
+                ApplyHideOldVersionsFilter(files);
             if (files.Count < 2) return true;
 
             switch (state.Type)

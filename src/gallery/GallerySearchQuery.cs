@@ -244,6 +244,33 @@ namespace VPB
             return q;
         }
 
+        /// <summary>
+        /// Clone with BroadTerms/BroadExclude stripped (NameOnly / NameStartsWith cannot use path LIKE).
+        /// Keeps tag:/creator:/status so SQL can still narrow structured atoms.
+        /// </summary>
+        internal GallerySearchQuery WithoutBroadTerms()
+        {
+            if (IsEmpty || Branches == null || Branches.Count == 0) return Empty;
+            var q = new GallerySearchQuery();
+            for (int bi = 0; bi < Branches.Count; bi++)
+            {
+                GallerySearchBranch src = Branches[bi];
+                if (src == null) continue;
+                var br = new GallerySearchBranch();
+                if (src.TagInclude != null)
+                    for (int i = 0; i < src.TagInclude.Count; i++) AddUnique(br.TagInclude, src.TagInclude[i]);
+                if (src.TagExclude != null)
+                    for (int i = 0; i < src.TagExclude.Count; i++) AddUnique(br.TagExclude, src.TagExclude[i]);
+                if (src.CreatorTerms != null)
+                    for (int i = 0; i < src.CreatorTerms.Count; i++) AddUnique(br.CreatorTerms, src.CreatorTerms[i]);
+                br.Status = src.Status;
+                if (!br.IsEmpty) q.Branches.Add(br);
+            }
+            if (q.IsEmpty) return Empty;
+            q.RebuildFlatViews();
+            return q;
+        }
+
         private void RebuildFlatViews()
         {
             BroadTerms.Clear();

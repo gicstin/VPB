@@ -2743,11 +2743,17 @@ namespace VPB
             return sb.ToString();
         }
 
-        /// <summary>Extra <c>AND ...</c> fragment for <see cref="TryReadTagCounts"/> when Hair + subfilter + schema has <c>cloth_attr</c>.</summary>
+        /// <summary>
+        /// Extra <c>AND ...</c> for Hair + <c>cloth_attr</c>.
+        /// Facets (<paramref name="defaultHidePresetsWhenIdle"/> false): keep presets when f==0 so Presets chip counts.
+        /// Grid (<paramref name="defaultHidePresetsWhenIdle"/> true): hide presets when f==0 — mirrors
+        /// <see cref="GalleryPanel.PassesHairGalleryFiltersForPath"/> / Clothing Issue #101.
+        /// </summary>
         private static string BuildHairSubfilterSqlAnd(
             VpbSqlite3.Connection conn,
             string categoryTitle,
-            GalleryPanel.HairSubfilter f)
+            GalleryPanel.HairSubfilter f,
+            bool defaultHidePresetsWhenIdle)
         {
             if (!string.Equals(categoryTitle, "Hair", StringComparison.OrdinalIgnoreCase)) return "";
 
@@ -2764,14 +2770,13 @@ namespace VPB
 
             const string c = "CAST(ifnull(m.cloth_attr,'0') AS INTEGER)";
 
-            // Note: This SQL fragment is used by TryReadTagCounts (facet counters).
-            // Do NOT default-hide presets when f==0; UI needs correct Presets facet count even when
-            // presets are hidden in file grid by default.
             if (f == 0)
             {
                 var sb0 = new StringBuilder(96);
                 sb0.Append(" AND (").Append(c).Append(" & 2147483648) <> 0");
                 sb0.Append(" AND (").Append(c).Append(" & 15) = 2");
+                if (defaultHidePresetsWhenIdle)
+                    sb0.Append(" AND (").Append(c).Append(" & 256) = 0");
                 return sb0.ToString();
             }
 
@@ -6292,7 +6297,8 @@ namespace VPB
                     try { pkgHasLoadedCol = PkgHasLoadedColumn(conn); } catch { pkgHasLoadedCol = false; }
 
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilter);
-                    string hairSqlAnd = BuildHairSubfilterSqlAnd(conn, categoryTitle, hairSubfilter);
+                    // Facets: do not default-hide presets when idle (Presets chip needs full Hair set).
+                    string hairSqlAnd = BuildHairSubfilterSqlAnd(conn, categoryTitle, hairSubfilter, false);
                     
                     string tagSqlAnd = "";
                     List<string> activeTagsList = null;
@@ -6529,6 +6535,10 @@ namespace VPB
             public string RejectReason;
             public long SqlElapsedMs;
             public int RowsRead;
+            /// <summary>True when WHERE included <c>pkg.is_newest</c> (skip in-memory hide-old).</summary>
+            public bool AppliedPkgVersionFilter;
+            /// <summary>True when WHERE included Hair <c>cloth_attr</c> gallery subfilter.</summary>
+            public bool AppliedHairGallerySubfilter;
         }
 
         internal sealed class TagScanTotals
@@ -6901,7 +6911,8 @@ namespace VPB
             HashSet<string> excludedUserTags = null,
             int pkgVersionFilter = PkgVersionFilterOff,
             bool userTagsTaggedOnly = false,
-            string licenseFilter = null)
+            string licenseFilter = null,
+            GalleryPanel.HairSubfilter hairSubfilterForSql = 0)
         {
             return TryQueryGalleryCategoryRows(
                 categoryTitle, currentExtension, creatorFilter, outRows, out stats,
@@ -6909,7 +6920,7 @@ namespace VPB
                 GallerySearchQuery.FromLegacyNameTerms(nameTerms),
                 pathExclusions, pathInclusions, activeTags, activeUserTags, sortState,
                 userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags, pkgVersionFilter,
-                userTagsTaggedOnly, licenseFilter);
+                userTagsTaggedOnly, licenseFilter, hairSubfilterForSql);
         }
 
         internal static bool TryQueryGalleryCategoryRows(
@@ -6931,7 +6942,8 @@ namespace VPB
             HashSet<string> excludedUserTags,
             int pkgVersionFilter = PkgVersionFilterOff,
             bool userTagsTaggedOnly = false,
-            string licenseFilter = null)
+            string licenseFilter = null,
+            GalleryPanel.HairSubfilter hairSubfilterForSql = 0)
         {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
@@ -7006,6 +7018,8 @@ namespace VPB
                         pkgVersionFilter, userTagsTaggedOnly, licenseFilter);
 
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
+                    // Grid: default-hide presets when idle (same as PassesHairGalleryFiltersForPath).
+                    string hairSqlAnd = BuildHairSubfilterSqlAnd(conn, categoryTitle, hairSubfilterForSql, true);
                     string loadedSelect = ctx.PkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
 
                     string orderBy = "";
@@ -7037,6 +7051,7 @@ namespace VPB
                         sbSql.Append("m.category = ?");
                     sbSql.Append(ctx.CreatorAndFragment);
                     sbSql.Append(clothSqlAnd);
+                    sbSql.Append(hairSqlAnd);
                     sbSql.Append(ctx.LoadedAndFragment).Append(ctx.VersionAndFragment).Append(ctx.LicenseAndFragment)
                          .Append(ctx.NameAndFragment)
                          .Append(ctx.SearchTimeAndFragment)
@@ -7084,6 +7099,9 @@ namespace VPB
                                 outRows.Add(r);
                         }
                     }
+
+                    stats.AppliedPkgVersionFilter = !string.IsNullOrEmpty(ctx.VersionAndFragment);
+                    stats.AppliedHairGallerySubfilter = !string.IsNullOrEmpty(hairSqlAnd);
                 }
                 swSql.Stop();
                 stats.ExecutedQuery = true;
@@ -7618,9 +7636,11 @@ namespace VPB
             string[] nameTerms,
             SortState sortState,
             List<PackageRow> outRows,
-            int pkgVersionFilter = PkgVersionFilterOff,
-            string licenseFilter = null)
+            int pkgVersionFilter,
+            string licenseFilter,
+            out bool appliedPkgVersionFilter)
         {
+            appliedPkgVersionFilter = false;
             if (outRows == null) return false;
             outRows.Clear();
             if (!VpbSqlite3.IsAvailable) return false;
@@ -7769,12 +7789,15 @@ namespace VPB
                             if (!string.IsNullOrEmpty(r.PackageUid)) outRows.Add(r);
                         }
                     }
+
+                    appliedPkgVersionFilter = versionSqlAnd.Length > 0;
                 }
                 return true;
             }
             catch
             {
                 outRows.Clear();
+                appliedPkgVersionFilter = false;
                 return false;
             }
         }

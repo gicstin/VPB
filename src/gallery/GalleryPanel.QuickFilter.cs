@@ -192,6 +192,11 @@ namespace VPB
         {
             if (entry == null) return;
 
+            // Drop pending keystroke search refresh — otherwise debounce can fire mid-apply
+            // and briefly widen the list (search restored then wiped by stale empty apply).
+            try { CancelTitleSearchSqlDebounce(); } catch { }
+            try { CancelTitleSearchInMemoryDebounce(); } catch { }
+
             // Merged: OR-combine all leaf filters for browse (not first-only).
             // Dice still expands leaves in FilterRandomizer — does not pass IsMerged here.
             if (entry.IsMerged && entry.MergeMembers != null && entry.MergeMembers.Count > 0)

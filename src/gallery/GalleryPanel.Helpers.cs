@@ -697,7 +697,7 @@ namespace VPB
             string text = inputField.text ?? "";
             if (text.Length == 0)
             {
-                e.Use();
+                // Do not Use() — empty Ctrl+Backspace may pop a title-search chip elsewhere.
                 return;
             }
 

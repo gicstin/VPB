@@ -1676,33 +1676,40 @@ namespace VPB
         /// <summary>
         /// Category-agnostic Path folder tree: every known package/loose folder, counts start at 0.
         /// Category-scoped counts overlay later in <see cref="CachePaths"/>.
+        /// Prefer SQLite <c>pkg_var_path</c> inventory; live registry only when SQL seed empty.
         /// </summary>
         private static void SeedAgnosticPathFolders(Dictionary<string, int> folders)
         {
             if (folders == null) return;
-            try
+
+            int beforeSql = folders.Count;
+            try { VpbLocalDatabase.SeedPackageFoldersFromVarPathInventory(folders); } catch { }
+            bool sqlSeeded = folders.Count > beforeSql;
+
+            if (!sqlSeeded)
             {
-                lock (FileManager.packagesLock)
+                try
                 {
-                    Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
-                    if (byUid != null)
+                    lock (FileManager.packagesLock)
                     {
-                        foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                        Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
+                        if (byUid != null)
                         {
-                            VarPackage pkg = kv.Value;
-                            if (pkg == null || string.IsNullOrEmpty(pkg.Path)) continue;
-                            string normalized;
-                            if (!TryNormalizeGalleryPathUnderKnownRoots(pkg.Path, out normalized)) continue;
-                            string folder = TryGetParentFolderFromNormalizedPath(normalized);
-                            if (string.IsNullOrEmpty(folder)) continue;
-                            SeedPathFolderHierarchy(folders, folder);
+                            foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                            {
+                                VarPackage pkg = kv.Value;
+                                if (pkg == null || string.IsNullOrEmpty(pkg.Path)) continue;
+                                string normalized;
+                                if (!TryNormalizeGalleryPathUnderKnownRoots(pkg.Path, out normalized)) continue;
+                                string folder = TryGetParentFolderFromNormalizedPath(normalized);
+                                if (string.IsNullOrEmpty(folder)) continue;
+                                SeedPathFolderHierarchy(folders, folder);
+                            }
                         }
                     }
                 }
+                catch { }
             }
-            catch { }
-
-            try { VpbLocalDatabase.SeedPackageFoldersFromVarPathInventory(folders); } catch { }
 
             EnsureLoosePathRootsSeeded(folders);
         }

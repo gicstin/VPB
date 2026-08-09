@@ -272,7 +272,7 @@ namespace VPB
             GalleryTitleSearchChipUtil.HydrateFromQuery(nameFilterQuery ?? GallerySearchQuery.Empty, _titleSearchChips);
         }
 
-        /// <summary>Backspace on empty draft — remove last committed chip.</summary>
+        /// <summary>Ctrl+Backspace on empty draft — remove last committed chip (plain Backspace does not).</summary>
         internal bool TitleSearchTryPopLastChip()
         {
             if (!HasTitleSearchChips()) return false;
@@ -760,6 +760,11 @@ namespace VPB
             Transform dismissT = go.transform.Find("Dismiss");
             if (dismissT != null) dismissBtn = dismissT.GetComponent<Button>();
             if (dismissBtn != null) dismissBtn.onClick.RemoveAllListeners();
+            if (dismissT != null)
+            {
+                UIChipDismissClick dismissClick = dismissT.GetComponent<UIChipDismissClick>();
+                if (dismissClick != null) dismissClick.OnDismiss = null;
+            }
 
             if (_titleSearchChipPool.Count >= TitleSearchChipPoolMaxIdle)
             {
@@ -842,9 +847,12 @@ namespace VPB
             GameObject dismissGO = new GameObject("Dismiss");
             dismissGO.transform.SetParent(go.transform, false);
             AddFilterChipRoundedBg(dismissGO, Color.gray);
+            // Button kept for hover/target graphic; click path is UIChipDismissClick
+            // (owns drag so parent TitleSearchChipDragSource / ScrollRect cannot cancel it).
             Button dismissBtn = dismissGO.AddComponent<Button>();
             dismissBtn.targetGraphic = dismissGO.GetComponent<Image>();
             UI.NeutralizeSelectableColorTint(dismissBtn);
+            dismissGO.AddComponent<UIChipDismissClick>();
 
             float iconPad = GalleryUiDesignTokens.SearchIconButtonPadRef * s;
             Sprite closeSpr = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
@@ -946,16 +954,16 @@ namespace VPB
 
                 Button dismissBtn = dismissT.GetComponent<Button>();
                 if (dismissBtn != null)
-                {
-                    int captured = index;
-                    TitleSearchChipDragSource dragRef = drag;
                     dismissBtn.onClick.RemoveAllListeners();
-                    dismissBtn.onClick.AddListener(() =>
-                    {
-                        if (dragRef != null && dragRef.ConsumedByDrag) return;
-                        try { RemoveTitleSearchChipAt(captured); } catch { }
-                    });
-                }
+
+                UIChipDismissClick dismissClick = dismissT.GetComponent<UIChipDismissClick>();
+                if (dismissClick == null)
+                    dismissClick = dismissT.gameObject.AddComponent<UIChipDismissClick>();
+                int captured = index;
+                dismissClick.OnDismiss = () =>
+                {
+                    try { RemoveTitleSearchChipAt(captured); } catch { }
+                };
             }
 
             try { AddTooltip(dismissT != null ? dismissT.gameObject : go, "gallery.filter_chip.remove_tip", "Remove this filter"); } catch { }
@@ -1060,8 +1068,9 @@ namespace VPB
                     return;
                 }
 
-                // Phase 3: empty draft + Backspace pops last chip.
-                if (e.keyCode == KeyCode.Backspace && !e.control && !e.command && !e.alt)
+                // Empty draft + Ctrl/Cmd+Backspace pops last chip.
+                // Plain Backspace must not — chips live outside field (filter chrome), not in-field tokens.
+                if (e.keyCode == KeyCode.Backspace && (e.control || e.command) && !e.alt)
                 {
                     string draft = Field.text ?? "";
                     if (draft.Length == 0)

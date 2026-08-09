@@ -216,16 +216,18 @@ namespace VPB
         {
             if (sb == null || binds == null || br == null) return;
 
+            // Broad include/exclude: match GalleryPanel.FileEntryMatchesBroadTerm PathAndName surface
+            // (path + creator + uid + user-tag substring). NameOnly / NameStartsWith are omitted from SQL
+            // by the panel and applied in PassesFilters.
             if (br.BroadTerms != null)
             {
                 for (int i = 0; i < br.BroadTerms.Count; i++)
                 {
                     string t = br.BroadTerms[i];
                     if (string.IsNullOrEmpty(t)) continue;
-                    string esc = "%" + EscapeLike(t) + "%";
-                    sb.Append(" AND (m.list_path LIKE ? ESCAPE '\\' OR m.internal_path LIKE ? ESCAPE '\\')");
-                    binds.Add(esc);
-                    binds.Add(esc);
+                    sb.Append(" AND (");
+                    AppendGalleryBroadTermMatchOrGroup(sb, binds, t, categoryTitle, everythingView);
+                    sb.Append(')');
                 }
             }
             if (br.BroadExclude != null)
@@ -234,10 +236,9 @@ namespace VPB
                 {
                     string t = br.BroadExclude[i];
                     if (string.IsNullOrEmpty(t)) continue;
-                    string esc = "%" + EscapeLike(t) + "%";
-                    sb.Append(" AND NOT (m.list_path LIKE ? ESCAPE '\\' OR m.internal_path LIKE ? ESCAPE '\\')");
-                    binds.Add(esc);
-                    binds.Add(esc);
+                    sb.Append(" AND NOT (");
+                    AppendGalleryBroadTermMatchOrGroup(sb, binds, t, categoryTitle, everythingView);
+                    sb.Append(')');
                 }
             }
 
@@ -293,6 +294,43 @@ namespace VPB
             {
                 AppendSqlNoUserTagExists(sb, "m", categoryTitle, everythingView);
             }
+        }
+
+        /// <summary>
+        /// OR-group body for one broad search term (no leading AND/NOT).
+        /// Surfaces: list_path, internal_path, creator, uid, user-tag name LIKE.
+        /// </summary>
+        private static void AppendGalleryBroadTermMatchOrGroup(
+            StringBuilder sb,
+            List<string> binds,
+            string termLower,
+            string categoryTitle,
+            bool everythingView)
+        {
+            if (sb == null || binds == null || string.IsNullOrEmpty(termLower)) return;
+            string esc = "%" + EscapeLike(termLower) + "%";
+            sb.Append("m.list_path LIKE ? ESCAPE '\\'");
+            sb.Append(" OR m.internal_path LIKE ? ESCAPE '\\'");
+            sb.Append(" OR ifnull(p.creator,'') LIKE ? ESCAPE '\\'");
+            sb.Append(" OR ifnull(p.uid,'') LIKE ? ESCAPE '\\'");
+            binds.Add(esc);
+            binds.Add(esc);
+            binds.Add(esc);
+            binds.Add(esc);
+
+            // User-tag substring (same as in-memory broad OR). Skip 1-char — too expensive / noisy.
+            if (termLower.Length < 2) return;
+
+            bool allVar = IsGalleryAllVarPseudoCategory(categoryTitle);
+            sb.Append(" OR EXISTS (");
+            sb.Append("SELECT 1 FROM gallery_item_user_tag gut");
+            sb.Append(" WHERE gut.pkg_uid=m.pkg_uid");
+            sb.Append(" AND gut.internal_path=m.internal_path");
+            if (!everythingView && !allVar && !string.IsNullOrEmpty(categoryTitle))
+                sb.Append(" AND gut.category=m.category");
+            sb.Append(" AND gut.tag_id IN (SELECT tag_id FROM gallery_user_tag WHERE lower(name) LIKE ? ESCAPE '\\')");
+            sb.Append(')');
+            binds.Add(esc);
         }
 
         /// <summary>History browse: append search AST predicates (paths + creator + uid + user tags + status).</summary>
@@ -365,12 +403,20 @@ namespace VPB
                     sb.Append(" OR ifnull(p.var_path,'') LIKE ? ESCAPE '\\'");
                     sb.Append(" OR ifnull(p.creator,'') LIKE ? ESCAPE '\\'");
                     sb.Append(" OR p.uid LIKE ? ESCAPE '\\'");
+                    if (t.Length >= 2)
+                    {
+                        sb.Append(" OR EXISTS (SELECT 1 FROM gallery_item_user_tag gut");
+                        sb.Append(" WHERE gut.pkg_uid=COALESCE(mx.pkg_uid, mr.pkg_uid)");
+                        sb.Append(" AND gut.internal_path=COALESCE(mx.internal_path, mr.internal_path)");
+                        sb.Append(" AND gut.tag_id IN (SELECT tag_id FROM gallery_user_tag WHERE lower(name) LIKE ? ESCAPE '\\'))");
+                    }
                     sb.Append(')');
                     textBinds.Add(esc);
                     textBinds.Add(esc);
                     textBinds.Add(esc);
                     textBinds.Add(esc);
                     textBinds.Add(esc);
+                    if (t.Length >= 2) textBinds.Add(esc);
                 }
             }
             if (br.BroadExclude != null)
@@ -386,12 +432,20 @@ namespace VPB
                     sb.Append(" OR ifnull(p.var_path,'') LIKE ? ESCAPE '\\'");
                     sb.Append(" OR ifnull(p.creator,'') LIKE ? ESCAPE '\\'");
                     sb.Append(" OR p.uid LIKE ? ESCAPE '\\'");
+                    if (t.Length >= 2)
+                    {
+                        sb.Append(" OR EXISTS (SELECT 1 FROM gallery_item_user_tag gut");
+                        sb.Append(" WHERE gut.pkg_uid=COALESCE(mx.pkg_uid, mr.pkg_uid)");
+                        sb.Append(" AND gut.internal_path=COALESCE(mx.internal_path, mr.internal_path)");
+                        sb.Append(" AND gut.tag_id IN (SELECT tag_id FROM gallery_user_tag WHERE lower(name) LIKE ? ESCAPE '\\'))");
+                    }
                     sb.Append(')');
                     textBinds.Add(esc);
                     textBinds.Add(esc);
                     textBinds.Add(esc);
                     textBinds.Add(esc);
                     textBinds.Add(esc);
+                    if (t.Length >= 2) textBinds.Add(esc);
                 }
             }
 

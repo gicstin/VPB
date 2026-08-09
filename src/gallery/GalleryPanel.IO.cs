@@ -165,6 +165,12 @@ namespace VPB
         private string filterSearchLower = "";
         private List<FileEntry> topSearchBaseFiles = null; // Base list for top search (non-filter mode)
         private bool _topSearchBaseIsClean = false; // true only when topSearchBaseFiles was captured from an unfiltered load
+        /// <summary>
+        /// RefreshFiles builds the non-search filtered list, then applies title search via
+        /// <see cref="ApplyTitleSearchToBaseListInMemory"/> (same path as live keystrokes).
+        /// Avoids SQL/PassesFilters search diverging from live in-memory results.
+        /// </summary>
+        private bool _refreshDeferNameFilterToInMemory;
         private RecyclingGridView recyclingGrid;
         private string filterRestoreAnchorKey = null;
         private Coroutine filterRestoreCoroutine = null;
@@ -1491,7 +1497,7 @@ namespace VPB
                 }
                 if (!PassesLiveStarFilters(entry))
                     return false;
-                if (HasActiveNameFilter())
+                if (HasActiveNameFilter() && !_refreshDeferNameFilterToInMemory)
                 {
                     bool skipSqlOwned = nameFilterQuery.RequiresSqlRefresh && IsGallerySqlIndexedSearchEntry(entry);
                     if (!MatchesFileEntryBySearchQuery(entry, nameFilterQuery, GetSearchTagKeysCached(),
@@ -1649,7 +1655,8 @@ namespace VPB
 
             // Name Filter (bare terms OR user tags; tag:/creator:/status structured).
             // Only skip SQL-owned time/loaded/tagged for VAR index rows — loose files need in-memory time match.
-            if (HasActiveNameFilter())
+            // When deferring, RefreshFiles applies the same in-memory pass as live SetNameFilter after the list builds.
+            if (HasActiveNameFilter() && !_refreshDeferNameFilterToInMemory)
             {
                 bool skipSqlOwned = nameFilterQuery.RequiresSqlRefresh && IsGallerySqlIndexedSearchEntry(entry);
                 if (!MatchesFileEntryBySearchQuery(entry, nameFilterQuery, GetSearchTagKeysCached(),
@@ -1788,6 +1795,7 @@ namespace VPB
             // start a second RefreshFiles after we begin loading.
             try { CancelTitleSearchSqlDebounce(); } catch { }
             try { CancelTitleSearchInMemoryDebounce(); } catch { }
+            _refreshDeferNameFilterToInMemory = false;
 
             // Clear any active dependency filter when refreshing
             ClearPackageFilter();
@@ -2132,11 +2140,9 @@ namespace VPB
                     var sortState = GetSortState("Files");
                     if (activeContentType != ContentType.History)
                     {
-                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState);
-                        GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState);
-                        // Legacy cfg / non-SQL safety: SQL path already used pkg.is_newest on full refresh.
-                        try { GallerySortManager.ApplyHideOldVersionsFilter(currentFilteredFiles); } catch { }
-                        try { GallerySortManager.ApplyHideOldVersionsFilter(lastFilteredFiles); } catch { }
+                        // SortFiles applies hide-old unless SQL already filtered via pkg.is_newest.
+                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState, _fileListHadSqlPkgVersionFilter);
+                        GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState, _fileListHadSqlPkgVersionFilter);
                         if (_browseOldVersionsCycle == BrowseFilterCycle.Only && !_fileListHadSqlPkgVersionFilter)
                         {
                             try { GallerySortManager.ApplyOldVersionsOnlyFilter(currentFilteredFiles); } catch { }
@@ -2381,7 +2387,11 @@ namespace VPB
             // bulk (cat_mem, VAR-only) is fast-appended without per-entry PassesFilters, where the source gate lives;
             // a bulk AddRange under Source:Local would leak every var row, so force the gated drain when it's active.
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return false;
-            // nameFilterTerms and activeTags are now handled by SQL
+            // Title search: SQL PathAndName is a pre-filter only. Live typing uses MatchesFileEntryBySearchQuery
+            // (scope + creator/uid/user-tag + exclude). Fast-append skipped PassesFilters → preset restore
+            // showed more hits than when the filter was saved. Always re-check via drain.
+            if (HasActiveNameFilter()) return false;
+            // activeTags still applied in SQL; keep fast-append when tags-only.
             if (wantsPoseCountsLocal || posePeopleFilter != PosePeopleFilter.All) return false;
             // LoadedOnly/UnloadedOnly is applied in the SQLite query via loadedState.
 
@@ -2941,9 +2951,40 @@ namespace VPB
             }
             
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
-            GallerySearchQuery searchQuerySnap = nameFilterQuery ?? GallerySearchQuery.Empty;
+            // Live keystrokes: in-memory filter on the non-search base list.
+            // Preset/RefreshFiles used to bake search into SQL — different (often looser) results.
+            // Defer normal title search to ApplyTitleSearchToBaseListInMemory after build (same matcher).
+            // Status windows (loaded/tagged) still need SQL (RequiresSqlRefresh).
+            GallerySearchQuery searchQueryLive = nameFilterQuery ?? GallerySearchQuery.Empty;
+            bool deferNameToInMemory = false;
+            try
+            {
+                deferNameToInMemory = searchQueryLive != null
+                    && !searchQueryLive.IsEmpty
+                    && !searchQueryLive.RequiresSqlRefresh;
+            }
+            catch { deferNameToInMemory = false; }
+            _refreshDeferNameFilterToInMemory = deferNameToInMemory;
+
+            GallerySearchQuery searchQuerySnap = searchQueryLive;
+            if (deferNameToInMemory)
+                searchQuerySnap = GallerySearchQuery.Empty;
+            else
+            {
+                try
+                {
+                    string scope = VPBConfig.Instance != null
+                        ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)
+                        : "PathAndName";
+                    if (scope != "PathAndName" && searchQueryLive != null && !searchQueryLive.IsEmpty)
+                        searchQuerySnap = searchQueryLive.WithoutBroadTerms();
+                }
+                catch { searchQuerySnap = searchQueryLive; }
+            }
             string[] nameTerms = searchQuerySnap.BroadTermsArray();
-            bool hasNameFilter = searchQuerySnap != null && !searchQuerySnap.IsEmpty;
+            // Worker fallback / diagnostics: live query still "has" a name filter when deferred.
+            bool hasNameFilter = searchQueryLive != null && !searchQueryLive.IsEmpty
+                && !deferNameToInMemory;
 
             int tagScanRefreshSeq = GalleryFileRefreshSequence;
             TagParallelWaiter tagParallelWaiterForThisRun = null;
@@ -3038,6 +3079,8 @@ namespace VPB
             if (!bypassFileListCache && !fileListFromCache && canFileListCache)
                 fileListFromCache = GalleryFileListSnapshotCache.TryCopyInto(fileListSnapKey, files);
             if (fileListFromCache) snapList = files;
+            if (fileListFromCache)
+                _refreshDeferNameFilterToInMemory = false;
             if (fileListFromSibling && canFileListCache && fileListSnapKey != null && files.Count > 0)
                 GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
 
@@ -3334,6 +3377,7 @@ namespace VPB
                 bool sqliteDrainApplyHairGateOnMain = (titleForIndexMain.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
                     || pathForIndexMain.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
                     || pathForIndexMain.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+                int[] sqlHairGalleryFilterAppliedFlag = new int[1];
 
                 VpbLocalDatabase.GalleryCategoryQueryStats catQueryStats = new VpbLocalDatabase.GalleryCategoryQueryStats();
 
@@ -3385,7 +3429,8 @@ namespace VPB
                         else if (VpbSqlite3.IsAvailable
                             && activeContentSnap == ContentType.Category)
                         {
-                            // Pseudo-extension category: package-level listing. Not indexed in SQLite; force non-SQL path.
+                            // Package-level listing (ext=varpkg): not in cat_mem — skip category SQL.
+                            // Worker still uses TryQueryVarPackageRowsForList below.
                             if (string.Equals(extForIndexMain, "varpkg", StringComparison.OrdinalIgnoreCase))
                             {
                                 useSqliteIndex = false;
@@ -3430,13 +3475,16 @@ namespace VPB
                                 excludedUserTagNamesForGridSqlSnap,
                                 pkgVersionFilterForIndexMain,
                                 userTagGridFilterTaggedOnlySnap,
-                                licenseFilterForIndexMain);
-                            if (useSqliteIndex && pkgVersionFilterForIndexMain != VpbLocalDatabase.PkgVersionFilterOff
+                                licenseFilterForIndexMain,
+                                sqliteWorkerHairSub);
+                            if (useSqliteIndex && catQueryStats.AppliedPkgVersionFilter
                                 && sqlPkgVersionFilterAppliedFlag != null)
                                 sqlPkgVersionFilterAppliedFlag[0] = 1;
                             if (useSqliteIndex && !string.IsNullOrEmpty(licenseFilterForIndexMain)
                                 && sqlLicenseFilterAppliedFlag != null)
                                 sqlLicenseFilterAppliedFlag[0] = 1;
+                            if (useSqliteIndex && catQueryStats.AppliedHairGallerySubfilter)
+                                sqlHairGalleryFilterAppliedFlag[0] = 1;
                             }
                         }
                         else
@@ -3543,12 +3591,28 @@ namespace VPB
                                         }
                                     }
 
+                                    // Hair: SQL narrows via BuildHairSubfilterSqlAnd when AppliedHairGallerySubfilter.
+                                    // Mirror Clothing — only C# gate when SQL miss, or active subfilter + missing cloth_attr.
+                                    bool hairSqlApplied = sqlHairGalleryFilterAppliedFlag[0] != 0;
                                     if (sqliteDrainApplyHairGateOnMain)
                                     {
-                                        // Hair is not yet narrowed at SQL level; apply same path/subfilter gate
-                                        // here so default grid does not show duplicate base + preset pairs.
-                                        if (!PassesHairGalleryFiltersForPath(listPath, sqliteWorkerHairSub, true))
-                                            continue;
+                                        if (!hairSqlApplied)
+                                        {
+                                            if (!PassesHairGalleryFiltersForPath(listPath, sqliteWorkerHairSub, true))
+                                                continue;
+                                        }
+                                        else if (sqliteWorkerHairSub != 0)
+                                        {
+                                            if ((r.ClothingAttrPacked & VpbLocalDatabase.ClothingAttrPresentFlag) != 0)
+                                            {
+                                                if (!VpbLocalDatabase.HairPackedAttrMatchesSubfilter(r.ClothingAttrPacked, sqliteWorkerHairSub))
+                                                    continue;
+                                            }
+                                            else if (!PassesHairGalleryFiltersForPath(listPath, sqliteWorkerHairSub, true))
+                                            {
+                                                continue;
+                                            }
+                                        }
                                     }
 
                                     DateTime entryTime = DateTime.MinValue;
@@ -3583,7 +3647,16 @@ namespace VPB
                                         break;
                                 }
 
-                                if (alreadySorted || GallerySortManager.TrySortFilesEntryFieldsOnly(bulk, fileListSortSnapForWorker))
+                                bool skipHideOld = sqlPkgVersionFilterAppliedFlag != null
+                                    && sqlPkgVersionFilterAppliedFlag[0] != 0;
+                                if (alreadySorted)
+                                {
+                                    if (!skipHideOld)
+                                        GallerySortManager.ApplyHideOldVersionsFilter(bulk);
+                                    if (sqliteBulkSortedOnWorkerFlag != null)
+                                        sqliteBulkSortedOnWorkerFlag[0] = 1;
+                                }
+                                else if (GallerySortManager.TrySortFilesEntryFieldsOnly(bulk, fileListSortSnapForWorker, skipHideOld))
                                 {
                                     if (sqliteBulkSortedOnWorkerFlag != null)
                                         sqliteBulkSortedOnWorkerFlag[0] = 1;
@@ -3639,6 +3712,7 @@ namespace VPB
                                         try
                                         {
                                             var rows = new List<VpbLocalDatabase.PackageRow>();
+                                            bool appliedVarPkgVersion = false;
                                             if (VpbLocalDatabase.TryQueryVarPackageRowsForList(
                                                 creatorForIndexMain,
                                                 packagePathFilterForIndexMain,
@@ -3647,9 +3721,10 @@ namespace VPB
                                                 fileListSortSnapForWorker,
                                                 rows,
                                                 pkgVersionFilterForIndexMain,
-                                                licenseFilterForIndexMain))
+                                                licenseFilterForIndexMain,
+                                                out appliedVarPkgVersion))
                                             {
-                                                if (pkgVersionFilterForIndexMain != VpbLocalDatabase.PkgVersionFilterOff
+                                                if (appliedVarPkgVersion
                                                     && sqlPkgVersionFilterAppliedFlag != null)
                                                     sqlPkgVersionFilterAppliedFlag[0] = 1;
                                                 if (!string.IsNullOrEmpty(licenseFilterForIndexMain)
@@ -4318,15 +4393,48 @@ namespace VPB
                 if (!historyBrowseOrder && !skipMainThreadSort)
                 {
                     try { VpbProgressService.ReportBrowseRefreshPhase("Sorting"); } catch { }
-                    GallerySortManager.Instance.SortFiles(files, sortState);
+                    GallerySortManager.Instance.SortFiles(files, sortState, _fileListHadSqlPkgVersionFilter);
                 }
                 swSortMain.Stop();
                 if (LogGalleryRefreshDeepTiming)
                 {
                     try { LogUtil.Log("[VPB.Gallery.DeepTiming] Sort done ms=" + swSortMain.ElapsedMilliseconds); } catch { }
                 }
+
+                // Same finalize as live title search: filter the non-search base in memory.
+                if (_refreshDeferNameFilterToInMemory)
+                {
+                    try
+                    {
+                        topSearchBaseFiles = new List<FileEntry>(files.Count);
+                        topSearchBaseFiles.AddRange(files);
+                        _topSearchBaseIsClean = true;
+                        ApplyTitleSearchToBaseListInMemory();
+                        files.Clear();
+                        if (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+                        {
+                            if (files.Capacity < currentFilteredFiles.Count)
+                                files.Capacity = currentFilteredFiles.Count;
+                            files.AddRange(currentFilteredFiles);
+                        }
+                    }
+                    catch
+                    {
+                        try { topSearchBaseFiles = null; } catch { }
+                    }
+                    finally
+                    {
+                        _refreshDeferNameFilterToInMemory = false;
+                    }
+                }
+
                 if (canFileListCache && fileListSnapKey != null)
                     GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
+            }
+            else if (_refreshDeferNameFilterToInMemory)
+            {
+                // Cache hit / early path already had search in the key — do not re-filter.
+                _refreshDeferNameFilterToInMemory = false;
             }
             if (swDeep != null) deepAfterSortMs = swDeep.ElapsedMilliseconds;
 

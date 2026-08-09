@@ -15,7 +15,27 @@ namespace VPB
         private CategoryFilterState CaptureCurrentFilterState()
         {
             var s = new CategoryFilterState();
-            s.NameFilter = nameFilter ?? "";
+            // Chips own the live filter when present — serialize them (heals nameFilter desync).
+            // Else capture nameFilter; fall back to title-field draft if filter state empty.
+            if (HasTitleSearchChips())
+            {
+                string fromChips = GalleryTitleSearchChipUtil.Serialize(_titleSearchChips) ?? "";
+                s.NameFilter = fromChips;
+                if (!string.Equals(nameFilter ?? "", fromChips, StringComparison.Ordinal))
+                {
+                    try { AssignNameFilterState(fromChips); } catch { }
+                }
+            }
+            else
+            {
+                s.NameFilter = nameFilter ?? "";
+                if (string.IsNullOrEmpty(s.NameFilter) && titleSearchInput != null)
+                {
+                    string draft = (titleSearchInput.text ?? "").Trim();
+                    if (draft.Length > 0)
+                        s.NameFilter = draft;
+                }
+            }
             s.Creator = currentCreator ?? "";
             s.Tags = new List<string>(activeTags);
             s.UserTags = new List<string>(activeUserTags);

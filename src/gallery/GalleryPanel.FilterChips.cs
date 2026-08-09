@@ -338,6 +338,7 @@ namespace VPB
                 Button dismissBtn = dismissGO.AddComponent<Button>();
                 dismissBtn.targetGraphic = dismissGO.GetComponent<Image>();
                 UI.NeutralizeSelectableColorTint(dismissBtn);
+                dismissGO.AddComponent<UIChipDismissClick>();
 
                 float iconPad = GalleryUiDesignTokens.SearchIconButtonPadRef * s;
                 Sprite closeSpr = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
@@ -441,10 +442,20 @@ namespace VPB
 
                 Button dismissBtn = dismissT.GetComponent<Button>();
                 if (dismissBtn != null)
-                {
                     dismissBtn.onClick.RemoveAllListeners();
-                    dismissBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
-                }
+
+                UIChipDismissClick dismissClick = dismissT.GetComponent<UIChipDismissClick>();
+                if (dismissClick == null)
+                    dismissClick = dismissT.gameObject.AddComponent<UIChipDismissClick>();
+                UnityAction dismissAction = dismiss;
+                dismissClick.OnDismiss = () =>
+                {
+                    try
+                    {
+                        if (dismissAction != null) dismissAction.Invoke();
+                    }
+                    catch { }
+                };
 
                 // Icon button tint (if present) follows dismiss backdrop.
                 Image iconImg = null;
@@ -1001,6 +1012,8 @@ namespace VPB
             {
                 Button dismissBtn = dismissT.GetComponent<Button>();
                 if (dismissBtn != null) dismissBtn.onClick.RemoveAllListeners();
+                UIChipDismissClick dismissClick = dismissT.GetComponent<UIChipDismissClick>();
+                if (dismissClick != null) dismissClick.OnDismiss = null;
             }
 
             bool isCompact = dismissT == null;
