@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
@@ -1416,18 +1417,26 @@ namespace VPB
 
             // Land VPB's bottom at the dock's top using mainHUD's own RectTransform; lossyScale captures any HUD or world-scale.
             RectTransform canvasRT = canvas.GetComponent<RectTransform>();
-            float galleryHalfHeight = (canvasRT.rect.height * 0.5f) * canvasRT.lossyScale.y;
+            float heightWorld = canvasRT.rect.height * canvasRT.lossyScale.y;
+            // Origin→bottom along local up (center pivot ⇒ half height).
+            float originToBottom = heightWorld * canvasRT.pivot.y;
             RectTransform hudRT = vamMenuTrans.GetComponent<RectTransform>();
             float hudHalfHeight = (hudRT != null) ? (hudRT.rect.height * 0.5f) * hudRT.lossyScale.y : 0.1f;
             float gap = 0.01f;
-            Vector3 targetPos = vamMenuTrans.position + (vamMenuTrans.up * (hudHalfHeight + gap + galleryHalfHeight));
+            Vector3 bottomEdgePos = vamMenuTrans.position + (vamMenuTrans.up * (hudHalfHeight + gap));
+
+            // mainHUD's forward faces away from user; rotate 180 on local Y so the canvas faces the user.
+            // Optional pitch: pivot on bottom edge, top tips toward user (negative local X; UI forward points away).
+            float tiltDeg = VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg);
+            Quaternion targetRot = vamMenuTrans.rotation * Quaternion.Euler(0f, 180f, 0f);
+            if (tiltDeg > 0.001f)
+                targetRot = targetRot * Quaternion.Euler(-tiltDeg, 0f, 0f);
+
+            Vector3 targetPos = bottomEdgePos + (targetRot * Vector3.up) * originToBottom;
 
             // WorldSpace canvas transform writes force a full canvas rebuild; skip when nothing moved.
             if (canvas.transform.position != targetPos)
                 canvas.transform.position = targetPos;
-
-            // mainHUD's forward faces away from user; rotate 180 on local Y so the canvas faces the user.
-            Quaternion targetRot = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
             if (canvas.transform.rotation != targetRot)
                 canvas.transform.rotation = targetRot;
 
@@ -2237,6 +2246,35 @@ namespace VPB
             return !string.IsNullOrEmpty(file.Path) ? file.Path : (file.Uid ?? "");
         }
 
+        /// <summary>
+        /// Warm-path selection fingerprint for cache keys: O(1) ends + count — no List/Sort/full walk.
+        /// Good enough to invalidate UI caches (Select-All / shift-range always change count or ends).
+        /// </summary>
+        private void AppendSelectionIdentityFingerprint(StringBuilder sb, bool historyBrowse)
+        {
+            if (sb == null) return;
+            int n = selectedFiles != null ? selectedFiles.Count : 0;
+            sb.Append(n);
+            if (n <= 0) return;
+
+            string first = GetSelectionIdentityKey(selectedFiles[0], historyBrowse);
+            string last = n > 1
+                ? GetSelectionIdentityKey(selectedFiles[n - 1], historyBrowse)
+                : first;
+            int pathSetN = selectedFilePaths != null ? selectedFilePaths.Count : n;
+            sb.Append('|');
+            sb.Append(first ?? "");
+            sb.Append('|');
+            sb.Append(last ?? "");
+            sb.Append('|');
+            sb.Append(pathSetN);
+        }
+
+        private bool SelectionExceedsHeavyScanBudget()
+        {
+            return selectedFiles != null && selectedFiles.Count > SelectionHeavyScanMax;
+        }
+
         private string GetCurrentSelectionAnchorIdentityKey(bool historyBrowse)
         {
             if (!string.IsNullOrEmpty(selectionAnchorIdentityKey)) return selectionAnchorIdentityKey;
@@ -2297,6 +2335,8 @@ namespace VPB
         /// <summary>
         /// Grid selection chrome only. Heavy side effects (user-tags pane + toolbox/context menu)
         /// are optional — skip during detail-strip thumb scrub for scroll performance.
+        /// Large selections: paint grid first, defer tags/strip/tbox package work one frame
+        /// (Unity coroutines / Update scheduling — avoid one-frame spike).
         /// </summary>
         private void RefreshSelectionVisualsCore(bool runHeavySideEffects)
         {
@@ -2327,7 +2367,7 @@ namespace VPB
                         }
                         catch { feForVisuals = diag != null ? diag.FileEntry : null; }
                         if (feForVisuals != null)
-                            UpdateFileButtonVisuals(btn, feForVisuals);
+                            UpdateFileButtonVisuals(btn, feForVisuals, selectionChromeOnly: true);
                     }
 
                     RatingHandler ratingHandler = binder != null ? binder.ratingHandler : null;
@@ -2357,7 +2397,7 @@ namespace VPB
                         }
                         catch { feForVisuals = diag != null ? diag.FileEntry : null; }
                         if (feForVisuals != null)
-                            UpdateFileButtonVisuals(btn, feForVisuals);
+                            UpdateFileButtonVisuals(btn, feForVisuals, selectionChromeOnly: true);
                     }
 
                     RatingHandler ratingHandler = binder != null ? binder.ratingHandler : null;
@@ -2365,6 +2405,20 @@ namespace VPB
                 }
             }
             if (!runHeavySideEffects) return;
+
+            // Large multi-select: paint cells now; tags/strip/tbox work next frame (coalesced).
+            if (SelectionExceedsHeavyScanBudget())
+            {
+                try { UpdateSelectionContextMenuLight(); } catch { }
+                ScheduleDeferredSelectionHeavySideEffects();
+                return;
+            }
+
+            RunSelectionHeavySideEffectsNow();
+        }
+
+        private void RunSelectionHeavySideEffectsNow()
+        {
             // Keep toolbox grid-rate selector open during selection visual refresh.
             // Selector visibility is already managed by RefreshTboxGridRateControlState() (selection count / mode gating)
             // and by user interaction (ToggleSelector/SetRating). Auto-closing here makes it impossible to use in
@@ -2375,6 +2429,79 @@ namespace VPB
             // Scene Import source follows gallery selection for all heavy selection paths
             // (click / keyboard). Scrub uses runHeavySideEffects:false — syncs on commit.
             try { TryLoadSelectedSceneIntoImportSidebar(); } catch { }
+            NoteSelectionContextMenuSynced();
+        }
+
+        private int _selectionHeavySideEffectsSeq;
+        private Coroutine _selectionHeavySideEffectsCo;
+
+        private void ScheduleDeferredSelectionHeavySideEffects()
+        {
+            unchecked { _selectionHeavySideEffectsSeq++; }
+            if (_selectionHeavySideEffectsCo != null) return;
+            _selectionHeavySideEffectsCo = StartCoroutine(CoDeferredSelectionHeavySideEffects());
+        }
+
+        private IEnumerator CoDeferredSelectionHeavySideEffects()
+        {
+            int seq = _selectionHeavySideEffectsSeq;
+            yield return null;
+            _selectionHeavySideEffectsCo = null;
+            if (seq != _selectionHeavySideEffectsSeq)
+            {
+                ScheduleDeferredSelectionHeavySideEffects();
+                yield break;
+            }
+            if (!SelectionExceedsHeavyScanBudget())
+            {
+                RunSelectionHeavySideEffectsNow();
+                yield break;
+            }
+            // Still large: run capped heavy path (SharedOrMixed / tags / tbox already budget-aware).
+            RunSelectionHeavySideEffectsNow();
+        }
+
+        /// <summary>Label + expand only — no DetailStripPopulate / tag SQL. Used while large selection defers.</summary>
+        private void UpdateSelectionContextMenuLight()
+        {
+            if (canvas == null) return;
+            EnsureTboxUI();
+            if (tbox == null) return;
+
+            int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
+            int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
+
+            if (tboxLabel != null)
+            {
+                string countStr = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
+                if (sel > 0)
+                {
+                    string selStr = sel == 1
+                        ? VPBTranslation.T("gallery.tbox.selected_one", "1 Selected")
+                        : string.Format(VPBTranslation.T("gallery.tbox.selected_many", "{0} Selected"), sel);
+                    tboxLabel.text = string.Format("{0}  ·  {1}", selStr, countStr);
+                }
+                else
+                    tboxLabel.text = countStr;
+            }
+
+            bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
+            bool canExpand = sel > 0 || cleanupModeActive || IsStripKeepSelectorOpen() || hasPersonAtoms;
+            tboxExpandT = canExpand ? 1f : 0f;
+            if (tboxButtonsCG != null)
+            {
+                tboxButtonsCG.alpha = canExpand ? 1f : 0f;
+                tboxButtonsCG.blocksRaycasts = canExpand;
+                tboxButtonsCG.interactable = canExpand;
+            }
+            NoteSelectionContextMenuSynced();
+        }
+
+        private void NoteSelectionContextMenuSynced()
+        {
+            selectionContextLastUpdateTime = Time.unscaledTime;
+            _selectionContextLastSelCount = (selectedFiles != null) ? selectedFiles.Count : 0;
+            _selectionContextLastTotalCount = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
         }
 
         public bool NotifyPackagesChanged(DateTime refreshTime)

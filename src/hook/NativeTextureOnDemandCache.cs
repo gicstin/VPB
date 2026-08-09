@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace VPB
 {
-    public static class NativeTextureOnDemandCache
+    public static partial class NativeTextureOnDemandCache
     {
         internal enum CacheWriteMode
         {
@@ -121,10 +121,15 @@ namespace VPB
         private static int s_UiStatusTexturesSinceUpdate;
         private static float s_LastUiStatusUpdateTime;
 
+        private static int s_SuppressZstdMissLookupLogCount;
+
         public static bool IsOnDemandBusy => s_OnDemandBusy;
 
         /// <summary>While true, GetZstdCachePath must not log per-texture MISS lines during on-demand builds.</summary>
-        internal static bool SuppressZstdMissLookupLog { get; private set; }
+        internal static bool SuppressZstdMissLookupLog
+        {
+            get { return System.Threading.Thread.VolatileRead(ref s_SuppressZstdMissLookupLogCount) > 0; }
+        }
 
         internal static UiSnapshot GetUiSnapshot()
         {
@@ -161,9 +166,95 @@ namespace VPB
             s_UiVisible = false;
         }
 
+        /// <summary>
+        /// End-of-job report for Settings / Scene Utils bulk Compress Cache (same chrome as on-demand).
+        /// Main-thread only.
+        /// </summary>
+        internal static void PresentBulkZstdSummary(ImageLoadingMgr.ZstdStats stats)
+        {
+            if (stats == null) return;
+
+            bool decompress = stats.IsDecompression;
+            bool cancelled = stats.CancelRequested;
+            float elapsed = stats.Duration;
+            if (elapsed <= 0f && stats.StartTime != default(DateTime))
+            {
+                try { elapsed = (float)(DateTime.Now - stats.StartTime).TotalSeconds; } catch { elapsed = 0f; }
+            }
+
+            string resultTitle;
+            if (cancelled)
+                resultTitle = decompress ? "Decompress cancelled" : "Compress cancelled";
+            else if (decompress)
+                resultTitle = "Decompress complete";
+            else
+                resultTitle = "Compress complete";
+
+            long orig = stats.TotalOriginalSize;
+            long comp = stats.TotalCompressedSize;
+            if (orig < 0) orig = 0;
+            if (comp < 0) comp = 0;
+
+            long savedBytes = 0;
+            string savedPct = "0";
+            if (!decompress && orig > 0)
+            {
+                savedBytes = orig - comp;
+                if (savedBytes < 0) savedBytes = 0;
+                float pct = (float)comp / Mathf.Max(1f, (float)orig);
+                float saved = 100f * (1f - Mathf.Clamp01(pct));
+                savedPct = saved.ToString("0");
+            }
+            else if (decompress && comp > 0)
+            {
+                // Decompress: compressed → native (growth).
+                savedBytes = orig - comp;
+                float pct = (float)comp / Mathf.Max(1f, (float)orig);
+                float ratio = 100f * Mathf.Clamp01(pct);
+                savedPct = ratio.ToString("0");
+            }
+
+            int wrote = (int)Math.Max(0, stats.ProcessedFiles - stats.FailedCount);
+            if (wrote < 0) wrote = 0;
+            int skipped = (int)Math.Max(0, stats.SkippedCount);
+            int failed = Math.Max(0, stats.FailedCount);
+            int total = (int)Math.Max(0, stats.TotalFiles);
+            int processed = (int)Math.Max(0, stats.ProcessedFiles);
+
+            string elapsedStr = FormatDuration(elapsed);
+            string nativeLabel = decompress ? "Native restored" : "Native Cache";
+            string zstdLabel = decompress ? "Zstd input" : "Zstd Compressed";
+            string saveLabel = decompress ? "Ratio" : "Saved Space";
+            string saveValue = decompress
+                ? (FormatBytes(comp) + " → " + FormatBytes(orig) + "  (" + savedPct + "%)")
+                : (FormatBytes(savedBytes) + "  (" + savedPct + "%)");
+
+            s_CompletionSoundPlayed = false;
+            TryPlayCompletionSound();
+
+            s_UiTitle = resultTitle;
+            s_UiVisible = true;
+            s_UiShowSummary = true;
+            s_UiSubtitle = string.Empty;
+
+            s_UiSummary = FormatReportMetric("Elapsed", elapsedStr) + "\n"
+                + FormatReportMetric("Textures", processed + " / " + (total > 0 ? total.ToString() : processed.ToString())) + "\n"
+                + "\n"
+                + FormatReportSection("Size")
+                + FormatReportMetric(nativeLabel, FormatBytes(orig)) + "\n"
+                + FormatReportMetric(zstdLabel, FormatBytes(comp)) + "\n"
+                + FormatReportMetric(saveLabel, saveValue);
+
+            s_UiSummaryRight = FormatReportSection(decompress ? "Decompress" : "Zstd Cache")
+                + FormatReportWriteStats(wrote, skipped, failed);
+
+            try { VpbProgressService.EnsureOverlay(); } catch { }
+        }
+
         internal static void RequestCancel()
         {
             s_CancelRequested = true;
+            try { OnDemandZstdWriteQueue.RequestCancel(); } catch { }
             try
             {
                 if (s_UiVisible && !s_UiShowSummary)
@@ -285,6 +376,8 @@ namespace VPB
             s_UiSubtitle = string.Empty;
             s_UiStatusTexturesSinceUpdate = 0;
             s_LastUiStatusUpdateTime = Time.unscaledTime;
+            System.Threading.Interlocked.Exchange(ref s_SuppressZstdMissLookupLogCount, 0);
+            try { OnDemandZstdWriteQueue.BeginJobSession(); } catch { }
 
             try
             {
@@ -777,7 +870,8 @@ namespace VPB
             int total,
             float elapsedSec,
             string focusLabel,
-            bool includeThroughput)
+            bool includeThroughput,
+            bool includeOnDemandZstdTail = true)
         {
             var sb = new StringBuilder(96);
             if (total > 0)
@@ -809,6 +903,18 @@ namespace VPB
 
             if (!string.IsNullOrEmpty(focusLabel))
                 sb.Append(" · ").Append(focusLabel);
+
+            if (includeOnDemandZstdTail)
+            {
+                try
+                {
+                    int zw = s_ZstdWrites;
+                    int zq = OnDemandZstdWriteQueue.PendingCount;
+                    if (zw > 0 || zq > 0)
+                        sb.Append(" · zstd ").Append(zw).Append(zq > 0 ? ("+" + zq + "q") : "");
+                }
+                catch { }
+            }
 
             return sb.ToString();
         }
@@ -1063,6 +1169,7 @@ namespace VPB
             try
             {
                 yield return BuildCacheForSceneTexturesUnity(scenePath);
+                yield return OnDemandZstdWriteQueue.CoWaitUntilIdle();
                 ThrottledLog("[VPB] On-demand cache finished.");
                 if (!s_BatchMode) EndUiJob(s_CancelRequested ? "Texture caching cancelled" : "Texture caching complete");
             }
@@ -1074,54 +1181,10 @@ namespace VPB
 
         private static IEnumerator WorkerBuildSelectiveLocalCoroutine(Dictionary<string, List<TextureFlags>> internalLowerToFlags, Dictionary<string, string> internalLowerToOriginal)
         {
-            if (internalLowerToOriginal == null || internalLowerToOriginal.Count == 0) yield break;
-
-            foreach (var kv in internalLowerToOriginal)
-            {
-                if (s_CancelRequested) yield break;
-                string internalLower = kv.Key;
-                string internalPath = kv.Value;
-                if (string.IsNullOrEmpty(internalPath)) continue;
-
-                IEnumerator work = null;
-                try
-                {
-                    List<TextureFlags> variants;
-                    if (internalLowerToFlags == null || !internalLowerToFlags.TryGetValue(internalLower, out variants) || variants == null || variants.Count == 0)
-                    {
-                        variants = new List<TextureFlags>
-                        {
-                            new TextureFlags
-                            {
-                                compress = true,
-                                linear = false,
-                                isNormalMap = false,
-                                createAlphaFromGrayscale = false,
-                                createNormalFromBump = false,
-                                invert = false,
-                                isReadable = false,
-                                bumpStrength = 1f
-                            }
-                        };
-                    }
-
-                    string localPath = "SELF:/" + (internalPath ?? string.Empty);
-                    if (TryFileEntryExists(localPath))
-                    {
-                        work = WriteNativeCacheForImageVariantsCoroutine(localPath, internalPath, variants, 0, default(DateTime));
-                    }
-                }
-                catch { work = null; }
-
-                if (work != null) yield return work;
-
-                s_TexturesProcessed++;
-                if (!s_BatchMode)
-                {
-                    s_ProcessedWork++;
-                }
-                UpdateUiStatusThrottled();
-            }
+            yield return WorkerBuildSelectivePipelineCoroutine(
+                internalLowerToOriginal,
+                internalLowerToFlags,
+                (internalLower, internalPath) => "SELF:/" + (internalPath ?? string.Empty));
         }
 
         private static IEnumerator BuildPackageCacheCoroutine(string packagePath)
@@ -1131,6 +1194,7 @@ namespace VPB
             try
             {
                 yield return BuildCacheForSelectedPackageUnity(packagePath);
+                yield return OnDemandZstdWriteQueue.CoWaitUntilIdle();
                 ThrottledLog("[VPB] On-demand package cache finished.");
                 if (!s_BatchMode) EndUiJob(s_CancelRequested ? "Texture caching cancelled" : "Texture caching complete");
             }
@@ -2843,13 +2907,20 @@ namespace VPB
 
             if (job != null && job.Success)
             {
+                byte[] raw = job.Raw;
+                int rawLen = job.RawLength;
+                int w = job.Width;
+                int h = job.Height;
+                TextureFormat fmt = job.Format;
+                job.Raw = null;
+
                 slot.Value = CustomImageLoaderThreaded.BuildOnDemandFinishFromDecoded(
                     imgUidPath,
-                    job.Raw,
-                    job.RawLength,
-                    job.Width,
-                    job.Height,
-                    job.Format,
+                    raw,
+                    rawLen,
+                    w,
+                    h,
+                    fmt,
                     flags.compress,
                     flags.linear,
                     flags.isNormalMap,
@@ -2857,7 +2928,8 @@ namespace VPB
                     flags.createNormalFromBump,
                     flags.invert,
                     flags.bumpStrength,
-                    suppressNativeDiskWrite);
+                    suppressNativeDiskWrite,
+                    true);
                 yield break;
             }
 
@@ -2965,54 +3037,12 @@ namespace VPB
 
         private static IEnumerator WorkerBuildSelectiveUnityCoroutine(VarPackage pkg, Dictionary<string, List<TextureFlags>> internalLowerToFlags, Dictionary<string, string> internalLowerToOriginal)
         {
-            if (pkg == null || internalLowerToOriginal == null || internalLowerToOriginal.Count == 0) yield break;
-
-            foreach (var kv in internalLowerToOriginal)
-            {
-                if (s_CancelRequested) yield break;
-                string internalLower = kv.Key;
-                string internalPath = kv.Value;
-                if (string.IsNullOrEmpty(internalPath)) continue;
-
-                IEnumerator work = null;
-                try
-                {
-                    List<TextureFlags> variants;
-                    if (internalLowerToFlags == null || !internalLowerToFlags.TryGetValue(internalLower, out variants) || variants == null || variants.Count == 0)
-                    {
-                        variants = new List<TextureFlags>
-                        {
-                            new TextureFlags
-                            {
-                                compress = true,
-                                linear = false,
-                                isNormalMap = false,
-                                createAlphaFromGrayscale = false,
-                                createNormalFromBump = false,
-                                invert = false,
-                                isReadable = false,
-                                bumpStrength = 1f
-                            }
-                        };
-                    }
-
-                    string imgUidPath = pkg.Uid + ":/" + internalPath;
-                    if (TryFileEntryExists(imgUidPath))
-                    {
-                        work = WriteNativeCacheForImageVariantsCoroutine(imgUidPath, internalPath, variants, 0, default(DateTime));
-                    }
-                }
-                catch { work = null; }
-
-                if (work != null) yield return work;
-
-                s_TexturesProcessed++;
-                if (!s_BatchMode)
-                {
-                    s_ProcessedWork++;
-                }
-                UpdateUiStatusThrottled();
-            }
+            if (pkg == null) yield break;
+            string uid = pkg.Uid;
+            yield return WorkerBuildSelectivePipelineCoroutine(
+                internalLowerToOriginal,
+                internalLowerToFlags,
+                (internalLower, internalPath) => uid + ":/" + internalPath);
         }
 
         private static IEnumerator WorkerPurgeSelectiveUnityCoroutine(VarPackage pkg, Dictionary<string, List<TextureFlags>> internalLowerToFlags, Dictionary<string, string> internalLowerToOriginal)
@@ -3119,7 +3149,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(imgUidPath) || string.IsNullOrEmpty(internalPath) || variants == null || variants.Count == 0) yield break;
 
-            SuppressZstdMissLookupLog = true;
+            EnterSuppressZstdMissLookupLog();
             try
             {
 
@@ -3172,7 +3202,7 @@ namespace VPB
                     {
                         try
                         {
-                            zstdPathOnDisk = TextureUtil.FindZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                            zstdPathOnDisk = TextureUtil.FindExactZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
                             zstdWritePath = !string.IsNullOrEmpty(zstdPathOnDisk)
                                 ? zstdPathOnDisk
                                 : TextureUtil.BuildExactZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
@@ -3200,7 +3230,7 @@ namespace VPB
 
                             try
                             {
-                                zstdPathOnDisk = TextureUtil.FindZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                                zstdPathOnDisk = TextureUtil.FindExactZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
                                 zstdWritePath = !string.IsNullOrEmpty(zstdPathOnDisk)
                                     ? zstdPathOnDisk
                                     : TextureUtil.BuildExactZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
@@ -3527,70 +3557,7 @@ namespace VPB
                             int level = 3;
                             try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
 
-                            try
-                            {
-                                string zdir = Path.GetDirectoryName(zstdWritePath);
-                                if (!string.IsNullOrEmpty(zdir) && !Directory.Exists(zdir)) Directory.CreateDirectory(zdir);
-                            }
-                            catch { }
-
-                            byte[] compressed;
-                            try
-                            {
-                                EnsureZstdInitialized();
-                                using (var compressor = new Compressor(new CompressionOptions(level)))
-                                {
-                                    compressed = compressor.Wrap(payloadZstd, 0, payloadZstd.Length);
-                                }
-                            }
-                            catch
-                            {
-                                s_ZstdFails++;
-                                goto AfterZstd;
-                            }
-
-                            AtomicWriteAllBytes(zstdWritePath, compressed);
-
-                            JSONClass zmeta = new JSONClass();
-                            zmeta["type"] = "compressed";
-                            zmeta["width"] = wz.ToString();
-                            zmeta["height"] = hz.ToString();
-                            zmeta["format"] = tfz.ToString();
-                            if (flags.isReadable) zmeta["isReadable"] = "true";
-                            if (didZstdDownscale)
-                            {
-                                zmeta["downscaled"].AsBool = true;
-                                zmeta["sourceWidth"] = zstdSourceW.ToString();
-                                zmeta["sourceHeight"] = zstdSourceH.ToString();
-                            }
-                            zmeta["zstdLevel"].AsInt = level;
-                            TextureUtil.WriteMipFieldsToMeta(zmeta, wz, hz, tfz, payloadZstd.Length, true);
-                            AtomicWriteAllText(zstdWritePath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
-
-                            s_ZstdWrites++;
-                            if (rewriteZstd) s_ZstdRewrites++;
-                            s_ZstdOriginalBytes += payloadZstd.Length;
-                            if (compressed != null) s_ZstdCompressedBytes += compressed.Length;
-                            try
-                            {
-                                long zb = new FileInfo(zstdWritePath).Length;
-                                s_ZstdDiskBytes += zb;
-                                s_ZstdDiskBytesWritten += zb;
-                            }
-                            catch { }
-                            try
-                            {
-                                string zmetaDisk = zstdWritePath + "meta";
-                                if (File.Exists(zmetaDisk))
-                                {
-                                    long mb = new FileInfo(zmetaDisk).Length;
-                                    s_ZstdDiskBytes += mb;
-                                    s_ZstdDiskBytesWritten += mb;
-                                }
-                            }
-                            catch { }
-                            Trace((rewriteZstd ? "ZstdRewrite: path='" : "ZstdWrite: path='") + zstdWritePath + "' orig=" + payloadZstd.Length + " comp=" + (compressed != null ? compressed.Length : 0));
-
+                            string deleteNativeAfter = null;
                             if (s_JobWriteMode == CacheWriteMode.ZstdOnly && !NeedsNativeCacheAtRuntime(internalPath))
                             {
                                 bool deleteNative = false;
@@ -3602,27 +3569,31 @@ namespace VPB
                                 }
                                 catch { deleteNative = true; }
 
-                                if (deleteNative && !string.IsNullOrEmpty(cachePath) && File.Exists(cachePath))
-                                {
-                                    TryDeleteFileAndMeta(cachePath, ref s_NativeDeletes);
-                                }
+                                if (deleteNative && !string.IsNullOrEmpty(cachePath))
+                                    deleteNativeAfter = cachePath;
                             }
 
-                            if (didZstdDownscale) s_ZstdDownscaleWrites++;
-                            if (didZstdDownscale)
+                            byte[] payloadForWorker = payloadZstd;
+                            payloadZstd = null;
+                            loaderZstd.payload = null;
+
+                            if (!OnDemandZstdWriteQueue.TryEnqueue(
+                                zstdWritePath,
+                                payloadForWorker,
+                                wz,
+                                hz,
+                                tfz,
+                                flags.isReadable,
+                                true,
+                                didZstdDownscale,
+                                zstdSourceW,
+                                zstdSourceH,
+                                level,
+                                rewriteZstd,
+                                deleteNativeAfter))
                             {
-                                try
-                                {
-                                    int expected = TextureUtil.GetExpectedRawDataSize(zstdSourceW, zstdSourceH, tfz);
-                                    if (expected > 0)
-                                    {
-                                        long saved = (long)expected - (long)payloadZstd.Length;
-                                        if (saved > 0) s_ZstdDownscaleSavedBytes += saved;
-                                        s_ZstdDownscaleOriginalBytes += expected;
-                                        s_ZstdDownscaleFinalBytes += payloadZstd.Length;
-                                    }
-                                }
-                                catch { }
+                                NotifyZstdWriteFailed();
+                                Trace("ZstdEnqueueFail: path='" + (zstdWritePath ?? string.Empty) + "'");
                             }
                         }
                         catch
@@ -3638,14 +3609,16 @@ namespace VPB
 
                 AfterZstd:
 
-                    if (Time.realtimeSinceStartup - frameStart >= OnDemandFrameBudgetSec)
+                    UpdateUiStatusThrottled();
+
+                    if (Time.realtimeSinceStartup - frameStart >= GetOnDemandFrameBudgetSec())
                     {
                         frameStart = Time.realtimeSinceStartup;
                         yield return null;
                     }
                 }
 
-                if (Time.realtimeSinceStartup - frameStart >= OnDemandFrameBudgetSec)
+                if (Time.realtimeSinceStartup - frameStart >= GetOnDemandFrameBudgetSec())
                 {
                     frameStart = Time.realtimeSinceStartup;
                     yield return null;
@@ -3654,7 +3627,7 @@ namespace VPB
             }
             finally
             {
-                SuppressZstdMissLookupLog = false;
+                ExitSuppressZstdMissLookupLog();
             }
         }
 

@@ -1220,6 +1220,8 @@ namespace VPB
             public bool didDownscale;
             public int sourceWidth;
             public int sourceHeight;
+            /// <summary>Native .vamcache path after Finish when disk write enabled.</summary>
+            public string nativeCachePath;
         }
 
         /// <summary>Main-thread compress + optional native disk write from pre-decoded RGB(A) produced on a worker thread.</summary>
@@ -1237,7 +1239,8 @@ namespace VPB
             bool createNormalFromBump,
             bool invert,
             float bumpStrength,
-            bool suppressNativeDiskWrite)
+            bool suppressNativeDiskWrite,
+            bool takeOwnershipOfDecodedRaw = false)
         {
             var result = new OnDemandCacheBuildResult();
             CustomImageLoaderThreaded loader = singleton;
@@ -1254,6 +1257,7 @@ namespace VPB
             }
 
             QueuedImage qi = loader.GetQI();
+            bool rentedRaw = false;
             try
             {
                 qi.onDemandCacheBuild = true;
@@ -1278,8 +1282,17 @@ namespace VPB
                 qi.height = height;
                 qi.textureFormat = textureFormat;
                 qi.rawLength = decodedRawLength;
-                qi.raw = ByteArrayPool.Rent(decodedRawLength);
-                Buffer.BlockCopy(decodedRaw, 0, qi.raw, 0, decodedRawLength);
+                if (takeOwnershipOfDecodedRaw)
+                {
+                    qi.raw = decodedRaw;
+                    rentedRaw = false;
+                }
+                else
+                {
+                    qi.raw = ByteArrayPool.Rent(decodedRawLength);
+                    rentedRaw = true;
+                    Buffer.BlockCopy(decodedRaw, 0, qi.raw, 0, decodedRawLength);
+                }
 
                 qi.Finish();
 
@@ -1314,6 +1327,7 @@ namespace VPB
                 if (!suppressNativeDiskWrite)
                 {
                     string nativePathAfter = qi.ResolveDiskCachePath();
+                    result.nativeCachePath = nativePathAfter;
                     if (!string.IsNullOrEmpty(nativePathAfter))
                     {
                         result.wroteNativeCache = File.Exists(nativePathAfter) && File.Exists(nativePathAfter + "meta");
@@ -1335,7 +1349,10 @@ namespace VPB
                 {
                     if (qi.raw != null)
                     {
-                        try { ByteArrayPool.Return(qi.raw); } catch { }
+                        if (rentedRaw)
+                        {
+                            try { ByteArrayPool.Return(qi.raw); } catch { }
+                        }
                         qi.raw = null;
                     }
                     if (qi.tex != null)

@@ -56,6 +56,7 @@ namespace VPB
         private static volatile int s_BulkZstdDone;
         private static volatile int s_BulkZstdTotal;
         private static volatile string s_BulkZstdCurrentFile;
+        private static volatile bool s_BulkZstdWasRunning;
 
         private static volatile bool s_SceneLoadActive;
         private static volatile bool s_SceneLoadNativePhase;
@@ -407,6 +408,7 @@ namespace VPB
             s_BulkZstdDone = 0;
             s_BulkZstdTotal = 0;
             s_BulkZstdCurrentFile = null;
+            s_BulkZstdWasRunning = false;
             EnsureOverlay();
         }
 
@@ -416,6 +418,7 @@ namespace VPB
             s_BulkZstdDone = 0;
             s_BulkZstdTotal = 0;
             s_BulkZstdCurrentFile = null;
+            s_BulkZstdWasRunning = false;
         }
 
         internal static void PollBulkZstdProgress()
@@ -437,11 +440,18 @@ namespace VPB
                 }
                 if (stats.IsRunning)
                 {
+                    s_BulkZstdWasRunning = true;
                     s_BulkZstdDecompress = stats.IsDecompression;
                     s_BulkZstdDone = (int)Math.Max(0, stats.ProcessedFiles);
                     s_BulkZstdTotal = (int)Math.Max(0, stats.TotalFiles);
                     s_BulkZstdCurrentFile = stats.CurrentFile;
                     return;
+                }
+
+                // Job finished — hand off to summary report (same chrome as on-demand cache).
+                if (s_BulkZstdWasRunning && stats.Completed)
+                {
+                    try { NativeTextureOnDemandCache.PresentBulkZstdSummary(stats); } catch { }
                 }
                 EndBulkZstd();
             }
@@ -488,19 +498,10 @@ namespace VPB
                 }
                 catch { }
 
-                string focus = null;
-                if (!string.IsNullOrEmpty(current)
-                    && current != "Completed"
-                    && current != "Cancelled"
-                    && current != "Scanning...")
-                {
-                    focus = current;
-                }
-
+                // Quiet live line: counts / ETA / bytes — no per-texture names.
                 snapshot.Subtitle = NativeTextureOnDemandCache.FormatLiveProgressLine(
-                    done, total, elapsed, focus, includeThroughput: true);
+                    done, total, elapsed, null, includeThroughput: true, includeOnDemandZstdTail: false);
 
-                // Bytes + skip/fail — evaluation gulf for long compress jobs.
                 if (origBytes > 0 || compBytes > 0 || skipped > 0 || failed > 0)
                 {
                     var sb = new System.Text.StringBuilder(snapshot.Subtitle, snapshot.Subtitle.Length + 48);
@@ -523,7 +524,7 @@ namespace VPB
                 snapshot.ShowMovingStrip = true;
                 snapshot.Subtitle = "Scanning cache folders…";
             }
-            else if (current == "Completed" || current == "Cancelled")
+            else if (current == "Completed" || current == "Cancelled" || current == "Restored")
             {
                 snapshot.Progress01 = 1f;
                 snapshot.ShowMovingStrip = false;

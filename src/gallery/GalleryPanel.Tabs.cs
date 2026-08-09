@@ -3355,6 +3355,14 @@ namespace VPB
 
         public void UpdateFileButtonVisuals(GameObject btnGO, FileEntry file)
         {
+            UpdateFileButtonVisuals(btnGO, file, selectionChromeOnly: false);
+        }
+
+        /// <param name="selectionChromeOnly">
+        /// Selection refresh path: skip drop/WL/chrome rescale (unchanged by select). Warm Select-All.
+        /// </param>
+        public void UpdateFileButtonVisuals(GameObject btnGO, FileEntry file, bool selectionChromeOnly)
+        {
             if (btnGO == null)
             {
                 LogUtil.LogError("[VPB] UpdateFileButtonVisuals: btnGO is null");
@@ -3407,7 +3415,10 @@ namespace VPB
 
             if (useInner)
             {
-                try { var oldO = btnGO.GetComponent<Outline>(); if (oldO != null) Destroy(oldO); } catch { }
+                if (!selectionChromeOnly)
+                {
+                    try { var oldO = btnGO.GetComponent<Outline>(); if (oldO != null) Destroy(oldO); } catch { }
+                }
                 if (hoverBorder != null)
                 {
                     hoverBorder.hoverBorderGO = innerBorderGO;
@@ -3442,12 +3453,18 @@ namespace VPB
                     innerBorderGO.SetActive(false);
                 }
             }
-            ApplyUserTagDropVisual(btnGO, file);
-            ApplyScanWhitelistIncludedBorderVisual(btnGO, file, isListRow);
-            ApplyScanWhitelistTemporaryBorderVisual(btnGO, file, isListRow);
+            if (!selectionChromeOnly)
+            {
+                ApplyUserTagDropVisual(btnGO, file);
+                ApplyScanWhitelistIncludedBorderVisual(btnGO, file, isListRow);
+                ApplyScanWhitelistTemporaryBorderVisual(btnGO, file, isListRow);
+            }
             if (!isListRow)
             {
-                try { ApplyGridCellChromeScale(btnGO); } catch { }
+                if (!selectionChromeOnly)
+                {
+                    try { ApplyGridCellChromeScale(btnGO); } catch { }
+                }
                 // Opaque caption under thumb must not cover hover/selection rim (sibling order).
                 try
                 {

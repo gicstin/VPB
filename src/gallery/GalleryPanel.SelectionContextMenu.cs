@@ -187,6 +187,7 @@ namespace VPB
             one(tboxCleanupRemoveExcludeBtn);
             one(tboxCreatorModeBtn);
             one(tboxCreatorStripSceneBtn);
+            one(tboxCreatorCompressCacheBtn);
             one(tboxLoadBtn);
             one(tboxLoadRandomBtn);
             one(tboxUnloadBtn);
@@ -238,6 +239,7 @@ namespace VPB
             d(tboxCleanupClearBtn);
             d(tboxCreatorModeBtn);
             d(tboxCreatorStripSceneBtn);
+            d(tboxCreatorCompressCacheBtn);
             d(tboxCleanupAddExcludeBtn);
             d(tboxCleanupRemoveExcludeBtn);
             d(tboxLoadBtn);
@@ -364,8 +366,9 @@ namespace VPB
             if (vis(tboxCleanupClearBtn)) ltr.Add(tboxCleanupClearBtn);
             if (vis(tboxCleanupAddExcludeBtn)) ltr.Add(tboxCleanupAddExcludeBtn);
             if (vis(tboxCleanupRemoveExcludeBtn)) ltr.Add(tboxCleanupRemoveExcludeBtn);
-            // Scene Strip near cleanup cluster (scene tools, not mid package ops).
+            // Scene Strip / Compress Cache near cleanup cluster (scene tools, not mid package ops).
             if (vis(tboxCreatorStripSceneBtn)) ltr.Add(tboxCreatorStripSceneBtn);
+            if (vis(tboxCreatorCompressCacheBtn)) ltr.Add(tboxCreatorCompressCacheBtn);
             if (vis(tboxCreatorModeBtn)) ltr.Add(tboxCreatorModeBtn);
             if (vis(tboxLoadBtn)) ltr.Add(tboxLoadBtn);
             if (vis(tboxLoadRandomBtn)) ltr.Add(tboxLoadRandomBtn);
@@ -1393,6 +1396,30 @@ namespace VPB
             catch { }
             tboxCreatorStripSceneBtn.SetActive(false);
 
+            tboxCreatorCompressCacheBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                GalleryTriggerBulkZstdCompression
+            );
+            tboxCreatorCompressCacheBtn.name = "Tbox_CreatorCompressCache";
+            TboxConfigureActionButtonFlex(tboxCreatorCompressCacheBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxCreatorCompressCacheBtn, "gallery.tooltip.tbox_creator_compress_cache",
+                "Compress Cache — migrate .vamcache → Zstd. Progress in top bar; report when done.");
+            try
+            {
+                Sprite compressIcon = LoadCompressCacheIconSprite(Color.white);
+                if (compressIcon != null) UI.AddIconToButton(tboxCreatorCompressCacheBtn, compressIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxCreatorCompressCacheBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("hook.compress_cache", "Compress Cache");
+                }
+            }
+            catch { }
+            try { RegisterFooterCompressCacheHover(tboxCreatorCompressCacheBtn); } catch { }
+            tboxCreatorCompressCacheBtn.SetActive(false);
+
             tboxAutoInstallBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -1545,6 +1572,12 @@ namespace VPB
                                 stripTxt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                         TboxConfigureActionButtonFlex(
                             tboxCreatorStripSceneBtn, 96f * s, 128f * s, TboxActionButtonInnerHeight());
+                    }
+                    if (tboxCreatorCompressCacheBtn != null)
+                    {
+                        TboxConfigureActionButtonFlex(
+                            tboxCreatorCompressCacheBtn, TboxActionButtonInnerHeight(), TboxActionButtonInnerHeight(),
+                            TboxActionButtonInnerHeight());
                     }
                     try { LayoutTboxGridRateChipContents(); } catch { }
                 }
@@ -2147,11 +2180,12 @@ namespace VPB
                 }
             }
             catch { }
+            try { NoteSelectionContextMenuSynced(); } catch { }
         }
 
         private string BuildTboxConditionalRefreshCacheKey()
         {
-            var sb = new StringBuilder(256);
+            var sb = new StringBuilder(96);
             sb.Append(cleanupModeActive ? 'C' : 'c');
             sb.Append(creatorModeActive ? 'M' : 'm');
             sb.Append(IsSettingsPanelOpen() ? 'S' : 's');
@@ -2164,19 +2198,8 @@ namespace VPB
             if (selectedFiles == null || selectedFiles.Count == 0) return sb.ToString();
 
             bool historyBrowse = activeContentType == ContentType.History;
-            var keys = new List<string>(selectedFiles.Count);
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                FileEntry f = selectedFiles[i];
-                if (f == null) continue;
-                keys.Add(GetSelectionIdentityKey(f, historyBrowse));
-            }
-            keys.Sort(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < keys.Count; i++)
-            {
-                sb.Append('|');
-                sb.Append(keys[i]);
-            }
+            sb.Append('|');
+            AppendSelectionIdentityFingerprint(sb, historyBrowse);
             return sb.ToString();
         }
 
@@ -2227,6 +2250,7 @@ namespace VPB
                 show(tboxCleanupRemoveExcludeBtn, false);
                 show(tboxCreatorModeBtn, false);
                 show(tboxCreatorStripSceneBtn, false);
+                show(tboxCreatorCompressCacheBtn, false);
 
                 show(tboxAutoInstallBtn, false);
                 show(tboxDisableAutoInstallBtn, false);
@@ -2281,6 +2305,7 @@ namespace VPB
             // Creator Mode: tools only while mode ON (rail toggle). Toolbox CM button stays hidden.
             show(tboxCreatorModeBtn, false);
             show(tboxCreatorStripSceneBtn, isCreator && !isCleanup);
+            show(tboxCreatorCompressCacheBtn, isCreator && !isCleanup);
             if (isCreator) RefreshCreatorModeChrome();
 
             show(tboxAutoInstallBtn, !isCleanup);
@@ -2338,89 +2363,106 @@ namespace VPB
 
             if (selectedFiles != null && selectedFiles.Count > 0)
             {
-                copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count
-                    + CollectUniqueLocalSceneGalleryRelativePathsFromSelection(selectedFiles).Count;
-                try { deleteN = GetTboxDeleteEligiblePackageCount() + GetTboxDeleteEligibleLocalSceneCount() + GetTboxDeleteEligibleLocalPresetCount(); } catch { deleteN = 0; }
-
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                for (int i = 0; i < selectedFiles.Count; i++)
+                // Large multi-select: avoid O(n) FileManager.GetFileEntry + GetDependenciesDeep storms.
+                // Enable bulk actions; exact work happens when user clicks an action.
+                if (SelectionExceedsHeavyScanBudget())
                 {
-                    var f = selectedFiles[i];
-                    if (f == null) continue;
-                    if (TryGetTboxResolvablePackageState(f, out string uid, out FileEntry diskFe, out bool hidden, out bool fiAi, out bool uidAl, out bool uidWl))
-                    {
-                        if (!seen.Add(uid)) continue;
-                        if (hidden) unhideN++;
-                        else hideN++;
-                        bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
-                        bool uidWlAny = scanWlEnabled && ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid);
-                        bool hasAnyAiFlag = fiAi || uidAl || (scanWlEnabled && uidWl);
-                        bool missingAnyAiFlag = !fiAi || !uidAl || (scanWlEnabled && !uidWl);
-                        if (hasAnyAiFlag) noAiN++;
-                        if (missingAnyAiFlag) aiN++;
-                        if (scanWlEnabled && !uidWlAny) scanWlTemporaryN++;
-
-                        // Fast install-state summary for Load/Unload buttons.
-                        // Use the resolved disk FileEntry (already computed by TryGetTboxResolvablePackageState) and
-                        // infer from its path prefix; avoids any rescans or heavy indexing work.
-                        try
-                        {
-                            // Local scenes (Saves/scene JSON) do not participate in load/unload.
-                            if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
-                                continue;
-
-                            string p = null;
-                            try { p = diskFe != null ? (diskFe.Path ?? diskFe.Uid) : null; } catch { p = null; }
-                            if (!string.IsNullOrEmpty(p))
-                            {
-                                p = p.Replace('\\', '/');
-                                int internalSep = p.IndexOf(":/", StringComparison.Ordinal);
-                                if (internalSep >= 0) p = p.Substring(0, internalSep);
-                                if (p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgInstalled = true;
-                                else if (p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgNotInstalled = true;
-                            }
-                        }
-                        catch { }
-                        continue;
-                    }
-
-                    if (TryGetTboxResolvableLocalPresetHideState(f, out string presetKey, out bool presetHidden))
-                    {
-                        if (!seen.Add(presetKey)) continue;
-                        if (presetHidden) unhideN++;
-                        else hideN++;
-                        continue;
-                    }
+                    copyN = selectedFiles.Count;
+                    deleteN = selectedFiles.Count; // enable Delete; ClassifyUids/DependencyGraph runs on click
+                    hideN = 1;
+                    unhideN = 1;
+                    aiN = 1;
+                    noAiN = 1;
+                    scanWlTemporaryN = ScanWhitelistManager.Instance.IsEnabled ? 1 : 0;
+                    anyPkgInstalled = true;
+                    anyPkgNotInstalled = true;
                 }
-
-                // Temporary whitelist should account for selected packages + their dependencies.
-                if (ScanWhitelistManager.Instance.IsEnabled)
+                else
                 {
-                    var tempCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var rootUid in seen)
+                    copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count
+                        + CollectUniqueLocalSceneGalleryRelativePathsFromSelection(selectedFiles).Count;
+                    try { deleteN = GetTboxDeleteEligiblePackageCount() + GetTboxDeleteEligibleLocalSceneCount() + GetTboxDeleteEligibleLocalPresetCount(); } catch { deleteN = 0; }
+
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < selectedFiles.Count; i++)
                     {
-                        if (string.IsNullOrEmpty(rootUid)) continue;
-                        tempCandidates.Add(rootUid);
-                        try
+                        var f = selectedFiles[i];
+                        if (f == null) continue;
+                        if (TryGetTboxResolvablePackageState(f, out string uid, out FileEntry diskFe, out bool hidden, out bool fiAi, out bool uidAl, out bool uidWl))
                         {
-                            var deps = FileManager.GetDependenciesDeep(rootUid, 2);
-                            if (deps == null || deps.Count == 0) continue;
-                            foreach (var depId in deps)
+                            if (!seen.Add(uid)) continue;
+                            if (hidden) unhideN++;
+                            else hideN++;
+                            bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
+                            bool uidWlAny = scanWlEnabled && ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid);
+                            bool hasAnyAiFlag = fiAi || uidAl || (scanWlEnabled && uidWl);
+                            bool missingAnyAiFlag = !fiAi || !uidAl || (scanWlEnabled && !uidWl);
+                            if (hasAnyAiFlag) noAiN++;
+                            if (missingAnyAiFlag) aiN++;
+                            if (scanWlEnabled && !uidWlAny) scanWlTemporaryN++;
+
+                            // Fast install-state summary for Load/Unload buttons.
+                            // Use the resolved disk FileEntry (already computed by TryGetTboxResolvablePackageState) and
+                            // infer from its path prefix; avoids any rescans or heavy indexing work.
+                            try
                             {
-                                if (string.IsNullOrEmpty(depId)) continue;
-                                tempCandidates.Add(depId);
+                                // Local scenes (Saves/scene JSON) do not participate in load/unload.
+                                if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+                                    continue;
+
+                                string p = null;
+                                try { p = diskFe != null ? (diskFe.Path ?? diskFe.Uid) : null; } catch { p = null; }
+                                if (!string.IsNullOrEmpty(p))
+                                {
+                                    p = p.Replace('\\', '/');
+                                    int internalSep = p.IndexOf(":/", StringComparison.Ordinal);
+                                    if (internalSep >= 0) p = p.Substring(0, internalSep);
+                                    if (p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgInstalled = true;
+                                    else if (p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgNotInstalled = true;
+                                }
                             }
+                            catch { }
+                            continue;
                         }
-                        catch { }
+
+                        if (TryGetTboxResolvableLocalPresetHideState(f, out string presetKey, out bool presetHidden))
+                        {
+                            if (!seen.Add(presetKey)) continue;
+                            if (presetHidden) unhideN++;
+                            else hideN++;
+                            continue;
+                        }
                     }
 
-                    int tmpN = 0;
-                    foreach (var uid in tempCandidates)
+                    // Temporary whitelist should account for selected packages + their dependencies.
+                    if (ScanWhitelistManager.Instance.IsEnabled)
                     {
-                        if (!ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid))
-                            tmpN++;
+                        var tempCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var rootUid in seen)
+                        {
+                            if (string.IsNullOrEmpty(rootUid)) continue;
+                            tempCandidates.Add(rootUid);
+                            try
+                            {
+                                var deps = FileManager.GetDependenciesDeep(rootUid, 2);
+                                if (deps == null || deps.Count == 0) continue;
+                                foreach (var depId in deps)
+                                {
+                                    if (string.IsNullOrEmpty(depId)) continue;
+                                    tempCandidates.Add(depId);
+                                }
+                            }
+                            catch { }
+                        }
+
+                        int tmpN = 0;
+                        foreach (var uid in tempCandidates)
+                        {
+                            if (!ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid))
+                                tmpN++;
+                        }
+                        scanWlTemporaryN = tmpN;
                     }
-                    scanWlTemporaryN = tmpN;
                 }
             }
 

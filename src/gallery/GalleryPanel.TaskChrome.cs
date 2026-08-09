@@ -121,8 +121,9 @@ namespace VPB
         }
 
         /// <summary>
-        /// Selection + expanded strip: strip owns Load/Delete (one primary surface).
-        /// Collapsed strip: toolbox owns them.
+        /// Selection + expanded strip: strip owns Load (one launch primary).
+        /// Delete stays on toolbox too (duplicate ok — Fitts reach from bar).
+        /// Collapsed strip: toolbox owns Load.
         /// </summary>
         private bool TaskChromeStripOwnsSelectionPrimary()
         {
@@ -224,11 +225,11 @@ namespace VPB
         {
             if (show == null) return;
 
-            // Expanded detail strip owns Load + Delete — hide toolbox duplicates (von Restorff).
+            // Expanded detail strip owns Load — hide toolbox Load duplicate (von Restorff).
+            // Keep Delete on toolbox (users expect bar action even with strip open).
             if (TaskChromeStripOwnsSelectionPrimary())
             {
                 show(tboxLoadBtn, false);
-                show(tboxDeleteBtn, false);
             }
         }
 
@@ -260,6 +261,7 @@ namespace VPB
             show(tboxCleanupRemoveExcludeBtn, false);
             show(tboxCreatorModeBtn, false);
             show(tboxCreatorStripSceneBtn, false);
+            show(tboxCreatorCompressCacheBtn, false);
             show(tboxAutoInstallBtn, false);
             show(tboxDisableAutoInstallBtn, false);
             show(tboxHideBtn, false);
@@ -328,12 +330,14 @@ namespace VPB
                 show(tboxDisableAutoInstallBtn, false);
                 show(tboxScanWhitelistTemporaryBtn, false);
                 show(tboxCreatorStripSceneBtn, true);
+                show(tboxCreatorCompressCacheBtn, true);
                 show(_detailStripExpandBtnGO, false);
             }
             else if (state == TaskChromeState.StickyImport)
             {
                 show(tboxCleanupBtn, false);
                 show(tboxCreatorStripSceneBtn, false);
+                show(tboxCreatorCompressCacheBtn, false);
                 show(tboxLoadBtn, false);
                 show(tboxLoadRandomBtn, false);
                 show(tboxUnloadBtn, false);
@@ -347,6 +351,7 @@ namespace VPB
                 // Armed apply: grid click is primary — hide competing sticky enter from tbox.
                 show(tboxCleanupBtn, false);
                 show(tboxCreatorStripSceneBtn, false);
+                show(tboxCreatorCompressCacheBtn, false);
             }
             else if (state == TaskChromeState.Browse)
             {

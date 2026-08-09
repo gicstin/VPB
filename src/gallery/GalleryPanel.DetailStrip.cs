@@ -4084,7 +4084,7 @@ namespace VPB
 
         private string BuildDetailStripCacheKey()
         {
-            var sb = new StringBuilder(160);
+            var sb = new StringBuilder(96);
             if (selectedFiles == null || selectedFiles.Count == 0) return "";
             bool historyBrowse = activeContentType == ContentType.History;
             if (selectedFiles.Count == 1)
@@ -4096,20 +4096,9 @@ namespace VPB
                 return sb.ToString();
             }
 
-            sb.Append('M').Append(selectedFiles.Count);
-            var keys = new List<string>(selectedFiles.Count);
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                FileEntry f = selectedFiles[i];
-                if (f == null) continue;
-                keys.Add(GetSelectionIdentityKey(f, historyBrowse));
-            }
-            keys.Sort(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < keys.Count; i++)
-            {
-                sb.Append('|');
-                sb.Append(keys[i]);
-            }
+            // Multi: cheap fingerprint — never sort/concat every identity key (Select-All hitch).
+            sb.Append('M').Append('|');
+            AppendSelectionIdentityFingerprint(sb, historyBrowse);
             return sb.ToString();
         }
 
@@ -4173,20 +4162,40 @@ namespace VPB
             int missingTotal = 0;
             string sharedCreator = null;
             bool creatorMixed = false;
+            bool heavy = SelectionExceedsHeavyScanBudget();
+            bool scanMissing = !heavy;
 
-            for (int i = 0; i < selectedFiles.Count; i++)
+            if (heavy)
             {
-                FileEntry f = selectedFiles[i];
-                if (f == null) continue;
-                if (f.Size > 0) totalSize += f.Size;
-                try { missingTotal += GallerySortManager.GetMissingDepsCount(f); } catch { }
-
-                string c = DetailStripResolveCreator(f);
-                if (!creatorMixed)
+                // Size sum is cheap field reads; skip creator/package resolve storm.
+                for (int i = 0; i < selectedFiles.Count; i++)
                 {
-                    if (sharedCreator == null) sharedCreator = c ?? "";
-                    else if (!string.Equals(sharedCreator, c ?? "", StringComparison.OrdinalIgnoreCase))
-                        creatorMixed = true;
+                    FileEntry f = selectedFiles[i];
+                    if (f == null) continue;
+                    if (f.Size > 0) totalSize += f.Size;
+                }
+                sharedCreator = DetailStripResolveCreator(first);
+            }
+            else
+            {
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    FileEntry f = selectedFiles[i];
+                    if (f == null) continue;
+                    if (f.Size > 0) totalSize += f.Size;
+                    // GetMissingDepsCount may scan deps — never N times on Select-All (warm hitch).
+                    if (scanMissing)
+                    {
+                        try { missingTotal += GallerySortManager.GetMissingDepsCount(f); } catch { }
+                    }
+
+                    string c = DetailStripResolveCreator(f);
+                    if (!creatorMixed)
+                    {
+                        if (sharedCreator == null) sharedCreator = c ?? "";
+                        else if (!string.Equals(sharedCreator, c ?? "", StringComparison.OrdinalIgnoreCase))
+                            creatorMixed = true;
+                    }
                 }
             }
 
@@ -4290,9 +4299,12 @@ namespace VPB
             {
                 try
                 {
-                    canDelete = GetTboxDeleteEligiblePackageCount()
-                        + GetTboxDeleteEligibleLocalSceneCount()
-                        + GetTboxDeleteEligibleLocalPresetCount() > 0;
+                    if (SelectionExceedsHeavyScanBudget())
+                        canDelete = true;
+                    else
+                        canDelete = GetTboxDeleteEligiblePackageCount()
+                            + GetTboxDeleteEligibleLocalSceneCount()
+                            + GetTboxDeleteEligibleLocalPresetCount() > 0;
                 }
                 catch { canDelete = false; }
             }
@@ -4325,6 +4337,13 @@ namespace VPB
             enableN = 0;
             disableN = 0;
             if (selectedFiles == null || selectedFiles.Count == 0) return;
+            // Large selection: enable both actions without resolving every package.
+            if (SelectionExceedsHeavyScanBudget())
+            {
+                enableN = 1;
+                disableN = 1;
+                return;
+            }
             bool scanWlEnabled = false;
             try { scanWlEnabled = ScanWhitelistManager.Instance != null && ScanWhitelistManager.Instance.IsEnabled; }
             catch { scanWlEnabled = false; }
@@ -4397,6 +4416,12 @@ namespace VPB
             hideN = 0;
             unhideN = 0;
             if (selectedFiles == null || selectedFiles.Count == 0) return;
+            if (SelectionExceedsHeavyScanBudget())
+            {
+                hideN = 1;
+                unhideN = 1;
+                return;
+            }
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < selectedFiles.Count; i++)
             {
@@ -4726,6 +4751,15 @@ namespace VPB
             if (!multi || selectedFiles == null || selectedFiles.Count <= 1)
             {
                 value = resolve != null ? (resolve(_detailStripBoundFile) ?? "") : "";
+                return;
+            }
+
+            // Large multi-select: never walk N items with license/meta hydrate (Select-All hitch).
+            // Show first-item value; CollectMetaFields already marks multi with "(1st)" where needed.
+            if (SelectionExceedsHeavyScanBudget())
+            {
+                FileEntry first = _detailStripBoundFile != null ? _detailStripBoundFile : selectedFiles[0];
+                value = resolve != null ? (resolve(first) ?? "") : "";
                 return;
             }
 
@@ -5479,18 +5513,36 @@ namespace VPB
             int missingTotal = 0;
             bool creatorMixed = false;
             string sharedCreator = null;
-            for (int i = 0; i < selectedFiles.Count; i++)
+            bool heavy = SelectionExceedsHeavyScanBudget();
+            bool scanMissing = !heavy;
+            if (heavy)
             {
-                FileEntry f = selectedFiles[i];
-                if (f == null) continue;
-                if (f.Size > 0) totalSize += f.Size;
-                try { missingTotal += GallerySortManager.GetMissingDepsCount(f); } catch { }
-                string c = DetailStripResolveCreator(f);
-                if (!creatorMixed)
+                for (int i = 0; i < selectedFiles.Count; i++)
                 {
-                    if (sharedCreator == null) sharedCreator = c ?? "";
-                    else if (!string.Equals(sharedCreator, c ?? "", StringComparison.OrdinalIgnoreCase))
-                        creatorMixed = true;
+                    FileEntry f = selectedFiles[i];
+                    if (f == null) continue;
+                    if (f.Size > 0) totalSize += f.Size;
+                }
+                sharedCreator = DetailStripResolveCreator(file);
+            }
+            else
+            {
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    FileEntry f = selectedFiles[i];
+                    if (f == null) continue;
+                    if (f.Size > 0) totalSize += f.Size;
+                    if (scanMissing)
+                    {
+                        try { missingTotal += GallerySortManager.GetMissingDepsCount(f); } catch { }
+                    }
+                    string c = DetailStripResolveCreator(f);
+                    if (!creatorMixed)
+                    {
+                        if (sharedCreator == null) sharedCreator = c ?? "";
+                        else if (!string.Equals(sharedCreator, c ?? "", StringComparison.OrdinalIgnoreCase))
+                            creatorMixed = true;
+                    }
                 }
             }
             int mShow = missingTotal > 0 ? missingTotal : missing;
@@ -5790,10 +5842,12 @@ namespace VPB
             }
 
             // Multi: show badge if any selected item has it. Prefer temporary chrome if any temp.
+            // Large selection: sample first item only — avoid N× SQLite tag badge queries.
             bool showAi = false, showHide = false, showScan = false, showTags = false;
             FileEntry scanSample = null;
             ScanWhitelistManager.GalleryScanWlBadgeKind scanKind = ScanWhitelistManager.GalleryScanWlBadgeKind.None;
-            for (int i = 0; i < selectedFiles.Count; i++)
+            int badgeLimit = SelectionExceedsHeavyScanBudget() ? 1 : selectedFiles.Count;
+            for (int i = 0; i < badgeLimit; i++)
             {
                 FileEntry f = selectedFiles[i];
                 if (f == null) continue;
@@ -8356,21 +8410,11 @@ namespace VPB
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return "";
             bool historyBrowse = activeContentType == ContentType.History;
-            var sb = new StringBuilder(192);
-            sb.Append(selectedFiles.Count);
-            var keys = new List<string>(selectedFiles.Count);
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                FileEntry f = selectedFiles[i];
-                if (f == null) continue;
-                keys.Add(GetSelectionIdentityKey(f, historyBrowse) + "#" + DetailStripUserTagsFingerprint(f));
-            }
-            keys.Sort(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < keys.Count; i++)
-            {
-                sb.Append('|');
-                sb.Append(keys[i]);
-            }
+            var sb = new StringBuilder(96);
+            AppendSelectionIdentityFingerprint(sb, historyBrowse);
+            sb.Append('#');
+            // Tag state is selection-aggregated (not per-row) — avoid O(n) per-item fingerprints.
+            sb.Append(BuildUserTagSelectionVirtSignature());
             return sb.ToString();
         }
 

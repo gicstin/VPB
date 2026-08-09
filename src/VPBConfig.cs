@@ -599,6 +599,15 @@ namespace VPB
         public bool GalleryOnlyWhenVamMenuVisible = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
         public bool GalleryAnchorToVamMenu = true;
+        /// <summary>VR menu-anchor only: gallery pane pitch (deg). Pivot bottom edge; top tips toward user. 0..20.</summary>
+        public float GalleryVrMenuAnchorTiltDeg = 10f;
+        public const float MinGalleryVrMenuAnchorTiltDeg = 0f;
+        public const float MaxGalleryVrMenuAnchorTiltDeg = 20f;
+        public static float ClampGalleryVrMenuAnchorTiltDeg(float v)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v)) return MinGalleryVrMenuAnchorTiltDeg;
+            return Mathf.Clamp(v, MinGalleryVrMenuAnchorTiltDeg, MaxGalleryVrMenuAnchorTiltDeg);
+        }
         /// <summary>Offset for anchoring gallery pane relative to the VAM menu system.</summary>
         public Vector3 GalleryAnchorOffset = new Vector3(0f, 0.1f, -0.1f);
         /// <summary>When anchored to VaM menu, hide the gallery if a full-screen VaM panel becomes active (Settings, Hub, package managers) so they never overlap.</summary>
@@ -1693,6 +1702,8 @@ namespace VPB
                             GalleryPluginsFloatCslistOnly = node["GalleryPluginsFloatCslistOnly"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
+                        if (node["GalleryVrMenuAnchorTiltDeg"] != null)
+                            GalleryVrMenuAnchorTiltDeg = ClampGalleryVrMenuAnchorTiltDeg(node["GalleryVrMenuAnchorTiltDeg"].AsFloat);
                         if (node["GalleryAnchorOffset"] != null)
                         {
                             var o = node["GalleryAnchorOffset"];
@@ -2128,6 +2139,7 @@ namespace VPB
                 node["GalleryPluginsFloatCslistOnly"].AsBool = GalleryPluginsFloatCslistOnly;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
+                node["GalleryVrMenuAnchorTiltDeg"].AsFloat = ClampGalleryVrMenuAnchorTiltDeg(GalleryVrMenuAnchorTiltDeg);
                 JSONClass o = new JSONClass();
                 o["x"].AsFloat = GalleryAnchorOffset.x;
                 o["y"].AsFloat = GalleryAnchorOffset.y;

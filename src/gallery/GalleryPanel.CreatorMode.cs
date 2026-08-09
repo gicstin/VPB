@@ -20,6 +20,7 @@ namespace VPB
         private Coroutine creatorModeStripRoutine;
         private GameObject tboxCreatorModeBtn;
         private GameObject tboxCreatorStripSceneBtn;
+        private GameObject tboxCreatorCompressCacheBtn;
         private Image tboxCreatorModeBtnImage;
         private Image tboxCreatorStripSceneBtnImage;
 

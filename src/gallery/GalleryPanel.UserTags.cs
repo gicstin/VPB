@@ -342,19 +342,31 @@ namespace VPB
             if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
             if (string.IsNullOrEmpty(cat)) return;
 
+            // Large Select-All: N×SQLite tag lookups hitch. Skip unless tags UI is actively open.
+            if (SelectionExceedsHeavyScanBudget())
+            {
+                bool tagsPaneOpen = (leftActiveContent == ContentType.UserTags && leftTabContainerGO != null)
+                    || (rightActiveContent == ContentType.UserTags && rightTabContainerGO != null);
+                bool tagMenuOpen = false;
+                try { tagMenuOpen = _detailStripTagMenuRoot != null && _detailStripTagMenuRoot.activeSelf; } catch { }
+                if (!tagsPaneOpen && !tagMenuOpen)
+                    return;
+            }
+
             bool allVar = VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat);
-            var uniqueRows = new List<KeyValuePair<string, string>>(selectedFiles.Count);
-            var seenRow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool heavy = SelectionExceedsHeavyScanBudget();
             int nSel = selectedFiles.Count;
-            for (int i = 0; i < nSel; i++)
+            int scanCap = heavy ? SelectionHeavyScanMax : nSel;
+            var uniqueRows = new List<KeyValuePair<string, string>>(Math.Min(nSel, scanCap));
+            var seenRow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < nSel && uniqueRows.Count < scanCap; i++)
             {
                 FileEntry fe = selectedFiles[i];
                 string pkg, ip;
                 if (!TryGetGalleryRowKeysForUserTags(fe, out pkg, out ip)) continue;
 
-                // ALL VAR + inherit mode: package row (meta.json) can have no direct tag rows;
-                // tags may exist only on child internal paths. Expand selection to child rows.
-                if (allVar && _userTagInheritVarToChildren && !string.IsNullOrEmpty(pkg))
+                // ALL VAR + inherit: expand only when selection is small — cat_mem × N is Select-All death.
+                if (!heavy && allVar && _userTagInheritVarToChildren && !string.IsNullOrEmpty(pkg))
                 {
                     var catMem = new List<KeyValuePair<string, string>>(256);
                     if (VpbLocalDatabase.TryReadCatMemRowsForPackage(pkg, catMem) && catMem.Count > 0)

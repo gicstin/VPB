@@ -327,6 +327,8 @@
     <Compile Include="src\hook\HubResourcePackageHook.cs" />
     <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
     <Compile Include="src\hook\OnDemandBackgroundDecode.cs" />
+    <Compile Include="src\hook\OnDemandZstdWriteQueue.cs" />
+    <Compile Include="src\hook\NativeTextureOnDemandCache.Pipeline.cs" />
     <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
     <Compile Include="src\hook\VpbBusyChrome.cs" />
     <Compile Include="src\hook\VpbOsBusyHeartbeat.cs" />

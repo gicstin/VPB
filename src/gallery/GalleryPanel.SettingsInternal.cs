@@ -90,7 +90,8 @@ namespace VPB
         {
             new[] { "appearance",      "visuals", "hover" },
             new[] { "grid_highlights", "grid", "scan_wl_border" },
-            new[] { "layout",          "follow", "desktop", "vr" },
+            new[] { "layout",          "follow", "desktop" },
+            new[] { "vr",              "vr" },
             new[] { "browsing",        "lists", "cat_general", "tags", "search" },
             new[] { "cat_visibility",  "cat_visibility" },
             new[] { "interaction",     "interaction", "plugin_hotkeys", "plugin_quickmenu" },
@@ -121,6 +122,7 @@ namespace VPB
                 case "appearance":      return VPBTranslation.T("settings.group.tab.appearance", "Appearance");
                 case "grid_highlights": return VPBTranslation.T("settings.group.tab.grid_highlights", "Grid & Highlights");
                 case "layout":          return VPBTranslation.T("settings.group.tab.layout", "Layout & Position");
+                case "vr":              return VPBTranslation.T("settings.group.tab.vr", "VR");
                 case "browsing":        return VPBTranslation.T("settings.group.tab.browsing", "Browsing");
                 case "cat_visibility":  return VPBTranslation.T("settings.group.category_visibility", "Category visibility");
                 case "interaction":     return VPBTranslation.T("settings.group.tab.interaction", "Interaction");
@@ -130,12 +132,19 @@ namespace VPB
             }
         }
 
-        /// <summary>Ordered single-layer settings group tabs.</summary>
+        /// <summary>Ordered single-layer settings group tabs. VR chip only when running in VR.</summary>
         private List<SettingsGroupTab> GetSettingsGroupTabs()
         {
+            bool isVr = false;
+            try { isVr = VPBConfig.Instance != null && VPBConfig.Instance.IsVR; } catch { isVr = false; }
             var list = new List<SettingsGroupTab>(SettingsGroupStructure.Length);
             foreach (var row in SettingsGroupStructure)
+            {
+                if (row == null || row.Length == 0) continue;
+                if (string.Equals(row[0], "vr", StringComparison.OrdinalIgnoreCase) && !isVr)
+                    continue;
                 list.Add(new SettingsGroupTab { Key = row[0], Label = SettingsGroupLabel(row[0]) });
+            }
             return list;
         }
 
@@ -410,6 +419,7 @@ namespace VPB
             public float GalleryScanWlTempBorderColorA;
             public bool GalleryOnlyWhenVamMenuVisible;
             public bool GalleryAnchorToVamMenu;
+            public float GalleryVrMenuAnchorTiltDeg;
             public string GalleryCategoryQuickOrder;
             public string GalleryCategoryQuickSwitchHidden;
             public HashSet<string> HiddenCategories;
@@ -1440,6 +1450,20 @@ namespace VPB
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryAnchorToVamMenu,
                 SetBool = v => { VPBConfig.Instance.GalleryAnchorToVamMenu = v; VPBConfig.Instance.TriggerChange(); ResetFollowOffsets(); }
             });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.anchorTilt", GroupKey = "vr",
+                Label = VPBTranslation.T("settings.gallery.vam_menu_anchor_tilt", "VR menu angle"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery.vam_menu_anchor_tilt", "When anchored to VaM menu in VR, tip gallery pane toward you. Pivot is bottom edge (0–20°). Gallery pane only."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg),
+                SetFloat = v =>
+                {
+                    VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg = VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(v);
+                    VPBConfig.Instance.TriggerChange();
+                },
+                Min = VPBConfig.MinGalleryVrMenuAnchorTiltDeg, Max = VPBConfig.MaxGalleryVrMenuAnchorTiltDeg, Step = 1f, Decimals = 0,
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu
+            });
 
             defs.Add(new InternalSettingDefinition {
                 Key = "vr.watchVisible", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_visible", "Show VR wrist watch"),
@@ -1770,6 +1794,7 @@ namespace VPB
                 GalleryScanWlTempBorderColorA = VPBConfig.Instance.GalleryScanWlTempBorderColorA,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
+                GalleryVrMenuAnchorTiltDeg = VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg),
                 GalleryCategoryQuickOrder = VPBConfig.Instance.GalleryCategoryQuickOrder ?? "",
                 GalleryCategoryQuickSwitchHidden = VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "",
                 HiddenCategories = VPBConfig.Instance.HiddenCategories != null
@@ -2010,7 +2035,8 @@ namespace VPB
                     if (def.GetFloat != null && def.SetFloat != null)
                     {
                         float dir = secondary ? -1f : 1f;
-                        float v = Mathf.Clamp(def.GetFloat() + (def.Step * dir), def.Min, def.Max);
+                        float step = ResolveSettingsSliderStep(def);
+                        float v = SnapSettingsSliderValue(def.GetFloat() + (step * dir), def.Min, def.Max, step, def.Decimals);
                         def.SetFloat(v);
                     }
                     break;
@@ -2062,6 +2088,44 @@ namespace VPB
         {
             float s = ChromeScale;
             return s <= 0f ? 1f : s;
+        }
+
+        /// <summary>
+        /// Step for slider nudge / −+ steppers. Prefer authored <see cref="InternalSettingDefinition.Step"/>;
+        /// else derive from decimals and span (0–100 → 1, 0.5–1.5 → 0.1, large spans → coarser).
+        /// </summary>
+        private static float ResolveSettingsSliderStep(InternalSettingDefinition def)
+        {
+            if (def == null) return 1f;
+            if (def.Step > 0f) return def.Step;
+
+            if (def.Decimals > 0)
+            {
+                float d = 1f;
+                for (int i = 0; i < def.Decimals; i++) d *= 0.1f;
+                return d;
+            }
+
+            float span = Mathf.Abs(def.Max - def.Min);
+            if (span <= 0f) return 1f;
+            if (span <= 2f) return 0.1f;
+            if (span <= 200f) return 1f;
+            if (span <= 2000f) return 10f;
+            return 25f;
+        }
+
+        private static float SnapSettingsSliderValue(float v, float min, float max, float step, int decimals)
+        {
+            v = Mathf.Clamp(v, min, max);
+            if (step > 0f)
+            {
+                float n = Mathf.Round((v - min) / step);
+                v = min + n * step;
+                v = Mathf.Clamp(v, min, max);
+            }
+            int d = Math.Max(0, decimals);
+            v = (float)Math.Round(v, d);
+            return Mathf.Clamp(v, min, max);
         }
 
         private static Image AddSettingsControlRoundedBg(GameObject go, Color color, bool raycastTarget = true)
@@ -2280,23 +2344,80 @@ namespace VPB
                 slider.handleRect = handleRT;
                 slider.targetGraphic = handleImg;
 
+                bool deferLive = def.DeferLiveApply;
+                float step = ResolveSettingsSliderStep(def);
+                int decimals = Math.Max(0, def.Decimals);
+                string fmt = "F" + decimals;
+
+                GameObject stepperHost = new GameObject("SettingsValueStepper");
+                stepperHost.transform.SetParent(controls.transform, false);
+                // Gestalt: − field + read as one spin unit (Galitz spin + slider hybrid; Fitts square hits).
+                UI.AddHLG(stepperHost, spacing: 2f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+                float stepBtnW = GalleryUiDesignTokens.ButtonSizeRef;
+                float inputW = 78f;
+                UI.AddLE(
+                    stepperHost,
+                    minWidth: (stepBtnW * 2f + inputW + 4f) * uiS,
+                    minHeight: chipH,
+                    preferredWidth: (stepBtnW * 2f + inputW + 4f) * uiS,
+                    preferredHeight: chipH);
+
+                Button minusBtn = null;
+                Button plusBtn = null;
+                InputField input = null;
+
+                Action syncStepperEnabled = () =>
+                {
+                    float curV = slider.value;
+                    if (minusBtn != null) minusBtn.interactable = curV > def.Min + 1e-5f;
+                    if (plusBtn != null) plusBtn.interactable = curV < def.Max - 1e-5f;
+                };
+
+                Action<float> applyDiscreteValue = v =>
+                {
+                    v = SnapSettingsSliderValue(v, def.Min, def.Max, step, decimals);
+                    slider.value = v;
+                    if (input != null) input.text = v.ToString(fmt);
+                    def.SetFloat(v);
+                    if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                        NotifyInternalSettingsHoverPreviewChanged();
+                    // Discrete −/+ / typed commit OK to rebuild; only slider drag must defer.
+                    if (deferLive)
+                    {
+                        try { ApplyInnerPaneScale(); } catch { }
+                    }
+                    syncStepperEnabled();
+                };
+
+                GameObject minusGO = CreateMiniButton(stepperHost.transform, "-", stepBtnW, GalleryUiColorTokens.SurfaceMid, () =>
+                {
+                    applyDiscreteValue(slider.value - step);
+                });
+                minusBtn = minusGO != null ? minusGO.GetComponent<Button>() : null;
+
                 GameObject inputGO = new GameObject("SettingsValueInput");
-                inputGO.transform.SetParent(controls.transform, false);
-                LayoutElement ile = UI.AddLE(inputGO, minWidth: 78f * uiS, minHeight: chipH, preferredWidth: 78f * uiS, preferredHeight: chipH);
+                inputGO.transform.SetParent(stepperHost.transform, false);
+                UI.AddLE(inputGO, minWidth: inputW * uiS, minHeight: chipH, preferredWidth: inputW * uiS, preferredHeight: chipH);
                 Image inputBg = AddSettingsControlRoundedBg(inputGO, UI.ChromeDarker);
-                InputField input = inputGO.AddComponent<InputField>();
+                input = inputGO.AddComponent<InputField>();
                 input.targetGraphic = inputBg;
                 input.contentType = def.AllowNegative ? InputField.ContentType.Standard : InputField.ContentType.DecimalNumber;
 
                 Text it = UI.CreateLabel(inputGO, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, Color.white, TextAnchor.MiddleCenter, name: "Text");
                 GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
                 input.textComponent = it;
-                input.text = slider.value.ToString("F" + Math.Max(0, def.Decimals));
+                input.text = slider.value.ToString(fmt);
 
-                bool deferLive = def.DeferLiveApply;
+                GameObject plusGO = CreateMiniButton(stepperHost.transform, "+", stepBtnW, GalleryUiColorTokens.SurfaceMid, () =>
+                {
+                    applyDiscreteValue(slider.value + step);
+                });
+                plusBtn = plusGO != null ? plusGO.GetComponent<Button>() : null;
+
                 slider.onValueChanged.AddListener(v =>
                 {
-                    input.text = v.ToString("F" + Math.Max(0, def.Decimals));
+                    if (input != null) input.text = v.ToString(fmt);
+                    syncStepperEnabled();
                     // Deferred sliders (e.g. UI scale) only show the live value while dragging; applying
                     // would rebuild the settings list rows and destroy this slider mid-drag. Commit on release.
                     if (deferLive) return;
@@ -2315,6 +2436,7 @@ namespace VPB
                         // UI-scale sliders defer until release; ApplyInnerPaneScale → RescaleSettingsFloatIfOpen
                         // already rebuilds rows once. Do not Refresh again (double Destroy+rebuild hitch).
                         try { ApplyInnerPaneScale(); } catch { }
+                        syncStepperEnabled();
                     };
                 }
                 input.onEndEdit.AddListener(s =>
@@ -2322,16 +2444,12 @@ namespace VPB
                     float parsed;
                     if (!float.TryParse(s, out parsed))
                     {
-                        input.text = slider.value.ToString("F" + Math.Max(0, def.Decimals));
+                        input.text = slider.value.ToString(fmt);
                         return;
                     }
-                    parsed = Mathf.Clamp(parsed, def.Min, def.Max);
-                    slider.value = parsed;
-                    def.SetFloat(parsed);
-                    input.text = parsed.ToString("F" + Math.Max(0, def.Decimals));
-                    if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
-                        NotifyInternalSettingsHoverPreviewChanged();
+                    applyDiscreteValue(parsed);
                 });
+                syncStepperEnabled();
                 return;
             }
 
@@ -2570,6 +2688,7 @@ namespace VPB
             VPBConfig.Instance.GalleryScanWlTempBorderColorA = b.GalleryScanWlTempBorderColorA;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
+            VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg = VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(b.GalleryVrMenuAnchorTiltDeg);
             VPBConfig.Instance.GalleryCategoryQuickOrder = b.GalleryCategoryQuickOrder ?? "";
             VPBConfig.Instance.GalleryCategoryQuickSwitchHidden = b.GalleryCategoryQuickSwitchHidden ?? "";
             VPBConfig.Instance.HiddenCategories = b.HiddenCategories != null

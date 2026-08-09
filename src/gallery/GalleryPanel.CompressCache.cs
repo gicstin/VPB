@@ -7,20 +7,20 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Assigned when the footer compress-cache button is built. That build path is not wired, so
-        // the field stays null and the hover handlers null-guard and no-op (dormant, not dead).
-#pragma warning disable 0649
-        private GameObject footerCompressCacheBtn;
-#pragma warning restore 0649
+        // Scene Utils toolbox Compress Cache button (hover count tooltip).
         private int _footerCompressCacheCount = -1;
         private bool _footerCompressCacheHovering;
         private bool _footerCompressCacheCounting;
         private float _footerCompressCacheCountTimer;
         private int _footerCompressCacheTooltipKey = int.MinValue;
 
+        private GameObject FooterCompressCacheBtn => tboxCreatorCompressCacheBtn;
+
         public static Sprite LoadCompressCacheIconSprite(Color tint)
         {
-            Sprite s = UI.LoadIconSprite("vpb_icons/compress.png", tint);
+            Sprite s = UI.LoadIconSprite("vpb_icons/compress_zstd.png", tint);
+            if (s != null) return s;
+            s = UI.LoadIconSprite("vpb_icons/compress.png", tint);
             if (s != null) return s;
             return UI.LoadIconSprite("vpb_icons/cache_texture.png", tint);
         }
@@ -46,7 +46,7 @@ namespace VPB
 
         private void FooterCompressCacheHoverTick()
         {
-            if (!_footerCompressCacheHovering || footerCompressCacheBtn == null) return;
+            if (!_footerCompressCacheHovering || FooterCompressCacheBtn == null) return;
             if (_footerCompressCacheCounting) return;
             if (Time.unscaledTime - _footerCompressCacheCountTimer < 2f) return;
             _footerCompressCacheCountTimer = Time.unscaledTime;
@@ -67,7 +67,7 @@ namespace VPB
 
         private void FooterCompressCachePollHoverTooltip()
         {
-            if (!_footerCompressCacheHovering || footerCompressCacheBtn == null) return;
+            if (!_footerCompressCacheHovering || FooterCompressCacheBtn == null) return;
             int key = _footerCompressCacheCounting ? -2 : _footerCompressCacheCount;
             if (key == _footerCompressCacheTooltipKey) return;
             _footerCompressCacheTooltipKey = key;
@@ -85,8 +85,8 @@ namespace VPB
 
         private void FooterCompressCacheUpdateHoverTooltip()
         {
-            if (!_footerCompressCacheHovering || footerCompressCacheBtn == null) return;
-            SetHoverTooltip(FooterCompressCacheTooltipText(), footerCompressCacheBtn);
+            if (!_footerCompressCacheHovering || FooterCompressCacheBtn == null) return;
+            SetHoverTooltip(FooterCompressCacheTooltipText(), FooterCompressCacheBtn);
         }
 
         private void RegisterFooterCompressCacheHover(GameObject go)

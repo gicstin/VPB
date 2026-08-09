@@ -517,6 +517,21 @@ namespace VPB
             bool MatchFilter(string label) =>
                 string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;
 
+            List<SettingsGroupTab> tabs = GetSettingsGroupTabs();
+            bool currentTabVisible = string.Equals(currentSettingsGroup, "all", StringComparison.OrdinalIgnoreCase);
+            for (int i = 0; i < tabs.Count; i++)
+            {
+                SettingsGroupTab g = tabs[i];
+                if (g == null) continue;
+                if (string.Equals(currentSettingsGroup, g.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    currentTabVisible = true;
+                    break;
+                }
+            }
+            if (!currentTabVisible)
+                currentSettingsGroup = "all";
+
             void AddChip(string key, string label)
             {
                 if (!string.Equals(key, "all", StringComparison.OrdinalIgnoreCase) && !MatchFilter(label)) return;
@@ -547,7 +562,6 @@ namespace VPB
             }
 
             AddChip("all", VPBTranslation.T("settings.group.all", "All"));
-            List<SettingsGroupTab> tabs = GetSettingsGroupTabs();
             for (int i = 0; i < tabs.Count; i++)
             {
                 SettingsGroupTab g = tabs[i];

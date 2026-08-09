@@ -1413,6 +1413,11 @@ namespace VPB
 
         /// <summary>Refuse select-all (toolbar and Ctrl+A) when the filtered gallery has more than this many items.</summary>
         private const int SelectAllSafetyMaxItemCount = 1000;
+        /// <summary>
+        /// Above this selection size, skip per-item dep scans / package resolve storms on warm selection refresh.
+        /// Counts become enable-all heuristics; exact per-UID work stays on explicit actions.
+        /// </summary>
+        private const int SelectionHeavyScanMax = 48;
         public FileEntry selectedFile
         {
             get { return selectedFiles.Count > 0 ? selectedFiles[0] : null; }

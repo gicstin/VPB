@@ -238,6 +238,11 @@ namespace VPB
 
                 DisplayConfirm("Delete", msg, () =>
                 {
+                    // Select next survivor before moves so purge does not empty selection
+                    // (empty selection closes detail strip).
+                    try { SelectNextBeforeTboxDelete(toDelete, localScenes, localPresets); }
+                    catch (Exception ex) { LogSuppressed("DeletePackages.SelectNextBeforeTboxDelete", ex); }
+
                     int pm = 0, pf = 0, sm = 0, sf = 0, prm = 0, prf = 0;
                     var undoPairs = new List<FileMoveUndoPair>();
                     if (toDelete.Count > 0)
@@ -285,6 +290,165 @@ namespace VPB
                 ShowTemporaryStatus("Deleted " + string.Join(", ", parts.ToArray()) + "; " + fail + " failed. See log.", 3f);
             else
                 ShowTemporaryStatus("Delete failed (" + fail + "). See log.", 3f);
+        }
+
+        /// <summary>
+        /// If entire selection will leave the grid after delete, select nearest survivor first
+        /// so detail strip stays open (same nearest-next policy as rating prune).
+        /// </summary>
+        private void SelectNextBeforeTboxDelete(
+            List<string> packageUidsToDelete,
+            List<LocalSceneDeleteItem> localScenes,
+            List<LocalPresetDeleteItem> localPresets)
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0) return;
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
+
+            var pkgUids = packageUidsToDelete != null && packageUidsToDelete.Count > 0
+                ? new HashSet<string>(packageUidsToDelete, StringComparer.OrdinalIgnoreCase)
+                : null;
+            HashSet<string> scenePaths = null;
+            if (localScenes != null && localScenes.Count > 0)
+            {
+                scenePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < localScenes.Count; i++)
+                {
+                    string rp = localScenes[i].GalleryRelativePath;
+                    if (!string.IsNullOrEmpty(rp))
+                        scenePaths.Add(rp.Replace('\\', '/'));
+                }
+            }
+            HashSet<string> presetPaths = null;
+            if (localPresets != null && localPresets.Count > 0)
+            {
+                presetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < localPresets.Count; i++)
+                {
+                    string rp = localPresets[i].RelativePath;
+                    if (!string.IsNullOrEmpty(rp))
+                        presetPaths.Add(rp.Replace('\\', '/'));
+                }
+            }
+
+            if ((pkgUids == null || pkgUids.Count == 0)
+                && (scenePaths == null || scenePaths.Count == 0)
+                && (presetPaths == null || presetPaths.Count == 0))
+                return;
+
+            bool historyBrowse = activeContentType == ContentType.History;
+            bool anySurvivor = false;
+            int firstRemovedIdx = -1;
+            int anchorRemovedIdx = -1;
+            string anchorKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
+
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry sel = selectedFiles[i];
+                if (sel == null) continue;
+                if (!WillGalleryEntryBeRemovedByTboxDelete(sel, pkgUids, scenePaths, presetPaths))
+                {
+                    anySurvivor = true;
+                    continue;
+                }
+
+                int idx = FindIndexBySelectionIdentity(
+                    currentFilteredFiles,
+                    GetSelectionIdentityKey(sel, historyBrowse),
+                    historyBrowse);
+                if (idx >= 0 && (firstRemovedIdx < 0 || idx < firstRemovedIdx))
+                    firstRemovedIdx = idx;
+
+                if (!string.IsNullOrEmpty(anchorKey)
+                    && string.Equals(
+                        GetSelectionIdentityKey(sel, historyBrowse),
+                        anchorKey,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    anchorRemovedIdx = idx;
+                }
+            }
+
+            // Partial multi-select: purge keeps survivors — no reselect needed.
+            if (anySurvivor) return;
+
+            int pivot = anchorRemovedIdx >= 0 ? anchorRemovedIdx : firstRemovedIdx;
+            FileEntry next = FindNearestSurvivorBeforeTboxDelete(
+                currentFilteredFiles, pivot, pkgUids, scenePaths, presetPaths);
+            if (next == null) return;
+
+            try { DetailStripUnlockAfterExternalSelectionChange(); } catch { }
+
+            selectedFiles.Clear();
+            selectedFilePaths.Clear();
+            AddFileToSelection(next, historyBrowse);
+            SetSelectionAnchor(next, historyBrowse);
+            selectedPath = historyBrowse ? GetSelectionIdentityKey(next, true) : next.Path;
+
+            try { RefreshSelectionVisuals(); } catch { }
+        }
+
+        private static bool WillGalleryEntryBeRemovedByTboxDelete(
+            FileEntry f,
+            HashSet<string> packageUidsToDelete,
+            HashSet<string> localSceneRelPaths,
+            HashSet<string> localPresetRelPaths)
+        {
+            if (f == null) return false;
+
+            if (packageUidsToDelete != null && packageUidsToDelete.Count > 0)
+            {
+                try
+                {
+                    if (f is VarFileEntry vfe && vfe.Package != null
+                        && packageUidsToDelete.Contains(vfe.Package.Uid))
+                        return true;
+                }
+                catch { }
+
+                string uid = TryGetPackageUidForEntry(f);
+                if (!string.IsNullOrEmpty(uid) && packageUidsToDelete.Contains(uid))
+                    return true;
+            }
+
+            string path = null;
+            try { path = f.Path ?? f.Uid; } catch { path = null; }
+            if (string.IsNullOrEmpty(path)) return false;
+            path = path.Replace('\\', '/');
+
+            if (localSceneRelPaths != null && localSceneRelPaths.Contains(path))
+                return true;
+            if (localPresetRelPaths != null && localPresetRelPaths.Contains(path))
+                return true;
+            return false;
+        }
+
+        private static FileEntry FindNearestSurvivorBeforeTboxDelete(
+            List<FileEntry> files,
+            int pivotIndex,
+            HashSet<string> packageUidsToDelete,
+            HashSet<string> localSceneRelPaths,
+            HashSet<string> localPresetRelPaths)
+        {
+            if (files == null || files.Count == 0) return null;
+            int n = files.Count;
+            if (pivotIndex < 0) pivotIndex = 0;
+            if (pivotIndex >= n) pivotIndex = n - 1;
+
+            for (int i = pivotIndex + 1; i < n; i++)
+            {
+                FileEntry fe = files[i];
+                if (fe != null
+                    && !WillGalleryEntryBeRemovedByTboxDelete(fe, packageUidsToDelete, localSceneRelPaths, localPresetRelPaths))
+                    return fe;
+            }
+            for (int i = pivotIndex - 1; i >= 0; i--)
+            {
+                FileEntry fe = files[i];
+                if (fe != null
+                    && !WillGalleryEntryBeRemovedByTboxDelete(fe, packageUidsToDelete, localSceneRelPaths, localPresetRelPaths))
+                    return fe;
+            }
+            return null;
         }
 
         private static void EnsureDeletedPackagesDirectory(string deletedDir)

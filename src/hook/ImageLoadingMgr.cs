@@ -220,25 +220,80 @@ namespace VPB
 
         private bool IsZstdCachePathBusy(string zstdPath)
         {
+            return IsZstdWritePathBusy(zstdPath);
+        }
+
+        /// <summary>True while runtime or on-demand zstd write owns path (incl. .tmp on disk).</summary>
+        public static bool IsZstdWritePathBusy(string zstdPath)
+        {
             if (string.IsNullOrEmpty(zstdPath)) return false;
 
-            lock (pendingZstdWriteLock)
+            var mgr = singleton;
+            if (mgr != null)
             {
-                if (pendingZstdWrites.Contains(zstdPath)) return true;
-            }
-
-            lock (runtimeZstdWriteQueueLock)
-            {
-                foreach (var item in runtimeZstdWriteQueue)
+                lock (mgr.pendingZstdWriteLock)
                 {
-                    if (item != null && string.Equals(item.ZstdPath, zstdPath, StringComparison.OrdinalIgnoreCase))
-                        return true;
+                    if (mgr.pendingZstdWrites.Contains(zstdPath)) return true;
+                }
+
+                lock (mgr.runtimeZstdWriteQueueLock)
+                {
+                    foreach (var item in mgr.runtimeZstdWriteQueue)
+                    {
+                        if (item != null && string.Equals(item.ZstdPath, zstdPath, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                }
+            }
+            else
+            {
+                lock (s_FallbackPendingZstdLock)
+                {
+                    if (s_FallbackPendingZstdWrites.Contains(zstdPath)) return true;
                 }
             }
 
             if (File.Exists(zstdPath + ".tmp")) return true;
             if (File.Exists(zstdPath + ".meta.tmp")) return true;
             return false;
+        }
+
+        /// <summary>Claim path for exclusive zstd write. False if already claimed.</summary>
+        public static bool TryAcquireZstdWritePath(string zstdPath)
+        {
+            if (string.IsNullOrEmpty(zstdPath)) return false;
+            var mgr = singleton;
+            if (mgr == null)
+            {
+                lock (s_FallbackPendingZstdLock)
+                {
+                    if (s_FallbackPendingZstdWrites.Contains(zstdPath)) return false;
+                    s_FallbackPendingZstdWrites.Add(zstdPath);
+                    return true;
+                }
+            }
+
+            lock (mgr.pendingZstdWriteLock)
+            {
+                if (mgr.pendingZstdWrites.Contains(zstdPath)) return false;
+                mgr.pendingZstdWrites.Add(zstdPath);
+                return true;
+            }
+        }
+
+        public static void ReleaseZstdWritePath(string zstdPath)
+        {
+            if (string.IsNullOrEmpty(zstdPath)) return;
+            var mgr = singleton;
+            if (mgr == null)
+            {
+                lock (s_FallbackPendingZstdLock)
+                {
+                    s_FallbackPendingZstdWrites.Remove(zstdPath);
+                }
+                return;
+            }
+            ReleasePendingZstdWriteSlot(zstdPath);
         }
 
         private bool TryGetZstdPayloadFromMemoryOnly(string zstdPath, bool queueCreateMipMaps, out DiskCachePayload payload)
@@ -1766,7 +1821,8 @@ namespace VPB
             CurrentZstdStats = new ZstdStats { IsRunning = true, IsDecompression = false, StartTime = DateTime.Now };
             try { VpbProgressService.BeginBulkZstd(decompress: false); } catch { }
 
-            ThreadPool.QueueUserWorkItem((state) =>
+            // Dedicated thread — never WaitOne on ThreadPool (classic pool starvation deadlock).
+            var t = new Thread(() =>
             {
                 try
                 {
@@ -1779,6 +1835,9 @@ namespace VPB
                     try { VpbProgressService.EndBulkZstd(); } catch { }
                 }
             });
+            t.IsBackground = true;
+            t.Name = "VPB-BulkZstd-Compress";
+            t.Start();
         }
 
         private static bool BulkZstdIsThumbnail(JSONNode metaJson, int threshold)
@@ -1899,6 +1958,179 @@ namespace VPB
                 fileIndex, liveBytes, fileBytes, gcCount, recompressPath ? "recompress" : "native"));
         }
 
+        private enum BulkZstdWorkKind
+        {
+            NativeToZstd = 0,
+            RecompressZstd = 1
+        }
+
+        private sealed class BulkZstdWorkItem
+        {
+            public BulkZstdWorkKind Kind;
+            public string SourcePath;
+            public string TargetPath;
+            public string MetaPath;
+            public string DisplayName;
+            public bool DeleteNativeAfter;
+            public JSONNode MetaJson;
+        }
+
+        private readonly object bulkZstdStatsLock = new object();
+
+        private static int ResolveBulkZstdParallelism()
+        {
+            try
+            {
+                int p = Environment.ProcessorCount;
+                if (p < 1) p = 1;
+                int n = p;
+                if (n < 2) n = 2;
+                if (n > 12) n = 12;
+                return n;
+            }
+            catch { return 4; }
+        }
+
+        private static void TryBoostThreadPoolForBulkZstd(int workers)
+        {
+            try
+            {
+                int minW, minIo, maxW, maxIo;
+                ThreadPool.GetMinThreads(out minW, out minIo);
+                ThreadPool.GetMaxThreads(out maxW, out maxIo);
+                int want = workers + 2;
+                if (want < 8) want = 8;
+                if (want > 32) want = 32;
+                if (want > minW) ThreadPool.SetMinThreads(want, minIo);
+                if (want > maxW) ThreadPool.SetMaxThreads(want, maxIo);
+            }
+            catch { }
+        }
+
+        private void BulkZstdNoteProgress(string currentFile, long originalAdd, long compressedAdd, bool processed, bool skipped, bool failed)
+        {
+            lock (bulkZstdStatsLock)
+            {
+                // Only phase labels (Scanning… / Completed / Cancelled) — no per-texture names in UI.
+                if (!string.IsNullOrEmpty(currentFile)
+                    && (currentFile == "Scanning..."
+                        || currentFile == "Completed"
+                        || currentFile == "Cancelled"
+                        || currentFile == "Restored"))
+                {
+                    CurrentZstdStats.CurrentFile = currentFile;
+                }
+                if (originalAdd > 0) CurrentZstdStats.TotalOriginalSize += originalAdd;
+                if (compressedAdd > 0) CurrentZstdStats.TotalCompressedSize += compressedAdd;
+                if (processed) CurrentZstdStats.ProcessedFiles++;
+                if (skipped) CurrentZstdStats.SkippedCount++;
+                if (failed) CurrentZstdStats.FailedCount++;
+            }
+        }
+
+        private void BulkZstdProcessWorkItem(BulkZstdWorkItem item, int compressionLevel, ref int memSampleCounter)
+        {
+            if (item == null) return;
+            if (CurrentZstdStats.CancelRequested) return;
+
+            try
+            {
+                if (item.Kind == BulkZstdWorkKind.NativeToZstd)
+                {
+                    long originalSize = new FileInfo(item.SourcePath).Length;
+                    int sample = System.Threading.Interlocked.Increment(ref memSampleCounter);
+                    if ((sample - 1) % 10 == 0)
+                        LogBulkZstdMemSample(sample - 1, originalSize, false);
+
+                    BulkZstdCompressNativeToZstd(item.SourcePath, item.TargetPath, compressionLevel, item.MetaJson);
+
+                    long compressed = 0;
+                    if (File.Exists(item.TargetPath))
+                        compressed = new FileInfo(item.TargetPath).Length;
+                    BulkZstdNoteProgress(null, originalSize, compressed, true, false, false);
+
+                    if (item.DeleteNativeAfter)
+                    {
+                        try { File.Delete(item.SourcePath); } catch { }
+                        try { if (!string.IsNullOrEmpty(item.MetaPath)) File.Delete(item.MetaPath); } catch { }
+                    }
+                }
+                else
+                {
+                    long originalSize = new FileInfo(item.SourcePath).Length;
+                    int sample = System.Threading.Interlocked.Increment(ref memSampleCounter);
+                    if ((sample - 1) % 10 == 0)
+                        LogBulkZstdMemSample(sample - 1, originalSize, true);
+
+                    BulkZstdRecompressZstdInPlace(item.SourcePath, compressionLevel, item.MetaJson);
+
+                    long compressed = 0;
+                    if (File.Exists(item.SourcePath))
+                        compressed = new FileInfo(item.SourcePath).Length;
+                    BulkZstdNoteProgress(null, originalSize, compressed, true, false, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                BulkZstdNoteProgress(null, 0, 0, true, false, true);
+                LogUtil.LogError("Bulk compression: Failed " + item.SourcePath + ": " + ex.Message);
+            }
+        }
+
+        private void BulkZstdRunParallel(List<BulkZstdWorkItem> work, int compressionLevel)
+        {
+            if (work == null || work.Count == 0) return;
+
+            int parallel = ResolveBulkZstdParallelism();
+            if (parallel > work.Count) parallel = work.Count;
+            TryBoostThreadPoolForBulkZstd(parallel);
+
+            var queue = new Queue<BulkZstdWorkItem>(work.Count);
+            for (int i = 0; i < work.Count; i++)
+            {
+                if (work[i] != null) queue.Enqueue(work[i]);
+            }
+
+            int memSampleCounter = 0;
+            int remainingWorkers = parallel;
+            var done = new ManualResetEvent(false);
+            var queueLock = new object();
+
+            for (int w = 0; w < parallel; w++)
+            {
+                int workerIndex = w;
+                var worker = new Thread(() =>
+                {
+                    try
+                    {
+                        while (!CurrentZstdStats.CancelRequested)
+                        {
+                            BulkZstdWorkItem item = null;
+                            lock (queueLock)
+                            {
+                                if (queue.Count == 0) break;
+                                item = queue.Dequeue();
+                            }
+                            BulkZstdProcessWorkItem(item, compressionLevel, ref memSampleCounter);
+                        }
+                    }
+                    finally
+                    {
+                        if (Interlocked.Decrement(ref remainingWorkers) == 0)
+                        {
+                            try { done.Set(); } catch { }
+                        }
+                    }
+                });
+                worker.IsBackground = true;
+                worker.Name = "VPB-BulkZstd-" + workerIndex;
+                worker.Start();
+            }
+
+            done.WaitOne();
+            done.Close();
+        }
+
         private void BulkZstdWorker(string nativeCacheDir, string vpbCacheDir)
         {
             string[] files;
@@ -1953,7 +2185,7 @@ namespace VPB
             catch { zstdFiles = new string[0]; }
 
             var touchedZstdTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            int workCount = 0;
+            var work = new List<BulkZstdWorkItem>(256);
             CurrentZstdStats.CurrentFile = "Scanning...";
             foreach (var f in files)
             {
@@ -1965,8 +2197,27 @@ namespace VPB
                     string cacheFileBase = Path.GetFileNameWithoutExtension(Path.GetFileName(f));
                     string targetPath = TextureUtil.ResolveBulkZstdTargetPath(vpbCacheDir, cacheFileBase, out _);
                     if (string.IsNullOrEmpty(targetPath)) continue;
-                    if (BulkZstdNeedsCompression(f, targetPath, compressionLevel))
-                        workCount++;
+                    touchedZstdTargets.Add(targetPath);
+                    if (!BulkZstdNeedsCompression(f, targetPath, compressionLevel))
+                    {
+                        CurrentZstdStats.SkippedCount++;
+                        if (deleteOriginal)
+                        {
+                            try { File.Delete(f); } catch { }
+                            try { File.Delete(f + "meta"); } catch { }
+                        }
+                        continue;
+                    }
+                    work.Add(new BulkZstdWorkItem
+                    {
+                        Kind = BulkZstdWorkKind.NativeToZstd,
+                        SourcePath = f,
+                        TargetPath = targetPath,
+                        MetaPath = f + "meta",
+                        DisplayName = Path.GetFileName(f),
+                        DeleteNativeAfter = deleteOriginal,
+                        MetaJson = mj
+                    });
                 }
                 catch { }
             }
@@ -1979,6 +2230,7 @@ namespace VPB
                     if (!File.Exists(zf + "meta")) continue;
                     var mj = JSON.Parse(File.ReadAllText(zf + "meta"));
                     if (BulkZstdIsThumbnail(mj, threshold)) continue;
+                    if (touchedZstdTargets.Contains(zf)) continue;
                     string cacheFileBase = Path.GetFileNameWithoutExtension(Path.GetFileName(zf));
                     string nativeTarget = TextureUtil.ResolveBulkZstdTargetPath(vpbCacheDir, cacheFileBase, out _);
                     if (!string.IsNullOrEmpty(nativeTarget))
@@ -1986,144 +2238,44 @@ namespace VPB
                         string nativePath = Path.Combine(nativeCacheDir, cacheFileBase + ".vamcache");
                         if (File.Exists(nativePath)) continue;
                     }
-                    if (BulkZstdNeedsCompression(zf, zf, compressionLevel))
-                        workCount++;
+                    if (!BulkZstdNeedsCompression(zf, zf, compressionLevel))
+                    {
+                        CurrentZstdStats.SkippedCount++;
+                        continue;
+                    }
+                    work.Add(new BulkZstdWorkItem
+                    {
+                        Kind = BulkZstdWorkKind.RecompressZstd,
+                        SourcePath = zf,
+                        TargetPath = zf,
+                        MetaPath = zf + "meta",
+                        DisplayName = Path.GetFileName(zf),
+                        DeleteNativeAfter = false,
+                        MetaJson = mj
+                    });
                 }
                 catch { }
             }
-            CurrentZstdStats.TotalFiles = workCount;
+
+            CurrentZstdStats.TotalFiles = work.Count;
             CurrentZstdStats.CurrentFile = null;
-            if (workCount == 0)
+            if (work.Count == 0)
             {
                 LogUtil.Log("[VPB] Bulk compress: nothing to compress (native=" + files.Length + " zstd=" + zstdFiles.Length + ") in " + nativeCacheDir);
             }
-
-            // Diagnostic: every N processed files sample heap live-bytes, this file's on-disk size, and GC count.
-            // Rising live = leak; flat live but death on a big file + high GC count = Boehm fragmentation; clean sawtooth = peak.
-            int zstdMemSampleCounter = 0;
-            const int ZstdMemSampleEveryN = 10;
-
-            foreach (var file in files)
+            else
             {
+                LogUtil.Log("[VPB] Bulk compress: " + work.Count + " files, parallel=" + ResolveBulkZstdParallelism());
+                BulkZstdRunParallel(work, compressionLevel);
                 if (CurrentZstdStats.CancelRequested)
-                {
                     CurrentZstdStats.CurrentFile = "Cancelled";
-                    break;
-                }
-                try
-                {
-                    string fileName = Path.GetFileName(file);
-                    string metaPath = file + "meta";
-                    if (!File.Exists(metaPath)) continue;
-
-                    JSONNode metaJson = null;
-                    try
-                    {
-                        metaJson = JSON.Parse(File.ReadAllText(metaPath));
-                        if (BulkZstdIsThumbnail(metaJson, threshold))
-                            continue;
-                    }
-                    catch { continue; }
-
-                    string cacheFileBase = Path.GetFileNameWithoutExtension(fileName);
-                    string targetPath = TextureUtil.ResolveBulkZstdTargetPath(vpbCacheDir, cacheFileBase, out _);
-                    if (string.IsNullOrEmpty(targetPath))
-                        continue;
-
-                    touchedZstdTargets.Add(targetPath);
-
-                    bool needsWork = BulkZstdNeedsCompression(file, targetPath, compressionLevel);
-                    if (needsWork)
-                    {
-                        CurrentZstdStats.CurrentFile = fileName;
-                        long originalSize = new FileInfo(file).Length;
-                        CurrentZstdStats.TotalOriginalSize += originalSize;
-                        if (zstdMemSampleCounter % ZstdMemSampleEveryN == 0)
-                            LogBulkZstdMemSample(zstdMemSampleCounter, originalSize, false);
-                        zstdMemSampleCounter++;
-                        BulkZstdCompressNativeToZstd(file, targetPath, compressionLevel, metaJson);
-                        if (File.Exists(targetPath))
-                            CurrentZstdStats.TotalCompressedSize += new FileInfo(targetPath).Length;
-                        CurrentZstdStats.ProcessedFiles++;
-                    }
-                    else
-                    {
-                        CurrentZstdStats.SkippedCount++;
-                    }
-
-                    if (deleteOriginal)
-                    {
-                        File.Delete(file);
-                        File.Delete(metaPath);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    CurrentZstdStats.FailedCount++;
-                    LogUtil.LogError("Bulk compression: Failed to convert " + file + ": " + ex.Message);
-                    CurrentZstdStats.ProcessedFiles++;
-                }
-            }
-
-            for (int zi = 0; zi < zstdFiles.Length; zi++)
-            {
-                if (CurrentZstdStats.CancelRequested)
-                {
-                    CurrentZstdStats.CurrentFile = "Cancelled";
-                    break;
-                }
-
-                string zstdPath = zstdFiles[zi];
-                if (string.IsNullOrEmpty(zstdPath) || touchedZstdTargets.Contains(zstdPath))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    string zmetaPath = zstdPath + "meta";
-                    if (!File.Exists(zmetaPath)) continue;
-
-                    JSONNode metaJson = null;
-                    try
-                    {
-                        metaJson = JSON.Parse(File.ReadAllText(zmetaPath));
-                        if (BulkZstdIsThumbnail(metaJson, threshold))
-                            continue;
-                    }
-                    catch { continue; }
-
-                    bool needsWork = BulkZstdNeedsCompression(zstdPath, zstdPath, compressionLevel);
-                    if (needsWork)
-                    {
-                        CurrentZstdStats.CurrentFile = Path.GetFileName(zstdPath);
-                        long originalSize = new FileInfo(zstdPath).Length;
-                        CurrentZstdStats.TotalOriginalSize += originalSize;
-                        if (zstdMemSampleCounter % ZstdMemSampleEveryN == 0)
-                            LogBulkZstdMemSample(zstdMemSampleCounter, originalSize, true);
-                        zstdMemSampleCounter++;
-                        BulkZstdRecompressZstdInPlace(zstdPath, compressionLevel, metaJson);
-                        if (File.Exists(zstdPath))
-                            CurrentZstdStats.TotalCompressedSize += new FileInfo(zstdPath).Length;
-                        CurrentZstdStats.ProcessedFiles++;
-                    }
-                    else
-                    {
-                        CurrentZstdStats.SkippedCount++;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    CurrentZstdStats.FailedCount++;
-                    LogUtil.LogError("Bulk compression: Failed to relevel " + zstdPath + ": " + ex.Message);
-                    CurrentZstdStats.ProcessedFiles++;
-                }
             }
 
             CurrentZstdStats.Duration = (float)(DateTime.Now - CurrentZstdStats.StartTime).TotalSeconds;
             CurrentZstdStats.IsRunning = false;
             CurrentZstdStats.Completed = true;
-            CurrentZstdStats.CurrentFile = "Completed";
+            if (!CurrentZstdStats.CancelRequested)
+                CurrentZstdStats.CurrentFile = "Completed";
             LogUtil.Log(string.Format(
                 "Bulk compression completed: {0} compressed, {1} already up to date, {2} failed",
                 CurrentZstdStats.ProcessedFiles, CurrentZstdStats.SkippedCount, CurrentZstdStats.FailedCount));
@@ -2146,7 +2298,7 @@ namespace VPB
             CurrentZstdStats = new ZstdStats { IsRunning = true, IsDecompression = true, StartTime = DateTime.Now };
             try { VpbProgressService.BeginBulkZstd(decompress: true); } catch { }
 
-            ThreadPool.QueueUserWorkItem((state) =>
+            var t = new Thread(() =>
             {
                 try
                 {
@@ -2159,6 +2311,9 @@ namespace VPB
                     try { VpbProgressService.EndBulkZstd(); } catch { }
                 }
             });
+            t.IsBackground = true;
+            t.Name = "VPB-BulkZstd-Decompress";
+            t.Start();
         }
 
         private void BulkZstdDecompressWorker(string nativeCacheDir, string vpbCacheDir)
@@ -2213,7 +2368,6 @@ namespace VPB
                 }
                 try
                 {
-                    CurrentZstdStats.CurrentFile = Path.GetFileName(file);
                     string metaPath = file + "meta";
                     if (!File.Exists(metaPath))
                     {
@@ -2296,6 +2450,8 @@ namespace VPB
         private readonly Dictionary<string, bool> pathCreateMipMapsHints = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<int, ImageLoaderThreaded.QueuedImage> texIdCandidates = new Dictionary<int, ImageLoaderThreaded.QueuedImage>();
         private readonly HashSet<string> pendingZstdWrites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> s_FallbackPendingZstdWrites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object s_FallbackPendingZstdLock = new object();
         private readonly object candidateLock = new object();
         private readonly object pendingZstdWriteLock = new object();
 

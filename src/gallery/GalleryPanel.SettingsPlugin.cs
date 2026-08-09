@@ -163,7 +163,7 @@ namespace VPB
                 Key = "plugin.zstd.compress_run",
                 GroupKey = "plugin_zstd",
                 Label = VPBTranslation.T("hook.compress_cache", "Compress Cache"),
-                Tooltip = VPBTranslation.T("settings.tip.compress_cache_run", "Start bulk .vamcache → Zstd migration. Progress shows in the top bar."),
+                Tooltip = VPBTranslation.T("settings.tip.compress_cache_run", "Start bulk .vamcache → Zstd migration. Quiet progress in the top bar; report when done."),
                 ControlType = InternalSettingControlType.Button,
                 OnAction = () => GalleryTriggerBulkZstdCompression()
             });
