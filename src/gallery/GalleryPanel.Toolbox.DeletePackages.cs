@@ -214,11 +214,16 @@ namespace VPB
                     return;
                 }
 
-                string relatedBlock = BuildRelatedEntriesBlock(relatedEntries);
+                // Related-entry dump: useful when a package hides collateral gallery items.
+                // Multi-select with one listing per package = selection echo — skip (Hick / memory load).
+                string relatedBlock = BuildRelatedEntriesBlock(relatedEntries, toDelete.Count);
 
                 var summaryLines = new List<string>();
                 if (toDelete.Count > 0)
-                    summaryLines.Add($"Move {toDelete.Count} package(s) into '{DeletedPackagesFolderName}'.");
+                {
+                    summaryLines.Add($"Move {toDelete.Count} package(s) into '{DeletedPackagesFolderName}':");
+                    AppendCappedUidBullets(summaryLines, toDelete, maxShown: 8);
+                }
                 if (localScenes.Count > 0)
                     summaryLines.Add($"Move {localScenes.Count} local scene(s) (JSON and preview image if present) into '{DeletedLocalScenesFolderName}'.");
                 if (localPresets.Count > 0)
@@ -535,28 +540,94 @@ namespace VPB
             return names;
         }
 
-        private static string BuildRelatedEntriesBlock(Dictionary<string, List<string>> relatedEntries)
+        /// <summary>
+        /// Append "- uid.var" lines for recognition; truncate with "- ..." after <paramref name="maxShown"/>.
+        /// </summary>
+        private static void AppendCappedUidBullets(List<string> lines, List<string> uids, int maxShown)
+        {
+            if (lines == null || uids == null || uids.Count == 0 || maxShown <= 0) return;
+            int shown = 0;
+            for (int i = 0; i < uids.Count; i++)
+            {
+                string uid = uids[i];
+                if (string.IsNullOrEmpty(uid)) continue;
+                if (shown >= maxShown)
+                {
+                    lines.Add("- ...");
+                    break;
+                }
+                lines.Add("- " + uid + ".var");
+                shown++;
+            }
+        }
+
+        /// <summary>
+        /// Related gallery paths inside packages being moved.
+        /// Single package: list paths (collateral awareness).
+        /// Multi: only when some package exposes &gt;1 listing; otherwise selection already named the tiles.
+        /// </summary>
+        private static string BuildRelatedEntriesBlock(Dictionary<string, List<string>> relatedEntries, int packageDeleteCount)
         {
             if (relatedEntries == null || relatedEntries.Count == 0) return "";
 
+            int maxPerPkg = 0;
+            int totalEntries = 0;
+            foreach (var kvp in relatedEntries)
+            {
+                int n = kvp.Value != null ? kvp.Value.Count : 0;
+                totalEntries += n;
+                if (n > maxPerPkg) maxPerPkg = n;
+            }
+            if (totalEntries == 0) return "";
+
+            bool multi = packageDeleteCount > 1 || relatedEntries.Count > 1;
+            // Multi + one listing per package = echo of selection / package list. Skip.
+            if (multi && maxPerPkg <= 1) return "";
+
             var lines = new List<string>();
+
+            if (!multi)
+            {
+                // One package: keep scannable path list under a single header.
+                lines.Add("Also removing related gallery entries:");
+                foreach (var kvp in relatedEntries)
+                {
+                    var list = kvp.Value;
+                    if (list == null) continue;
+                    int shown = 0;
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        if (string.IsNullOrEmpty(list[i])) continue;
+                        if (shown >= 10) { lines.Add("- ..."); break; }
+                        lines.Add("- " + list[i]);
+                        shown++;
+                    }
+                }
+                return string.Join("\n", lines.ToArray());
+            }
+
+            // Multi with collateral (unselected scenes/presets inside package).
+            lines.Add("Also removing other gallery entries inside these packages:");
             int pkgShown = 0;
             foreach (var kvp in relatedEntries)
             {
-                if (pkgShown >= 6) { lines.Add("..."); break; }
+                var list = kvp.Value;
+                // Only packages with more than one listing are collateral risk.
+                if (list == null || list.Count <= 1) continue;
+                if (pkgShown >= 6) { lines.Add("- ..."); break; }
                 string uid = kvp.Key;
-                var list = kvp.Value ?? new List<string>();
 
-                lines.Add($"Also removing related entries from {uid}.var:");
-                int shown = 0;
-                for (int i = 0; i < list.Count; i++)
+                if (list.Count <= 3)
                 {
-                    if (shown >= 10) { lines.Add("- ..."); break; }
-                    lines.Add("- " + list[i]);
-                    shown++;
+                    lines.Add("- " + uid + ".var — " + string.Join("; ", list.ToArray()));
+                }
+                else
+                {
+                    lines.Add("- " + uid + ".var — " + list.Count + " entries (" + list[0] + "; …)");
                 }
                 pkgShown++;
             }
+            if (pkgShown == 0) return "";
             return string.Join("\n", lines.ToArray());
         }
 

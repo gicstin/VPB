@@ -75,7 +75,6 @@ namespace VPB
             try
             {
                 LogUtil.Log("VarPackageMgr SQL manifest load START");
-                MessageKit<string>.post(MessageDef.UpdateLoading, "Loading VPB manifest...");
             }
             catch { }
 
@@ -124,8 +123,6 @@ namespace VPB
                                     try
                                     {
                                         LogUtil.Log("VarPackageMgr SQL manifest load progress " + progress + "/" + manifestCount);
-                                        MessageKit<string>.post(MessageDef.UpdateLoading,
-                                            "VPB manifest " + progress + "/" + manifestCount);
                                     }
                                     catch { }
                                 }
@@ -165,8 +162,6 @@ namespace VPB
                                     try
                                     {
                                         LogUtil.Log("VarPackageMgr SQL manifest load progress " + progress + "/" + manifestCount);
-                                        MessageKit<string>.post(MessageDef.UpdateLoading,
-                                            "VPB manifest " + progress + "/" + manifestCount);
                                     }
                                     catch { }
                                 }
@@ -194,8 +189,6 @@ namespace VPB
                                     try
                                     {
                                         LogUtil.Log("VarPackageMgr SQL manifest load pkg_file rows=" + fileRows);
-                                        MessageKit<string>.post(MessageDef.UpdateLoading,
-                                            "VPB manifest files " + fileRows);
                                     }
                                     catch { }
                                 }
@@ -263,8 +256,6 @@ namespace VPB
                     {
                         LogUtil.Log("VarPackageMgr SQL manifest load DONE pkgs=" + loadedCount
                             + " mode=" + loadMode + " ms=" + sw.ElapsedMilliseconds);
-                        MessageKit<string>.post(MessageDef.UpdateLoading,
-                            "VPB manifest loaded " + loadedCount + " (" + sw.ElapsedMilliseconds + "ms)");
                     }
                     catch { }
                 }
@@ -349,8 +340,6 @@ namespace VPB
                         try
                         {
                             LogUtil.Log("VarPackageMgr SQL manifest write progress " + progress + "/" + snapshot.Count);
-                            MessageKit<string>.post(MessageDef.UpdateLoading,
-                                "VPB manifest save " + progress + "/" + snapshot.Count);
                         }
                         catch { }
                     }

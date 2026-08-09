@@ -2402,9 +2402,7 @@ namespace VPB
             catch { }
             
             contentGO = scrollRect.content.gameObject;
-            CreateLoadingOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
             CreateEmptyGridStateOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
-            CreateThumbnailCacheProgressPanel(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
             try { CreateModeSemanticsBanner(backgroundBoxGO != null ? backgroundBoxGO : scrollGO); } catch { }
 
             // Clean up legacy layout components that interfere with virtualization
@@ -2420,10 +2418,8 @@ namespace VPB
             recyclingGrid.scrollRect = scrollRect;
             recyclingGrid.content = contentGO.GetComponent<RectTransform>();
             
-            // Set initial adaptive config
-            float minSize = 200f;
-            recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), gridColumnCount);
-            recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, false);
+            // Set initial adaptive config (square thumb + font-tight caption chrome).
+            ApplyGridRecyclingLayoutConfig(recyclingGrid, gridColumnCount, deferRefresh: false);
 
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();
@@ -2479,7 +2475,7 @@ namespace VPB
             minRT.pivot     = new Vector2(0.5f, 0.5f);
             minRT.anchoredPosition = Vector2.zero;
             _titleBarMinimizeBtnRT = minRT;
-            minimizeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+            minimizeBtn.GetComponent<Image>().color = GalleryUiColorTokens.ChromeIconWell;
             AddHoverDelegate(minimizeBtn);
             { var s = UI.LoadIconSprite("vpb_icons/minimize.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(minimizeBtn, s); }
 
@@ -2493,7 +2489,7 @@ namespace VPB
             closeRT.pivot     = new Vector2(0.5f, 0.5f);
             closeRT.anchoredPosition = Vector2.zero;
             _titleBarCloseBtnRT = closeRT;
-            closeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+            closeBtn.GetComponent<Image>().color = GalleryUiColorTokens.ChromeIconWell;
             AddHoverDelegate(closeBtn);
             { var s = UI.LoadIconSprite("vpb_icons/close.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s); }
 

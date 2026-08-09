@@ -35,15 +35,11 @@ namespace VPB
 
         private GameObject _modeSemanticsBannerGO;
         private Image _modeSemanticsBannerBg;
-        private Image _modeSemanticsBannerStripe;
         private Text _modeSemanticsBannerText;
         private RectTransform _modeSemanticsBannerRT;
         private bool _modeSemanticsBannerVisible;
         private string _modeSemanticsBannerCacheKey;
         private static readonly Color ModeBannerToolBg = GalleryUiColorTokens.ModeToolBanner;
-        private static readonly Color ModeBannerApplyBg = GalleryUiColorTokens.ModeApplyBanner;
-        private static readonly Color ModeBannerToolStripe = GalleryUiColorTokens.ModeToolStripe;
-        private static readonly Color ModeBannerApplyStripe = GalleryUiColorTokens.ModeApplyStripe;
 
         /// <summary>Sticky mode line under drag/temp status. Null when idle.</summary>
         private string ModeAmbientMsg { get { return _modeAmbientMsg; } }
@@ -284,7 +280,6 @@ namespace VPB
             if (oneClick) key |= 1 << 8;
             if (hold) key |= 1 << 9;
             if (_stripKeepSubScenePickActive) key |= 1 << 10;
-            key ^= (_contextBarActiveFilterCount & 0xFF) << 16;
             string keyStr = key.ToString();
             if (_modeAmbientCacheKey == keyStr)
             {
@@ -403,16 +398,6 @@ namespace VPB
                 Vector2.zero);
             _modeSemanticsBannerRT = _modeSemanticsBannerGO.GetComponent<RectTransform>();
             _modeSemanticsBannerBg = UI.AddImage(_modeSemanticsBannerGO, ModeBannerToolBg, false);
-            // Left stripe — redundant mode cue (color + position; Johnson / change blindness).
-            GameObject stripeGO = UI.CreateChildRT(
-                _modeSemanticsBannerGO,
-                "ModeStripe",
-                AnchorPresets.vStretchLeft,
-                new Vector2(4f * s, 0f),
-                Vector2.zero);
-            _modeSemanticsBannerStripe = UI.AddImage(stripeGO, ModeBannerToolStripe, false);
-            if (_modeSemanticsBannerStripe != null)
-                _modeSemanticsBannerStripe.raycastTarget = false;
             _modeSemanticsBannerText = UI.CreateLabel(
                 _modeSemanticsBannerGO,
                 "",
@@ -426,7 +411,7 @@ namespace VPB
             {
                 labelRT.anchorMin = Vector2.zero;
                 labelRT.anchorMax = Vector2.one;
-                labelRT.offsetMin = new Vector2(14f * s, 0f);
+                labelRT.offsetMin = new Vector2(10f * s, 0f);
                 labelRT.offsetMax = new Vector2(-10f * s, 0f);
             }
             _modeSemanticsBannerGO.SetActive(false);
@@ -444,12 +429,14 @@ namespace VPB
 
         private void SyncModeSemanticsBanner(StickyToolMode tool, string applyLabel)
         {
-            bool show = tool != StickyToolMode.None || !string.IsNullOrEmpty(applyLabel);
+            // Dedicated action bars own Try-On / BenchPick copy — no duplicate top banner.
+            // Hold / 1-Click stay on status line only (no permanent band).
+            bool dedicatedBar = tool == StickyToolMode.TryOn || tool == StickyToolMode.BenchPick;
+            bool show = tool != StickyToolMode.None && !dedicatedBar;
             string toolName = StickyToolDisplayName(tool);
             string cacheKey = ((int)tool).ToString()
                 + "|" + (applyLabel ?? "")
-                + "|" + (show ? "1" : "0")
-                + "|f" + _contextBarActiveFilterCount.ToString();
+                + "|" + (show ? "1" : "0");
             if (_modeSemanticsBannerCacheKey == cacheKey
                 && _modeSemanticsBannerVisible == show)
                 return;
@@ -498,11 +485,6 @@ namespace VPB
                             "gallery.mode.banner_creator",
                             "strip / authoring tools active"));
                         break;
-                    case StickyToolMode.TryOn:
-                        sb.Append(VPBTranslation.T(
-                            "gallery.mode.banner_tryon",
-                            "Compare / Revert / Keep — Esc reverts"));
-                        break;
                     case StickyToolMode.Cleanup:
                         sb.Append(VPBTranslation.T(
                             "gallery.mode.banner_cleanup",
@@ -512,11 +494,6 @@ namespace VPB
                         sb.Append(VPBTranslation.T(
                             "gallery.mode.banner_import",
                             "docked scene import — click sets source"));
-                        break;
-                    case StickyToolMode.BenchPick:
-                        sb.Append(VPBTranslation.T(
-                            "gallery.mode.banner_bench_pick",
-                            "select items, then Done"));
                         break;
                 }
             }
@@ -544,23 +521,11 @@ namespace VPB
                         VPBTranslation.T("gallery.mode.strip_esc_named", "Esc → {0}"),
                         toolName));
             }
-            else if (!string.IsNullOrEmpty(applyLabel))
-            {
-                sb.Append("  ·  ");
-                sb.Append(
-                    VPBTranslation.T("gallery.mode.esc_apply", "Esc → clear apply mode"));
-            }
-
-            // Filters collapsed into mode Context Bar — recognition without second chrome band.
-            AppendContextBarFilterCountToBanner(sb);
 
             if (_modeSemanticsBannerText != null)
                 _modeSemanticsBannerText.text = sb.ToString();
-            bool toolActive = tool != StickyToolMode.None;
             if (_modeSemanticsBannerBg != null)
-                _modeSemanticsBannerBg.color = toolActive ? ModeBannerToolBg : ModeBannerApplyBg;
-            if (_modeSemanticsBannerStripe != null)
-                _modeSemanticsBannerStripe.color = toolActive ? ModeBannerToolStripe : ModeBannerApplyStripe;
+                _modeSemanticsBannerBg.color = ModeBannerToolBg;
 
             if (wasVisible != show)
             {

@@ -462,14 +462,13 @@ namespace VPB
         /// <summary>
         /// Atom/type/option rows add Button without UIHoverBorder — gallery pane enforcer only walks
         /// backgroundBoxGO. Floated import reparents to canvas, so auto-restore never gets borders
-        /// until a dock round-trip. Apply policy on the import tree itself, then force inward rims
-        /// under scroll RectMask2D (outward clips).
+        /// until a dock round-trip. Apply float inward policy on the import tree itself.
         /// </summary>
         private void SyncImportSidebarHoverChrome()
         {
             if (importSidebarRoot != null)
             {
-                try { UI.ApplyGalleryPaneHoverPolicy(importSidebarRoot); } catch { }
+                try { UI.ApplyFloatRootHoverPolicy(importSidebarRoot); } catch { }
             }
             SyncImportSidebarScrollHoverBorders();
         }

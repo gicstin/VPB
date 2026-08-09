@@ -352,6 +352,7 @@ namespace VPB
 
             // Process-lifetime static L1 caches: drop on package library change (stability / bound memory).
             try { GallerySortManager.ClearSceneDependencyCache(); } catch { }
+            try { PackageHidePrefs.InvalidateSceneJsonCountCache(); } catch { }
             try { UIDraggableItem.ClearGlobalRegionCache(); } catch { }
             try { LooseVapGenderProbe.InvalidateMemoryCache(); } catch { }
             try { VpbLocalDatabase.ClearDeepDirMtimeCache(); } catch { }

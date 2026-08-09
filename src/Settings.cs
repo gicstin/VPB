@@ -109,7 +109,6 @@ namespace VPB
         public ConfigEntry<bool> LogConfigPerf;
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<float> UiTransparencyValue;
-        public ConfigEntry<bool> ShowSceneLoadingOverlay;
         public ConfigEntry<bool> ShowGalleryIndexBuildOverlay;
         public ConfigEntry<bool> AutoPageEnabled;
         public ConfigEntry<bool> HideOldVersions;
@@ -168,7 +167,6 @@ namespace VPB
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
-            ShowSceneLoadingOverlay = config.Bind<bool>("UI", "ShowSceneLoadingOverlay", false, "Show VPB full-screen loading overlay during scene loads.");
             ShowGalleryIndexBuildOverlay = config.Bind<bool>("UI", "ShowGalleryIndexBuildOverlay", true, "Show top progress banner while VAR packages are scanned and the gallery SQLite index is built at startup. Warns not to close VaM during first-time or full rebuild indexing.");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
             HideOldVersions = config.Bind<bool>("UI", "HideOldVersions", true, "Legacy cfg: hide older VAR versions (newest per Creator.Package). Default on. Synced with Filters → Old versions → Newest. Prefer the Filters UI; SQL uses pkg.is_newest when the index is ready.");

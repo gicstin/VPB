@@ -10,6 +10,8 @@ Tip: press **?** or **F1** to open **Hotkeys** (Esc closes). Title-bar help butt
 
 Or tap the red **Category** side button — {{icon:category|Category}} grid icon on the left or right rail. The blue folder icon is {{icon:path|Path}}, not Category.
 
+**Item labels** — Under each square thumbnail: **leaf** left + **creator** right on the first line; **package** on the second (opaque bar). Cell grows taller so the image stays **1:1**. When old package versions are shown, package line uses **`package.vN`**. Single-name rows keep one line (+ creator when known). Tooltip / detail still show full `creator.package.version:/path`.
+
 Some categories use two columns:
 - **Main list** — packages or presets in that category.
 - **Sub-list** — extra filters (tags in Clothing/Hair, scene sources in Scenes, etc.).

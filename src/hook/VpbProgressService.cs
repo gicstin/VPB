@@ -341,7 +341,7 @@ namespace VPB
                 snapshot.ShowMovingStrip = true;
                 int pct = Mathf.Clamp(Mathf.RoundToInt(100f * done / Mathf.Max(1, total)), 0, 100);
                 string phaseLabel = string.IsNullOrEmpty(phase) ? "Items" : phase;
-                snapshot.Subtitle = phaseLabel + " " + done + "/" + total + " (" + pct + "%) — cannot cancel";
+                snapshot.Subtitle = phaseLabel + " " + done + "/" + total + " (" + pct + "%)";
             }
             else
             {
@@ -350,7 +350,7 @@ namespace VPB
                 string basePhase = string.IsNullOrEmpty(phase)
                     ? "Preparing items for browse"
                     : phase;
-                snapshot.Subtitle = basePhase + " — cannot cancel";
+                snapshot.Subtitle = basePhase;
             }
             return true;
         }

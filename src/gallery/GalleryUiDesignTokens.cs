@@ -228,9 +228,31 @@ namespace VPB
         // Grid thumbnails (overlay scale derives from cell geometry, not user chrome scale)
         public const float GridCellRefSize = 100f;
         public const float GridBadgeSizeRef = 32f;
+        /// <summary>Legacy single-line strip height at scale 1 (reference).</summary>
         public const float GridLabelHeightRef = 22f;
+        /// <summary>
+        /// Unity UI Text line-box vs fontSize for each grid caption row.
+        /// Dual strip = (primaryFs + secondaryFs) × this + primaryFs × <see cref="GridLabelStripVPadMul"/>.
+        /// Single strip = primaryFs × this + pad (when filtered set has no dual captions).
+        /// Absolute pixels — not a fraction of cell width (column zoom must not waste chrome).
+        /// </summary>
+        public const float GridLabelLineBoxMul = 1.12f;
+        /// <summary>Total vertical pad (top+bottom) as fraction of resolved primary font size.</summary>
+        public const float GridLabelStripVPadMul = 0.30f;
+        /// <summary>
+        /// Secondary band maxY / primary minY (0..1 from bottom).
+        /// Primary occupies (frac..1) — keep ≥0.55 share so leaf hierarchy matches larger font.
+        /// </summary>
+        public const float GridLabelPrimaryHeightFrac = 0.40f;
+        /// <summary>Hide creator on primary row when caption inner width is below this (px, chrome-scaled).</summary>
+        public const float GridLabelCreatorMinInnerW = 96f;
+        /// <summary>Max fraction of inner width reserved for creator before leaf truncation.</summary>
+        public const float GridLabelCreatorMaxFrac = 0.42f;
+        /// <summary>If leaf would keep less than this fraction of inner width with creator, hide creator.</summary>
+        public const float GridLabelLeafMinFracWithCreator = 0.45f;
         public const int GridBadgeFontRef = FontRef;
         public const int GridLabelFontRef = FontRef;
+        public const int GridLabelSecondaryFontRef = FontCaptionRef;
         public const float GridCellOverlayMin = 0.45f;
         public const float GridCellOverlayMax = 2.5f;
 

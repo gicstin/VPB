@@ -7,15 +7,11 @@ using UnityEngine.UI;
 namespace VPB
 {
     /// <summary>
-    /// Context Bar coordination (Part 2 UX): mode preempts filter chip row,
-    /// filter count surfaces on mode banner, +N overflow popup for capped chips.
+    /// Context Bar coordination: filter chip row + +N overflow popup.
     /// Warm/cold only — reused lists, no per-frame alloc.
     /// </summary>
     public partial class GalleryPanel
     {
-        /// <summary>Cached browse-filter count for mode banner (excludes Back / Clear all / Overflow).</summary>
-        private int _contextBarActiveFilterCount;
-
         private readonly List<ActiveFilterChipSpec> _filterChipSpecScratch = new List<ActiveFilterChipSpec>(16);
         private readonly List<ActiveFilterChipSpec> _filterChipOverflowSpecs = new List<ActiveFilterChipSpec>(12);
         private readonly List<int> _filterChipPackBodyIdx = new List<int>(16);
@@ -24,68 +20,9 @@ namespace VPB
         private bool _filterChipOverflowOpen;
         private RectTransform _filterChipOverflowAnchorRT;
 
-        /// <summary>Sticky tool or armed apply owns the Context Bar (mode banner).</summary>
-        private bool ContextBarModeOwnsChrome()
-        {
-            if (GetActiveStickyToolMode() != StickyToolMode.None)
-                return true;
-            if (holdToLaunchEnabled)
-                return true;
-            if (ItemApplyMode == ApplyMode.SingleClick)
-                return true;
-            return false;
-        }
-
-        /// <summary>Count filter specs that represent user constraints (not chrome actions).</summary>
-        private static int CountContextBarFilterSpecs(List<ActiveFilterChipSpec> specs)
-        {
-            if (specs == null) return 0;
-            int n = 0;
-            for (int i = 0; i < specs.Count; i++)
-            {
-                FilterChipKind k = specs[i].Kind;
-                if (k == FilterChipKind.PackageFilterBack
-                    || k == FilterChipKind.ClearAll
-                    || k == FilterChipKind.Overflow)
-                    continue;
-                n++;
-            }
-            return n;
-        }
-
-        /// <summary>
-        /// Rebuild filter-count cache used by mode banner. Call from chip refresh.
-        /// </summary>
-        private void RefreshContextBarFilterCountCache(List<ActiveFilterChipSpec> specs)
-        {
-            _contextBarActiveFilterCount = CountContextBarFilterSpecs(specs);
-        }
-
         private void InvalidateModeSemanticsBannerCache()
         {
             _modeSemanticsBannerCacheKey = null;
-        }
-
-        private void AppendContextBarFilterCountToBanner(System.Text.StringBuilder sb)
-        {
-            if (sb == null) return;
-            int n = _contextBarActiveFilterCount;
-            if (n <= 0) return;
-            sb.Append("  ·  ");
-            if (n == 1)
-            {
-                sb.Append(
-                    string.Format(
-                        VPBTranslation.T("gallery.mode.banner_filter_one", "{0} filter active"),
-                        n));
-            }
-            else
-            {
-                sb.Append(
-                    string.Format(
-                        VPBTranslation.T("gallery.mode.banner_filters_fmt", "{0} filters active"),
-                        n));
-            }
         }
 
         // ── Filter chip +N overflow popup ───────────────────────────────────

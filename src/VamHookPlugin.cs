@@ -220,10 +220,6 @@ namespace VPB
         private const float MaxUiScale = 2.4f;
         private const float MiniModeHeight = 50f;
 
-        private bool m_StylesInited;
-        private Texture2D m_TexLoadingOverlay;
-        private GUIStyle m_StyleHeader;
-
         public static VamHookPlugin singleton;
         private static bool s_FileManagerInitialRefreshCompleted;
         private static bool s_UiPendingWarnLogged;
@@ -233,30 +229,6 @@ namespace VPB
         private Harmony m_Harmony;
 
         internal Harmony StartupHarmony { get { return m_Harmony; } }
-
-        private static Texture2D MakeTex(Color color)
-        {
-            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            tex.SetPixel(0, 0, color);
-            tex.Apply(false, true);
-            return tex;
-        }
-
-        private void EnsureStyles()
-        {
-            if (m_StylesInited)
-                return;
-            if (GUI.skin == null)
-                return;
-
-            m_TexLoadingOverlay = MakeTex(new Color(0f, 0f, 0f, 1f));
-            m_StyleHeader = new GUIStyle(GUI.skin.label);
-            m_StyleHeader.fontStyle = FontStyle.Bold;
-            m_StyleHeader.normal.textColor = Color.white;
-            m_StyleHeader.alignment = TextAnchor.MiddleLeft;
-            m_StyleHeader.wordWrap = false;
-            m_StylesInited = true;
-        }
 
         public static string GetCacheDir()
         {
@@ -733,22 +705,15 @@ namespace VPB
         void OnEnable()
         {
             VPBLogger.Init(); // in case the plugin is ever partially reloaded for some reason
-            MessageKit<string>.addObserver(MessageDef.UpdateLoading, OnProgress);
             MessageKit.addObserver(MessageDef.DeactivateWorldUI, OnDeactivateWorldUI);
             try { VpbProgressService.EnsureOverlay(); } catch { }
 
         }
         void OnDisable()
         {
-            MessageKit<string>.removeObserver(MessageDef.UpdateLoading, OnProgress);
             MessageKit.removeObserver(MessageDef.DeactivateWorldUI, OnDeactivateWorldUI);
         }
 
-        string m_ProgressText = "";
-        void OnProgress(string text)
-        {
-            m_ProgressText = text;
-        }
         void OnDeactivateWorldUI()
         {
             if (m_FileBrowser != null)
@@ -1880,34 +1845,7 @@ namespace VPB
             if (!m_Inited)
             {
                 GUI.Box(new Rect(0, 0, 200, 30), "VPB is waiting to start");
-                return;
             }
-
-            if (!LogUtil.IsSceneLoading() || Settings.Instance == null || Settings.Instance.ShowSceneLoadingOverlay == null || !Settings.Instance.ShowSceneLoadingOverlay.Value)
-                return;
-
-            EnsureStyles();
-            var prevDepth = GUI.depth;
-            var prevColor = GUI.color;
-            GUI.depth = -10000;
-            GUI.color = Color.white;
-            var overlayRect = new Rect(0f, 0f, Screen.width, Screen.height);
-            GUI.DrawTexture(overlayRect, m_TexLoadingOverlay);
-
-            string progress = m_ProgressText;
-            if (string.IsNullOrEmpty(progress))
-                progress = "Loading...";
-            var labelStyle = (m_StyleHeader != null) ? m_StyleHeader : GUI.skin.label;
-            var prevAlign = labelStyle.alignment;
-            var prevWrap = labelStyle.wordWrap;
-            labelStyle.alignment = TextAnchor.MiddleCenter;
-            labelStyle.wordWrap = true;
-            GUI.Label(overlayRect, progress, labelStyle);
-            labelStyle.alignment = prevAlign;
-            labelStyle.wordWrap = prevWrap;
-
-            GUI.color = prevColor;
-            GUI.depth = prevDepth;
         }
 
         private void UpdateUnderlyingUGUIBlockState()

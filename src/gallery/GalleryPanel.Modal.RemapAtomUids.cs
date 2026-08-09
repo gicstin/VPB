@@ -1065,6 +1065,12 @@ namespace VPB
             _remapAtomUidsExpandHeightRef = null;
             _remapAtomUidsCollapsedTopLeftPos = null;
             _remapAtomUidsModalRoot.transform.SetAsLastSibling();
+            try
+            {
+                if (_remapAtomUidsPanelRT != null)
+                    UI.ApplyFloatRootHoverPolicy(_remapAtomUidsPanelRT.gameObject);
+            }
+            catch { }
         }
 
         private void RebuildRemapAtomUidsRows(int font, float s, float rowH)

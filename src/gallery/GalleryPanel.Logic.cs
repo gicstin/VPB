@@ -77,16 +77,23 @@ namespace VPB
             return new Color(1f, 1f, 0f, 1f);
         }
 
+        /// <summary>
+        /// Grid cells always inset hover/selection rims. Outward expansion bleeds into the next
+        /// row/col when spacing is 0 (default) — reads as 1px clip/seam on the bottom of each thumb
+        /// (default hover width is 1px). List still honors the inward-when-square setting.
+        /// </summary>
         private bool EffectiveGridBorderInwardForGalleryCell()
         {
             try
             {
-                if (VPBConfig.Instance == null) return false;
-                if (!VPBConfig.Instance.GalleryGridBorderInwardWhenSquare) return false;
-                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive) return true;
-                return EffectiveGridThumbnailPadding() <= 0.01f;
+                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive)
+                {
+                    if (VPBConfig.Instance == null) return false;
+                    return VPBConfig.Instance.GalleryGridBorderInwardWhenSquare;
+                }
+                return true;
             }
-            catch { return false; }
+            catch { return true; }
         }
 
         private bool EffectiveGalleryScanWlBorderEnabled()
@@ -604,7 +611,7 @@ namespace VPB
             string scope = VPBConfig.Instance != null
                 ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)
                 : "PathAndName";
-            string pretty = GetPrettyEntryDisplayName(file);
+            string pretty = GetPrettyEntryDisplayName(file, currentCategoryTitle);
             bool namePathOk;
             if (scope == "NameStartsWith")
                 namePathOk = !string.IsNullOrEmpty(pretty) && pretty.StartsWith(t, StringComparison.OrdinalIgnoreCase);
@@ -918,14 +925,14 @@ namespace VPB
                         }
                         else if (layoutMode == GalleryLayoutMode.List)
                         {
+                            rgv.fixedBottomChromePx = 0f;
                             rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferGridRefresh);
                             rgv.SetAdaptiveConfig(true, 0f, 1, true, deferGridRefresh);
                         }
                         else
                         {
                             int cols = GridColumnCount;
-                            rgv.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols, deferGridRefresh);
-                            rgv.SetAdaptiveConfig(true, 200f, cols, false, deferGridRefresh);
+                            ApplyGridRecyclingLayoutConfig(rgv, cols, deferGridRefresh);
                         }
                         if (!deferGridRefresh)
                             rgv.Refresh();
@@ -944,7 +951,7 @@ namespace VPB
 
         /// <summary>
         /// Re-applies grid config height and rebinds all visible cells.
-        /// Call after grid label settings or column count changes (label strip height depends on visibility).
+        /// Call after grid label settings or column count changes (label strip height tracks font, not columns).
         /// </summary>
         public void RebuildGridLayout()
         {
@@ -961,8 +968,7 @@ namespace VPB
                 }
                 if (layoutMode != GalleryLayoutMode.Grid) return;
                 int cols = GridColumnCount;
-                rgv.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols);
-                rgv.SetAdaptiveConfig(true, 200f, cols, false);
+                ApplyGridRecyclingLayoutConfig(rgv, cols, deferRefresh: false);
                 rgv.Refresh();
             }
             catch { }

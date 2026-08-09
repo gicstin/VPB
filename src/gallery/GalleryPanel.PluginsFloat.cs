@@ -284,7 +284,15 @@ namespace VPB
             GameObject closeBtn = PluginsFloatSquareIconButton(
                 titleBar.transform, chromeSz, "vpb_icons/x.png",
                 GalleryUiColorTokens.ChromeIconWell, HidePluginsFloat);
-            if (closeBtn != null) closeBtn.name = "TitleClose";
+            if (closeBtn != null)
+            {
+                closeBtn.name = "TitleClose";
+                AddTooltip(closeBtn, "gallery.plugins.float_close", "Close");
+            }
+            if (_pluginsFloatCollapseBtn != null)
+            {
+                AddTooltip(_pluginsFloatCollapseBtn, "gallery.plugins.float_collapse", "Collapse to title bar");
+            }
 
             var headerDrag = titleBar.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = _pluginsFloatPanelRT;
@@ -640,6 +648,7 @@ namespace VPB
 
             if (_pluginsFloatCollapsed)
                 SyncPluginsFloatCollapseChrome(titleH);
+            try { UI.ApplyFloatRootHoverPolicy(_pluginsFloatRoot); } catch { }
         }
 
         private void RefreshPluginsFloatFilterClearVisible()

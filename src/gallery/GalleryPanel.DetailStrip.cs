@@ -3082,15 +3082,17 @@ namespace VPB
             DetailStripApplyTextColPadForThumbSide(ChromeScale > 0f ? ChromeScale : 1f);
         }
 
+        // Hover-reveal splitter (desktop pane pattern): idle chrome stays out of the way;
+        // full rail + pill only when pointer approaches. Hit target stays full-width (Fitts).
         private static readonly Color DetailStripResizeGripBgNormal = new Color(
-            GalleryUiColorTokens.SurfaceDark.r, GalleryUiColorTokens.SurfaceDark.g, GalleryUiColorTokens.SurfaceDark.b, 0.94f);
+            GalleryUiColorTokens.SurfaceDark.r, GalleryUiColorTokens.SurfaceDark.g, GalleryUiColorTokens.SurfaceDark.b, 0f);
         private static readonly Color DetailStripResizeGripBgHover = new Color(
-            GalleryUiColorTokens.SurfaceMid.r, GalleryUiColorTokens.SurfaceMid.g, GalleryUiColorTokens.SurfaceMid.b, 0.98f);
+            GalleryUiColorTokens.SurfaceMid.r, GalleryUiColorTokens.SurfaceMid.g, GalleryUiColorTokens.SurfaceMid.b, 0.92f);
         private static readonly Color DetailStripResizeGripHandleNormal = new Color(
-            GalleryUiColorTokens.TextMuted.r, GalleryUiColorTokens.TextMuted.g, GalleryUiColorTokens.TextMuted.b, 0.92f);
+            GalleryUiColorTokens.TextMuted.r, GalleryUiColorTokens.TextMuted.g, GalleryUiColorTokens.TextMuted.b, 0.14f);
         private static readonly Color DetailStripResizeGripHandleHover = GalleryUiColorTokens.TextPrimary;
 
-        /// <summary>True when grip is legacy (over title / tiny / missing Handle).</summary>
+        /// <summary>True when grip is legacy (over title / opaque idle / missing Handle).</summary>
         private static bool DetailStripResizeGripNeedsRebuild(GameObject grip)
         {
             if (grip == null) return true;
@@ -3098,6 +3100,18 @@ namespace VPB
             if (rt == null) return true;
             if (rt.pivot.y > 0.5f) return true;
             if (grip.transform.Find("Handle") == null) return true;
+            // Old always-on chrome (opaque rail/pill) → rebuild for quiet-idle colors.
+            UIHoverColor[] hovers = grip.GetComponents<UIHoverColor>();
+            for (int i = 0; i < hovers.Length; i++)
+            {
+                UIHoverColor h = hovers[i];
+                if (h != null && h.normalColor.a > 0.35f)
+                    return true;
+            }
+            // Twin dashes fought quiet idle; drop them.
+            Transform handle = grip.transform.Find("Handle");
+            if (handle != null && handle.Find("DashA") != null)
+                return true;
             return false;
         }
 
@@ -3131,34 +3145,21 @@ namespace VPB
                     flexibleWidth: 1f, flexibleHeight: 0f);
                 if (gripLe != null) gripLe.ignoreLayout = true;
 
-                // Full-width rail — easy to aim; sits above content (see Sync).
+                // Full-width rail — easy to aim; idle alpha 0 so work surface stays clean.
                 _detailStripResizeGripBg = UI.AddImage(grip, DetailStripResizeGripBgNormal, raycastTarget: true);
 
                 float handleW = GalleryUiDesignTokens.FooterDetailStripResizePillWRef * s;
                 float handleH = GalleryUiDesignTokens.FooterDetailStripResizePillHRef * s;
                 GameObject handle = UI.CreateChildRT(grip, "Handle", AnchorPresets.middleCenter, new Vector2(handleW, handleH));
-                // Always bright — grip Bg owns raycasts; handle is the visual grab cue.
+                // Whisper pill at rest (Norman signifier); bright on hover. Bg owns raycasts.
                 _detailStripResizeGripPill = UI.AddImage(handle, DetailStripResizeGripHandleNormal, raycastTarget: false);
-
-                // Twin dashes = classic “grab” cue (readable at a glance).
-                float dashW = handleW * 0.55f;
-                float dashH = Mathf.Max(1.5f, 1.5f * s);
-                float dashGap = 1.5f * s;
-                GameObject dashA = UI.CreateChildRT(handle, "DashA", AnchorPresets.middleCenter, new Vector2(dashW, dashH));
-                UI.AddImage(dashA, new Color(0.10f, 0.11f, 0.14f, 0.75f), raycastTarget: false);
-                RectTransform dashART = dashA.GetComponent<RectTransform>();
-                if (dashART != null) dashART.anchoredPosition = new Vector2(0f, dashGap);
-                GameObject dashB = UI.CreateChildRT(handle, "DashB", AnchorPresets.middleCenter, new Vector2(dashW, dashH));
-                UI.AddImage(dashB, new Color(0.10f, 0.11f, 0.14f, 0.75f), raycastTarget: false);
-                RectTransform dashBRT = dashB.GetComponent<RectTransform>();
-                if (dashBRT != null) dashBRT.anchoredPosition = new Vector2(0f, -dashGap);
 
                 DetailStripHeightDragRelay drag = grip.AddComponent<DetailStripHeightDragRelay>();
                 drag.OnBegin = DetailStripOnResizeBegin;
                 drag.OnMove = DetailStripOnResizeDrag;
                 drag.OnEnd = DetailStripOnResizeEnd;
 
-                // Full-width rail + handle light up on hover (two hover comps, same GO).
+                // Rail + pill: quiet idle → full chrome on hover/drag (two hover comps, same GO).
                 UIHoverColor railHover = grip.AddComponent<UIHoverColor>();
                 railHover.targetImage = _detailStripResizeGripBg;
                 railHover.normalColor = DetailStripResizeGripBgNormal;
@@ -3199,8 +3200,24 @@ namespace VPB
                 gripLe.preferredHeight = gripH;
                 gripLe.ignoreLayout = true;
             }
-            // Do not reset Image colors here — layout/refresh calls this often and would
-            // wipe UIHoverColor highlight while the pointer is still over the grip.
+            // Keep UIHoverColor targets in sync; do not paint Image.color here — refresh would
+            // wipe hover/drag highlight while the pointer is still over the grip.
+            UIHoverColor[] hovers = _detailStripResizeGripGO.GetComponents<UIHoverColor>();
+            for (int i = 0; i < hovers.Length; i++)
+            {
+                UIHoverColor h = hovers[i];
+                if (h == null) continue;
+                if (h.targetImage == _detailStripResizeGripBg)
+                {
+                    h.normalColor = DetailStripResizeGripBgNormal;
+                    h.hoverColor = DetailStripResizeGripBgHover;
+                }
+                else if (h.targetImage == _detailStripResizeGripPill)
+                {
+                    h.normalColor = DetailStripResizeGripHandleNormal;
+                    h.hoverColor = DetailStripResizeGripHandleHover;
+                }
+            }
             if (_detailStripResizeGripPill != null)
             {
                 RectTransform pillRT = _detailStripResizeGripPill.GetComponent<RectTransform>();
@@ -3209,29 +3226,6 @@ namespace VPB
                     float handleW = GalleryUiDesignTokens.FooterDetailStripResizePillWRef * s;
                     float handleH = GalleryUiDesignTokens.FooterDetailStripResizePillHRef * s;
                     pillRT.sizeDelta = new Vector2(handleW, handleH);
-                    float dashW = handleW * 0.55f;
-                    float dashH = Mathf.Max(1.5f, 1.5f * s);
-                    float dashGap = 1.5f * s;
-                    Transform dashA = pillRT.Find("DashA");
-                    Transform dashB = pillRT.Find("DashB");
-                    if (dashA != null)
-                    {
-                        RectTransform dART = dashA as RectTransform;
-                        if (dART != null)
-                        {
-                            dART.sizeDelta = new Vector2(dashW, dashH);
-                            dART.anchoredPosition = new Vector2(0f, dashGap);
-                        }
-                    }
-                    if (dashB != null)
-                    {
-                        RectTransform dBRT = dashB as RectTransform;
-                        if (dBRT != null)
-                        {
-                            dBRT.sizeDelta = new Vector2(dashW, dashH);
-                            dBRT.anchoredPosition = new Vector2(0f, -dashGap);
-                        }
-                    }
                 }
             }
         }
@@ -5986,10 +5980,11 @@ namespace VPB
             SetSelectionAnchor(newFile, historyBrowse);
             selectedPath = historyBrowse ? GetSelectionIdentityKey(newFile, true) : newFile.Path;
 
-            // Scroll cell into view first so grid Thumbnail is bound — then copy (no LoadThumbnail blank).
+            // Prefetch bind, then re-ensure after chrome (label under thumb + detail inset).
             if (recyclingGrid != null) recyclingGrid.EnsureItemVisible(newIndex);
             DetailStripApplyScrubPreview(newFile, newIndex);
             RefreshSelectionVisualsCore(runHeavySideEffects: false);
+            try { EnsureGridSelectionFullyVisible(newIndex); } catch { }
             DetailStripSyncScrubIndexOverlay();
             DetailStripSyncThumbNavChrome();
         }
@@ -7245,7 +7240,14 @@ namespace VPB
                 _detailStripTagMenuHeaderGO.transform, titleCloseSz, "vpb_icons/x.png",
                 GalleryUiColorTokens.ChromeIconWell, DetailStripCloseTagMenu);
             if (_detailStripTagMenuCloseGO != null)
+            {
                 _detailStripTagMenuCloseGO.name = "TitleClose";
+                AddTooltip(_detailStripTagMenuCloseGO, "gallery.detail.tag_menu_close", "Close");
+            }
+            if (_detailStripTagMenuCollapseBtn != null)
+            {
+                AddTooltip(_detailStripTagMenuCollapseBtn, "gallery.detail.tag_menu_collapse", "Collapse to title bar");
+            }
 
             // Hairline under titlebar (separates chrome from work surface).
             GameObject headerRule = UI.CreateChildRT(_detailStripTagMenuPanelGO, "HeaderRule");
@@ -7542,6 +7544,7 @@ namespace VPB
 
             _detailStripTagMenuCollapsed = false;
             _detailStripTagMenuRoot.SetActive(false);
+            try { UI.ApplyFloatRootHoverPolicy(_detailStripTagMenuRoot); } catch { }
         }
 
         private void DetailStripRefreshTagMenuFilterClearVisible()
@@ -7628,59 +7631,10 @@ namespace VPB
 
         private static void DetailStripStyleTagMenuTitleClose(GameObject closeGO, float size)
         {
-            // Legacy path — SettingsFloatSquareIconButton owns new chrome.
+            // Keep ChromeIconWell + inward UIHoverBorder (never destroy hover on rescale).
             if (closeGO == null) return;
-            AspectRatioFitter arf = closeGO.GetComponent<AspectRatioFitter>();
-            if (arf != null) UnityEngine.Object.Destroy(arf);
-            Image closeImg = closeGO.GetComponent<Image>();
-            if (closeImg != null) closeImg.color = new Color(0f, 0f, 0f, 0.5f);
-            Button closeBtn = closeGO.GetComponent<Button>();
-            if (closeBtn != null) closeBtn.transition = Selectable.Transition.None;
-            LayoutElement closeLe = closeGO.GetComponent<LayoutElement>();
-            if (closeLe == null) closeLe = closeGO.AddComponent<LayoutElement>();
-            closeLe.preferredWidth = size;
-            closeLe.preferredHeight = size;
-            closeLe.minWidth = size;
-            closeLe.minHeight = size;
-            closeLe.flexibleWidth = 0f;
-            closeLe.flexibleHeight = 0f;
-            RectTransform closeRT = closeGO.GetComponent<RectTransform>();
-            if (closeRT != null)
-            {
-                closeRT.anchorMin = closeRT.anchorMax = new Vector2(0.5f, 0.5f);
-                closeRT.pivot = new Vector2(0.5f, 0.5f);
-                closeRT.sizeDelta = new Vector2(size, size);
-            }
-            Text closeLabel = closeGO.GetComponentInChildren<Text>(true);
-            if (closeLabel != null) closeLabel.gameObject.SetActive(false);
-
-            const float iconPad = 6f;
-            Transform closeIconTr = closeGO.transform.Find("Icon");
-            if (closeIconTr == null)
-            {
-                Sprite closeSpr = null;
-                try { closeSpr = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint); } catch { }
-                if (closeSpr != null)
-                    UI.AddIconToButton(closeGO, closeSpr, iconPad, new Color(0f, 0f, 0f, 0.5f));
-            }
-            else
-            {
-                RectTransform iconRT = closeIconTr.GetComponent<RectTransform>();
-                if (iconRT != null)
-                {
-                    iconRT.anchorMin = Vector2.zero;
-                    iconRT.anchorMax = Vector2.one;
-                    iconRT.sizeDelta = new Vector2(-iconPad * 2f, -iconPad * 2f);
-                    iconRT.anchoredPosition = Vector2.zero;
-                }
-            }
-
-            UIHoverBorder closeBorder = closeGO.GetComponent<UIHoverBorder>();
-            if (closeBorder != null)
-                UnityEngine.Object.Destroy(closeBorder);
-            UIHoverColor closeHover = closeGO.GetComponent<UIHoverColor>();
-            if (closeHover != null)
-                UnityEngine.Object.Destroy(closeHover);
+            UI.StyleFloatChromeIconButton(
+                closeGO, size, "vpb_icons/x.png", GalleryUiColorTokens.ChromeIconWell);
         }
 
         private void DetailStripApplyTagMenuPanelChrome()
@@ -8854,12 +8808,10 @@ namespace VPB
                 float chromeSz = GalleryUiDesignTokens.ButtonSizeRef * s;
                 if (_detailStripTagMenuCollapseBtn != null)
                 {
-                    LayoutElement cLe = _detailStripTagMenuCollapseBtn.GetComponent<LayoutElement>();
-                    if (cLe != null)
-                    {
-                        cLe.preferredWidth = cLe.minWidth = chromeSz;
-                        cLe.preferredHeight = cLe.minHeight = chromeSz;
-                    }
+                    UI.StyleFloatChromeIconButton(
+                        _detailStripTagMenuCollapseBtn, chromeSz,
+                        _detailStripTagMenuCollapsed ? "vpb_icons/chevron_down.png" : "vpb_icons/chevron_up.png",
+                        GalleryUiColorTokens.ChromeIconWell);
                 }
                 if (_detailStripTagMenuCloseGO != null)
                     DetailStripStyleTagMenuTitleClose(_detailStripTagMenuCloseGO, chromeSz);

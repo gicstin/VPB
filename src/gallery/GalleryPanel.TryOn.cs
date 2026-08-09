@@ -469,15 +469,9 @@ namespace VPB
 
             Button btn = go.AddComponent<Button>();
             btn.targetGraphic = img;
-            ColorBlock cb = btn.colors;
-            cb.normalColor = Color.white;
-            cb.highlightedColor = new Color(1.18f, 1.18f, 1.18f, 1f);
-            cb.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
-            cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-            btn.colors = cb;
-            btn.transition = Selectable.Transition.ColorTint;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(btn, applyColors: true);
             if (onClick != null) btn.onClick.AddListener(() => onClick());
+            UI.EnsureFloatChromeHoverBorder(go, inward: true);
 
             LayoutElement le = UI.AddLE(go, minWidth: width, preferredWidth: width, flexibleWidth: 0f);
 

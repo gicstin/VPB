@@ -577,6 +577,21 @@ namespace VPB
             ApplyRimTint();
         }
 
+        /// <summary>
+        /// Draw hover/selection chrome above opaque grid labels (sibling order).
+        /// Label band sits under thumb; without this, caption covers bottom rim.
+        /// </summary>
+        public void BringIndicatorToFront()
+        {
+            if (hoverBorderGO != null)
+            {
+                hoverBorderGO.transform.SetAsLastSibling();
+                return;
+            }
+            if (rimRoot != null)
+                rimRoot.transform.SetAsLastSibling();
+        }
+
         private void RefreshRimActive()
         {
             if (hoverBorderGO != null) return;
@@ -662,15 +677,18 @@ namespace VPB
             float t = borderSize;
             if (t < 1f) t = 1f;
 
-            // Match old Outline: outward = expand past rect, inward = shrink inside rect. The rounded
-            // border band (thickness t) is then drawn along the inner edge of the expanded/shrunk rimRoot.
+            // RoundedRectOutline draws thickness along the INNER edge of rimRoot.
+            // Outward: expand rim by t so the band sits outside the control (gutter / spacing).
+            // Inward: keep rim flush — band insets into the control. Do NOT also shrink rimRoot
+            // by t (that double-offset pushed the rim inward and left a 1px seam into neighbors
+            // when flush grid cells used the rim path).
             var prt = rimRoot.GetComponent<RectTransform>();
             if (prt != null)
             {
                 if (inward)
                 {
-                    prt.offsetMin = Vector2.one * t;
-                    prt.offsetMax = Vector2.one * (-t);
+                    prt.offsetMin = Vector2.zero;
+                    prt.offsetMax = Vector2.zero;
                 }
                 else
                 {
@@ -778,9 +796,12 @@ namespace VPB
         }
     }
 
+    /// <summary>
+    /// Grid cell pointer enter/exit: claim footer hover path + grid hover badges.
+    /// Name Card overlay removed — captions live on always-on GridLabel + info-bar path.
+    /// </summary>
     public class UIHoverReveal : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
-        public GameObject card;
         public GalleryPanel panel;
         public FileEntry file;
         private Coroutine _gridBadgeExitCo;
@@ -792,11 +813,6 @@ namespace VPB
                 StopCoroutine(_gridBadgeExitCo);
                 _gridBadgeExitCo = null;
             }
-            // Name Card only when always-on grid labels are OFF.
-            bool labelsActive = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible()
-                                && panel != null && panel.layoutMode == GalleryLayoutMode.Grid;
-            if (!labelsActive && card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
-                card.SetActive(true);
             // Claim before sibling deferred-exit runs — otherwise exit restores count over this path (#75).
             if (panel != null && file != null) panel.ClaimHoverPath(this, file);
             if (panel != null && file != null && panel.layoutMode == GalleryLayoutMode.Grid)
@@ -813,7 +829,6 @@ namespace VPB
                 return;
             }
 
-            if (card) card.SetActive(false);
             if (panel != null) panel.ReleaseHoverPath(this);
         }
 
@@ -838,7 +853,6 @@ namespace VPB
             if (IsScreenPointInsideCell(pos) || IsScreenPointOverOpenRatingSelector(pos))
                 yield break;
 
-            if (card) card.SetActive(false);
             if (panel != null) panel.HideGridHoverBadges(gameObject, force: false);
             // Ownership gate: sibling enter already claimed — do not wipe path to count (#75).
             if (panel != null) panel.ReleaseHoverPath(this);
@@ -854,7 +868,6 @@ namespace VPB
             // Recycle / deactivate must clear hover rating so pooled grid cells stay clean.
             if (panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 panel.HideGridHoverBadges(gameObject, force: true);
-            if (card != null) card.SetActive(false);
             // Drop path claim if this cell owned it (pool recycle / deactivate mid-hover).
             if (panel != null) panel.ReleaseHoverPath(this);
         }
@@ -1131,6 +1144,12 @@ namespace VPB
         private const float AbsoluteMinCellSize = 80f;
         public int fixedColumns = 0;
         public float targetAspectRatio = 1.0f;
+        /// <summary>
+        /// Extra cell height in pixels under a square thumb (grid captions).
+        /// Independent of column width — strip hugs text metrics (Johnson density; Galitz chrome).
+        /// List/fixed-height mode ignores this.
+        /// </summary>
+        public float fixedBottomChromePx = 0f;
         public bool useFixedHeight = false;
         private float lastRectWidth = -1f;
         private int lastFixedColumns = -1;
@@ -1338,6 +1357,11 @@ namespace VPB
             {
                 cellHeight = itemHeight;
             }
+            else if (fixedBottomChromePx > 0.01f)
+            {
+                // Square thumb + absolute caption band (column changes must not inflate strip).
+                cellHeight = cellWidth + fixedBottomChromePx;
+            }
             else
             {
                 if (targetAspectRatio <= 0.01f) targetAspectRatio = 1.0f;
@@ -1487,8 +1511,9 @@ namespace VPB
             if (effectiveItemHeight <= 0.1f) return;
 
             int row = index / Mathf.Max(1, colCount);
-            float rowTopY = row * effectiveItemHeight;
-            float rowBottomY = rowTopY + itemHeight + spacingY;
+            // Match PositionItem: top = row*(h+s)+s, bottom = top+h (pivot top-left).
+            float rowTopY = row * effectiveItemHeight + spacingY;
+            float rowBottomY = rowTopY + itemHeight;
 
             float vh = viewport.rect.height;
             if (vh <= 0.01f) vh = 800f;
@@ -1497,11 +1522,13 @@ namespace VPB
             if (maxScrollY <= 0.01f) return;
 
             float scrollTopY = GetContentScrollTopYForVisibility();
+            // Small pad so two-line caption under square thumb is not flush-clipped.
+            float edgePad = Mathf.Max(2f, spacingY * 0.5f);
             float targetScrollY = scrollTopY;
-            if (rowTopY < scrollTopY)
-                targetScrollY = rowTopY;
-            else if (rowBottomY > scrollTopY + vh)
-                targetScrollY = rowBottomY - vh;
+            if (rowTopY - edgePad < scrollTopY)
+                targetScrollY = Mathf.Max(0f, rowTopY - edgePad);
+            else if (rowBottomY + edgePad > scrollTopY + vh)
+                targetScrollY = rowBottomY + edgePad - vh;
             else
                 return;
 

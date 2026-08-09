@@ -752,7 +752,10 @@ namespace VPB
 
             RectTransform rootRT = root.GetComponent<RectTransform>();
             if (rootRT == null) rootRT = root.AddComponent<RectTransform>();
-            rootRT.sizeDelta = new Vector2(520f, 280f);
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+            rootRT.sizeDelta = new Vector2(520f * s, 280f * s);
 
             // Face player camera — independent of gallery collapsed / fixed overlay.
             Transform camTf = null;
@@ -815,33 +818,35 @@ namespace VPB
             stripeRT.anchorMin = new Vector2(0f, 1f);
             stripeRT.anchorMax = new Vector2(1f, 1f);
             stripeRT.pivot = new Vector2(0.5f, 1f);
-            stripeRT.sizeDelta = new Vector2(0f, 8f);
+            stripeRT.sizeDelta = new Vector2(0f, 8f * s);
             stripeRT.anchoredPosition = Vector2.zero;
 
             UI.CreateLabel(
-                panel, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter,
-                anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0f, 44f),
-                anchoredPosition: new Vector2(0f, -22f), name: "Title");
+                panel, title, type.Title, Color.white, TextAnchor.MiddleCenter,
+                anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0f, 44f * s),
+                anchoredPosition: new Vector2(0f, -22f * s), name: "Title");
 
             Text msgText = UI.CreateLabel(
-                panel, msg, GalleryUiDesignTokens.FontBodyRef, new Color(0.9f, 0.9f, 0.92f, 1f),
+                panel, msg, type.Body, new Color(0.9f, 0.9f, 0.92f, 1f),
                 TextAnchor.UpperCenter, name: "Message");
             RectTransform msgRT = msgText.GetComponent<RectTransform>();
             msgRT.anchorMin = new Vector2(0f, 0f);
             msgRT.anchorMax = new Vector2(1f, 1f);
-            msgRT.offsetMin = new Vector2(24f, 72f);
-            msgRT.offsetMax = new Vector2(-24f, -60f);
+            msgRT.offsetMin = new Vector2(24f * s, 72f * s);
+            msgRT.offsetMax = new Vector2(-24f * s, -60f * s);
 
+            float btnW = 160f * s;
+            float btnH = GalleryUiDesignTokens.ButtonSizeRef * s;
             GameObject cancelBtn = UI.CreateUIButton(
-                panel, 160f, 44f,
+                panel, btnW, btnH,
                 VPBTranslation.T("gallery.remove.confirm_cancel", "Cancel"),
-                18, -100f, 28f, AnchorPresets.bottomMiddle,
+                type.Body, -100f * s, 28f * s, AnchorPresets.bottomMiddle,
                 () => RemoveModeCloseAtomConfirm(invokeCancel: true));
 
             GameObject removeBtn = UI.CreateUIButton(
-                panel, 160f, 44f,
+                panel, btnW, btnH,
                 VPBTranslation.T("gallery.remove.confirm_remove", "Remove"),
-                18, 100f, 28f, AnchorPresets.bottomMiddle,
+                type.Body, 100f * s, 28f * s, AnchorPresets.bottomMiddle,
                 RemoveModeAcceptAtomConfirm);
             Image removeImg = removeBtn != null ? removeBtn.GetComponent<Image>() : null;
             if (removeImg != null)

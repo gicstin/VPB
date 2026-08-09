@@ -54,7 +54,7 @@ namespace VPB
         private static readonly Color ColorFacetActiveRow = GalleryUiColorTokens.AccentFacetGeneric;
 
         /// <summary>List row label: package uid (Creator.Package.Version) unless legacy file-name mode is on, or pretty mode is on (then the BA-style stripped name wins for every entry kind).</summary>
-        private static string GetGalleryListRowDisplayName(FileEntry file)
+        private string GetGalleryListRowDisplayName(FileEntry file)
         {
             if (file == null) return "[UNNAMED]";
             bool legacy = VPBConfig.Instance != null && VPBConfig.Instance.GalleryListNamesLegacyFileName;
@@ -62,7 +62,7 @@ namespace VPB
 
             if (pretty)
             {
-                string r = GetPrettyEntryDisplayName(file);
+                string r = GetPrettyEntryDisplayName(file, currentCategoryTitle);
                 LogPrettyNameSample(file, r, "ListRow");
                 return r;
             }
@@ -70,10 +70,12 @@ namespace VPB
             if (legacy)
                 return string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
 
+            // Non-pretty: Creator.Package.N/leaf (same universal scheme, full uid package part).
+            if (file is VarFileEntry vfeTitle)
+                return FormatVarEntryGalleryTitle(vfeTitle, prettyPackage: false);
+
             try
             {
-                if (file is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
-                    return vfe.Package.Uid;
                 if (file is PackageListEntry ple && ple.Package != null && !string.IsNullOrEmpty(ple.Package.Uid))
                     return ple.Package.Uid;
                 if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
@@ -123,14 +125,21 @@ namespace VPB
         /// Order of precedence:
         ///   1. .vap presets strip 7-char "Preset_" (BA ResourceManifest.cs:4029).
         ///   2. .json session plugin presets strip 8-char "Plugins_" (BA ResourceManifest.cs:4030).
-        ///   3. VAR package rows (PackageListEntry / non-preset VarFileEntry) render <see cref="VarPackage.Name"/> only (BA PackagedRVGE.resourceDisplayName).
-        ///   4. Missing-package rows keep their RequestedUid (no Package to read Name from).
-        ///   5. Loose system files fall back to filename without extension.
+        ///   3. VAR package rows (PackageListEntry) render <see cref="VarPackage.Name"/>.
+        ///   4. VarFileEntry (#90 universal): <c>package/leaf</c> (or <c>package.vN/leaf</c> when old versions shown).
+        ///   5. Missing-package rows keep their RequestedUid.
+        ///   6. Loose system files fall back to filename without extension.
         /// Couples display with search so what users see equals what they can type.
         /// </summary>
         internal static string GetPrettyEntryDisplayName(FileEntry file)
         {
+            return GetPrettyEntryDisplayName(file, null);
+        }
+
+        internal static string GetPrettyEntryDisplayName(FileEntry file, string categoryHint)
+        {
             if (file == null) return "[UNNAMED]";
+            // categoryHint retained for call-site compatibility; dual caption = leaf≠package (no sibling SQL).
 
             string raw = file.Name;
             if (!string.IsNullOrEmpty(raw))
@@ -150,15 +159,14 @@ namespace VPB
                     return stem.Substring(8);
             }
 
-            // Package-level rows (and non-preset VarFileEntry items that share a package) reduce to the package's Name.
             try
             {
                 if (file is PackageListEntry ple && ple.Package != null && !string.IsNullOrEmpty(ple.Package.Name))
                     return ple.Package.Name;
                 if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
                     return mple.RequestedUid;
-                if (file is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Name))
-                    return vfe.Package.Name;
+                if (file is VarFileEntry vfe)
+                    return FormatVarEntryGalleryTitle(vfe, prettyPackage: true);
             }
             catch { }
 
@@ -168,6 +176,563 @@ namespace VPB
                 return dot2 > 0 ? raw.Substring(0, dot2) : raw;
             }
             return file.Path ?? "[UNNAMED]";
+        }
+
+        /// <summary>
+        /// Universal VAR item title for all categories (#90).
+        /// Pretty: <c>package/leaf</c>; when old versions visible: <c>package.vN/leaf</c>.
+        /// Non-pretty: <c>Creator.Package.N/leaf</c>.
+        /// Leaf = file basename stem (same as thumb placeholder). Scrubs creator prefix then collapses when leaf ≈ package name.
+        /// Scroll-safe: uid parse + string ops only — no SQLite.
+        /// </summary>
+        private static string FormatVarEntryGalleryTitle(VarFileEntry vfe, bool prettyPackage)
+        {
+            string pkgPart;
+            string leaf;
+            string creator;
+            bool dual;
+            if (!TryGetVarGalleryTitleParts(vfe, prettyPackage, out pkgPart, out leaf, out creator, out dual))
+                return "[UNNAMED]";
+            if (!dual) return pkgPart;
+            return pkgPart + "/" + leaf;
+        }
+
+        /// <summary>
+        /// Split VAR title into package + leaf (+ creator) for grid captions.
+        /// <paramref name="dual"/> false → use <paramref name="pkgPart"/> alone (collapsed / parse-fail leaf-only).
+        /// When dual, primary UI line = leaf, secondary = pkgPart; creator sits on primary row right.
+        /// Creator scrub on package + leaf (prefix/suffix/brackets/glued). Collapse: seps, dots≈underscores, alnum, 1-edit typo.
+        /// Warm-path: uid parse + index compares; Substring/humanize/alnum-key alloc only when needed.
+        /// </summary>
+        private static bool TryGetVarGalleryTitleParts(
+            VarFileEntry vfe,
+            bool prettyPackage,
+            out string pkgPart,
+            out string leaf,
+            out string creator,
+            out bool dual)
+        {
+            pkgPart = null;
+            leaf = null;
+            creator = null;
+            dual = false;
+            if (vfe == null) return false;
+
+            leaf = GetThumbPlaceholderItemLine(vfe);
+            string uid = vfe.GetRowPackageUid();
+            string packageName;
+            int version;
+            if (!TryParseVarUidParts(uid, out creator, out packageName, out version))
+            {
+                creator = null;
+                if (!string.IsNullOrEmpty(leaf))
+                {
+                    pkgPart = leaf;
+                    leaf = null;
+                    return true;
+                }
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    pkgPart = uid;
+                    return true;
+                }
+                return false;
+            }
+
+            // Creator lives on the right — strip from package + leaf titles (prefix + suffix).
+            packageName = ScrubCreatorFromGalleryName(packageName, creator);
+            leaf = ScrubCreatorFromGalleryName(leaf, creator);
+
+            // Collapse when leaf ≈ package (seps / version dots / apostrophe noise / 1-char typo).
+            if (string.IsNullOrEmpty(leaf)
+                || GalleryTitlesShouldCollapse(leaf, packageName))
+            {
+                string core = string.IsNullOrEmpty(leaf)
+                    ? HumanizeGalleryNameSeparators(packageName)
+                    : PickPreferredGalleryDisplayName(leaf, packageName);
+                pkgPart = prettyPackage
+                    ? FormatPackageNameForGalleryLabel(core, version)
+                    : uid;
+                leaf = null;
+                dual = false;
+                return true;
+            }
+
+            // True dual — different content; still humanize separators for scan.
+            if (prettyPackage)
+            {
+                leaf = HumanizeGalleryNameSeparators(leaf);
+                pkgPart = FormatPackageNameForGalleryLabel(
+                    HumanizeGalleryNameSeparators(packageName), version);
+            }
+            else
+            {
+                pkgPart = uid;
+            }
+            dual = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Package-list row caption from deferred UID — no <see cref="PackageListEntry.Package"/> resolve on bind.
+        /// </summary>
+        private static bool TryGetPackageListGalleryLabel(
+            PackageListEntry ple,
+            out string pkgPart,
+            out string creator)
+        {
+            pkgPart = null;
+            creator = null;
+            if (ple == null) return false;
+            string uid = null;
+            try { uid = ple.GetPackageUidForGalleryUserTags(); }
+            catch { uid = null; }
+            if (string.IsNullOrEmpty(uid)) return false;
+
+            string packageName;
+            int version;
+            if (!TryParseVarUidParts(uid, out creator, out packageName, out version))
+            {
+                creator = null;
+                pkgPart = uid;
+                return true;
+            }
+            packageName = ScrubCreatorFromGalleryName(packageName, creator);
+            pkgPart = FormatPackageNameForGalleryLabel(
+                HumanizeGalleryNameSeparators(packageName), version);
+            return true;
+        }
+
+        /// <summary>Package display name; appends <c>.vN</c> only when old versions are visible.</summary>
+        private static string FormatPackageNameForGalleryLabel(string packageName, int version)
+        {
+            if (string.IsNullOrEmpty(packageName)) return packageName;
+            if (!ShouldShowPackageVersionInGalleryTitle()) return packageName;
+            if (version < 0) return packageName;
+            return packageName + ".v" + version.ToString();
+        }
+
+        /// <summary>Prefix then suffix creator scrub.</summary>
+        private static string ScrubCreatorFromGalleryName(string name, string creator)
+        {
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(creator)) return name;
+            name = ScrubCreatorPrefixFromName(name, creator);
+            return ScrubCreatorSuffixFromName(name, creator);
+        }
+
+        /// <summary>
+        /// Strip leading creator from a package/leaf title when boundary is clear.
+        /// Matches: <c>Creator_rest</c>, <c>Creator.rest</c>, <c>Creator-rest</c>, <c>Creator rest</c>,
+        /// or glued catalog form <c>Creator013_rest</c> (digit immediately after creator).
+        /// No alloc on miss; one Substring on hit. Empty remainder → original.
+        /// </summary>
+        private static string ScrubCreatorPrefixFromName(string name, string creator)
+        {
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(creator)) return name;
+            int clen = creator.Length;
+            if (name.Length <= clen) return name;
+            if (string.Compare(name, 0, creator, 0, clen, StringComparison.OrdinalIgnoreCase) != 0)
+                return name;
+
+            char next = name[clen];
+            int start;
+            if (next == '_' || next == '.' || next == '-' || next == ' ')
+            {
+                start = clen + 1;
+                while (start < name.Length)
+                {
+                    char c = name[start];
+                    if (c != '_' && c != '.' && c != '-' && c != ' ') break;
+                    start++;
+                }
+            }
+            else if (next >= '0' && next <= '9')
+            {
+                start = clen;
+            }
+            else
+            {
+                return name;
+            }
+
+            if (start >= name.Length) return name;
+            return name.Substring(start);
+        }
+
+        /// <summary>
+        /// Strip trailing creator: <c>Name_Creator</c>, <c>Name - Creator</c>, <c>Name[Creator]</c>,
+        /// or glued <c>NameCreator</c> when creator length >= 4 and remainder >= 3.
+        /// Mined from local Scenes index (~545 separator-suffix cases).
+        /// </summary>
+        private static string ScrubCreatorSuffixFromName(string name, string creator)
+        {
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(creator)) return name;
+            int clen = creator.Length;
+            if (name.Length <= clen) return name;
+
+            char last = name[name.Length - 1];
+            if ((last == ']' || last == ')') && name.Length >= clen + 2)
+            {
+                char open = last == ']' ? '[' : '(';
+                int openIdx = name.Length - clen - 2;
+                if (openIdx >= 0
+                    && name[openIdx] == open
+                    && string.Compare(name, openIdx + 1, creator, 0, clen, StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    int end = openIdx;
+                    while (end > 0 && IsGalleryNameCompareSeparator(name[end - 1])) end--;
+                    if (end > 0) return name.Substring(0, end);
+                }
+            }
+
+            if (string.Compare(name, name.Length - clen, creator, 0, clen, StringComparison.OrdinalIgnoreCase) != 0)
+                return name;
+
+            int before = name.Length - clen - 1;
+            if (before < 0) return name;
+            char prev = name[before];
+            if (prev == '_' || prev == '.' || prev == '-' || prev == ' ')
+            {
+                int end = before;
+                while (end > 0 && IsGalleryNameCompareSeparator(name[end - 1])) end--;
+                if (end <= 0) return name;
+                return name.Substring(0, end);
+            }
+
+            if (clen >= 4 && (before + 1) >= 3 && IsGalleryNameLetterOrDigit(prev))
+                return name.Substring(0, before + 1);
+
+            return name;
+        }
+
+        /// <summary>
+        /// True when leaf and package should share one caption.
+        /// Order: exact → sep-loose (incl. <c>.</c> for 1_1≈1.1) → alnum-key → 1-edit typo (min len 6).
+        /// </summary>
+        private static bool GalleryTitlesShouldCollapse(string leaf, string packageName)
+        {
+            if (string.IsNullOrEmpty(leaf) || string.IsNullOrEmpty(packageName)) return false;
+            if (string.Equals(leaf, packageName, StringComparison.OrdinalIgnoreCase)) return true;
+            if (GalleryNamesEquivalentLoose(leaf, packageName)) return true;
+            if (GalleryNamesEquivalentAlnum(leaf, packageName)) return true;
+            return GalleryNamesAlnumEditDistanceAtMostOne(leaf, packageName);
+        }
+
+        /// <summary>Separators for equality walks — includes <c>.</c> so <c>1_1</c> ≈ <c>1.1</c>.</summary>
+        private static bool IsGalleryNameCompareSeparator(char c)
+        {
+            return c == '_' || c == ' ' || c == '-' || c == '.';
+        }
+
+        /// <summary>Word separators converted to spaces for display (dots kept for versions).</summary>
+        private static bool IsGalleryNameSeparator(char c)
+        {
+            return c == '_' || c == ' ' || c == '-';
+        }
+
+        private static bool IsGalleryNameLetterOrDigit(char c)
+        {
+            if (c >= '0' && c <= '9') return true;
+            if (c >= 'A' && c <= 'Z') return true;
+            if (c >= 'a' && c <= 'z') return true;
+            return char.IsLetterOrDigit(c);
+        }
+
+        private static bool IsGalleryNameAlnum(char c)
+        {
+            if (c >= '0' && c <= '9') return true;
+            if (c >= 'A' && c <= 'Z') return true;
+            if (c >= 'a' && c <= 'z') return true;
+            return char.IsLetterOrDigit(c);
+        }
+
+        private static char GalleryFoldAscii(char c)
+        {
+            if (c >= 'A' && c <= 'Z') return (char)(c + 32);
+            return c;
+        }
+
+        /// <summary>
+        /// True when names match ignoring case and treating <c>_</c>/<c> </c>/<c>-</c>/<c>.</c> runs as equivalent.
+        /// Zero alloc. <c>Hero II</c> ≈ <c>Hero_II</c>; <c>marob 4 VAM 1.1</c> ≈ <c>marob_4_VAM_1_1</c>.
+        /// </summary>
+        private static bool GalleryNamesEquivalentLoose(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+
+            int i = 0;
+            int j = 0;
+            int na = a.Length;
+            int nb = b.Length;
+            while (true)
+            {
+                while (i < na && IsGalleryNameCompareSeparator(a[i])) i++;
+                while (j < nb && IsGalleryNameCompareSeparator(b[j])) j++;
+                if (i >= na || j >= nb) break;
+
+                char ca = GalleryFoldAscii(a[i]);
+                char cb = GalleryFoldAscii(b[j]);
+                if (ca != cb)
+                {
+                    if (char.ToLowerInvariant(a[i]) != char.ToLowerInvariant(b[j]))
+                        return false;
+                }
+                i++;
+                j++;
+            }
+            while (i < na && IsGalleryNameCompareSeparator(a[i])) i++;
+            while (j < nb && IsGalleryNameCompareSeparator(b[j])) j++;
+            return i == na && j == nb;
+        }
+
+        /// <summary>
+        /// Equality on letters/digits only (apostrophes, brackets, plus signs ignored).
+        /// Zero alloc. <c>Becky's</c> ≈ <c>Beckys</c>; <c>[A3] Saya</c> ≈ <c>A3_saya</c>.
+        /// </summary>
+        private static bool GalleryNamesEquivalentAlnum(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+
+            int i = 0;
+            int j = 0;
+            int na = a.Length;
+            int nb = b.Length;
+            while (true)
+            {
+                while (i < na && !IsGalleryNameAlnum(a[i])) i++;
+                while (j < nb && !IsGalleryNameAlnum(b[j])) j++;
+                if (i >= na || j >= nb) break;
+
+                char ca = GalleryFoldAscii(a[i]);
+                char cb = GalleryFoldAscii(b[j]);
+                if (ca != cb)
+                {
+                    if (char.ToLowerInvariant(a[i]) != char.ToLowerInvariant(b[j]))
+                        return false;
+                }
+                i++;
+                j++;
+            }
+            while (i < na && !IsGalleryNameAlnum(a[i])) i++;
+            while (j < nb && !IsGalleryNameAlnum(b[j])) j++;
+            return i == na && j == nb;
+        }
+
+        /// <summary>
+        /// One insert/delete/replace on alnum stream (min alnum len 6) — catches <c>Transgender</c>/<c>Trasgender</c>.
+        /// Allocates two short keys only on this rare path.
+        /// </summary>
+        private static bool GalleryNamesAlnumEditDistanceAtMostOne(string a, string b)
+        {
+            string ka = BuildGalleryAlnumKey(a);
+            string kb = BuildGalleryAlnumKey(b);
+            if (ka.Length < 6 || kb.Length < 6) return false;
+            if (ka.Length == kb.Length)
+            {
+                int diff = 0;
+                for (int i = 0; i < ka.Length; i++)
+                {
+                    if (ka[i] == kb[i]) continue;
+                    diff++;
+                    if (diff > 1) return false;
+                }
+                return diff == 1;
+            }
+            string shorter;
+            string longer;
+            if (ka.Length + 1 == kb.Length)
+            {
+                shorter = ka;
+                longer = kb;
+            }
+            else if (kb.Length + 1 == ka.Length)
+            {
+                shorter = kb;
+                longer = ka;
+            }
+            else return false;
+
+            int si = 0;
+            int li = 0;
+            int skipped = 0;
+            while (si < shorter.Length && li < longer.Length)
+            {
+                if (shorter[si] == longer[li])
+                {
+                    si++;
+                    li++;
+                    continue;
+                }
+                skipped++;
+                if (skipped > 1) return false;
+                li++;
+            }
+            return true;
+        }
+
+        private static string BuildGalleryAlnumKey(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            int n = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (IsGalleryNameAlnum(s[i])) n++;
+            }
+            if (n == 0) return "";
+            char[] buf = new char[n];
+            int w = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (!IsGalleryNameAlnum(c)) continue;
+                buf[w++] = GalleryFoldAscii(c);
+            }
+            return new string(buf, 0, w);
+        }
+
+        /// <summary>
+        /// Prefer spaced form and version dots (<c>1.1</c> over <c>1_1</c>); preserve dots when humanizing.
+        /// On near-typo pairs prefer longer alnum (usually correct spelling in package uid).
+        /// </summary>
+        private static string PickPreferredGalleryDisplayName(string a, string b)
+        {
+            int aDots = GalleryVersionDotScore(a);
+            int bDots = GalleryVersionDotScore(b);
+            if (aDots != bDots)
+                return HumanizeGalleryNameSeparators(aDots > bDots ? a : b);
+
+            bool aSpace = GalleryNameHasChar(a, ' ');
+            bool bSpace = GalleryNameHasChar(b, ' ');
+            if (aSpace && !bSpace) return HumanizeGalleryNameSeparators(a);
+            if (bSpace && !aSpace) return HumanizeGalleryNameSeparators(b);
+
+            int aUgly = GalleryNameSeparatorUglyScore(a);
+            int bUgly = GalleryNameSeparatorUglyScore(b);
+            if (aUgly != bUgly)
+                return HumanizeGalleryNameSeparators(aUgly < bUgly ? a : b);
+
+            int aLen = CountGalleryAlnum(a);
+            int bLen = CountGalleryAlnum(b);
+            if (aLen != bLen)
+                return HumanizeGalleryNameSeparators(aLen > bLen ? a : b);
+
+            return HumanizeGalleryNameSeparators(a);
+        }
+
+        private static int GalleryVersionDotScore(string s)
+        {
+            if (string.IsNullOrEmpty(s) || s.Length < 3) return 0;
+            int n = 0;
+            for (int i = 1; i < s.Length - 1; i++)
+            {
+                if (s[i] != '.') continue;
+                char p = s[i - 1];
+                char q = s[i + 1];
+                if (p >= '0' && p <= '9' && q >= '0' && q <= '9') n++;
+            }
+            return n;
+        }
+
+        private static int CountGalleryAlnum(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            int n = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (IsGalleryNameAlnum(s[i])) n++;
+            }
+            return n;
+        }
+
+        private static bool GalleryNameHasChar(string s, char c)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (s[i] == c) return true;
+            }
+            return false;
+        }
+
+        private static int GalleryNameSeparatorUglyScore(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            int n = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '_' || c == '-') n++;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// Replace <c>_</c>/<c>-</c> with spaces; collapse separator runs; trim. Dots kept (versions).
+        /// No alloc when already clean.
+        /// </summary>
+        private static string HumanizeGalleryNameSeparators(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+
+            bool needs = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '_' || c == '-')
+                {
+                    needs = true;
+                    break;
+                }
+                if (c == ' ')
+                {
+                    if (i == 0 || i == s.Length - 1)
+                    {
+                        needs = true;
+                        break;
+                    }
+                    if (i + 1 < s.Length && s[i + 1] == ' ')
+                    {
+                        needs = true;
+                        break;
+                    }
+                }
+            }
+            if (!needs) return s;
+
+            char[] buf = new char[s.Length];
+            int w = 0;
+            bool pendingSpace = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (IsGalleryNameSeparator(c))
+                {
+                    if (w == 0) continue;
+                    pendingSpace = true;
+                    continue;
+                }
+                if (pendingSpace)
+                {
+                    buf[w++] = ' ';
+                    pendingSpace = false;
+                }
+                buf[w++] = c;
+            }
+            if (w == 0) return s;
+            return new string(buf, 0, w);
+        }
+
+        private static bool ShouldShowPackageVersionInGalleryTitle()
+        {
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.HideOldVersions != null
+                    && Settings.Instance.HideOldVersions.Value)
+                    return false;
+            }
+            catch { }
+            return true;
         }
 
         private static string FormatBytesForList(long bytes)
@@ -633,8 +1198,8 @@ namespace VPB
         }
 
         /// <summary>
-        /// Square gallery cells share one side length; list mode uses list thumb height.
-        /// Font size is derived once from that canonical side and reused for every visible placeholder.
+        /// Square thumb side for placeholder fonts. Grid: cell width (1:1 region above caption).
+        /// List: list thumb height.
         /// </summary>
         private float GetCanonicalThumbCellSidePx(bool isListMode)
         {
@@ -645,7 +1210,7 @@ namespace VPB
             try
             {
                 if (recyclingGrid != null)
-                    side = Mathf.Max(recyclingGrid.CellWidth, recyclingGrid.CellHeight);
+                    side = recyclingGrid.CellWidth;
             }
             catch { }
 
@@ -656,17 +1221,7 @@ namespace VPB
                     pad = Mathf.Clamp(VPBConfig.Instance.GalleryGridThumbnailPadding, 0f, 40f);
             }
             catch { pad = 3f; }
-            side = Mathf.Max(16f, side - pad * 2f);
-
-            bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible();
-            if (showGridLabels)
-            {
-                float labelFrac = GetGridLabelFraction();
-                if (labelFrac > 0.01f && labelFrac < 0.99f)
-                    side = Mathf.Max(16f, side * (1f - labelFrac));
-            }
-
-            return side;
+            return Mathf.Max(16f, side - pad * 2f);
         }
 
         private const float ThumbPlaceholderLineHeightMul = 1.12f;

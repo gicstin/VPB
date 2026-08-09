@@ -264,6 +264,7 @@ namespace VPB
         {
             if (rgv == null) return;
             rgv.fixedColumns = 1;
+            rgv.fixedBottomChromePx = 0f;
             rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh);
             rgv.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh);
         }
@@ -1187,7 +1188,7 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "grid.enabled", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_labels_enabled", "Always-on grid labels"),
-                Tooltip = VPBTranslation.T("settings.tip.grid_labels_enabled", "Show Creator.Package.Version labels under grid thumbnails."),
+                Tooltip = VPBTranslation.T("settings.tip.grid_labels_enabled", "Show labels under grid thumbnails: cleaned package/leaf name left, creator muted right. Creator prefix stripped from leaf stems; strip is one line when leaf matches package. Hover tip keeps full caption + path."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridLabelsEnabled,
                 SetBool = v => { VPBConfig.Instance.GalleryGridLabelsEnabled = v; RebuildGridLayout(); }
             });
@@ -1274,7 +1275,7 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "grid.inwardSquare", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_border_inward_square", "Inward border when padding = 0"),
-                Tooltip = VPBTranslation.T("settings.tip.grid_border_inward_square", "When padding is 0 (square/flush), draw hover/selection border inward instead of outward."),
+                Tooltip = VPBTranslation.T("settings.tip.grid_border_inward_square", "List rows: when enabled, draw hover/selection border inward. Grid cells always inset (outward rims bleed into neighbors when spacing is 0)."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridBorderInwardWhenSquare,
                 SetBool = v => { VPBConfig.Instance.GalleryGridBorderInwardWhenSquare = v; try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { } }
             });
@@ -2086,6 +2087,7 @@ namespace VPB
             float chipH = GalleryUiDesignTokens.ButtonSizeRef * uiS;
 
             LayoutElement le = UI.AddLE(go, minWidth: width * uiS, minHeight: chipH, preferredWidth: width * uiS, preferredHeight: chipH, flexibleWidth: 0f);
+            UI.EnsureFloatChromeHoverBorder(go, inward: true);
 
             Text t = UI.CreateLabel(go, label, GalleryUiDesignTokens.SettingsListRowDetailFontRef, Color.white, TextAnchor.MiddleCenter, name: "Text");
             GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);

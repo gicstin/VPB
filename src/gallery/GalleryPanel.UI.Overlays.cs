@@ -24,94 +24,27 @@ namespace VPB
             }
         }
 
-        private void CreateLoadingOverlay(GameObject parentGO)
-        {
-            // Progress lives on external VpbBusyChrome via VpbProgressService — no panel dim bar.
-        }
-
         private void ShowLoadingOverlay(string message)
         {
-            // Quiet refresh freezes cells (no blank flash) but still needs BusyChrome —
-            // otherwise empty/quiet paths look dead (gulf of evaluation).
+            // BusyChrome only for first load / empty grid — populated grid change is enough feedback.
+            // Quiet refresh already skips this caller; EndBrowseRefresh stays idempotent.
+            bool needChrome = !hasLoadedContent
+                || currentFilteredFiles == null
+                || currentFilteredFiles.Count == 0;
+            if (!needChrome) return;
             try
             {
                 VpbProgressService.BeginBrowseRefresh(
                     string.IsNullOrEmpty(message)
-                        ? (_quietGalleryRefresh
-                            ? "Updating gallery"
-                            : "Preparing items for browse")
+                        ? "Preparing items for browse"
                         : message);
             }
             catch { }
         }
 
-        private void UpdateLoadingOverlayPulse()
-        {
-            // Motion owned by VpbBusyChrome / OS heartbeat.
-        }
-
         private void HideLoadingOverlay()
         {
             try { VpbProgressService.EndBrowseRefresh(); } catch { }
-        }
-
-        // ── Thumbnail cache progress bar (bottom of viewport) ─────────
-
-        private const float ThumbCacheProgressBarHeightPx = 3f;
-
-        private void CreateThumbnailCacheProgressPanel(GameObject viewportGO)
-        {
-            if (viewportGO == null || _thumbCacheProgressGO != null) return;
-
-            // Full-width bar — 3px so progress is perceptible (1px was change-blindness bait).
-            _thumbCacheProgressGO = new GameObject("ThumbCacheProgress");
-            _thumbCacheProgressGO.transform.SetParent(viewportGO.transform, false);
-            RectTransform panelRT = _thumbCacheProgressGO.AddComponent<RectTransform>();
-            panelRT.anchorMin = new Vector2(0f, 0f);
-            panelRT.anchorMax = new Vector2(1f, 0f);
-            panelRT.pivot     = new Vector2(0.5f, 0f);
-            panelRT.anchoredPosition = Vector2.zero;
-            panelRT.sizeDelta = new Vector2(0f, ThumbCacheProgressBarHeightPx);
-
-            // Dark track (background)
-            Image trackImg = UI.AddImage(_thumbCacheProgressGO, new Color(1f, 1f, 1f, 0.12f), false);
-
-            SetLayerRecursive(_thumbCacheProgressGO, viewportGO.layer);
-
-            // Blue fill — grows from anchorMax.x=0 to 1
-            GameObject fillGO = new GameObject("Fill");
-            fillGO.transform.SetParent(_thumbCacheProgressGO.transform, false);
-            _thumbCacheBarFillRT = fillGO.AddComponent<RectTransform>();
-            _thumbCacheBarFillRT.anchorMin = Vector2.zero;
-            _thumbCacheBarFillRT.anchorMax = new Vector2(0f, 1f);
-            _thumbCacheBarFillRT.sizeDelta  = Vector2.zero;
-            Image fillImg = UI.AddImage(fillGO, new Color(0.3f, 0.7f, 1f, 1f), false);
-
-            _thumbCacheProgressGO.SetActive(false);
-        }
-
-        private void ShowThumbnailCacheProgress()
-        {
-            if (_thumbCacheProgressGO == null) return;
-            _thumbCacheFinishTime = -1f;
-            _thumbCacheProgressGO.SetActive(true);
-        }
-
-        private void HideThumbnailCacheProgress()
-        {
-            if (_thumbCacheProgressGO != null) _thumbCacheProgressGO.SetActive(false);
-            _thumbCacheTotalEnqueued = 0;
-            _thumbCacheSaved = 0;
-            _thumbCacheFinishTime = -1f;
-        }
-
-        private void UpdateThumbnailCacheProgressDisplay()
-        {
-            if (_thumbCacheBarFillRT == null) return;
-            float fraction = (_thumbCacheTotalEnqueued > 0)
-                ? Mathf.Clamp01((float)_thumbCacheSaved / _thumbCacheTotalEnqueued)
-                : 0f;
-            _thumbCacheBarFillRT.anchorMax = new Vector2(fraction, 1f);
         }
 
         public void DisplayColorPicker(string title, Color initialColor, UnityAction<Color> onConfirm)
@@ -125,45 +58,51 @@ namespace VPB
 
         public void DisplayTextInput(string title, string initialValue, UnityAction<string> onConfirm)
         {
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+
             GameObject panelGO;
             GameObject overlayGO = UI.CreateModalChrome(
-                backgroundBoxGO, "TextInputOverlay", 400f, 200f, UI.ChromeDarker, null, out panelGO, dimAlpha: 0.5f);
+                backgroundBoxGO, "TextInputOverlay", 400f * s, 200f * s, UI.ChromeDarker, null, out panelGO, dimAlpha: 0.5f);
 
-            // Title
-            Text titleText = UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 40), anchoredPosition: new Vector2(0, -10), name: "Title");
+            Text titleText = UI.CreateLabel(
+                panelGO, title, type.Title, Color.white, TextAnchor.MiddleCenter,
+                anchorPreset: AnchorPresets.hStretchTop,
+                size: new Vector2(0, 40f * s),
+                anchoredPosition: new Vector2(0, -10f * s),
+                name: "Title");
 
-            // Input - Using CreateSearchInput logic from Tabs.cs but since it's private there, we re-implement or call if possible.
-            // Actually, CreateSearchInput is private in GalleryPanel.Tabs.cs.
-            // Let's create a simple InputField here.
             GameObject inputGO = new GameObject("InputField");
             inputGO.transform.SetParent(panelGO.transform, false);
             Image inputBg = UI.AddImage(inputGO, UI.ChromePanel);
             InputField input = inputGO.AddComponent<InputField>();
             RectTransform inputRT = inputGO.GetComponent<RectTransform>();
-            inputRT.sizeDelta = new Vector2(350, 40);
-            inputRT.anchoredPosition = new Vector2(0, 10);
+            inputRT.sizeDelta = new Vector2(350f * s, 40f * s);
+            inputRT.anchoredPosition = new Vector2(0, 10f * s);
 
             GameObject textArea = new GameObject("TextArea");
             textArea.transform.SetParent(inputGO.transform, false);
             RectTransform textAreaRT = textArea.AddComponent<RectTransform>();
             textAreaRT.anchorMin = Vector2.zero;
             textAreaRT.anchorMax = Vector2.one;
-            textAreaRT.sizeDelta = new Vector2(-20, -10);
+            textAreaRT.sizeDelta = new Vector2(-20f * s, -10f * s);
 
-            Text t = UI.CreateLabel(textArea, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, name: "Text");
+            Text t = UI.CreateLabel(textArea, "", type.Body, Color.white, TextAnchor.MiddleLeft, name: "Text");
 
             input.textComponent = t;
             input.text = initialValue;
-            // Match typical text field behavior: Ctrl+Backspace deletes previous word.
             inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
 
-            // Buttons
-            GameObject confirmBtn = UI.CreateUIButton(panelGO, 140, 45, "Confirm", 18, 80, -60, AnchorPresets.middleCenter, () => {
+            float btnW = 140f * s;
+            float btnH = GalleryUiDesignTokens.ButtonSizeRef * s;
+            float btnY = -60f * s;
+            GameObject confirmBtn = UI.CreateUIButton(panelGO, btnW, btnH, "Confirm", type.Body, 80f * s, btnY, AnchorPresets.middleCenter, () => {
                 onConfirm?.Invoke(input.text);
                 Destroy(overlayGO);
             });
             
-            GameObject cancelBtn = UI.CreateUIButton(panelGO, 140, 45, "Cancel", 18, -80, -60, AnchorPresets.middleCenter, () => {
+            GameObject cancelBtn = UI.CreateUIButton(panelGO, btnW, btnH, "Cancel", type.Body, -80f * s, btnY, AnchorPresets.middleCenter, () => {
                 Destroy(overlayGO);
             });
 
@@ -191,30 +130,34 @@ namespace VPB
             catch { }
             if (overlayParent == null) overlayParent = backgroundBoxGO.transform;
 
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+
             GameObject panelGO;
             GameObject overlayGO = UI.CreateModalChrome(
-                overlayParent.gameObject, "PersonAtomRenameOverlay", 440f, 300f,
+                overlayParent.gameObject, "PersonAtomRenameOverlay", 440f * s, 300f * s,
                 new Color(0.12f, 0.12f, 0.12f, 1f), null, out panelGO, dimAlpha: 0.55f);
 
-            UI.CreateLabel(panelGO, VPBTranslation.T("gallery.rename.title", "Rename Person Atom"), GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-24f, 36f), anchoredPosition: new Vector2(0, -12f), name: "Title");
+            UI.CreateLabel(panelGO, VPBTranslation.T("gallery.rename.title", "Rename Person Atom"), type.Title, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-24f * s, 36f * s), anchoredPosition: new Vector2(0, -12f * s), name: "Title");
 
-            UI.CreateLabel(panelGO, VPBTranslation.T("gallery.rename.old_name_label", "Old name"), GalleryUiDesignTokens.FontBodyRef, new Color(0.85f, 0.85f, 0.85f), TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-28f, 22f), anchoredPosition: new Vector2(0, -54f), name: "OldNameLabel");
+            UI.CreateLabel(panelGO, VPBTranslation.T("gallery.rename.old_name_label", "Old name"), type.Body, new Color(0.85f, 0.85f, 0.85f), TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-28f * s, 22f * s), anchoredPosition: new Vector2(0, -54f * s), name: "OldNameLabel");
 
             GameObject oldValGO = new GameObject("OldNameValue");
             oldValGO.transform.SetParent(panelGO.transform, false);
             Image oldValBg = UI.AddImage(oldValGO, new Color(0.18f, 0.18f, 0.2f, 1f));
-            Text oldValTxt = UI.CreateLabel(oldValGO, oldUid, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, name: "Text");
+            Text oldValTxt = UI.CreateLabel(oldValGO, oldUid, type.Body, Color.white, TextAnchor.MiddleLeft, name: "Text");
             RectTransform oldValTxtRt = oldValTxt.GetComponent<RectTransform>();
-            oldValTxtRt.offsetMin = new Vector2(10f, 4f);
-            oldValTxtRt.offsetMax = new Vector2(-10f, -4f);
+            oldValTxtRt.offsetMin = new Vector2(10f * s, 4f * s);
+            oldValTxtRt.offsetMax = new Vector2(-10f * s, -4f * s);
             RectTransform oldValRt = oldValGO.GetComponent<RectTransform>();
             oldValRt.anchorMin = new Vector2(0, 1);
             oldValRt.anchorMax = new Vector2(1, 1);
             oldValRt.pivot = new Vector2(0.5f, 1f);
-            oldValRt.anchoredPosition = new Vector2(0, -82f);
-            oldValRt.sizeDelta = new Vector2(-28f, 38f);
+            oldValRt.anchoredPosition = new Vector2(0, -82f * s);
+            oldValRt.sizeDelta = new Vector2(-28f * s, 38f * s);
 
-            UI.CreateLabel(panelGO, VPBTranslation.T("gallery.rename.rename_to_label", "Rename to"), GalleryUiDesignTokens.FontBodyRef, new Color(0.85f, 0.85f, 0.85f), TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-28f, 22f), anchoredPosition: new Vector2(0, -126f), name: "RenameToLabel");
+            UI.CreateLabel(panelGO, VPBTranslation.T("gallery.rename.rename_to_label", "Rename to"), type.Body, new Color(0.85f, 0.85f, 0.85f), TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-28f * s, 22f * s), anchoredPosition: new Vector2(0, -126f * s), name: "RenameToLabel");
 
             GameObject inputGO = new GameObject("InputField");
             inputGO.transform.SetParent(panelGO.transform, false);
@@ -224,18 +167,18 @@ namespace VPB
             inputRt.anchorMin = new Vector2(0, 1);
             inputRt.anchorMax = new Vector2(1, 1);
             inputRt.pivot = new Vector2(0.5f, 1f);
-            inputRt.anchoredPosition = new Vector2(0, -154f);
-            inputRt.sizeDelta = new Vector2(-28f, 40f);
+            inputRt.anchoredPosition = new Vector2(0, -154f * s);
+            inputRt.sizeDelta = new Vector2(-28f * s, 40f * s);
 
             GameObject textArea = new GameObject("TextArea");
             textArea.transform.SetParent(inputGO.transform, false);
             RectTransform textAreaRt = textArea.AddComponent<RectTransform>();
             textAreaRt.anchorMin = Vector2.zero;
             textAreaRt.anchorMax = Vector2.one;
-            textAreaRt.offsetMin = new Vector2(10f, 6f);
-            textAreaRt.offsetMax = new Vector2(-10f, -6f);
+            textAreaRt.offsetMin = new Vector2(10f * s, 6f * s);
+            textAreaRt.offsetMax = new Vector2(-10f * s, -6f * s);
 
-            Text tComp = UI.CreateLabel(textArea, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, name: "Text");
+            Text tComp = UI.CreateLabel(textArea, "", type.Body, Color.white, TextAnchor.MiddleLeft, name: "Text");
 
             input.textComponent = tComp;
             input.text = oldUid;
@@ -243,7 +186,10 @@ namespace VPB
 
             UnityAction close = () => { try { Destroy(overlayGO); } catch { } };
 
-            GameObject renameBtn = UI.CreateUIButton(panelGO, 150f, 44f, VPBTranslation.T("gallery.rename.rename_btn", "Rename"), 18, 78f, -116f, AnchorPresets.middleCenter, () =>
+            float btnW = 150f * s;
+            float btnH = GalleryUiDesignTokens.ButtonSizeRef * s;
+            float btnY = -116f * s;
+            GameObject renameBtn = UI.CreateUIButton(panelGO, btnW, btnH, VPBTranslation.T("gallery.rename.rename_btn", "Rename"), type.Body, 78f * s, btnY, AnchorPresets.middleCenter, () =>
             {
                 string newName = input != null ? input.text : null;
                 if (newName != null) newName = newName.Trim();
@@ -299,7 +245,7 @@ namespace VPB
                 try { NotifyAllPanelsSceneTargetsChanged(); } catch { }
             });
 
-            GameObject cancelBtn = UI.CreateUIButton(panelGO, 150f, 44f, VPBTranslation.T("gallery.rename.cancel_btn", "Cancel"), 18, -78f, -116f, AnchorPresets.middleCenter, close);
+            GameObject cancelBtn = UI.CreateUIButton(panelGO, btnW, btnH, VPBTranslation.T("gallery.rename.cancel_btn", "Cancel"), type.Body, -78f * s, btnY, AnchorPresets.middleCenter, close);
 
             SetLayerRecursive(overlayGO, backgroundBoxGO.layer);
             input.ActivateInputField();
@@ -313,7 +259,7 @@ namespace VPB
 
         /// <summary>
         /// Modal confirm. Esc → cancel (or onCancel), Enter → confirm.
-        /// Custom button labels optional (e.g. Keep / Revert).
+        /// Custom button labels optional (e.g. Keep / Revert). Scaled with ChromeScale.
         /// </summary>
         public void DisplayConfirm(
             string title,
@@ -325,29 +271,166 @@ namespace VPB
         {
             try { CloseConfirmOverlay(invokeCancel: false); } catch { }
 
-            GameObject panelGO;
-            GameObject overlayGO = UI.CreateModalChrome(
-                backgroundBoxGO, "ConfirmOverlay", 500f, 420f, UI.ChromeDarker, null, out panelGO, dimAlpha: 0.5f);
-
-            _confirmOverlayGO = overlayGO;
             _confirmOnConfirm = onConfirm;
             _confirmOnCancel = onCancel;
+            _confirmTitle = title ?? "";
+            _confirmMessage = message ?? "";
+            _confirmConfirmLabel = confirmLabel;
+            _confirmCancelLabel = cancelLabel;
 
-            UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 40), anchoredPosition: new Vector2(0, -15), name: "Title");
+            BuildConfirmOverlayUi();
+        }
 
-            Text msgText = UI.CreateLabel(panelGO, message, GalleryUiDesignTokens.FontBodyRef, new Color(0.8f, 0.8f, 0.8f, 1f), TextAnchor.MiddleCenter, name: "Message");
-            RectTransform msgRT = msgText.GetComponent<RectTransform>();
-            msgRT.offsetMin = new Vector2(20, 80);
-            msgRT.offsetMax = new Vector2(-20, -60);
+        private void BuildConfirmOverlayUi()
+        {
+            if (backgroundBoxGO == null) return;
 
-            string cancelText = string.IsNullOrEmpty(cancelLabel) ? "Cancel" : cancelLabel;
-            string confirmText = string.IsNullOrEmpty(confirmLabel) ? "Confirm" : confirmLabel;
+            if (_confirmOverlayGO != null)
+            {
+                try { Destroy(_confirmOverlayGO); } catch { }
+                _confirmOverlayGO = null;
+            }
 
-            GameObject cancelBtn = UI.CreateUIButton(panelGO, 160, 45, cancelText, 18, -100, 40, AnchorPresets.bottomMiddle, ConfirmOverlayCancel);
-            GameObject confirmBtn = UI.CreateUIButton(panelGO, 160, 45, confirmText, 18, 100, 40, AnchorPresets.bottomMiddle, ConfirmOverlayConfirm);
-            confirmBtn.GetComponent<Image>().color = new Color(0.4f, 0.2f, 0.2f, 1f);
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            GalleryModalTypography type = new GalleryModalTypography(s);
 
+            // Galitz dialog: content-sized shell (no empty cavern); title → body → actions.
+            const float panelWRef = 460f;
+            float panelW = panelWRef * s;
+            GameObject panelGO;
+            GameObject overlayGO = UI.CreateModalChrome(
+                backgroundBoxGO,
+                "ConfirmOverlay",
+                panelW,
+                120f * s,
+                GalleryUiColorTokens.ModalSurface,
+                null,
+                out panelGO,
+                dimAlpha: 0.55f);
+
+            _confirmOverlayGO = overlayGO;
+
+            // Opaque raised panel edge (von Restorff: dialog distinct from dim).
+            Image panelImg = panelGO.GetComponent<Image>();
+            if (panelImg != null) panelImg.color = GalleryUiColorTokens.ModalSurface;
+            Outline panelOutline = panelGO.GetComponent<Outline>();
+            if (panelOutline == null) panelOutline = panelGO.AddComponent<Outline>();
+            panelOutline.effectColor = new Color(1f, 1f, 1f, 0.14f);
+            panelOutline.effectDistance = new Vector2(1f, -1f);
+
+            VerticalLayoutGroup v = panelGO.AddComponent<VerticalLayoutGroup>();
+            int pad = Mathf.RoundToInt(20f * s);
+            v.padding = new RectOffset(pad, pad, pad, pad);
+            v.spacing = 12f * s;
+            v.childAlignment = TextAnchor.UpperCenter;
+            v.childControlWidth = true;
+            v.childForceExpandWidth = true;
+            v.childControlHeight = true;
+            v.childForceExpandHeight = false;
+
+            ContentSizeFitter csf = panelGO.AddComponent<ContentSizeFitter>();
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            string title = string.IsNullOrEmpty(_confirmTitle)
+                ? VPBTranslation.T("gallery.confirm.title", "Confirm")
+                : _confirmTitle;
+            Text titleTxt = UI.CreateEmphasisTitleLabel(
+                panelGO, title, type.Title, Color.white, TextAnchor.MiddleCenter);
+            ConfirmPrepLayoutRow(titleTxt != null ? titleTxt.rectTransform : null, 32f * s);
+            if (titleTxt != null)
+                UI.AddLE(titleTxt.gameObject, preferredHeight: 32f * s, minHeight: 28f * s, flexibleHeight: 0f);
+
+            // Truncate (not Overflow): clamped height must not paint over Cancel/Confirm (Galitz layout).
+            Text msgText = UI.CreateLabel(
+                panelGO,
+                _confirmMessage ?? "",
+                type.Body,
+                GalleryUiColorTokens.TextMuted,
+                TextAnchor.UpperLeft,
+                HorizontalWrapMode.Wrap,
+                VerticalWrapMode.Truncate,
+                raycastTarget: false,
+                name: "Message");
+            float msgH = 48f * s;
+            if (msgText != null)
+            {
+                msgText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                msgText.verticalOverflow = VerticalWrapMode.Truncate;
+                ConfirmPrepLayoutRow(msgText.rectTransform, 48f * s);
+                // Preferred height from content; clamp so long lists stay scannable.
+                float innerW = Mathf.Max(40f, panelW - pad * 2f);
+                float pref = msgText.preferredHeight;
+                try
+                {
+                    TextGenerator tg = msgText.cachedTextGeneratorForLayout;
+                    if (tg != null)
+                    {
+                        TextGenerationSettings settings = msgText.GetGenerationSettings(new Vector2(innerW, 0f));
+                        pref = tg.GetPreferredHeight(msgText.text, settings) / msgText.pixelsPerUnit;
+                    }
+                }
+                catch { pref = msgText.preferredHeight; }
+                float maxMsg = 220f * s;
+                msgH = Mathf.Clamp(pref + 4f * s, 40f * s, maxMsg);
+                UI.AddLE(msgText.gameObject, preferredHeight: msgH, minHeight: 40f * s, flexibleHeight: 0f);
+            }
+
+            GameObject btnRow = new GameObject("Buttons");
+            btnRow.transform.SetParent(panelGO.transform, false);
+            ConfirmPrepLayoutRow(btnRow.GetComponent<RectTransform>() ?? btnRow.AddComponent<RectTransform>(), GalleryUiDesignTokens.ButtonSizeRef * s);
+            HorizontalLayoutGroup brh = btnRow.AddComponent<HorizontalLayoutGroup>();
+            brh.spacing = 12f * s;
+            brh.padding = new RectOffset(0, 0, 0, 0);
+            brh.childAlignment = TextAnchor.MiddleCenter;
+            brh.childForceExpandWidth = false;
+            brh.childControlWidth = true;
+            brh.childForceExpandHeight = true;
+            brh.childControlHeight = true;
+            float btnRowH = (GalleryUiDesignTokens.ButtonSizeRef + 4f) * s;
+            UI.AddLE(btnRow, preferredHeight: btnRowH, minHeight: btnRowH, flexibleHeight: 0f);
+
+            string cancelText = string.IsNullOrEmpty(_confirmCancelLabel)
+                ? VPBTranslation.T("hook.cancel", "Cancel")
+                : _confirmCancelLabel;
+            string confirmText = string.IsNullOrEmpty(_confirmConfirmLabel)
+                ? VPBTranslation.T("gallery.confirm.ok", "Confirm")
+                : _confirmConfirmLabel;
+
+            float btnH = GalleryUiDesignTokens.ButtonSizeRef * s;
+            float btnW = 132f * s;
+            UI.CreateChromeLayoutButton(
+                btnRow.transform, btnW, btnH, cancelText, type.Body,
+                GalleryUiColorTokens.SurfaceMid, ConfirmOverlayCancel);
+            UI.CreateChromeLayoutButton(
+                btnRow.transform, btnW, btnH, confirmText, type.Body,
+                new Color(0.48f, 0.22f, 0.22f, 1f), ConfirmOverlayConfirm);
+
+            try { LayoutRebuilder.ForceRebuildLayoutImmediate(panelGO.GetComponent<RectTransform>()); } catch { }
             SetLayerRecursive(overlayGO, backgroundBoxGO.layer);
+        }
+
+        /// <summary>
+        /// Layout-group children must not use stretch-all (fills parent and overlaps siblings).
+        /// Top-stretch width + explicit height driven by LayoutElement.
+        /// </summary>
+        private static void ConfirmPrepLayoutRow(RectTransform rt, float height)
+        {
+            if (rt == null) return;
+            rt.localScale = Vector3.one;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(0f, height);
+        }
+
+        /// <summary>Rebuild open confirm at current ChromeScale (live UI-scale change).</summary>
+        private void RescaleConfirmOverlayIfOpen()
+        {
+            if (_confirmOverlayGO == null) return;
+            try { BuildConfirmOverlayUi(); } catch { }
         }
 
         private bool IsConfirmOverlayOpen()
@@ -414,6 +497,11 @@ namespace VPB
                 _confirmOnConfirm = null;
                 _confirmOnCancel = null;
             }
+
+            _confirmTitle = null;
+            _confirmMessage = null;
+            _confirmConfirmLabel = null;
+            _confirmCancelLabel = null;
 
             if (_confirmOverlayGO != null)
             {

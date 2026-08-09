@@ -3375,6 +3375,7 @@ namespace VPB
                     if (rgv != null)
                     {
                         rgv.fixedColumns = 1;
+                        rgv.fixedBottomChromePx = 0f;
                         rgv.SetGridConfig(100f, internalSettingsListRowHeightSession, 5f, 5f, 1);
                         // Settings list must adapt to viewport width (Top dock/full width resize).
                         rgv.SetAdaptiveConfig(true, 0f, 1, true);
@@ -3411,6 +3412,7 @@ namespace VPB
                     if (rgv != null)
                     {
                         rgv.fixedColumns = 1;
+                        rgv.fixedBottomChromePx = 0f;
                         rgv.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
                         rgv.SetAdaptiveConfig(true, 0f, 1, true);
                         rgv.Refresh();

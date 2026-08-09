@@ -220,7 +220,15 @@ namespace VPB
             GameObject closeBtn = SettingsFloatSquareIconButton(
                 titleBar.transform, chromeSz, "vpb_icons/x.png",
                 GalleryUiColorTokens.ChromeIconWell, () => ExitInternalSettingsMode(true));
-            if (closeBtn != null) closeBtn.name = "TitleClose";
+            if (closeBtn != null)
+            {
+                closeBtn.name = "TitleClose";
+                AddTooltip(closeBtn, "settings.float.close", "Close");
+            }
+            if (_settingsFloatCollapseBtn != null)
+            {
+                AddTooltip(_settingsFloatCollapseBtn, "settings.float.collapse", "Collapse to title bar");
+            }
 
             var headerDrag = titleBar.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = _settingsFloatPanelRT;
@@ -487,6 +495,7 @@ namespace VPB
             try { SyncSettingsSideSearchInputFromFilter(); } catch { }
             RebuildSettingsFloatGroupTabs(font, s, chromeSz);
             RebuildSettingsFloatRows(font, s, rowH, false);
+            try { UI.ApplyFloatRootHoverPolicy(_settingsFloatRoot); } catch { }
             _settingsFloatRoot.SetActive(false);
         }
 
@@ -547,6 +556,7 @@ namespace VPB
             }
 
             RelayoutSettingsFloatGroupTabs(s, chromeSz);
+            try { UI.ApplyFloatRootHoverPolicy(_settingsFloatGroupTabsParent != null ? _settingsFloatGroupTabsParent.gameObject : _settingsFloatRoot); } catch { }
         }
 
         private void RefreshSettingsFloatFilterClearVisible()
@@ -685,6 +695,7 @@ namespace VPB
 
             if (keepScroll && _settingsFloatScrollRect != null)
                 _settingsFloatScrollRect.verticalNormalizedPosition = Mathf.Clamp01(scrollPos);
+            try { UI.ApplyFloatRootHoverPolicy(_settingsFloatRoot); } catch { }
         }
 
         private void BuildSettingsFloatRow(InternalSettingRowEntry row, InternalSettingDefinition def, int font, float s, float rowH)

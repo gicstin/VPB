@@ -31,3 +31,4 @@
 VPB.code-workspace
 .aider*
 /.vscode
+/scripts

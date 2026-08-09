@@ -113,6 +113,22 @@ namespace VPB
         /// </summary>
         public static void ApplyGalleryPaneHoverPolicy(GameObject root)
         {
+            ApplyHoverPolicyCore(root, forceInward: false);
+        }
+
+        /// <summary>
+        /// Modeless float roots live on canvas (outside <see cref="GalleryPaneChromeEnforcer"/>).
+        /// Same neutralize + border policy, but always inward — float title/footer/panel use
+        /// <see cref="RectMask2D"/> and outward rims clip (invisible hover).
+        /// Cold/warm after build or list rebuild — not per-frame.
+        /// </summary>
+        public static void ApplyFloatRootHoverPolicy(GameObject root)
+        {
+            ApplyHoverPolicyCore(root, forceInward: true);
+        }
+
+        private static void ApplyHoverPolicyCore(GameObject root, bool forceInward)
+        {
             if (root == null) return;
             try
             {
@@ -133,7 +149,8 @@ namespace VPB
                         if (added) hb = s.gameObject.AddComponent<UIHoverBorder>();
                         // Only stamp default border color on newly added borders — never overwrite
                         // side-rail selected tints / custom hover colors (that caused a 0.5s pulse).
-                        ApplyHoverBorderPolicyIfChanged(hb, border, IsUnderImportSidebarScrollViewport(s.transform), assignDefaultColor: added);
+                        bool wantInward = forceInward || IsUnderImportSidebarScrollViewport(s.transform);
+                        ApplyHoverBorderPolicyIfChanged(hb, border, wantInward, assignDefaultColor: added);
                     }
                 }
 
@@ -143,7 +160,8 @@ namespace VPB
                 {
                     var hb = hbs[i];
                     if (hb == null) continue;
-                    ApplyHoverBorderPolicyIfChanged(hb, border, IsUnderImportSidebarScrollViewport(hb.transform), assignDefaultColor: false);
+                    bool wantInward = forceInward || IsUnderImportSidebarScrollViewport(hb.transform);
+                    ApplyHoverBorderPolicyIfChanged(hb, border, wantInward, assignDefaultColor: false);
                 }
             }
             catch { }
@@ -2054,7 +2072,8 @@ namespace VPB
 
         /// <summary>
         /// Style existing square chrome button (CreateUIButton → this). Same pad/tint as
-        /// <see cref="CreateFloatChromeIconButton"/>.
+        /// <see cref="CreateFloatChromeIconButton"/>. Inward hover rim — title/footer
+        /// <see cref="RectMask2D"/> clips outward rims.
         /// </summary>
         public static void StyleFloatChromeIconButton(
             GameObject go, float size, string iconPath, Color? backdropOverride = null)
@@ -2077,6 +2096,8 @@ namespace VPB
             le.flexibleHeight = 0f;
             Text label = go.GetComponentInChildren<Text>(true);
             if (label != null) label.gameObject.SetActive(false);
+            // Keep hover under float title/footer masks (never strip on rescale).
+            EnsureFloatChromeHoverBorder(go, inward: true);
             float pad = GalleryUiDesignTokens.FloatChromeIconPadRef;
             if (string.IsNullOrEmpty(iconPath)) return;
             try
@@ -2126,6 +2147,7 @@ namespace VPB
                     irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
                 }
             }
+            EnsureFloatChromeHoverBorder(go, inward: true);
         }
 
         /// <summary>
@@ -2549,7 +2571,12 @@ namespace VPB
             b.targetGraphic = img;
             if (onClick != null) b.onClick.AddListener(onClick);
             UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
-            try { hb.ApplyBorderSettings(); } catch { }
+            try
+            {
+                hb.inward = true;
+                hb.ApplyBorderSettings();
+            }
+            catch { }
 
             LayoutElement le = go.AddComponent<LayoutElement>();
             if (width > 0f)

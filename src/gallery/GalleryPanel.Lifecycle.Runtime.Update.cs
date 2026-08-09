@@ -196,18 +196,6 @@ namespace VPB
                     thumbnailCacheCoroutine = StartCoroutine(ProcessThumbnailCacheQueue());
                 }
 
-                // Update thumbnail cache progress panel
-                if (_thumbCacheProgressGO != null && _thumbCacheProgressGO.activeSelf)
-                {
-                    UpdateThumbnailCacheProgressDisplay();
-                    bool queueEmpty = pendingThumbnailCacheJobs == null || pendingThumbnailCacheJobs.Count == 0;
-                    if (queueEmpty && _thumbCacheSaved > 0 && thumbnailCacheCoroutine == null)
-                    {
-                        if (_thumbCacheFinishTime < 0f) _thumbCacheFinishTime = Time.unscaledTime;
-                        else if (Time.unscaledTime - _thumbCacheFinishTime > 3f) HideThumbnailCacheProgress();
-                    }
-                }
-
                 if (isFixedLocally && backgroundBoxGO != null)
                 {
                     // Self-correct the content subtree (e.g. first load completing while collapsed),
@@ -805,7 +793,7 @@ namespace VPB
             if (TryHandleConfirmOverlayKeys())
                 return;
 
-            if (TryHandleGridContextMenuEsc())
+            if (TryHandleGridContextMenuKeys())
                 return;
 
             if (TryHandleFilterChipOverflowEsc())
@@ -1188,7 +1176,6 @@ namespace VPB
 
                 selectedPath = historyBrowseForNav ? GetSelectionIdentityKey(newFile, true) : newFile.Path;
                 SetHoverPath(newFile);
-                if (recyclingGrid != null) recyclingGrid.EnsureItemVisible(newIndex);
                 if (settingsListViewActive)
                 {
                     try { DetailStripHide(); } catch { }
@@ -1196,8 +1183,35 @@ namespace VPB
                 }
                 else
                     RefreshSelectionVisuals();
+                // After detail/tbox resize shrinks viewport — ensure full cell (thumb+label) visible.
+                try { EnsureGridSelectionFullyVisible(newIndex); } catch { }
                 UpdatePaginationText();
             }
+        }
+
+        /// <summary>
+        /// Keyboard/selection scroll after chrome layout. Must run after detail strip/tbox
+        /// change bottom inset — otherwise caption under square thumb stays clipped.
+        /// </summary>
+        private void EnsureGridSelectionFullyVisible(int index)
+        {
+            if (index < 0) return;
+            if (layoutMode != GalleryLayoutMode.Grid || settingsListViewActive) return;
+            if (recyclingGrid == null) return;
+            try { SyncGalleryMainAreaBottomEdgeFromCurrentLayout(); } catch { }
+            recyclingGrid.EnsureItemVisible(index);
+        }
+
+        private void SyncGalleryMainAreaBottomEdgeFromCurrentLayout()
+        {
+            if (contentScrollRT == null) return;
+            float paneScale = ChromeScale;
+            if (paneScale <= 0f) paneScale = 1f;
+            float leftOffset = contentScrollRT.offsetMin.x;
+            float rightOffset = contentScrollRT.offsetMax.x;
+            float topOffset = contentScrollRT.offsetMax.y;
+            float tabTop = TabScrollTopOffset();
+            SyncGalleryMainAreaBottomEdge(leftOffset, rightOffset, topOffset, tabTop);
         }
     }
 

@@ -700,6 +700,12 @@ namespace VPB
             }
             catch { }
             ScheduleStripKeepSnugPanelHeight();
+            try
+            {
+                if (_stripKeepPanelRT != null)
+                    UI.ApplyFloatRootHoverPolicy(_stripKeepPanelRT.gameObject);
+            }
+            catch { }
         }
 
         private CreatorStripKeepKind StripKeepPresentKindsMask()

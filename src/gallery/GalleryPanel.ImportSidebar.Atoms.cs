@@ -37,6 +37,7 @@ namespace VPB
             Button rndBtn = rndRow.AddComponent<Button>();
             rndBtn.targetGraphic = rndBg;
             UI.NeutralizeSelectableColorTint(rndBtn);
+            UI.EnsureFloatChromeHoverBorder(rndRow, inward: true);
             Text rndLabel = CreateImportSidebarLabel(
                 rndRow.transform,
                 VPBTranslation.T("gallery.import.wizard.random_scene", "\u21ba  Random Scene"),
@@ -94,6 +95,7 @@ namespace VPB
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(btn);
+            UI.EnsureFloatChromeHoverBorder(row, inward: true);
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
 

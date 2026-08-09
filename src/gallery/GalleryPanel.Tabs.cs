@@ -1852,36 +1852,349 @@ namespace VPB
         }
 
 
-        private static float GetGridLabelUnits()
-            => Mathf.Max(0f, VPBConfig.Instance.GalleryGridLabelFontSize * 0.6f);
-
-        private static float GetGridLabelFraction()
+        /// <summary>
+        /// Grid caption strip height in pixels from font metrics.
+        /// One-line when filtered set has no dual captions; two-line when any package/leaf split exists
+        /// (uniform recycle cell height — scan once per layout, not per scroll bind).
+        /// </summary>
+        internal float GetGridLabelStripHeightPx()
         {
             if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsStripVisible()) return 0f;
-            float L = GetGridLabelUnits();
-            return L / 100f;
+
+            float fontDesign = 18f;
+            try { fontDesign = VPBConfig.Instance.GalleryGridLabelFontSize; }
+            catch { fontDesign = 18f; }
+            fontDesign = Mathf.Clamp(fontDesign, 8f, 40f);
+
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+
+            int primaryPt = Mathf.RoundToInt(fontDesign);
+            float secondaryRatio = (float)GalleryUiDesignTokens.GridLabelSecondaryFontRef
+                / (float)Mathf.Max(1, GalleryUiDesignTokens.GridLabelFontRef);
+            int secondaryPt = Mathf.Max(
+                GalleryUiDesignTokens.FontMinRef,
+                Mathf.RoundToInt(fontDesign * secondaryRatio));
+
+            int primaryFs = GalleryUiMetrics.ScaledFontSize(primaryPt, s, GalleryUiDesignTokens.FontMinRef);
+            int secondaryFs = GalleryUiMetrics.ScaledFontSize(secondaryPt, s, GalleryUiDesignTokens.FontMinRef);
+
+            bool dualBand = GridLabelsNeedDualBand();
+            float lines = dualBand
+                ? (primaryFs + secondaryFs) * GalleryUiDesignTokens.GridLabelLineBoxMul
+                : primaryFs * GalleryUiDesignTokens.GridLabelLineBoxMul;
+            float pad = primaryFs * GalleryUiDesignTokens.GridLabelStripVPadMul;
+            return Mathf.Max(0f, lines + pad);
         }
 
+        /// <summary>Invalidate dual-band cache (call before strip height after filter/layout changes).</summary>
+        internal void InvalidateGridLabelDualBandCache()
+        {
+            _gridLabelDualBandValid = false;
+        }
+
+        /// <summary>
+        /// True when any filtered item needs package+leaf dual caption.
+        /// Warm O(n) once per layout — early-out on first dual; no SQL.
+        /// </summary>
+        private bool GridLabelsNeedDualBand()
+        {
+            if (_gridLabelDualBandValid) return _gridLabelDualBandCached;
+            _gridLabelDualBandValid = true;
+            _gridLabelDualBandCached = false;
+
+            List<FileEntry> list = currentFilteredFiles;
+            if (list == null || list.Count == 0) return false;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                FileEntry f = list[i];
+                if (f == null) continue;
+                string primary;
+                string secondary;
+                string creator;
+                GetGridItemLabelLines(f, out primary, out secondary, out creator);
+                if (!string.IsNullOrEmpty(secondary))
+                {
+                    _gridLabelDualBandCached = true;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Label band as fraction of full cell (square thumb + caption under).
+        /// Uses absolute strip px over (cellWidth + strip) so column zoom does not inflate chrome.
+        /// </summary>
+        private float GetGridLabelFraction(float cellWidthPx = 0f)
+        {
+            float stripPx = GetGridLabelStripHeightPx();
+            if (stripPx <= 0.01f) return 0f;
+
+            float w = cellWidthPx;
+            if (w < 1f)
+            {
+                try
+                {
+                    if (recyclingGrid != null && recyclingGrid.CellWidth > 1f)
+                        w = recyclingGrid.CellWidth;
+                }
+                catch { }
+            }
+            if (w < 1f) w = GalleryUiDesignTokens.GridCellRefSize;
+            return stripPx / (w + stripPx);
+        }
+
+        /// <summary>
+        /// Grid cell config height in design units (width baseline = 100).
+        /// Thumb stays square; caption band is <see cref="RecyclingGridView.fixedBottomChromePx"/>.
+        /// </summary>
         internal float GetGridCellConfigHeight() => 100f;
 
-        private static string GetGridItemLabelText(FileEntry file)
+        /// <summary>
+        /// Apply square-thumb grid recycle config + font-tight caption chrome height.
+        /// </summary>
+        internal void ApplyGridRecyclingLayoutConfig(RecyclingGridView rgv, int cols, bool deferRefresh = false)
+        {
+            if (rgv == null) return;
+            if (cols < 1) cols = 1;
+            InvalidateGridLabelDualBandCache();
+            float stripPx = GetGridLabelStripHeightPx();
+            rgv.fixedBottomChromePx = stripPx;
+            rgv.SetGridConfig(100f, 100f, EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols, deferRefresh: true);
+            rgv.SetAdaptiveConfig(true, 200f, cols, false, deferRefresh: deferRefresh);
+        }
+
+        private string GetGridItemLabelText(FileEntry file)
+        {
+            string primary;
+            string secondary;
+            string creator;
+            GetGridItemLabelLines(file, out primary, out secondary, out creator);
+            return BuildGridLabelFullCaption(primary, secondary, creator);
+        }
+
+        /// <summary>
+        /// Full untruncated caption for info-bar hover recovery (warm path; reuses panel StringBuilder).
+        /// Format: leaf · creator\npackage (omit empty parts).
+        /// </summary>
+        internal string BuildGridLabelFullCaption(string primary, string secondary, string creator)
+        {
+            System.Text.StringBuilder sb = _gridLabelCaptionSb;
+            sb.Length = 0;
+            if (!string.IsNullOrEmpty(primary))
+                sb.Append(primary);
+            if (!string.IsNullOrEmpty(creator))
+            {
+                if (sb.Length > 0) sb.Append(" · ");
+                sb.Append(creator);
+            }
+            if (!string.IsNullOrEmpty(secondary))
+            {
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(secondary);
+            }
+            return sb.Length > 0 ? sb.ToString() : "";
+        }
+
+        /// <summary>
+        /// Best filesystem / VAR path for hover tip + info bar (warm; no SQL).
+        /// Prefer <see cref="FileEntry.Path"/>; else internal path; else package uid.
+        /// </summary>
+        private static string ResolveFileDisplayPath(FileEntry file)
         {
             if (file == null) return "";
-
-            // Pretty mode strips creator/version/prefix for every entry kind, matching BA across all tabs.
-            bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
-            if (pretty)
+            string path = file.Path;
+            if (!string.IsNullOrEmpty(path))
             {
-                string r = GetPrettyEntryDisplayName(file);
-                LogPrettyNameSample(file, r, "GridLabel");
-                return r;
+                if (path.IndexOf('\\') >= 0) return path.Replace('\\', '/');
+                return path;
+            }
+            try
+            {
+                if (file is VarFileEntry vfe)
+                {
+                    string ip = vfe.InternalPath;
+                    if (!string.IsNullOrEmpty(ip))
+                    {
+                        if (ip.IndexOf('\\') >= 0) return ip.Replace('\\', '/');
+                        return ip;
+                    }
+                    VarPackage pkg = vfe.Package;
+                    if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
+                        return pkg.Uid + ".var";
+                }
+            }
+            catch { }
+            return file.Uid ?? "";
+        }
+
+        /// <summary>
+        /// Near-preview sticky tip text: caption + full path (Galitz ToolTip / Johnson fovea).
+        /// Shown via <see cref="AddTooltipPlain"/> on thumbnail — status channel, not Name Card.
+        /// </summary>
+        internal string BuildGridItemHoverTooltip(FileEntry file)
+        {
+            if (file == null) return "";
+            string primary;
+            string secondary;
+            string creator;
+            GetGridItemLabelLines(file, out primary, out secondary, out creator);
+            string cap = BuildGridLabelFullCaption(primary, secondary, creator);
+            string path = ResolveFileDisplayPath(file);
+            if (string.IsNullOrEmpty(cap)) return path ?? "";
+            if (string.IsNullOrEmpty(path)) return cap;
+            return cap + "\n" + path;
+        }
+
+        /// <summary>
+        /// Grid caption: primary = leaf (or sole package name); secondary = package when dual;
+        /// creator = author on primary row right (muted). Scroll-safe — no SQLite, no Package resolve.
+        /// Always cleaned names (creator not repeated in primary); full UID/path stay on hover tip.
+        /// </summary>
+        private void GetGridItemLabelLines(FileEntry file, out string primary, out string secondary, out string creator)
+        {
+            primary = "";
+            secondary = "";
+            creator = "";
+            if (file == null) return;
+
+            bool prettyPresets = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
+
+            if (file is VarFileEntry vfe)
+            {
+                // Preset_/Plugins_ BA strips stay single-line when pretty presets on.
+                if (prettyPresets && IsPresetLikeFileName(file))
+                {
+                    primary = GetPrettyEntryDisplayName(file, currentCategoryTitle);
+                    TryFillCreatorForGridLabel(file, out creator);
+                    LogPrettyNameSample(file, primary, "GridLabel");
+                    return;
+                }
+
+                string pkgPart;
+                string leaf;
+                string creatorPart;
+                bool dual;
+                // Grid always uses cleaned package name (creator on right) — not full UID.
+                if (TryGetVarGalleryTitleParts(vfe, prettyPackage: true, out pkgPart, out leaf, out creatorPart, out dual))
+                {
+                    creator = creatorPart ?? "";
+                    if (dual)
+                    {
+                        primary = leaf;
+                        secondary = pkgPart;
+                    }
+                    else
+                        primary = pkgPart;
+                    if (prettyPresets)
+                        LogPrettyNameSample(file, dual ? (pkgPart + "/" + leaf) : pkgPart, "GridLabel");
+                    return;
+                }
             }
 
-            VarPackage pkg = null;
-            if (file is VarFileEntry vfe)         pkg = vfe.Package;
-            else if (file is PackageListEntry ple) pkg = ple.Package;
-            if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) return pkg.Uid;
-            return System.IO.Path.GetFileNameWithoutExtension(file.Name ?? "");
+            if (file is PackageListEntry ple)
+            {
+                string pkgPart;
+                string creatorPart;
+                if (TryGetPackageListGalleryLabel(ple, out pkgPart, out creatorPart))
+                {
+                    primary = pkgPart ?? "";
+                    creator = creatorPart ?? "";
+                    return;
+                }
+            }
+
+            if (file is MissingPackageListEntry mple)
+            {
+                string c;
+                string n;
+                int v;
+                if (TryParseVarUidParts(mple.RequestedUid, out c, out n, out v))
+                {
+                    creator = c ?? "";
+                    primary = FormatPackageNameForGalleryLabel(
+                        HumanizeGalleryNameSeparators(ScrubCreatorFromGalleryName(n, c)), v);
+                    return;
+                }
+                primary = mple.RequestedUid ?? "";
+                return;
+            }
+
+            // Loose / other rows: filename stem; if stem is Creator.Package.N, clean like a package row.
+            string stem = System.IO.Path.GetFileNameWithoutExtension(file.Name ?? "");
+            if (string.IsNullOrEmpty(stem) && !string.IsNullOrEmpty(file.Path))
+                stem = System.IO.Path.GetFileNameWithoutExtension(file.Path.Replace('\\', '/'));
+
+            string stemCreator;
+            string stemPkg;
+            int stemVer;
+            if (!string.IsNullOrEmpty(stem)
+                && TryParseVarUidParts(stem, out stemCreator, out stemPkg, out stemVer))
+            {
+                creator = stemCreator ?? "";
+                primary = FormatPackageNameForGalleryLabel(
+                    HumanizeGalleryNameSeparators(ScrubCreatorFromGalleryName(stemPkg, stemCreator)), stemVer);
+                return;
+            }
+
+            if (prettyPresets)
+            {
+                primary = GetPrettyEntryDisplayName(file, currentCategoryTitle);
+                TryFillCreatorForGridLabel(file, out creator);
+                LogPrettyNameSample(file, primary, "GridLabel");
+                return;
+            }
+
+            primary = stem ?? "";
+            TryFillCreatorForGridLabel(file, out creator);
+        }
+
+        /// <summary>Best-effort creator for non-VAR or fallback rows (uid parse; no Package resolve).</summary>
+        private static void TryFillCreatorForGridLabel(FileEntry file, out string creator)
+        {
+            creator = "";
+            if (file == null) return;
+            try
+            {
+                if (file is VarFileEntry vfe)
+                {
+                    string uid = vfe.GetRowPackageUid();
+                    string c;
+                    string n;
+                    int v;
+                    if (TryParseVarUidParts(uid, out c, out n, out v) && !string.IsNullOrEmpty(c))
+                    {
+                        creator = c;
+                        return;
+                    }
+                }
+                if (file is PackageListEntry ple)
+                {
+                    string uid = ple.GetPackageUidForGalleryUserTags();
+                    string c;
+                    string n;
+                    int v;
+                    if (TryParseVarUidParts(uid, out c, out n, out v) && !string.IsNullOrEmpty(c))
+                    {
+                        creator = c;
+                        return;
+                    }
+                }
+                if (file is MissingPackageListEntry mple)
+                {
+                    string c;
+                    string n;
+                    int v;
+                    if (TryParseVarUidParts(mple.RequestedUid, out c, out n, out v) && !string.IsNullOrEmpty(c))
+                    {
+                        creator = c;
+                        return;
+                    }
+                }
+            }
+            catch { }
         }
 
         /// <summary>True when filename matches BA's preset prefix rule (Preset_*.vap or Plugins_*.json). Drives the override-uid-with-pretty-name decision in <see cref="GetGridItemLabelText"/>.</summary>
@@ -1901,34 +2214,45 @@ namespace VPB
             return false;
         }
 
+        /// <summary>
+        /// Ellipsize to width via binary search + TextGenerator (O(log n) measures).
+        /// Warm scroll bind — avoid linear LayoutUtility shrink loop (GC + layout thrash).
+        /// </summary>
         private static string TruncateGridLabelTextByWidth(Text textComponent, string text, float maxWidth)
         {
             if (string.IsNullOrEmpty(text)) return text;
             if (textComponent == null || textComponent.font == null) return text;
 
             float availWidth = Mathf.Max(10f, maxWidth - 4f);
+            TextGenerationSettings settings = textComponent.GetGenerationSettings(new Vector2(availWidth, 0f));
+            settings.horizontalOverflow = HorizontalWrapMode.Overflow;
+            settings.generateOutOfBounds = true;
+            settings.resizeTextForBestFit = false;
 
-            textComponent.text = text;
-            float fullWidth = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
+            TextGenerator gen = textComponent.cachedTextGeneratorForLayout;
+            float ppu = textComponent.pixelsPerUnit;
+            if (ppu < 0.01f) ppu = 1f;
+
+            float fullWidth = gen.GetPreferredWidth(text, settings) / ppu;
             if (fullWidth <= availWidth) return text;
 
-            string ellipsis = "...";
-            textComponent.text = ellipsis;
-            float ellipsisWidth = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
-            float targetWidth = availWidth - ellipsisWidth - 2f;
+            const string ellipsis = "...";
+            float ellipsisWidth = gen.GetPreferredWidth(ellipsis, settings) / ppu;
+            float targetWidth = availWidth - ellipsisWidth - 1f;
+            if (targetWidth <= 0f) return ellipsis;
 
-            if (targetWidth <= 0) return ellipsis;
-
-            string current = text;
-            for (int i = 0; i < text.Length; i++)
+            int lo = 0;
+            int hi = text.Length;
+            while (lo < hi)
             {
-                current = text.Substring(0, text.Length - i);
-                textComponent.text = current;
-                float width = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
-                if (width <= targetWidth) return current + ellipsis;
+                int mid = (lo + hi + 1) >> 1;
+                float w = gen.GetPreferredWidth(text.Substring(0, mid), settings) / ppu;
+                if (w <= targetWidth) lo = mid;
+                else hi = mid - 1;
             }
 
-            return ellipsis;
+            if (lo <= 0) return ellipsis;
+            return text.Substring(0, lo) + ellipsis;
         }
 
         private void CreateFileButton(FileEntry file)
@@ -2007,21 +2331,6 @@ namespace VPB
 
             EnsurePluginThumbPlaceholderUi(thumbGO.transform);
 
-            // Grid-mode inward border (4 edge Images inside cell). Used when padding = 0.
-            GameObject gridInnerBorderGO = new GameObject("GridInnerBorder");
-            gridInnerBorderGO.transform.SetParent(btnGO.transform, false);
-            RectTransform gibRT = gridInnerBorderGO.AddComponent<RectTransform>();
-            gibRT.anchorMin = Vector2.zero;
-            gibRT.anchorMax = Vector2.one;
-            gibRT.offsetMin = Vector2.zero;
-            gibRT.offsetMax = Vector2.zero;
-            // child edge names are stable: Top/Bottom/Left/Right
-            AddBorderEdgeNamed(gridInnerBorderGO, "Top",    new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1f), new Vector2(0, 2));
-            AddBorderEdgeNamed(gridInnerBorderGO, "Bottom", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(0, 2));
-            AddBorderEdgeNamed(gridInnerBorderGO, "Left",   new Vector2(0, 0), new Vector2(0, 1), new Vector2(0f, 0.5f), new Vector2(2, 0));
-            AddBorderEdgeNamed(gridInnerBorderGO, "Right",  new Vector2(1, 0), new Vector2(1, 1), new Vector2(1f, 0.5f), new Vector2(2, 0));
-            gridInnerBorderGO.SetActive(false);
-
             GameObject gridLabelGO = new GameObject("GridLabel");
             gridLabelGO.transform.SetParent(btnGO.transform, false);
             gridLabelGO.SetActive(false);
@@ -2032,49 +2341,62 @@ namespace VPB
             gridLabelRT.offsetMin = Vector2.zero;
             gridLabelRT.offsetMax = Vector2.zero;
 
-            Image gridLabelBg = UI.AddImage(gridLabelGO, GalleryItemLabelBarBackdrop, false);
+            // Opaque bar — legible under square thumb (Johnson/Galitz). Badges keep translucent fill.
+            Image gridLabelBg = UI.AddImage(gridLabelGO, GalleryGridLabelBarOpaque, false);
 
-            Text gridLabelText = UI.CreateLabel(gridLabelGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, name: "Text");
-            GameObject gridLabelTextGO = gridLabelText.gameObject;
-            RectTransform gridLabelTextRT = gridLabelTextGO.GetComponent<RectTransform>();
-            gridLabelTextRT.offsetMin = new Vector2(2f, 0f);
-            gridLabelTextRT.offsetMax = new Vector2(-2f, 0f);
+            Text gridLabelPrimary = UI.CreateLabel(
+                gridLabelGO, "", GalleryUiDesignTokens.GridLabelFontRef, Color.white,
+                TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow,
+                raycastTarget: false, name: "Primary");
+            RectTransform primaryRT = gridLabelPrimary.GetComponent<RectTransform>();
+            primaryRT.anchorMin = new Vector2(0f, GalleryUiDesignTokens.GridLabelPrimaryHeightFrac);
+            primaryRT.anchorMax = Vector2.one;
+            primaryRT.offsetMin = new Vector2(2f, 0f);
+            primaryRT.offsetMax = new Vector2(-2f, 0f);
 
-            Shadow gridLabelShadow = gridLabelTextGO.AddComponent<Shadow>();
+            Shadow gridLabelShadow = gridLabelPrimary.gameObject.AddComponent<Shadow>();
             gridLabelShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
             gridLabelShadow.effectDistance = new Vector2(1f, -1f);
 
-            // Card Container (Hidden by default, positions below)
-            GameObject cardGO = new GameObject("Card");
-            cardGO.transform.SetParent(btnGO.transform, false);
-            cardGO.SetActive(false);
+            // Creator on primary row right — secondary metadata, muted (von Restorff: leaf stays primary).
+            Text gridLabelCreator = UI.CreateLabel(
+                gridLabelGO, "", GalleryUiDesignTokens.GridLabelSecondaryFontRef, GalleryGridLabelSecondaryColor,
+                TextAnchor.MiddleRight, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow,
+                raycastTarget: false, name: "Creator");
+            RectTransform creatorRT = gridLabelCreator.GetComponent<RectTransform>();
+            creatorRT.anchorMin = new Vector2(0.45f, GalleryUiDesignTokens.GridLabelPrimaryHeightFrac);
+            creatorRT.anchorMax = Vector2.one;
+            creatorRT.offsetMin = new Vector2(2f, 0f);
+            creatorRT.offsetMax = new Vector2(-2f, 0f);
+            gridLabelCreator.gameObject.SetActive(false);
 
-            RectTransform cardRT = cardGO.AddComponent<RectTransform>();
-            cardRT.anchorMin = new Vector2(0, 0); // Bottom
-            cardRT.anchorMax = new Vector2(1, 0); // Bottom
-            cardRT.pivot = new Vector2(0.5f, 0);  // Pivot Bottom (Inside)
-            cardRT.anchoredPosition = Vector2.zero;
-            cardRT.sizeDelta = new Vector2(0, 0); // Width stretch
+            Text gridLabelSecondary = UI.CreateLabel(
+                gridLabelGO, "", GalleryUiDesignTokens.GridLabelSecondaryFontRef, GalleryGridLabelSecondaryColor,
+                TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow,
+                raycastTarget: false, name: "Secondary");
+            RectTransform secondaryRT = gridLabelSecondary.GetComponent<RectTransform>();
+            secondaryRT.anchorMin = Vector2.zero;
+            secondaryRT.anchorMax = new Vector2(1f, GalleryUiDesignTokens.GridLabelPrimaryHeightFrac);
+            secondaryRT.offsetMin = new Vector2(2f, 0f);
+            secondaryRT.offsetMax = new Vector2(-2f, 0f);
+            gridLabelSecondary.gameObject.SetActive(false);
 
-            // Dynamic height based on content
-            VerticalLayoutGroup cardVLG = UI.AddVLG(cardGO, 0f, UI.Pad(5f, 5f, 5f, 5f));
+            // Grid-mode inward border after label so bottom rim is not covered by opaque caption.
+            GameObject gridInnerBorderGO = new GameObject("GridInnerBorder");
+            gridInnerBorderGO.transform.SetParent(btnGO.transform, false);
+            RectTransform gibRT = gridInnerBorderGO.AddComponent<RectTransform>();
+            gibRT.anchorMin = Vector2.zero;
+            gibRT.anchorMax = Vector2.one;
+            gibRT.offsetMin = Vector2.zero;
+            gibRT.offsetMax = Vector2.zero;
+            AddBorderEdgeNamed(gridInnerBorderGO, "Top",    new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1f), new Vector2(0, 2));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Bottom", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(0, 2));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Left",   new Vector2(0, 0), new Vector2(0, 1), new Vector2(0f, 0.5f), new Vector2(2, 0));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Right",  new Vector2(1, 0), new Vector2(1, 1), new Vector2(1f, 0.5f), new Vector2(2, 0));
+            gridInnerBorderGO.SetActive(false);
 
-            ContentSizeFitter cardCSF = cardGO.AddComponent<ContentSizeFitter>();
-            cardCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            // Background — same see-through bar as GridLabel / hover badges
-            Image cardBg = UI.AddImage(cardGO, GalleryItemLabelBarBackdrop, false);
-
-            // Label
-            Text labelText = UI.CreateLabel(cardGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, verticalWrap: VerticalWrapMode.Overflow, raycastTarget: false, name: "Label");
-            GameObject labelGO = labelText.gameObject;
-
-            // Label Layout
-            LayoutElement labelLE = UI.AddLE(labelGO, minHeight: 30);
-
-            // Hover Logic
+            // Hover: footer path + grid badges (no on-cell Name Card — GridLabel strip owns captions).
             UIHoverReveal hover = btnGO.AddComponent<UIHoverReveal>();
-            hover.card = cardGO;
             hover.panel = this;
 
             // List Row (Table mode)
@@ -2296,12 +2618,8 @@ namespace VPB
             UI.AddLE(depsDlGO, minWidth: 24f, minHeight: 28f, preferredWidth: 28f, preferredHeight: 28f);
             Button depsDlBtn = depsDlGO.AddComponent<Button>();
             depsDlBtn.targetGraphic = depsDlRr;
-            depsDlBtn.transition = Selectable.Transition.ColorTint;
-            var depsDlColors = depsDlBtn.colors;
-            depsDlColors.normalColor = Color.white;
-            depsDlColors.highlightedColor = new Color(1f, 1f, 1f, 0.92f);
-            depsDlColors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
-            depsDlBtn.colors = depsDlColors;
+            UI.ConfigButtonFlat(depsDlBtn, applyColors: true);
+            depsDlGO.AddComponent<UIHoverBorder>();
             depsDlGO.AddComponent<GalleryDepsDownloadHoverButton>();
             depsDlGO.SetActive(false);
 
@@ -2329,9 +2647,14 @@ namespace VPB
             listSelBarRT.anchoredPosition = Vector2.zero;
             listSelBarGO.SetActive(false);
 
-            // Wire hover bar into UIHoverBorder; selection bar is managed by UpdateFileButtonVisuals
+            // Wire hover bar into UIHoverBorder; selection bar is managed by UpdateFileButtonVisuals.
+            // ApplyBorderSettings destroys Awake outward HoverRim once hoverBorderGO is set.
             UIHoverBorder hoverBorderComp = btnGO.GetComponent<UIHoverBorder>();
-            if (hoverBorderComp != null) hoverBorderComp.hoverBorderGO = listHoverBarGO;
+            if (hoverBorderComp != null)
+            {
+                hoverBorderComp.hoverBorderGO = listHoverBarGO;
+                try { hoverBorderComp.ApplyBorderSettings(); } catch { }
+            }
 
             SetLayerRecursive(btnGO, 5);
             FileButtonBinder.Attach(btnGO);
@@ -2600,8 +2923,14 @@ namespace VPB
             }
         }
 
-        /// <summary>Same black see-through fill as GridLabel / Card name bar.</summary>
+        /// <summary>Translucent fill for hover badges (not opaque GridLabel strip).</summary>
         private static readonly Color GalleryItemLabelBarBackdrop = new Color(0f, 0f, 0f, 0.6f);
+
+        /// <summary>Opaque grid caption bar — no text on busy thumbnail pixels (Johnson reading; Galitz imagery).</summary>
+        private static readonly Color GalleryGridLabelBarOpaque = new Color(0.05f, 0.05f, 0.07f, 1f);
+
+        /// <summary>Secondary package line on grid caption (dimmer than primary leaf).</summary>
+        private static readonly Color GalleryGridLabelSecondaryColor = new Color(0.78f, 0.78f, 0.82f, 0.95f);
 
         // Former solid badge fills → letter colors (lifted for readability on translucent black).
         private static readonly Color GalleryBadgeLetterAutoInstall = new Color(0.35f, 0.65f, 1f, 1f);
@@ -3084,22 +3413,27 @@ namespace VPB
                     hoverBorder.hoverBorderGO = innerBorderGO;
                     hoverBorder.hoverIndicatorUsesSeparateSelectionVisual = false;
                     hoverBorder.isSelected = isSelected;
+                    hoverBorder.inward = true;
+                    // Drops Awake-created outward HoverRim — assigning hoverBorderGO alone left it alive.
+                    hoverBorder.ApplyBorderSettings();
                 }
                 SetGalleryBorderRectInset(innerBorderGO, 0f);
                 SetBorderThickness(innerBorderGO, w);
                 SetGalleryInnerBorderEdgeTint(innerBorderGO, borderTint);
                 innerBorderGO.SetActive(isSelected);
+                if (hoverBorder != null) hoverBorder.SyncIndicatorVisibility();
             }
             else
             {
-                bool listOutlineInwardFallback = isListRow;
+                // Grid: always inset. List: inward when flush-square setting is on.
+                bool rimInward = !isListRow || EffectiveGridBorderInwardForGalleryCell();
                 if (hoverBorder != null)
                 {
                     hoverBorder.hoverBorderGO = null;
                     hoverBorder.hoverIndicatorUsesSeparateSelectionVisual = false;
                     hoverBorder.isSelected = isSelected;
                     hoverBorder.borderSize = w;
-                    hoverBorder.inward = listOutlineInwardFallback;
+                    hoverBorder.inward = rimInward;
                     hoverBorder.ApplyBorderSettings();
                 }
                 if (innerBorderGO != null)
@@ -3112,7 +3446,17 @@ namespace VPB
             ApplyScanWhitelistIncludedBorderVisual(btnGO, file, isListRow);
             ApplyScanWhitelistTemporaryBorderVisual(btnGO, file, isListRow);
             if (!isListRow)
+            {
                 try { ApplyGridCellChromeScale(btnGO); } catch { }
+                // Opaque caption under thumb must not cover hover/selection rim (sibling order).
+                try
+                {
+                    if (innerBorderGO != null && innerBorderGO.activeSelf)
+                        innerBorderGO.transform.SetAsLastSibling();
+                    if (hoverBorder != null) hoverBorder.BringIndicatorToFront();
+                }
+                catch { }
+            }
         }
 
         public void BindFileButton(GameObject btnGO, FileEntry file)
@@ -3346,24 +3690,8 @@ namespace VPB
                     selectorTr.gameObject.SetActive(false);
             }
 
-            // Card Container (Hidden in List mode, Visible in Grid mode? No, Card is for VerticalCard mode which is removed or mapped to Grid if we had it)
-            // Wait, Grid mode uses the old style overlay? Or does Grid mode use Card?
-            // In the previous code, Grid mode had "Card" active only if VerticalCard.
-            // layoutMode == GalleryLayoutMode.Grid means standard grid which usually has hover reveal or overlay.
-            // Let's check CreateNewFileButtonGO. CardGO is hidden by default.
-
-            Transform cardTr = b != null ? b.cardTr : btnGO.transform.Find("Card");
-            if (cardTr != null)
-            {
-                // In the new 2-mode system, Grid usually implies the simple thumbnail + optional overlay.
-                // If we want "Grid" to look like cards, we set this true.
-                // But typically Grid = just thumbnail with hover name.
-                // VerticalCard was the one with persistent text below.
-                // Since we only have Grid and List, let's assume Grid means "Thumbnail Grid".
-
-                // So Card is hidden in both Grid (standard) and List.
-                cardTr.gameObject.SetActive(false);
-            }
+            // Migrate pooled templates that still carry pre-GridLabel Name Card overlay.
+            FileButtonBinder.DestroyLegacyNameCard(btnGO.transform);
 
             // Thumbnail
             Transform thumbTr = b != null ? b.thumbTr : null;
@@ -3432,6 +3760,14 @@ namespace VPB
                     hp.file = file;
                     hp.SyncHoverPreviewAfterRebind();
                     thumbImg.raycastTarget = true;
+                    // Near-preview sticky tip: full caption + path (Galitz ToolTip; Johnson fovea on thumb).
+                    try
+                    {
+                        string tip = BuildGridItemHoverTooltip(file);
+                        if (!string.IsNullOrEmpty(tip))
+                            AddTooltipPlain(thumbTr.gameObject, tip);
+                    }
+                    catch { }
                     // RawImage steals raycasts; forward to row root handler (UIDraggableItem + slop live on btnGO).
                     try
                     {
@@ -3479,33 +3815,6 @@ namespace VPB
                 h.file = file;
             }
             catch { }
-
-            // Label
-            Transform labelTr = b != null ? b.cardLabelTr : btnGO.transform.Find("Card/Label");
-            if (labelTr != null)
-            {
-                Text labelText = b != null && b.cardLabelText != null ? b.cardLabelText : labelTr.GetComponent<Text>();
-                if (labelText != null)
-                {
-                    bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
-                    string displayName = pretty
-                        ? GetPrettyEntryDisplayName(file)
-                        : (string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name);
-                    labelText.text = displayName;
-                    // Tooltip now surfaces internal path so users can see where the preset lives; falls back to package uid if path missing.
-                    try
-                    {
-                        if (file is VarFileEntry vfe && vfe.Package != null)
-                        {
-                            string hint = string.IsNullOrEmpty(vfe.InternalPath)
-                                ? string.Format(VPBTranslation.T("gallery.tooltip.package_uid", "Package: {0}.var"), vfe.Package.Uid)
-                                : vfe.InternalPath.Replace('\\', '/');
-                            AddTooltipPlain(labelTr.gameObject, hint);
-                        }
-                    }
-                    catch { }
-                }
-            }
 
             // List: star + full badge strip. Grid: thumbnail + GridLabel only; all badges hidden.
             Transform ratingTr = b != null ? b.ratingTr : btnGO.transform.Find("Rating");

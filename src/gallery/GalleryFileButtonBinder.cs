@@ -76,10 +76,10 @@ namespace VPB
         public Text dateText;
 
         public Transform gridLabelTr;
-        public Transform cardTr;
-        public Transform cardLabelTr;
-        public Text cardLabelText;
-
+        public Image gridLabelBg;
+        public Text gridLabelPrimaryText;
+        public Text gridLabelSecondaryText;
+        public Text gridLabelCreatorText;
         public Transform ratingTr;
         public Transform ratingSelectorTr;
         public Transform ratingStarTr;
@@ -183,12 +183,9 @@ namespace VPB
             }
 
             gridLabelTr = root.Find("GridLabel");
-            cardTr = root.Find("Card");
-            if (cardTr != null)
-            {
-                cardLabelTr = cardTr.Find("Label");
-                if (cardLabelTr != null) cardLabelText = cardLabelTr.GetComponent<Text>();
-            }
+            CacheGridLabel(gridLabelTr);
+            // Legacy Name Card overlay (pre always-on GridLabel) — destroy if pooled template still has it.
+            DestroyLegacyNameCard(root);
 
             ratingTr = root.Find("Rating");
             ratingSelectorTr = root.Find("RatingSelector");
@@ -225,6 +222,37 @@ namespace VPB
             hover = tr.GetComponent<UIRichValueHover>();
             scrollPassthrough = tr.GetComponent<UIScrollPassthrough>();
             eventTrigger = tr.GetComponent<EventTrigger>();
+        }
+
+        /// <summary>Cache GridLabel primary/secondary/creator texts (supports legacy single "Text" child).</summary>
+        public void CacheGridLabel(Transform gl)
+        {
+            gridLabelTr = gl;
+            gridLabelBg = null;
+            gridLabelPrimaryText = null;
+            gridLabelSecondaryText = null;
+            gridLabelCreatorText = null;
+            if (gl == null) return;
+            gridLabelBg = gl.GetComponent<Image>();
+            Transform primaryTr = gl.Find("Primary");
+            if (primaryTr == null) primaryTr = gl.Find("Text");
+            if (primaryTr != null) gridLabelPrimaryText = primaryTr.GetComponent<Text>();
+            Transform secondaryTr = gl.Find("Secondary");
+            if (secondaryTr != null) gridLabelSecondaryText = secondaryTr.GetComponent<Text>();
+            Transform creatorTr = gl.Find("Creator");
+            if (creatorTr != null) gridLabelCreatorText = creatorTr.GetComponent<Text>();
+        }
+
+        /// <summary>
+        /// One-shot pool migrate: old hover Name Card under cell root.
+        /// Captions are GridLabel strip + footer path only.
+        /// </summary>
+        public static void DestroyLegacyNameCard(Transform btnRoot)
+        {
+            if (btnRoot == null) return;
+            Transform card = btnRoot.Find("Card");
+            if (card == null) return;
+            UnityEngine.Object.Destroy(card.gameObject);
         }
 
         private static Transform FindBadge(Transform btnRoot, string badgeName)

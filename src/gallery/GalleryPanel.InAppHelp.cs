@@ -131,7 +131,10 @@ namespace VPB
                 _inAppHelpCloseBtnRT.offsetMin = new Vector2(-40f, 4f);
                 _inAppHelpCloseBtnRT.offsetMax = new Vector2(-6f, -4f);
             }
-            { var s = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s, 6f, new Color(0.10f, 0.26f, 0.44f, 1f)); }
+            Image closeBg = closeBtn.GetComponent<Image>();
+            if (closeBg != null) closeBg.color = GalleryUiColorTokens.ChromeIconWell;
+            { var s = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s, 6f, GalleryUiColorTokens.ChromeIconWell); }
+            UI.EnsureFloatChromeHoverBorder(closeBtn, inward: true);
 
             _inAppHelpSearchInput = CreateSearchInput(_inAppHelpPanelGO, GalleryUiDesignTokens.InAppHelpPanelWidthRef - 24f, _ => OnInAppHelpSearchChanged());
             RectTransform searchRT = _inAppHelpSearchInput.GetComponent<RectTransform>();
@@ -536,14 +539,8 @@ namespace VPB
 
             Button btn = btnGO.AddComponent<Button>();
             btn.targetGraphic = bg;
-            btn.transition = Selectable.Transition.ColorTint;
-            ColorBlock cb = btn.colors;
-            cb.normalColor = Color.white;
-            cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
-            cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
-            cb.fadeDuration = 0.05f;
-            btn.colors = cb;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(btn, applyColors: true);
+            UI.EnsureFloatChromeHoverBorder(btnGO, inward: true);
 
             GameObject labelGO = new GameObject("Label");
             labelGO.transform.SetParent(btnGO.transform, false);

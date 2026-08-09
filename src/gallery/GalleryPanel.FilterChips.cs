@@ -72,8 +72,6 @@ namespace VPB
             if (!IsVisible || isCollapsed) return false;
             if (settingsListViewActive) return false;
             if (cleanupModeActive) return false;
-            // Mode / armed apply owns Context Bar — filters collapse to banner count.
-            if (ContextBarModeOwnsChrome()) return false;
             if (!IsBrowseFilterChipContextActive()) return false;
             return HasActiveBrowseFilters();
         }
@@ -115,7 +113,6 @@ namespace VPB
             // Reuse scratch list — warm path, no per-refresh List alloc.
             _filterChipSpecScratch.Clear();
             CollectActiveFilterChipSpecs(_filterChipSpecScratch);
-            RefreshContextBarFilterCountCache(_filterChipSpecScratch);
 
             _activeFilterChipBarVisible = ShouldShowActiveFilterChipBar();
             // Title-search chips own their host; empty filter specs → no bar strip.
@@ -958,7 +955,7 @@ namespace VPB
             int wasSearchRows = _titleSearchChipRowCount;
             try { RebuildTitleSearchChipUi(); } catch { }
             try { RefreshActiveFilterChips(); } catch { }
-            // Mode banner may show "N filters" when chip bar suppressed — refresh copy only.
+            // Keep mode banner cache coherent if sticky chrome is up.
             try
             {
                 InvalidateModeSemanticsBannerCache();

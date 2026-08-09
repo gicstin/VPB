@@ -23,10 +23,19 @@ namespace VPB
 		/// <summary>Per scene-json .hide path for <see cref="IsLocalSceneJsonHidden"/>.</summary>
 		private static Dictionary<string, bool> s_localSceneHiddenByMarkerPath;
 
+		/// <summary>Per-package count of <c>Saves/scene/**/*.json</c> — gallery labels (#90). Cleared on package refresh.</summary>
+		private static Dictionary<string, int> s_sceneJsonCountByUid;
+
 		public static void InvalidateHideMarkerCache()
 		{
 			s_varHiddenByUid = null;
 			s_localSceneHiddenByMarkerPath = null;
+		}
+
+		/// <summary>Drop cached scene JSON counts (package library changed).</summary>
+		public static void InvalidateSceneJsonCountCache()
+		{
+			s_sceneJsonCountByUid = null;
 		}
 
 		public static void RebuildHideMarkerCache()
@@ -251,6 +260,68 @@ namespace VPB
 				return true;
 			}
 			catch { return false; }
+		}
+
+		/// <summary>
+		/// True when the VAR entry is a scene JSON under <c>Saves/scene/</c> (nested folders included).
+		/// </summary>
+		public static bool IsVarSceneJsonEntry(VarFileEntry vfe)
+		{
+			if (vfe == null) return false;
+			string path = vfe.InternalPath;
+			if (string.IsNullOrEmpty(path)) return false;
+			path = path.Replace('\\', '/');
+			return path.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase)
+			       && path.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+		}
+
+		/// <summary>
+		/// Count of <c>Saves/scene/**/*.json</c> in the package. Cached by <see cref="VarPackage.Uid"/>.
+		/// </summary>
+		public static int CountSceneJsonInPackage(VarPackage pkg)
+		{
+			if (pkg == null) return 0;
+			string uid = pkg.Uid;
+			if (!string.IsNullOrEmpty(uid) && s_sceneJsonCountByUid != null)
+			{
+				int cached;
+				if (s_sceneJsonCountByUid.TryGetValue(uid, out cached))
+					return cached;
+			}
+
+			int count = 0;
+			try
+			{
+				if (pkg.FileEntries != null)
+				{
+					foreach (var entry in pkg.FileEntries)
+					{
+						if (entry?.InternalPath == null) continue;
+						string path = entry.InternalPath.Replace('\\', '/');
+						if (path.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase)
+						    && path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+							count++;
+					}
+				}
+			}
+			catch { }
+
+			if (!string.IsNullOrEmpty(uid))
+			{
+				if (s_sceneJsonCountByUid == null)
+					s_sceneJsonCountByUid = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+				s_sceneJsonCountByUid[uid] = count;
+			}
+			return count;
+		}
+
+		/// <summary>
+		/// Legacy #90 scene-stem gate. Captions now use leaf≠package dual rule in gallery title split —
+		/// always true for non-null VAR so callers keep stem-aware naming without sibling SQL.
+		/// </summary>
+		public static bool ShouldUseSceneFileStemLabel(VarFileEntry vfe)
+		{
+			return vfe != null;
 		}
 
 		/// <summary>

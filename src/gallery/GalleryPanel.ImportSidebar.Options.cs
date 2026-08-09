@@ -200,6 +200,7 @@ namespace VPB
                 Button b = row.AddComponent<Button>();
                 b.targetGraphic = rb;
                 UI.NeutralizeSelectableColorTint(b);
+                UI.EnsureFloatChromeHoverBorder(row, inward: true);
 
                 Text typeLabel = CreateImportSidebarLabel(row.transform, ShortNameForType(t), ImportSidebarBaseFontSize);
                 typeLabel.alignment = TextAnchor.MiddleLeft;
@@ -258,6 +259,7 @@ namespace VPB
             Button btn = btnGO.AddComponent<Button>();
             btn.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(btn);
+            UI.EnsureFloatChromeHoverBorder(btnGO, inward: true);
             Text txt = CreateImportSidebarLabel(btnGO.transform, label, ImportSidebarBaseFontSize);
             txt.alignment = TextAnchor.MiddleCenter;
             btn.onClick.AddListener(onClick);
@@ -679,6 +681,7 @@ namespace VPB
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(btn);
+            UI.EnsureFloatChromeHoverBorder(row, inward: true);
 
             // labelColor stays an override for the destructive "Delete target linked CUAs" row,
             // which must visibly stand out from neutral toggles.
@@ -905,6 +908,7 @@ namespace VPB
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(btn);
+            UI.EnsureFloatChromeHoverBorder(row, inward: true);
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
             ConfigureImportSidebarChecklistLabel(label);
@@ -1614,6 +1618,7 @@ namespace VPB
             b.targetGraphic = bg;
             b.onClick.AddListener(OnImportSidebarApplyClicked);
             UI.NeutralizeSelectableColorTint(b);
+            UI.EnsureFloatChromeHoverBorder(btn, inward: true);
 
             importSidebarApplyButton = b;
             importSidebarApplyButtonLabel = AddSimpleLabelText(

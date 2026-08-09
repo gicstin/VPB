@@ -80,14 +80,9 @@ namespace VPB
         /// <summary>Background History filter-tab counts (SQLite); avoids multi-second stalls on History toggle.</summary>
         private Coroutine _historyModeCountsCo;
 
-        // Thumbnail cache progress UI
-        private GameObject _thumbCacheProgressGO;
-        private RectTransform _thumbCacheBarFillRT;
-
-        // Thumbnail cache progress tracking
+        // Thumbnail cache counters (perf telemetry; no progress chrome)
         private int _thumbCacheTotalEnqueued;
         private int _thumbCacheSaved;
-        private float _thumbCacheFinishTime = -1f;
         private Text titleText;
         private Text fpsText;
 
@@ -472,6 +467,10 @@ namespace VPB
         private GameObject _confirmOverlayGO;
         private UnityAction _confirmOnConfirm;
         private UnityAction _confirmOnCancel;
+        private string _confirmTitle;
+        private string _confirmMessage;
+        private string _confirmConfirmLabel;
+        private string _confirmCancelLabel;
         private GameObject clothingSlotPickerPanelGO;
 
         private GameObject hairSlotPickerOverlayGO;
@@ -1221,6 +1220,11 @@ namespace VPB
         /// clear path when pointer already moved onto another cell (sibling enter claims first).
         /// </summary>
         private UIHoverReveal _hoverPathRevealOwner;
+        /// <summary>Reuse for grid caption recovery strings (info-bar hover) — warm path only.</summary>
+        private readonly System.Text.StringBuilder _gridLabelCaptionSb = new System.Text.StringBuilder(160);
+        /// <summary>Cached: filtered set needs two-line strip (any dual package/leaf). Invalidated on layout apply.</summary>
+        private bool _gridLabelDualBandCached;
+        private bool _gridLabelDualBandValid;
         // Hover preview overlay (canvas-local X/Y offset + size; drag placeholder in settings)
         private GameObject hoverPreviewGO;
         private RectTransform hoverPreviewRT;

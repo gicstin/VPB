@@ -97,9 +97,6 @@ namespace VPB
 
         // ── Sticky mode ambient (stronger than idle chrome — change blindness) ─
         public static readonly Color ModeToolBanner = new Color(0.20f, 0.28f, 0.34f, 0.97f);
-        public static readonly Color ModeApplyBanner = new Color(0.42f, 0.30f, 0.14f, 0.97f);
-        /// <summary>Left rail stripe on mode banner — second cue vs color-only (Johnson).</summary>
-        public static readonly Color ModeToolStripe = new Color(0.62f, 0.72f, 0.78f, 1f);
         public static readonly Color ModeApplyStripe = new Color(0.90f, 0.72f, 0.40f, 1f);
         public static readonly Color ModeStatusTextTool = new Color(0.78f, 0.84f, 0.88f, 1f);
         public static readonly Color ModeStatusTextApply = new Color(0.92f, 0.82f, 0.55f, 1f);

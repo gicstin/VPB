@@ -444,6 +444,7 @@ namespace VPB
             }
 
             RefreshSelectionVisuals();
+            try { EnsureGridSelectionFullyVisible(hadVisibleAnchor ? idx : 0); } catch { }
             try { UpdatePaginationText(); } catch { }
         }
 

@@ -87,20 +87,10 @@ namespace VPB
             bool baseOk = hasLoadedContent
                 && !settingsListViewActive;
 
-            // Never blank with no cue: refreshing + empty → "Updating…"; idle empty → filters/search CTAs.
-            bool show = baseOk && emptyFiles;
+            // BusyChrome owns refresh feedback — hide empty chrome while refreshing (no duplicate "Updating…").
+            bool show = baseOk && emptyFiles && !refreshing;
             _emptyGridStateGO.SetActive(show);
             if (!show) return;
-
-            if (refreshing)
-            {
-                _emptyGridStateMessage.text = VPBTranslation.T(
-                    "gallery.empty.updating",
-                    "Updating gallery…");
-                if (_emptyGridStateActionBtn != null)
-                    _emptyGridStateActionBtn.SetActive(false);
-                return;
-            }
 
             if (_emptyGridStateActionBtn != null)
                 _emptyGridStateActionBtn.SetActive(true);

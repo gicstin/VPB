@@ -1835,9 +1835,7 @@ namespace VPB
             if (pendingThumbnailCacheJobs != null) pendingThumbnailCacheJobs.Clear();
             _thumbCacheTotalEnqueued = 0;
             _thumbCacheSaved = 0;
-            _thumbCacheFinishTime = -1f;
             _nextThumbPriority = 0;
-            HideThumbnailCacheProgress();
             StopCo(ref _deferredGallerySideTabsCoroutine);
             StopCo(ref _sideTabsTagCountSliceCo);
             StopCo(ref _appearanceLooseMergeCo);
@@ -2739,13 +2737,13 @@ namespace VPB
                 if (layoutMode == GalleryLayoutMode.List || settingsListViewActive)
                 {
                     recyclingGrid.fixedColumns = 1;
+                    recyclingGrid.fixedBottomChromePx = 0f;
                     recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
                     recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                 }
                 else
                 {
-                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), GridColumnCount, deferRefresh: true);
-                    recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false, deferRefresh: true);
+                    ApplyGridRecyclingLayoutConfig(recyclingGrid, GridColumnCount, deferRefresh: true);
                 }
 
                 if (savedCenterItemIndex >= 0)
@@ -2937,14 +2935,13 @@ namespace VPB
                     if (layoutMode == GalleryLayoutMode.List || settingsListViewActive)
                     {
                         recyclingGrid.fixedColumns = 1;
+                        recyclingGrid.fixedBottomChromePx = 0f;
                         recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
                         recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                     }
                     else
                     {
-                        // Grid mode
-                        recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), GridColumnCount, deferRefresh: true);
-                        recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false, deferRefresh: true);
+                        ApplyGridRecyclingLayoutConfig(recyclingGrid, GridColumnCount, deferRefresh: true);
                     }
                     recyclingGrid.SetItemCount(0); // Clear initially — single Refresh after deferred config
                 }
@@ -4546,7 +4543,6 @@ namespace VPB
                 };
                 
                 // Use Adaptive Config
-                float minSize = 200f;
                 int cols = GridColumnCount;
                 
                 // Initialize spacing and adaptive config
@@ -4554,13 +4550,13 @@ namespace VPB
                 {
                     // List/Table mode: ALWAYS 1 column; +/- controls row height/thumb size.
                     recyclingGrid.fixedColumns = 1;
+                    recyclingGrid.fixedBottomChromePx = 0f;
                     recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
                     recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                 }
                 else
                 {
-                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols, deferRefresh: true);
-                    recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false, deferRefresh: true);
+                    ApplyGridRecyclingLayoutConfig(recyclingGrid, cols, deferRefresh: true);
                 }
                 if (swDeep != null) deepGbConfigMs = swDeep.ElapsedMilliseconds;
 

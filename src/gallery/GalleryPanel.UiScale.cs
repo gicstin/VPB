@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -116,6 +117,8 @@ namespace VPB
             try { RescaleSettingsFloatIfOpen(chromeS); } catch { }
             try { RescalePluginsFloatIfOpen(chromeS); } catch { }
             try { RescaleCommandPaletteIfOpen(); } catch { }
+            try { RescaleConfirmOverlayIfOpen(); } catch { }
+            try { RebuildGridLayout(); } catch { }
         }
 
         /// <summary>Scales hover-path tooltip text, collapsed tbox labels, and detail strip chrome.</summary>
@@ -139,23 +142,67 @@ namespace VPB
             try { UpdateSelectionContextMenu(); } catch { }
         }
 
-        /// <summary>Grid label strip: anchor fraction from config; font is the single gallery chrome font.</summary>
+        /// <summary>
+        /// Grid label under square thumb (not overlay). Cell taller via absolute strip px; thumb region 1:1.
+        /// Primary row: leaf left + creator right; secondary: package. Warm path + binary truncate.
+        /// </summary>
         internal void ApplyGridLabelStripLayout(GameObject btnGO, FileEntry file = null)
         {
             if (btnGO == null || layoutMode == GalleryLayoutMode.List || settingsListViewActive) return;
-            Transform gridLabelTr = btnGO.transform.Find("GridLabel");
+
+            FileButtonBinder binder = FileButtonBinder.GetOrAdd(btnGO);
+            Transform gridLabelTr = binder != null ? binder.gridLabelTr : null;
+            if (gridLabelTr == null)
+            {
+                gridLabelTr = btnGO.transform.Find("GridLabel");
+                if (binder != null && gridLabelTr != null) binder.gridLabelTr = gridLabelTr;
+            }
             if (gridLabelTr == null) return;
 
-            RectTransform cellRt = btnGO.GetComponent<RectTransform>();
+            RectTransform cellRt = binder != null ? binder.rectTransform : btnGO.GetComponent<RectTransform>();
             float cellW = cellRt != null && cellRt.rect.width > 1f ? cellRt.rect.width : GalleryUiDesignTokens.GridCellRefSize;
-            float cellH = cellRt != null && cellRt.rect.height > 1f ? cellRt.rect.height : GalleryUiDesignTokens.GridCellRefSize;
-            float overlay = GalleryUiMetrics.CellOverlayScale(cellW, cellH);
 
             bool show = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible();
+            float labelFrac = show ? GetGridLabelFraction(cellW) : 0f;
+
+            float thumbPad = 3f;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    thumbPad = Mathf.Clamp(VPBConfig.Instance.GalleryGridThumbnailPadding, 0f, 40f);
+            }
+            catch { thumbPad = 3f; }
+
+            RectTransform thumbRT = binder != null ? binder.thumbRT : null;
+            if (thumbRT == null)
+            {
+                Transform thumbTr = binder != null ? binder.thumbTr : null;
+                if (thumbTr == null) thumbTr = btnGO.transform.Find("Thumbnail");
+                if (thumbTr != null) thumbRT = thumbTr as RectTransform;
+            }
+            if (thumbRT != null)
+            {
+                if (show && labelFrac > 0.01f)
+                {
+                    thumbRT.anchorMin = new Vector2(0f, labelFrac);
+                    thumbRT.anchorMax = Vector2.one;
+                }
+                else
+                {
+                    thumbRT.anchorMin = Vector2.zero;
+                    thumbRT.anchorMax = Vector2.one;
+                }
+                thumbRT.pivot = new Vector2(0.5f, 0.5f);
+                thumbRT.anchoredPosition = Vector2.zero;
+                thumbRT.offsetMin = new Vector2(thumbPad, thumbPad);
+                thumbRT.offsetMax = new Vector2(-thumbPad, -thumbPad);
+            }
+
             gridLabelTr.gameObject.SetActive(show);
             if (!show) return;
 
-            float labelFrac = GetGridLabelFraction();
+            EnsureGridLabelChrome(gridLabelTr, binder);
+
             RectTransform glRT = gridLabelTr as RectTransform;
             if (glRT != null)
             {
@@ -166,27 +213,225 @@ namespace VPB
                 glRT.offsetMax = Vector2.zero;
             }
 
-            Transform glTextTr = gridLabelTr.Find("Text");
-            if (glTextTr == null) return;
-            Text t = glTextTr.GetComponent<Text>();
-            RectTransform glTextRT = glTextTr as RectTransform;
-            if (t == null) return;
-
-            // Grid labels use the single gallery chrome font, not a per-cell overlay size.
-            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
-            if (glTextRT != null)
+            Text primary = binder != null ? binder.gridLabelPrimaryText : null;
+            Text secondary = binder != null ? binder.gridLabelSecondaryText : null;
+            Text creator = binder != null ? binder.gridLabelCreatorText : null;
+            if (primary == null)
             {
-                float pad = 2f * overlay;
-                glTextRT.offsetMin = new Vector2(pad, 0f);
-                glTextRT.offsetMax = new Vector2(-pad, 0f);
+                Transform pTr = gridLabelTr.Find("Primary");
+                if (pTr == null) pTr = gridLabelTr.Find("Text");
+                if (pTr != null) primary = pTr.GetComponent<Text>();
             }
+            if (secondary == null)
+            {
+                Transform sTr = gridLabelTr.Find("Secondary");
+                if (sTr != null) secondary = sTr.GetComponent<Text>();
+            }
+            if (creator == null)
+            {
+                Transform cTr = gridLabelTr.Find("Creator");
+                if (cTr != null) creator = cTr.GetComponent<Text>();
+            }
+            if (primary == null) return;
+
+            float chromeS = ChromeScale;
+            if (chromeS <= 0f) chromeS = 1f;
+            // Pad tracks font/chrome — not cell width (wide columns must not bloat caption chrome).
+            float padX = 2f * chromeS;
+            float gap = 4f * chromeS;
+            float availWidth = glRT != null && glRT.rect.width > 1f ? glRT.rect.width : cellW;
+            float innerW = Mathf.Max(10f, availWidth - padX * 2f);
+
+            float fontDesign = 18f;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    fontDesign = Mathf.Clamp(VPBConfig.Instance.GalleryGridLabelFontSize, 8f, 40f);
+            }
+            catch { fontDesign = 18f; }
+            int primaryPt = Mathf.RoundToInt(fontDesign);
+            float secondaryRatio = (float)GalleryUiDesignTokens.GridLabelSecondaryFontRef
+                / (float)Mathf.Max(1, GalleryUiDesignTokens.GridLabelFontRef);
+            int secondaryPt = Mathf.Max(
+                GalleryUiDesignTokens.FontMinRef,
+                Mathf.RoundToInt(fontDesign * secondaryRatio));
+
+            string primaryText = null;
+            string secondaryText = null;
+            string creatorText = null;
+            bool dual;
+            if (file != null)
+            {
+                GetGridItemLabelLines(file, out primaryText, out secondaryText, out creatorText);
+                dual = !string.IsNullOrEmpty(secondaryText);
+                if (!string.IsNullOrEmpty(creatorText)
+                    && string.Equals(creatorText, primaryText, StringComparison.OrdinalIgnoreCase))
+                    creatorText = null;
+            }
+            else
+            {
+                dual = secondary != null && secondary.gameObject.activeSelf;
+                creatorText = creator != null && creator.gameObject.activeSelf ? creator.text : null;
+            }
+
+            // Dual-band strip may be one-line globally when filtered set has no duals — still expand primary.
+            float primaryBandMinY = dual ? GalleryUiDesignTokens.GridLabelPrimaryHeightFrac : 0f;
+
+            // Creator: hide under width budget so leaf keeps discriminator (Hick / chunking).
+            float creatorMinW = GalleryUiDesignTokens.GridLabelCreatorMinInnerW * chromeS;
+            bool showCreator = !string.IsNullOrEmpty(creatorText) && creator != null && innerW >= creatorMinW;
+
+            // Creator first (right): reserve width so leaf truncation keeps discriminator.
+            float creatorUsed = 0f;
+            if (showCreator)
+            {
+                float creatorMax = innerW * GalleryUiDesignTokens.GridLabelCreatorMaxFrac;
+                float leafMin = innerW * GalleryUiDesignTokens.GridLabelLeafMinFracWithCreator;
+                if (innerW - creatorMax - gap < leafMin)
+                    showCreator = false;
+            }
+
+            if (showCreator)
+            {
+                if (!creator.gameObject.activeSelf) creator.gameObject.SetActive(true);
+                RectTransform creatorRT = creator.rectTransform;
+                creatorRT.anchorMin = new Vector2(0.35f, primaryBandMinY);
+                creatorRT.anchorMax = Vector2.one;
+                creatorRT.offsetMin = new Vector2(gap, 0f);
+                creatorRT.offsetMax = new Vector2(-padX, 0f);
+                creator.alignment = TextAnchor.MiddleRight;
+                creator.color = GalleryGridLabelSecondaryColor;
+                GalleryUiMetrics.ApplyFont(
+                    creator,
+                    secondaryPt,
+                    chromeS,
+                    GalleryUiDesignTokens.FontMinRef);
+
+                if (file != null)
+                {
+                    float creatorMax = innerW * GalleryUiDesignTokens.GridLabelCreatorMaxFrac;
+                    string truncatedCreator = TruncateGridLabelTextByWidth(creator, creatorText, creatorMax + padX * 2f);
+                    creator.text = truncatedCreator;
+                    creatorUsed = MeasureGridLabelTextWidth(creator, truncatedCreator);
+                    if (creatorUsed > creatorMax) creatorUsed = creatorMax;
+                }
+                else
+                    creatorUsed = MeasureGridLabelTextWidth(creator, creator.text ?? "");
+            }
+            else if (creator != null && file != null)
+            {
+                if (creator.gameObject.activeSelf) creator.gameObject.SetActive(false);
+                creator.text = "";
+            }
+
+            RectTransform primaryRT = primary.rectTransform;
+            primaryRT.anchorMin = new Vector2(0f, primaryBandMinY);
+            primaryRT.anchorMax = Vector2.one;
+            primaryRT.offsetMin = new Vector2(padX, 0f);
+            float primaryRight = showCreator ? (padX + creatorUsed + gap) : padX;
+            primaryRT.offsetMax = new Vector2(-primaryRight, 0f);
+            primary.alignment = TextAnchor.MiddleLeft;
+            GalleryUiMetrics.ApplyFont(
+                primary,
+                primaryPt,
+                chromeS,
+                GalleryUiDesignTokens.FontMinRef);
 
             if (file != null)
             {
-                string labelText = GetGridItemLabelText(file);
-                float availWidth = glRT != null && glRT.rect.width > 1f ? glRT.rect.width : cellW;
-                t.text = TruncateGridLabelTextByWidth(t, labelText, availWidth);
+                float leafAvail = Mathf.Max(10f, innerW - (showCreator ? (creatorUsed + gap) : 0f));
+                primary.text = TruncateGridLabelTextByWidth(primary, primaryText ?? "", leafAvail + padX * 2f);
             }
+
+            if (secondary != null)
+            {
+                if (dual)
+                {
+                    if (!secondary.gameObject.activeSelf) secondary.gameObject.SetActive(true);
+                    RectTransform secondaryRT = secondary.rectTransform;
+                    secondaryRT.anchorMin = Vector2.zero;
+                    secondaryRT.anchorMax = new Vector2(1f, GalleryUiDesignTokens.GridLabelPrimaryHeightFrac);
+                    secondaryRT.offsetMin = new Vector2(padX, 0f);
+                    secondaryRT.offsetMax = new Vector2(-padX, 0f);
+                    secondary.alignment = TextAnchor.MiddleLeft;
+                    secondary.color = GalleryGridLabelSecondaryColor;
+                    GalleryUiMetrics.ApplyFont(
+                        secondary,
+                        secondaryPt,
+                        chromeS,
+                        GalleryUiDesignTokens.FontMinRef);
+                    if (file != null)
+                        secondary.text = TruncateGridLabelTextByWidth(secondary, secondaryText, availWidth);
+                }
+                else if (file != null)
+                {
+                    if (secondary.gameObject.activeSelf) secondary.gameObject.SetActive(false);
+                    secondary.text = "";
+                }
+            }
+        }
+
+        /// <summary>Preferred width via TextGenerator — no LayoutUtility thrash on warm bind.</summary>
+        private static float MeasureGridLabelTextWidth(Text textComponent, string text)
+        {
+            if (textComponent == null || textComponent.font == null || string.IsNullOrEmpty(text)) return 0f;
+            TextGenerationSettings settings = textComponent.GetGenerationSettings(new Vector2(4000f, 0f));
+            settings.horizontalOverflow = HorizontalWrapMode.Overflow;
+            settings.generateOutOfBounds = true;
+            settings.resizeTextForBestFit = false;
+            float ppu = textComponent.pixelsPerUnit;
+            if (ppu < 0.01f) ppu = 1f;
+            return textComponent.cachedTextGeneratorForLayout.GetPreferredWidth(text, settings) / ppu;
+        }
+
+        /// <summary>
+        /// Migrate pooled GridLabel chrome: opaque bg + Primary/Secondary/Creator texts.
+        /// </summary>
+        private static void EnsureGridLabelChrome(Transform gridLabelTr, FileButtonBinder binder)
+        {
+            if (gridLabelTr == null) return;
+
+            // Pool migrate: destroy pre-GridLabel Name Card sibling if still present.
+            Transform btnRoot = gridLabelTr.parent;
+            if (btnRoot != null) FileButtonBinder.DestroyLegacyNameCard(btnRoot);
+
+            Image bg = binder != null ? binder.gridLabelBg : null;
+            if (bg == null) bg = gridLabelTr.GetComponent<Image>();
+            if (bg != null) bg.color = GalleryGridLabelBarOpaque;
+
+            Transform primaryTr = gridLabelTr.Find("Primary");
+            Transform legacyTr = gridLabelTr.Find("Text");
+            if (primaryTr == null && legacyTr != null)
+            {
+                legacyTr.name = "Primary";
+                primaryTr = legacyTr;
+                Text legacyText = primaryTr.GetComponent<Text>();
+                if (legacyText != null) legacyText.alignment = TextAnchor.MiddleLeft;
+            }
+
+            Transform secondaryTr = gridLabelTr.Find("Secondary");
+            if (secondaryTr == null)
+            {
+                Text secondary = UI.CreateLabel(
+                    gridLabelTr.gameObject, "", GalleryUiDesignTokens.GridLabelSecondaryFontRef,
+                    GalleryGridLabelSecondaryColor, TextAnchor.MiddleLeft,
+                    HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow,
+                    raycastTarget: false, name: "Secondary");
+                secondary.gameObject.SetActive(false);
+            }
+
+            Transform creatorTr = gridLabelTr.Find("Creator");
+            if (creatorTr == null)
+            {
+                Text creator = UI.CreateLabel(
+                    gridLabelTr.gameObject, "", GalleryUiDesignTokens.GridLabelSecondaryFontRef,
+                    GalleryGridLabelSecondaryColor, TextAnchor.MiddleRight,
+                    HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow,
+                    raycastTarget: false, name: "Creator");
+                creator.gameObject.SetActive(false);
+            }
+
+            if (binder != null) binder.CacheGridLabel(gridLabelTr);
         }
 
         /// <summary>Scales row height + fonts on a vertical popup menu panel.</summary>
@@ -234,6 +479,11 @@ namespace VPB
                     leftExtraRef = GalleryUiDesignTokens.PopupMenuRowIconSizeRef + GalleryUiDesignTokens.PopupMenuRowIconGapRef;
                 }
                 Text t = ch.GetComponentInChildren<Text>(true);
+                if (t != null && t.gameObject != null && t.gameObject.name == "Accel")
+                {
+                    Transform textTr = ch.Find("Text");
+                    t = textTr != null ? textTr.GetComponent<Text>() : null;
+                }
                 if (t != null)
                 {
                     GalleryUiMetrics.ApplyFont(t, fontRef, s, GalleryUiDesignTokens.FontMinRef);
@@ -253,6 +503,7 @@ namespace VPB
             try { RescaleFooterOverflowMenuInternal(s); } catch { }
             try { RescaleSideRailOverflowMenuInternal(s); } catch { }
             try { RescaleLanguageMenuInternal(s); } catch { }
+            try { RescaleGridContextMenuInternal(s); } catch { }
             try { RescaleGlobalSourceFilterMenuInternal(s); } catch { }
             try { quickFiltersUI?.ApplyLayout(s); } catch { }
             try { RescaleSaveMenuPopupInternal(s); } catch { }

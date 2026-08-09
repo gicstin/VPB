@@ -449,7 +449,7 @@ namespace VPB
                 closeRT.sizeDelta = new Vector2(closeSz, closeSz);
             }
             Image closeImg = closeBtn.GetComponent<Image>();
-            if (closeImg != null) closeImg.color = new Color(0f, 0f, 0f, 0.5f);
+            if (closeImg != null) closeImg.color = GalleryUiColorTokens.ChromeIconWell;
             try
             {
                 Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint);
@@ -465,6 +465,7 @@ namespace VPB
                 Text xt = closeBtn.GetComponentInChildren<Text>(true);
                 if (xt != null) xt.text = "X";
             }
+            UI.EnsureFloatChromeHoverBorder(closeBtn, inward: true);
             AddTooltip(closeBtn, "gallery.cmd.close", "Close (Esc)");
 
             GameObject searchRow = UI.CreateChildRT(panelGO, "CmdSearch", AnchorPresets.hStretchTop, new Vector2(0, 36f * s));

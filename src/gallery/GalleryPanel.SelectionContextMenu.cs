@@ -3123,6 +3123,11 @@ namespace VPB
 
         private void CopySelectedPackageNamesToClipboard()
         {
+            CopySelectedPackageNamesToClipboard(forceFullPaths: false);
+        }
+
+        private void CopySelectedPackageNamesToClipboard(bool forceFullPaths)
+        {
             try
             {
                 if (selectedFiles == null || selectedFiles.Count == 0)
@@ -3131,8 +3136,8 @@ namespace VPB
                     return;
                 }
 
-                bool ctrlHeld = IsCtrlHeld();
-                bool shiftHeld = IsShiftHeld();
+                bool ctrlHeld = forceFullPaths || IsCtrlHeld();
+                bool shiftHeld = !forceFullPaths && IsShiftHeld();
                 bool fullPaths = ctrlHeld;
                 bool internalPaths = ctrlHeld && shiftHeld;
 

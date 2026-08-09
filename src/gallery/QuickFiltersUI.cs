@@ -664,6 +664,7 @@ namespace VPB
             SyncSortButtonVisual();
             SyncMergeChrome();
             SyncSoftDeleteUndoButton();
+            try { UI.ApplyFloatRootHoverPolicy(containerGO); } catch { }
         }
 
         private static void StyleChromeIconBtn(GameObject go, float size, string iconPath, Color? backdropOverride = null)

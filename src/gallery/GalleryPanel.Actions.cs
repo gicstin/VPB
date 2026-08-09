@@ -1496,7 +1496,37 @@ namespace VPB
                     return;
                 }
             }
-            SetHoverPath(file.Path);
+
+            string path = ResolveFileDisplayPath(file);
+            // Grid labels on: prepend full untruncated caption above path (info-bar backup).
+            // Primary recovery when over thumb = sticky tip via BindFileButton AddTooltipPlain.
+            bool labelsOn = false;
+            try
+            {
+                labelsOn = VPBConfig.Instance != null
+                    && VPBConfig.Instance.GalleryGridLabelsStripVisible()
+                    && layoutMode == GalleryLayoutMode.Grid;
+            }
+            catch { labelsOn = false; }
+
+            if (labelsOn)
+            {
+                string primary;
+                string secondary;
+                string creator;
+                GetGridItemLabelLines(file, out primary, out secondary, out creator);
+                string cap = BuildGridLabelFullCaption(primary, secondary, creator);
+                if (!string.IsNullOrEmpty(cap))
+                {
+                    if (!string.IsNullOrEmpty(path))
+                        SetHoverPath(cap + "\n" + path);
+                    else
+                        SetHoverPath(cap);
+                    return;
+                }
+            }
+
+            SetHoverPath(path);
         }
 
         /// <summary>
