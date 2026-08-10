@@ -264,6 +264,16 @@ namespace VPB
         public bool PerfApplySoftPhysics = false;
         public bool PerfApplyGlowEffects = false;
 
+        public const int SceneImportCacheLimitMbDefault = 1024;
+        public const int SceneImportCacheLimitMbMin = 256;
+        public const int SceneImportCacheLimitMbMax = 8192;
+        public int SceneImportCacheLimitMb = SceneImportCacheLimitMbDefault;
+
+        public static int ClampSceneImportCacheLimitMb(int value)
+        {
+            return Mathf.Clamp(value, SceneImportCacheLimitMbMin, SceneImportCacheLimitMbMax);
+        }
+
         public static int PerfStepMaxIndex()
         {
             int n = VpbPerfController.StepCount;
@@ -1167,6 +1177,7 @@ namespace VPB
             PerfApplyRealtimeReflectionProbes = false;
             PerfApplySoftPhysics = false;
             PerfApplyGlowEffects = false;
+            SceneImportCacheLimitMb = SceneImportCacheLimitMbDefault;
             InitialGalleryCategory = "Scenes";
             DesktopFixedMode = false;
             DesktopFixedAutoCollapse = true;
@@ -1432,6 +1443,8 @@ namespace VPB
                         if (node["PerfApplyRealtimeReflectionProbes"] != null) PerfApplyRealtimeReflectionProbes = node["PerfApplyRealtimeReflectionProbes"].AsBool;
                         if (node["PerfApplySoftPhysics"] != null) PerfApplySoftPhysics = node["PerfApplySoftPhysics"].AsBool;
                         if (node["PerfApplyGlowEffects"] != null) PerfApplyGlowEffects = node["PerfApplyGlowEffects"].AsBool;
+                        if (node["SceneImportCacheLimitMb"] != null)
+                            SceneImportCacheLimitMb = ClampSceneImportCacheLimitMb(node["SceneImportCacheLimitMb"].AsInt);
                         if (!hadPerfStepKey && (hadPerfBlendKey || hadPerfModeKey || !string.IsNullOrEmpty(PerfPresetMode)))
                             MigrateLegacyPerfPresetFields(this, hadPerfModeKey);
                         else
@@ -1990,6 +2003,8 @@ namespace VPB
                 node["PerfApplyRealtimeReflectionProbes"].AsBool = PerfApplyRealtimeReflectionProbes;
                 node["PerfApplySoftPhysics"].AsBool = PerfApplySoftPhysics;
                 node["PerfApplyGlowEffects"].AsBool = PerfApplyGlowEffects;
+                SceneImportCacheLimitMb = ClampSceneImportCacheLimitMb(SceneImportCacheLimitMb);
+                node["SceneImportCacheLimitMb"].AsInt = SceneImportCacheLimitMb;
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
                 node["global_source_filter"] = GlobalSourceFilter.ToString();
                 node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;

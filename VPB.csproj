@@ -440,6 +440,7 @@
     <Compile Include="src\gallery\GalleryPanel.AppearanceAutoSpawn.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsMaintenance.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsFloat.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPerf.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPlugin.cs" />

@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Threading;
 using SimpleJSON;
 using MVR.FileManagement;
 
@@ -9,8 +12,47 @@ namespace VPB
     // Import sidebar populates its picker (and slices one atom at Apply) without re-parsing the scene.
     internal static partial class VpbLocalDatabase
     {
-        const int SceneAtomCacheSchemaVersion = 1;
+        const int SceneAtomCacheSchemaVersion = 2;
         const string MetaSceneAtomCacheSchemaKey = "scene_atom_cache_schema_v";
+        private static readonly object s_SceneAtomCacheMaintenanceLock = new object();
+        private static readonly object s_SceneAtomCacheTrimLock = new object();
+        private static bool s_SceneAtomCacheTrimRunning;
+        private static bool s_SceneAtomCacheTrimRequested;
+
+        internal static long GetDatabaseFileLength()
+        {
+            try { return new FileInfo(DbPath).Length; }
+            catch { return 0L; }
+        }
+
+        internal static bool TryClearSceneAtomCacheAndVacuum(out bool cacheCleared, out Exception error)
+        {
+            cacheCleared = false;
+            error = null;
+            try
+            {
+                if (!VpbSqlite3.IsAvailable)
+                    throw new InvalidOperationException("SQLite is unavailable");
+                lock (s_SceneAtomCacheMaintenanceLock)
+                {
+                    using (var conn = new VpbSqlite3.Connection(DbPath))
+                    {
+                        EnsureSchema(conn);
+                        EnsureSceneAtomCacheSchema(conn);
+                        conn.ExecUtf8("DELETE FROM scene_person_atom;");
+                        conn.ExecUtf8("DELETE FROM scene_person_atom_usage;");
+                        cacheCleared = true;
+                        conn.ExecUtf8("VACUUM;");
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+                return false;
+            }
+        }
 
         internal static void EnsureSceneAtomCacheSchema(VpbSqlite3.Connection conn)
         {
@@ -25,16 +67,160 @@ namespace VPB
                 "atom_json TEXT NOT NULL," +
                 "sig TEXT NOT NULL," +
                 "PRIMARY KEY(scene_key, atom_id));");
+            conn.ExecUtf8(
+                "CREATE TABLE IF NOT EXISTS scene_person_atom_usage (" +
+                "scene_key TEXT PRIMARY KEY," +
+                "cached_at INTEGER NOT NULL," +
+                "bytes INTEGER NOT NULL);");
+
+            long schemaVersion = 0;
             try
             {
+                using (var st = conn.Prepare("SELECT v FROM meta WHERE k=?"))
+                {
+                    st.BindText(1, MetaSceneAtomCacheSchemaKey);
+                    if (st.Step() == VpbSqlite3.SqliteRow)
+                        long.TryParse(st.ColumnText(0), out schemaVersion);
+                }
+            }
+            catch { }
+
+            if (schemaVersion >= SceneAtomCacheSchemaVersion) return;
+            conn.ExecUtf8("BEGIN IMMEDIATE;");
+            try
+            {
+                // Preserve pre-migration eviction order: older rowids represent earlier cache writes.
+                conn.ExecUtf8(
+                    "INSERT OR IGNORE INTO scene_person_atom_usage(scene_key,cached_at,bytes) " +
+                    "SELECT scene_key,MIN(rowid),SUM(length(CAST(atom_json AS BLOB))) " +
+                    "FROM scene_person_atom GROUP BY scene_key;");
                 using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
                 {
                     st.BindText(1, MetaSceneAtomCacheSchemaKey);
                     st.BindText(2, SceneAtomCacheSchemaVersion.ToString());
                     st.Step();
                 }
+                conn.ExecUtf8("COMMIT;");
+            }
+            catch
+            {
+                try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                throw;
+            }
+        }
+
+        internal static void RequestSceneAtomCacheTrim()
+        {
+            bool startWorker = false;
+            lock (s_SceneAtomCacheTrimLock)
+            {
+                s_SceneAtomCacheTrimRequested = true;
+                if (!s_SceneAtomCacheTrimRunning)
+                {
+                    s_SceneAtomCacheTrimRunning = true;
+                    startWorker = true;
+                }
+            }
+            if (!startWorker) return;
+
+            bool queued = false;
+            try { queued = ThreadPool.QueueUserWorkItem(_ => SceneAtomCacheTrimWorker()); }
+            catch { }
+            if (queued) return;
+
+            lock (s_SceneAtomCacheTrimLock)
+            {
+                s_SceneAtomCacheTrimRunning = false;
+                s_SceneAtomCacheTrimRequested = false;
+            }
+            try { LogUtil.LogWarning("[VPB] Could not start scene import cache trim worker"); } catch { }
+        }
+
+        private static void SceneAtomCacheTrimWorker()
+        {
+            while (true)
+            {
+                lock (s_SceneAtomCacheTrimLock)
+                {
+                    if (!s_SceneAtomCacheTrimRequested)
+                    {
+                        s_SceneAtomCacheTrimRunning = false;
+                        return;
+                    }
+                    s_SceneAtomCacheTrimRequested = false;
+                }
+
+                try { TrimSceneAtomCacheToConfiguredLimit(); }
+                catch (Exception ex)
+                {
+                    try { LogUtil.LogWarning("[VPB] Scene import cache trim failed: " + ex.Message); } catch { }
+                }
+            }
+        }
+
+        private static void TrimSceneAtomCacheToConfiguredLimit()
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            int limitMb = VPBConfig.SceneImportCacheLimitMbDefault;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    limitMb = VPBConfig.ClampSceneImportCacheLimitMb(VPBConfig.Instance.SceneImportCacheLimitMb);
             }
             catch { }
+            long limitBytes = limitMb * 1024L * 1024L;
+
+            lock (s_SceneAtomCacheMaintenanceLock)
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    EnsureSceneAtomCacheSchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        var oldest = new List<KeyValuePair<string, long>>();
+                        long totalBytes = 0;
+                        using (var st = conn.Prepare(
+                            "SELECT scene_key,bytes FROM scene_person_atom_usage ORDER BY cached_at,scene_key"))
+                        {
+                            while (st.Step() == VpbSqlite3.SqliteRow)
+                            {
+                                string key = st.ColumnText(0);
+                                long bytes = st.ColumnInt64(1);
+                                if (string.IsNullOrEmpty(key)) continue;
+                                oldest.Add(new KeyValuePair<string, long>(key, bytes));
+                                totalBytes += bytes;
+                            }
+                        }
+
+                        if (totalBytes > limitBytes)
+                        {
+                            using (var delAtoms = conn.Prepare("DELETE FROM scene_person_atom WHERE scene_key=?"))
+                            using (var delUsage = conn.Prepare("DELETE FROM scene_person_atom_usage WHERE scene_key=?"))
+                            {
+                                for (int i = 0; i < oldest.Count && totalBytes > limitBytes; i++)
+                                {
+                                    string key = oldest[i].Key;
+                                    delAtoms.BindText(1, key);
+                                    delAtoms.Step();
+                                    delAtoms.Reset();
+                                    delUsage.BindText(1, key);
+                                    delUsage.Step();
+                                    delUsage.Reset();
+                                    totalBytes -= oldest[i].Value;
+                                }
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
         }
 
         // Flips when the scene's on-disk bytes change. For a VAR scene the .var file mtime+size move on
@@ -143,6 +329,7 @@ namespace VPB
             string sceneKey = entry.Uid;
             if (string.IsNullOrEmpty(sceneKey)) return;
             string sig = ComputeSceneSig(entry);
+            bool wrote = false;
 
             try
             {
@@ -158,6 +345,12 @@ namespace VPB
                             del.BindText(1, sceneKey);
                             del.Step();
                         }
+                        using (var del = conn.Prepare("DELETE FROM scene_person_atom_usage WHERE scene_key=?"))
+                        {
+                            del.BindText(1, sceneKey);
+                            del.Step();
+                        }
+                        long cachedBytes = 0;
                         using (var ins = conn.Prepare(
                             "INSERT OR REPLACE INTO scene_person_atom(scene_key,atom_id,seq,atom_json,sig) VALUES(?,?,?,?,?)"))
                         {
@@ -166,16 +359,27 @@ namespace VPB
                                 string id = ids[i];
                                 JSONClass node = nodes[i];
                                 if (string.IsNullOrEmpty(id) || node == null) continue;
+                                string atomJson = VPB.src.util.JsonSerializationUtil.Serialize(node, 1 << 20);
                                 ins.BindText(1, sceneKey);
                                 ins.BindText(2, id);
                                 ins.BindInt64(3, i);
-                                ins.BindText(4, VPB.src.util.JsonSerializationUtil.Serialize(node, 1 << 20));
+                                ins.BindText(4, atomJson);
                                 ins.BindText(5, sig);
                                 ins.Step();
                                 ins.Reset();
+                                cachedBytes += Encoding.UTF8.GetByteCount(atomJson);
                             }
                         }
+                        using (var usage = conn.Prepare(
+                            "INSERT OR REPLACE INTO scene_person_atom_usage(scene_key,cached_at,bytes) VALUES(?,?,?)"))
+                        {
+                            usage.BindText(1, sceneKey);
+                            usage.BindInt64(2, DateTime.UtcNow.Ticks);
+                            usage.BindInt64(3, cachedBytes);
+                            usage.Step();
+                        }
                         conn.ExecUtf8("COMMIT;");
+                        wrote = true;
                     }
                     catch
                     {
@@ -188,6 +392,7 @@ namespace VPB
             {
                 try { LogUtil.LogWarning("[VPB] TryWriteSceneAtoms failed: " + ex.Message); } catch { }
             }
+            if (wrote) RequestSceneAtomCacheTrim();
         }
     }
 }

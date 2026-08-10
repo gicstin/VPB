@@ -66,6 +66,7 @@ namespace VPB
 
             /// <summary>Fired when a Button-type row is clicked (primary or secondary click).</summary>
             public Action OnAction;
+            public Func<bool> ActionEnabled;
 
             public Func<Color> GetColor;
             public Action<Color> SetColor;
@@ -332,6 +333,7 @@ namespace VPB
             public bool EnableGalleryFade;
             public bool EnableGalleryTranslucency;
             public bool GalleryManualRefreshOnly;
+            public int SceneImportCacheLimitMb;
             public bool GalleryDetailStripSideInfoEnabled;
             public bool GalleryDetailStripThumbOnRight;
             public float GalleryDetailStripHeightRef;
@@ -1667,6 +1669,29 @@ namespace VPB
 
             AppendGalleryPerfSettings(defs);
             AppendPluginInternalSettingDefinitions(defs);
+            defs.Add(new InternalSettingDefinition {
+                Key = "performance.sceneAtomCacheLimit", GroupKey = "performance",
+                Label = VPBTranslation.T("settings.scene_atom_cache_limit", "Scene Import Cache Limit (GB)"),
+                Tooltip = VPBTranslation.T("settings.tip.scene_atom_cache_limit", "Maximum cached Scene Import Person data. Oldest cached scenes are removed first."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance == null
+                    ? 1f
+                    : VPBConfig.ClampSceneImportCacheLimitMb(VPBConfig.Instance.SceneImportCacheLimitMb) / 1024f,
+                SetFloat = v => {
+                    if (VPBConfig.Instance == null) return;
+                    VPBConfig.Instance.SceneImportCacheLimitMb = VPBConfig.ClampSceneImportCacheLimitMb(Mathf.RoundToInt(v * 1024f));
+                },
+                Min = 0.25f, Max = 8f, Step = 0.25f, Decimals = 2,
+                DeferLiveApply = true
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "performance.sceneAtomCache", GroupKey = "performance",
+                Label = VPBTranslation.T("settings.scene_atom_cache", "Clear Scene Import Cache"),
+                Tooltip = VPBTranslation.T("settings.tip.scene_atom_cache", "Clear cached Person atom data used by Scene Import, then compact VPB database. Cache rebuilds when scenes are imported again."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = RequestSceneAtomCacheCleanup,
+                ActionEnabled = () => !_sceneAtomCacheCleanupRunning
+            });
 
             return defs;
         }
@@ -1707,6 +1732,7 @@ namespace VPB
                 EnableGalleryFade = VPBConfig.Instance.EnableGalleryFade,
                 EnableGalleryTranslucency = VPBConfig.Instance.EnableGalleryTranslucency,
                 GalleryManualRefreshOnly = VPBConfig.Instance.GalleryManualRefreshOnly,
+                SceneImportCacheLimitMb = VPBConfig.Instance.SceneImportCacheLimitMb,
                 GalleryDetailStripSideInfoEnabled = VPBConfig.Instance.GalleryDetailStripSideInfoEnabled,
                 GalleryDetailStripThumbOnRight = VPBConfig.Instance.GalleryDetailStripThumbOnRight,
                 GalleryDetailStripHeightRef = VPBConfig.Instance.GalleryDetailStripHeightRef,
@@ -1981,7 +2007,9 @@ namespace VPB
                 if (def == null) return;
                 string key = def.Key;
                 string group = def.GroupKey;
-                string label = def.Label;
+                string label = string.Equals(key, "performance.sceneAtomCache", StringComparison.OrdinalIgnoreCase)
+                    ? GetSceneAtomCacheSettingsLabel()
+                    : def.Label;
                 if (!GroupAllowed(group)) return;
                 if (!FilterAllowed(label)) return;
                 try
@@ -2043,7 +2071,7 @@ namespace VPB
                 case InternalSettingControlType.TextArea:
                     break;
                 case InternalSettingControlType.Button:
-                    def.OnAction?.Invoke();
+                    if (def.ActionEnabled == null || def.ActionEnabled()) def.OnAction?.Invoke();
                     break;
                 case InternalSettingControlType.ColorRgb:
                     break;
@@ -2527,16 +2555,25 @@ namespace VPB
                 if (def.OnAction != null)
                 {
                     string btnLabel = VPBTranslation.T("settings.row.action", "CLICK");
+                    bool isSceneAtomCache = string.Equals(def.Key, "performance.sceneAtomCache", StringComparison.OrdinalIgnoreCase);
                     if (string.Equals(def.Key, "plugin.scan_whitelist.manage", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.manage", "MANAGE");
                     else if (string.Equals(def.Key, "plugin.qm_positions", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.adjust", "ADJUST");
                     else if (string.Equals(def.Key, "plugin.bench.configure", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.configure", "CONFIGURE");
-                    CreateMiniButton(controls.transform, btnLabel, 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
+                    else if (isSceneAtomCache)
+                        btnLabel = VPBTranslation.T("settings.row.clear", "CLEAR");
+                    GameObject actionGO = CreateMiniButton(controls.transform, btnLabel, 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
+                        if (def.ActionEnabled != null && !def.ActionEnabled()) return;
                         def.OnAction?.Invoke();
                         RefreshInternalSettingsListRows(true);
                     });
+                    if (def.ActionEnabled != null)
+                    {
+                        Button actionButton = actionGO != null ? actionGO.GetComponent<Button>() : null;
+                        if (actionButton != null) actionButton.interactable = def.ActionEnabled();
+                    }
                 }
                 return;
             }
@@ -2561,6 +2598,7 @@ namespace VPB
             try { VPBConfig.Instance.Save(false); } catch { }
             VPBConfig.Instance.TriggerChange();
             try { Settings.SaveConfig(); } catch { }
+            VpbLocalDatabase.RequestSceneAtomCacheTrim();
             try { SetHoverPreviewDummyActive(false); } catch { }
             PluginSettingsEndSession();
             internalSettingsSessionActive = false;
@@ -2601,6 +2639,7 @@ namespace VPB
             VPBConfig.Instance.EnableGalleryFade = b.EnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = b.EnableGalleryTranslucency;
             VPBConfig.Instance.GalleryManualRefreshOnly = b.GalleryManualRefreshOnly;
+            VPBConfig.Instance.SceneImportCacheLimitMb = b.SceneImportCacheLimitMb;
             VPBConfig.Instance.GalleryDetailStripSideInfoEnabled = b.GalleryDetailStripSideInfoEnabled;
             VPBConfig.Instance.GalleryDetailStripThumbOnRight = b.GalleryDetailStripThumbOnRight;
             VPBConfig.Instance.GalleryDetailStripHeightRef = b.GalleryDetailStripHeightRef;

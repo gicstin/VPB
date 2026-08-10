@@ -239,6 +239,8 @@ namespace VPB
 
         void Start()
         {
+            // Apply saved cap after SQLite path setup; waiting for a new import leaves oversized upgrades untouched.
+            VpbLocalDatabase.RequestSceneAtomCacheTrim();
             // Do not rebuild the SQLite index here: FileManager.lastPackageRefreshTime is often still
             // DateTime.MinValue, which would publish scan stamp 0 and disable TryQueryGalleryCategoryRows until
             // a full rebuild runs after a real package refresh. Rebuild is scheduled from

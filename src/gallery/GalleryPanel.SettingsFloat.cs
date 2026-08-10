@@ -743,7 +743,7 @@ namespace VPB
                 childForceExpandWidth: false, childForceExpandHeight: true);
 
             Text nameText = UI.CreateLabel(
-                listRowGO, def.Label ?? row.RowKey ?? "", GalleryUiDesignTokens.SettingsListRowNameFontRef,
+                listRowGO, row.Name ?? def.Label ?? row.RowKey ?? "", GalleryUiDesignTokens.SettingsListRowNameFontRef,
                 Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate,
                 raycastTarget: false, name: "Name");
             GalleryUiMetrics.ApplyFont(nameText, GalleryUiDesignTokens.SettingsListRowNameFontRef, s, GalleryUiDesignTokens.FontMinRef);
