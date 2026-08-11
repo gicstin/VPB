@@ -418,7 +418,7 @@ namespace VPB
                 if (ImageLoadingMgr.singleton != null)
                 {
                     try { ImageLoadingMgr.singleton.CancelBulkOperation(); } catch { }
-                    try { ImageLoadingMgr.singleton.PrepareForSceneLoad(); } catch { }
+                    try { ImageLoadingMgr.singleton.PrepareForSceneLoad(false); } catch { }
                 }
             }
             catch { }

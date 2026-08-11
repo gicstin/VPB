@@ -1460,7 +1460,7 @@ namespace VPB
 
                 if (ImageLoadingMgr.singleton != null)
                 {
-                    ImageLoadingMgr.singleton.PrepareForSceneLoad();
+                    ImageLoadingMgr.singleton.PrepareForSceneLoad(loadMerge);
                 }
 
                 if (!string.IsNullOrEmpty(saveName))

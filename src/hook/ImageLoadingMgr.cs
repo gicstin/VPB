@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using SimpleJSON;
 using UnityEngine;
+using UnityEngine.Profiling;
 using ZstdNet;
 
 namespace VPB
@@ -81,7 +82,17 @@ namespace VPB
             }
         }
 
-        Dictionary<string, Texture2D> textureCache = new Dictionary<string, Texture2D>();
+        private sealed class CachedTexture
+        {
+            public Texture2D Texture;
+            public long EstimatedBytes;
+            public LinkedListNode<string> LruNode;
+        }
+
+        private const long MaxTextureCacheBytes = 512L * 1024 * 1024;
+        private readonly Dictionary<string, CachedTexture> textureCache = new Dictionary<string, CachedTexture>();
+        private readonly LinkedList<string> textureLruOrder = new LinkedList<string>();
+        private long currentTextureCacheBytes;
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
         private readonly object textureCacheLock = new object();
@@ -1029,7 +1040,6 @@ namespace VPB
 
         public void ClearCache()
         {
-            TextureUtil.UnmarkDownscaledActiveByPrefix("ILM:");
             lock (metadataCacheLock)
             {
                 metadataCache.Clear();
@@ -1044,10 +1054,7 @@ namespace VPB
             {
                 cachePathMap.Clear();
             }
-            lock (textureCacheLock)
-            {
-                textureCache.Clear();
-            }
+            ClearTextureCacheReferences();
             lock (inflightLock)
             {
                 inflightKeys.Clear();
@@ -1199,27 +1206,138 @@ namespace VPB
             }
         }
 
-        public Texture2D GetTextureFromCache(string path)
+        private static long EstimateTextureCacheBytes(Texture2D tex)
         {
+            if (tex == null) return 0;
+
+            try
+            {
+                long runtimeBytes = Profiler.GetRuntimeMemorySizeLong(tex);
+                if (runtimeBytes > 0) return runtimeBytes;
+            }
+            catch { }
+
+            try
+            {
+                int width = Math.Max(1, tex.width);
+                int height = Math.Max(1, tex.height);
+                long bytes = TextureUtil.GetExpectedRawDataSize(width, height, tex.format);
+                if (bytes <= 0) bytes = (long)width * height * 4L;
+                if (tex.mipmapCount > 1) bytes += bytes / 3L;
+                return Math.Max(1L, bytes);
+            }
+            catch
+            {
+                return 1L;
+            }
+        }
+
+        private void TouchTextureCacheEntryLocked(string path, CachedTexture entry)
+        {
+            if (entry.LruNode == null)
+            {
+                entry.LruNode = textureLruOrder.AddFirst(path);
+                return;
+            }
+
+            textureLruOrder.Remove(entry.LruNode);
+            textureLruOrder.AddFirst(entry.LruNode);
+        }
+
+        private bool RemoveTextureFromCacheLocked(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+
+            CachedTexture entry;
+            if (!textureCache.TryGetValue(path, out entry)) return false;
+
+            textureCache.Remove(path);
+            if (entry != null)
+            {
+                if (entry.LruNode != null) textureLruOrder.Remove(entry.LruNode);
+                currentTextureCacheBytes -= entry.EstimatedBytes;
+                if (currentTextureCacheBytes < 0) currentTextureCacheBytes = 0;
+            }
+            return true;
+        }
+
+        private void RemoveTextureFromCache(string path)
+        {
+            bool removed;
             lock (textureCacheLock)
             {
-                if (textureCache.TryGetValue(path, out var tex))
-                {
-                    if (tex != null) return tex;
-                    TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
-                    textureCache.Remove(path);
-                }
-                return null;
+                removed = RemoveTextureFromCacheLocked(path);
             }
+            if (removed) TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
+        }
+
+        private void EvictTextureCacheIfNeededLocked()
+        {
+            while (currentTextureCacheBytes > MaxTextureCacheBytes && textureCache.Count > 0)
+            {
+                LinkedListNode<string> lru = textureLruOrder.Last;
+                if (lru == null) break;
+
+                string path = lru.Value;
+                if (!RemoveTextureFromCacheLocked(path))
+                {
+                    textureLruOrder.Remove(lru);
+                    continue;
+                }
+                TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
+            }
+        }
+
+        public void ClearTextureCacheReferences()
+        {
+            TextureUtil.UnmarkDownscaledActiveByPrefix("ILM:");
+            lock (textureCacheLock)
+            {
+                textureCache.Clear();
+                textureLruOrder.Clear();
+                currentTextureCacheBytes = 0;
+            }
+        }
+
+        public Texture2D GetTextureFromCache(string path)
+        {
+            bool removed = false;
+            lock (textureCacheLock)
+            {
+                CachedTexture entry;
+                if (textureCache.TryGetValue(path, out entry))
+                {
+                    if (entry != null && entry.Texture != null)
+                    {
+                        TouchTextureCacheEntryLocked(path, entry);
+                        return entry.Texture;
+                    }
+                    removed = RemoveTextureFromCacheLocked(path);
+                }
+            }
+            if (removed) TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
+            return null;
         }
 
         void RegisterTexture(string path, Texture2D tex)
         {
             if (string.IsNullOrEmpty(path) || tex == null) return;
+            long estimatedBytes = EstimateTextureCacheBytes(tex);
             TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
             lock (textureCacheLock)
             {
-                textureCache[path] = tex;
+                RemoveTextureFromCacheLocked(path);
+                if (estimatedBytes > MaxTextureCacheBytes) return;
+
+                var entry = new CachedTexture
+                {
+                    Texture = tex,
+                    EstimatedBytes = estimatedBytes
+                };
+                textureCache[path] = entry;
+                currentTextureCacheBytes += estimatedBytes;
+                TouchTextureCacheEntryLocked(path, entry);
+                EvictTextureCacheIfNeededLocked();
             }
         }
 
@@ -1371,7 +1489,6 @@ namespace VPB
         public bool Request(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
-            
             LogUtil.MarkImageActivity();
 
             // VaM JSONStorableUrl.Reload / browse sets forceReload. Native UseCachedTex still
@@ -1383,11 +1500,7 @@ namespace VPB
                     string evictKey = GetTextureCacheKey(qi);
                     if (!string.IsNullOrEmpty(evictKey))
                     {
-                        TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(evictKey));
-                        lock (textureCacheLock)
-                        {
-                            textureCache.Remove(evictKey);
-                        }
+                        RemoveTextureFromCache(evictKey);
                     }
                 }
                 catch { }
@@ -1421,11 +1534,7 @@ namespace VPB
             {
                 try
                 {
-                    TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(cacheKey));
-                    lock (textureCacheLock)
-                    {
-                        textureCache.Remove(cacheKey);
-                    }
+                    RemoveTextureFromCache(cacheKey);
                 }
                 catch { }
             }
@@ -1690,7 +1799,7 @@ namespace VPB
                 data.OriginalQI.tex = tex;
 
                 RegisterTexture(data.CacheKey, tex);
-                if (data.Meta.IsDownscaled) 
+                if (data.Meta.IsDownscaled)
                     TextureUtil.MarkDownscaledActive(GetDownscaledKey(data.CacheKey));
                 
                 ResolveInflight(data.CacheKey, tex);
@@ -1734,7 +1843,7 @@ namespace VPB
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
             string cacheKey = GetTextureCacheKey(qi);
-            
+
             if (qi.tex != null)
             {
                 RegisterTexture(cacheKey, qi.tex);
@@ -2692,9 +2801,13 @@ namespace VPB
             }
         }
 
-        /// <summary>Scene load prep: drop stale candidate refs, cancel queued zstd writes; keep RAM decompressed + texture caches.</summary>
-        public void PrepareForSceneLoad()
+        /// <summary>Full replacements release VPB texture refs before VaM's unload pass; merges keep refs still used by live scene.</summary>
+        public void PrepareForSceneLoad(bool loadMerge)
         {
+            if (!loadMerge)
+            {
+                ClearTextureCacheReferences();
+            }
             ClearCandidates();
             lock (runtimeZstdWriteQueueLock)
             {
