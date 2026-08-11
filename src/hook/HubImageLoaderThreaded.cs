@@ -824,8 +824,13 @@ namespace VPB
             if (imageLoaderTask != null)
             {
                 imageLoaderTask.kill = true;
-                imageLoaderTask.resetEvent.Set();
-                while (imageLoaderTask.thread.IsAlive) { }
+                try { imageLoaderTask.resetEvent.Set(); } catch { }
+                Thread t = imageLoaderTask.thread;
+                if (t != null && t.IsAlive)
+                {
+                    // Never spin forever on quit — blocked worker would pin VaM process.
+                    try { t.Join(500); } catch { }
+                }
                 imageLoaderTask = null;
             }
         }
@@ -839,6 +844,7 @@ namespace VPB
                 imageLoaderTask.name = "HubImageLoaderTask";
                 imageLoaderTask.resetEvent = new AutoResetEvent(false);
                 imageLoaderTask.thread = new Thread(MTTask);
+                imageLoaderTask.thread.IsBackground = true;
                 imageLoaderTask.thread.Priority = System.Threading.ThreadPriority.Normal;
                 imageLoaderTask.thread.Start(imageLoaderTask);
             }

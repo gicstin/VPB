@@ -41,6 +41,7 @@ namespace VPB
         private static Thread s_Thread;
         private static volatile bool s_WantVisible;
         private static volatile bool s_ThreadRunning;
+        private static volatile bool s_ShutdownRequested;
         private static volatile IntPtr s_Hwnd;
         private static int s_Pulse;
         private static IntPtr s_BrushBg;
@@ -51,6 +52,7 @@ namespace VPB
 
         internal static void Show()
         {
+            if (s_ShutdownRequested) return;
             s_WantVisible = true;
             EnsureThread();
         }
@@ -66,10 +68,62 @@ namespace VPB
             }
         }
 
-        private static void EnsureThread()
+        /// <summary>
+        /// Tear down Win32 message pump. Hide alone is not enough — GetMessage thread
+        /// + HWND keep VaM from exiting cleanly after any EnterBlocking (scene load).
+        /// Only PostMessage from foreign threads — DestroyWindow runs on STA owner via WndProc.
+        /// </summary>
+        internal static void Shutdown()
         {
+            s_ShutdownRequested = true;
+            s_WantVisible = false;
+            Thread thread;
+            IntPtr hwnd;
             lock (s_Sync)
             {
+                thread = s_Thread;
+                hwnd = s_Hwnd;
+            }
+
+            if (hwnd != IntPtr.Zero)
+            {
+                try { PostMessage(hwnd, WmClose, IntPtr.Zero, IntPtr.Zero); } catch { }
+            }
+
+            if (thread != null && thread.IsAlive)
+            {
+                // Window may still be creating — brief retry so PostMessage can land.
+                for (int i = 0; i < 3 && thread.IsAlive; i++)
+                {
+                    hwnd = s_Hwnd;
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        try { PostMessage(hwnd, WmClose, IntPtr.Zero, IntPtr.Zero); } catch { }
+                        break;
+                    }
+                    try { Thread.Sleep(50); } catch { }
+                }
+                try { thread.Join(750); } catch { }
+            }
+
+            lock (s_Sync)
+            {
+                if (s_Thread == thread)
+                {
+                    s_Thread = null;
+                    s_ThreadRunning = false;
+                }
+                if (s_Hwnd == hwnd)
+                    s_Hwnd = IntPtr.Zero;
+            }
+        }
+
+        private static void EnsureThread()
+        {
+            if (s_ShutdownRequested) return;
+            lock (s_Sync)
+            {
+                if (s_ShutdownRequested) return;
                 if (s_Thread != null && s_ThreadRunning) return;
                 s_ThreadRunning = true;
                 s_Thread = new Thread(ThreadMain);
@@ -84,6 +138,8 @@ namespace VPB
         {
             try
             {
+                if (s_ShutdownRequested) return;
+
                 EnsureWindowClass();
                 s_BrushBg = CreateSolidBrush(Rgb(18, 22, 28));
                 s_BrushFill = CreateSolidBrush(Rgb(90, 200, 255));
@@ -105,6 +161,12 @@ namespace VPB
                     return;
                 }
 
+                if (s_ShutdownRequested)
+                {
+                    try { DestroyWindow(hwnd); } catch { }
+                    return;
+                }
+
                 SetLayeredWindowAttributes(hwnd, 0, 230, LwaAlpha);
                 SetWindowPos(hwnd, new IntPtr(HwndTopmost), 0, 0, screenW, StripHeightPx,
                     SwpNoActivate | SwpHideWindow);
@@ -113,6 +175,11 @@ namespace VPB
                 MSG msg;
                 while (GetMessage(out msg, IntPtr.Zero, 0, 0) > 0)
                 {
+                    if (s_ShutdownRequested)
+                    {
+                        try { DestroyWindow(hwnd); } catch { }
+                        break;
+                    }
                     TranslateMessage(ref msg);
                     DispatchMessage(ref msg);
                 }

@@ -396,6 +396,32 @@ namespace VPB
                 "SELECT COUNT(*) FROM pkg WHERE uid NOT IN (SELECT pkg_uid FROM cat_mem);");
         }
 
+        /// <summary>
+        /// Tiny persistent gaps (corrupt / uncacheable VARs) must not wipe ready meta and force a full
+        /// gallery SQL rebuild on every launch. Seen: 28 missing of ~20k with uid set match.
+        /// Cap = max(32, total/500) — same floor as cache-ready gate, ~0.2% on large libraries.
+        /// </summary>
+        private static bool IsAcceptableMissingCatMem(long missing, long totalPkgs)
+        {
+            if (missing <= 0) return true;
+            if (totalPkgs <= 0) return false;
+            long maxGap = Math.Max(32L, totalPkgs / 500L);
+            return missing <= maxGap;
+        }
+
+        /// <summary>True when pkg row count + inventory sig match and cat_mem coverage is complete or within gap.</summary>
+        private static bool IsGalleryIndexCoverageComplete(
+            long pkgRowsAfter,
+            int pkgSnapCount,
+            long packagesMissingCatMem,
+            string dbInvSigAfter,
+            string invSigForMeta)
+        {
+            if (pkgRowsAfter != pkgSnapCount) return false;
+            if (!string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal)) return false;
+            return IsAcceptableMissingCatMem(packagesMissingCatMem, pkgRowsAfter);
+        }
+
         private static string MetaGet(VpbSqlite3.Connection conn, string key)
         {
             try
@@ -3302,7 +3328,7 @@ namespace VPB
                             int.TryParse(stPkg.ColumnText(0), out pkgCount);
                     }
                     pkgsMissingCatMem = CountPackagesMissingCatMem(conn);
-                    if (pkgsMissingCatMem > 0)
+                    if (!IsAcceptableMissingCatMem(pkgsMissingCatMem, pkgCount))
                     {
                         try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: packages_missing_cat_mem=" + pkgsMissingCatMem); } catch { }
                         return false;
@@ -3325,7 +3351,10 @@ namespace VPB
                         }
                     }
                     catch { }
-                    if (liveCount > 0 && pkgCount > 0 && liveCount != pkgCount)
+                    if (liveCount > 0 && pkgCount > 0 && liveCount != pkgCount
+                        && !IsAcceptableMissingCatMem(
+                            Math.Abs((long)liveCount - pkgCount),
+                            Math.Max((long)liveCount, pkgCount)))
                     {
                         try
                         {
@@ -3706,9 +3735,13 @@ namespace VPB
                             if (FileManager.PackagesByUid != null)
                                 liveCount = FileManager.PackagesByUid.Count;
                         }
-                        if (liveCount > 0 && pkgCount != liveCount)
+                        if (liveCount > 0 && pkgCount != liveCount
+                            && !IsAcceptableMissingCatMem(
+                                Math.Abs((long)liveCount - pkgCount),
+                                Math.Max((long)liveCount, pkgCount)))
                             return true;
-                        if (CountPackagesMissingCatMem(conn) > 0)
+                        long missingCat = CountPackagesMissingCatMem(conn);
+                        if (!IsAcceptableMissingCatMem(missingCat, pkgCount))
                             return true;
                     }
                 }
@@ -3732,7 +3765,9 @@ namespace VPB
                     if (!string.Equals(ready ?? "", "1", StringComparison.Ordinal))
                         return false;
                     long catMem = ScalarInt64(conn, "SELECT COUNT(*) FROM cat_mem;");
-                    return catMem > 0 && CountPackagesMissingCatMem(conn) == 0;
+                    if (catMem <= 0) return false;
+                    long pkgCount = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg;");
+                    return IsAcceptableMissingCatMem(CountPackagesMissingCatMem(conn), pkgCount);
                 }
             }
             catch
@@ -3971,9 +4006,11 @@ namespace VPB
 
             if (forceFullRebuild || NeedsFullGalleryIndexBuild())
             {
+                // forceFullRebuild must not bypass skip: deferred startup used to pass true and
+                // rebuild every launch even after a valid on-disk index. NeedsFull already decided.
                 if (!TryEnqueueFullGalleryIndexRebuild(forceFullRebuild
                     ? "forceFullRebuild"
-                    : "NeedsFullGalleryIndexBuild", forceFullRebuild))
+                    : "NeedsFullGalleryIndexBuild", false))
                     return;
                 return;
             }
@@ -4293,9 +4330,8 @@ namespace VPB
                         pkgRowsAfter = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg;");
                         packagesMissingCatMem = CountPackagesMissingCatMem(conn);
                         dbInvSigAfter = ComputePackageInventorySignatureFromDatabase(conn);
-                        indexComplete = pkgRowsAfter == pkgSnap.Count
-                            && packagesMissingCatMem == 0
-                            && string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal);
+                        indexComplete = IsGalleryIndexCoverageComplete(
+                            pkgRowsAfter, pkgSnap.Count, packagesMissingCatMem, dbInvSigAfter, invSigForMeta);
 
                         // Always recompute after remove and/or add (IndexVarPackages may no-op on empty add).
                         try { RefreshAllPkgNewestFlags(conn); } catch { }
@@ -5471,16 +5507,27 @@ namespace VPB
                         pkgRowsAfter = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg;");
                         packagesMissingCatMem = CountPackagesMissingCatMem(conn);
                         dbInvSigAfter = ComputePackageInventorySignatureFromDatabase(conn);
-                        catMemIndexComplete = pkgRowsAfter == pkgSnap.Count
-                            && packagesMissingCatMem == 0
-                            && string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal);
+                        catMemIndexComplete = IsGalleryIndexCoverageComplete(
+                            pkgRowsAfter, pkgSnap.Count, packagesMissingCatMem, dbInvSigAfter, invSigForMeta);
 
                         try { RefreshAllPkgNewestFlags(conn); } catch { }
                         try { MarkPkgLicenseBackfillComplete(conn); } catch { }
 
                         long tMeta0 = Stopwatch.GetTimestamp();
                         if (catMemIndexComplete)
+                        {
                             WriteGalleryIndexReadyMeta(conn, scanAtStart, catSig, invSigForMeta);
+                            if (packagesMissingCatMem > 0)
+                            {
+                                try
+                                {
+                                    LogUtil.Log(VamStartupOptimizations.LogTag
+                                        + " gallery SQL rebuild ready with tolerated cat_mem gap="
+                                        + packagesMissingCatMem + "/" + pkgRowsAfter);
+                                }
+                                catch { }
+                            }
+                        }
                         else
                         {
                             try

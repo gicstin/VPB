@@ -202,7 +202,7 @@ namespace VPB
             titleClipRT.anchorMin = new Vector2(0f, 0f);
             titleClipRT.anchorMax = new Vector2(0f, 1f);
             titleClipRT.pivot = new Vector2(0f, 0.5f);
-            titleClip.AddComponent<RectMask2D>();
+
             var titleClipLe = titleClip.AddComponent<LayoutElement>();
             titleClipLe.flexibleWidth = 1f;
             titleClipLe.preferredWidth = 168f;
@@ -221,8 +221,9 @@ namespace VPB
                 if (t != null)
                 {
                     t.color = Color.white;
-                    t.horizontalOverflow = HorizontalWrapMode.Wrap;
-                    t.verticalOverflow = VerticalWrapMode.Truncate;
+
+                    t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                    t.verticalOverflow = VerticalWrapMode.Overflow;
                 }
             }
             catch { }
@@ -390,10 +391,17 @@ namespace VPB
                 contentVlg.padding = new RectOffset(pad, pad, pad, pad);
                 contentVlg.spacing = GalleryUiDesignTokens.PopupMenuRowSpacingRef * s;
             }
-            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
             int padH = Mathf.RoundToInt(10f * s);
             int padV = Mathf.RoundToInt(6f * s);
             int gap = Mathf.RoundToInt(10f * s);
+            // FontMin floor keeps fontSize high while rowH tracks raw scale — at low UI scale
+            // Wrap+Truncate then drops the only line (empty rows, visible chrome). Match header
+            // Overflow fix + keep row tall enough for floored font.
+            int fontPt = GalleryUiMetrics.ScaledFontSize(
+                GalleryUiDesignTokens.PopupMenuRowFontLargeRef, s, GalleryUiDesignTokens.FontMinRef);
+            float rowH = Mathf.Max(
+                GalleryUiDesignTokens.PopupMenuRowHeightRef * s,
+                fontPt + padV * 2 + 2f);
             for (int i = 0; i < parent.childCount; i++)
             {
                 Transform row = parent.GetChild(i);
@@ -419,7 +427,12 @@ namespace VPB
                     if (child == null) continue;
                     Text t = child.GetComponent<Text>();
                     if (t != null)
-                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuRowFontLargeRef, s, 12);
+                    {
+                        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                        t.verticalOverflow = VerticalWrapMode.Overflow;
+                        GalleryUiMetrics.ApplyFont(
+                            t, GalleryUiDesignTokens.PopupMenuRowFontLargeRef, s, GalleryUiDesignTokens.FontMinRef);
+                    }
                     LayoutElement childLe = child.GetComponent<LayoutElement>();
                     if (childLe != null && child.name == "Idx")
                     {
@@ -428,6 +441,26 @@ namespace VPB
                     }
                 }
             }
+            try
+            {
+                RectTransform contentRT = _categoryQuickMenuContentGO.GetComponent<RectTransform>();
+                if (contentRT != null)
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(contentRT);
+                RefreshCategoryQuickMenuMaskClip();
+            }
+            catch { }
+        }
+
+        /// <summary>Unity 2018 RectMask2D caches clip rect; nudge after scale so row glyphs reclip.</summary>
+        private void RefreshCategoryQuickMenuMaskClip()
+        {
+            if (_categoryQuickMenuScrollGO == null) return;
+            Transform vp = _categoryQuickMenuScrollGO.transform.Find("Viewport");
+            if (vp == null) return;
+            RectMask2D mask = vp.GetComponent<RectMask2D>();
+            if (mask == null) return;
+            mask.enabled = false;
+            mask.enabled = true;
         }
 
         private void SyncCategoryQuickSwitchChrome()
@@ -793,11 +826,15 @@ namespace VPB
 
             string numPrefix = keyboardDigitLabel >= 0 ? (keyboardDigitLabel == 0 ? "0." : keyboardDigitLabel + ".") : rowLabelNumber + ".";
 
-            var numT = UI.CreateLabel(row, numPrefix, GalleryUiDesignTokens.FontBodyRef, UI.PopupMutedText, TextAnchor.MiddleLeft, name: "Idx");
+            // Overflow: Wrap+Truncate blanks when UI-scale pass leaves row shorter than one line
+            // (same class of bug as CategoryQuickTitleClip header label).
+            var numT = UI.CreateLabel(row, numPrefix, GalleryUiDesignTokens.FontBodyRef, UI.PopupMutedText, TextAnchor.MiddleLeft,
+                HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, name: "Idx");
             var numLe = UI.AddLE(numT.gameObject, minWidth: 34, preferredWidth: 34);
 
             int cnt = categoryCounts != null && categoryCounts.ContainsKey(cat.name ?? "") ? categoryCounts[cat.name] : 0;
-            var nameT = UI.CreateLabel(row, (cat.name ?? "") + " (" + cnt + ")", GalleryUiDesignTokens.FontBodyRef, isActive ? UI.PopupText : UI.PopupMutedText, TextAnchor.MiddleLeft, name: "Name");
+            var nameT = UI.CreateLabel(row, (cat.name ?? "") + " (" + cnt + ")", GalleryUiDesignTokens.FontBodyRef, isActive ? UI.PopupText : UI.PopupMutedText, TextAnchor.MiddleLeft,
+                HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, name: "Name");
             var nameLe = UI.AddLE(nameT.gameObject, minWidth: 40, flexibleWidth: 1);
         }
 

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using ZstdNet;
 
@@ -8,6 +10,8 @@ namespace VPB
     {
         private static string _cachedZstdPath = null;
         private static bool _zstdChecked = false;
+        private static readonly object _activeProcLock = new object();
+        private static readonly List<Process> _activeProcs = new List<Process>(8);
 
         private static string GetNativeZstdPath()
         {
@@ -67,6 +71,46 @@ namespace VPB
             return _cachedZstdPath;
         }
 
+        /// <summary>Kill any in-flight external zstd.exe children (quit / cancel path).</summary>
+        public static void KillActiveProcesses()
+        {
+            Process[] snapshot;
+            lock (_activeProcLock)
+            {
+                snapshot = _activeProcs.ToArray();
+                _activeProcs.Clear();
+            }
+            for (int i = 0; i < snapshot.Length; i++)
+            {
+                Process p = snapshot[i];
+                if (p == null) continue;
+                try
+                {
+                    if (!p.HasExited) p.Kill();
+                }
+                catch { }
+                try { p.Dispose(); } catch { }
+            }
+        }
+
+        private static void RegisterActiveProcess(Process process)
+        {
+            if (process == null) return;
+            lock (_activeProcLock)
+            {
+                _activeProcs.Add(process);
+            }
+        }
+
+        private static void UnregisterActiveProcess(Process process)
+        {
+            if (process == null) return;
+            lock (_activeProcLock)
+            {
+                _activeProcs.Remove(process);
+            }
+        }
+
         private static bool RunZstd(string arguments, int timeoutMs = 30000)
         {
             string exePath = GetNativeZstdPath();
@@ -75,36 +119,38 @@ namespace VPB
             // If we don't have the full path, and it's not "zstd.exe", we can't be sure it exists
             if (exePath.Contains("\\") && !File.Exists(exePath)) return false;
 
+            Process process = null;
             try
             {
-                var startInfo = new System.Diagnostics.ProcessStartInfo
+                var startInfo = new ProcessStartInfo
                 {
                     FileName = exePath,
                     Arguments = arguments,
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+                    WindowStyle = ProcessWindowStyle.Hidden
                 };
 
-                using (var process = System.Diagnostics.Process.Start(startInfo))
+                process = Process.Start(startInfo);
+                if (process == null) return false;
+
+                RegisterActiveProcess(process);
+                bool exited = process.WaitForExit(timeoutMs);
+                if (exited && process.ExitCode == 0)
+                    return true;
+                if (!exited)
                 {
-                    if (process != null)
-                    {
-                        bool exited = process.WaitForExit(timeoutMs);
-                        if (exited && process.ExitCode == 0)
-                        {
-                            return true;
-                        }
-                        if (!exited)
-                        {
-                            try { process.Kill(); } catch { }
-                        }
-                    }
+                    try { process.Kill(); } catch { }
                 }
             }
             catch (Exception ex)
             {
                 LogUtil.LogWarning("[VPB] RunZstd failed: " + ex.Message);
+            }
+            finally
+            {
+                UnregisterActiveProcess(process);
+                try { if (process != null) process.Dispose(); } catch { }
             }
             return false;
         }

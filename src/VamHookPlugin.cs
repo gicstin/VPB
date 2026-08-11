@@ -634,6 +634,7 @@ namespace VPB
         }
         void OnDestroy()
         {
+            try { VpbProgressService.ShutdownForQuit(); } catch { }
             try { VpbPerfController.Shutdown(); } catch { }
             try
             {
@@ -666,6 +667,12 @@ namespace VPB
                 Destroy(m_QuickMenuCanvas.gameObject);
             }
             VPBLogger.Destroy();
+        }
+
+        void OnApplicationQuit()
+        {
+            // Runs before OnDestroy during player quit — kill Win32 pump + zstd writers early.
+            try { VpbProgressService.ShutdownForQuit(); } catch { }
         }
         // Called on (hard) restart as well.
         IEnumerator ApplyLateStartupProfilerPatchesCo()

@@ -110,6 +110,7 @@ namespace VPB
                     ReleaseJob(dropped);
                 }
             }
+            try { ZstdCompressor.KillActiveProcesses(); } catch { }
         }
 
         /// <summary>Enqueue payload ownership transfer. Returns false if path busy/cancel/invalid.</summary>
@@ -327,7 +328,9 @@ namespace VPB
             finally
             {
                 Interlocked.Decrement(ref s_ActiveWriters);
-                if (!s_Cancel)
+                if (s_Cancel)
+                    DisposeThreadCompressor();
+                else
                     TrySpawnWriters();
             }
         }
@@ -336,6 +339,7 @@ namespace VPB
         {
             compressedLen = 0;
             diskBytes = 0;
+            if (s_Cancel) return false;
             string zstdPath = job.ZstdPath;
             if (string.IsNullOrEmpty(zstdPath)) return false;
 
@@ -344,9 +348,11 @@ namespace VPB
             {
                 try
                 {
+                    if (s_Cancel) return false;
                     if (!File.Exists(job.NativeSourcePath)) return false;
                     long rawLen = new FileInfo(job.NativeSourcePath).Length;
                     ZstdCompressor.SaveCacheFromFile(zstdPath, job.NativeSourcePath, job.Level);
+                    if (s_Cancel) return false;
                     if (!File.Exists(zstdPath)) return false;
                     compressedLen = new FileInfo(zstdPath).Length;
 
@@ -361,7 +367,7 @@ namespace VPB
                     }
                     catch { diskBytes = compressedLen; }
 
-                    return true;
+                    return !s_Cancel;
                 }
                 catch (Exception ex)
                 {
@@ -372,9 +378,11 @@ namespace VPB
 
             byte[] raw = job.Payload;
             if (raw == null || raw.Length == 0) return false;
+            if (s_Cancel) return false;
 
             byte[] compressed = CompressWithThreadCompressor(raw, job.Level);
             if (compressed == null || compressed.Length == 0) return false;
+            if (s_Cancel) return false;
             compressedLen = compressed.Length;
 
             try
@@ -522,6 +530,21 @@ namespace VPB
             if (job == null) return;
             try { ImageLoadingMgr.ReleaseZstdWritePath(job.ZstdPath); } catch { }
             job.Payload = null;
+        }
+
+        /// <summary>Dispose thread-local ZstdNet compressor (native handle) on quit.</summary>
+        internal static void DisposeThreadCompressor()
+        {
+            try
+            {
+                if (s_ThreadCompressor != null)
+                {
+                    try { s_ThreadCompressor.Dispose(); } catch { }
+                    s_ThreadCompressor = null;
+                    s_ThreadCompressorLevel = int.MinValue;
+                }
+            }
+            catch { }
         }
     }
 }

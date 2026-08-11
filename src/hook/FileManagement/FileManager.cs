@@ -4388,6 +4388,7 @@ namespace VPB
 					}
 				}
 			});
+			loadThread.IsBackground = true;
 			loadThread.Start();
 			while (loadThread.IsAlive)
 			{

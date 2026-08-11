@@ -401,6 +401,33 @@ namespace VPB
             try { NativeTextureOnDemandCache.RequestCancel(); } catch { }
         }
 
+        private static int s_QuitShutdownDone;
+
+        /// <summary>
+        /// Deterministic process-exit teardown. Clears blocking chrome, cancels workers,
+        /// and destroys OS heartbeat message pump so VaM can exit without Task Manager.
+        /// </summary>
+        internal static void ShutdownForQuit()
+        {
+            if (System.Threading.Interlocked.Exchange(ref s_QuitShutdownDone, 1) != 0)
+                return;
+
+            try { RequestCancelActiveJob(); } catch { }
+            try
+            {
+                if (ImageLoadingMgr.singleton != null)
+                {
+                    try { ImageLoadingMgr.singleton.CancelBulkOperation(); } catch { }
+                    try { ImageLoadingMgr.singleton.PrepareForSceneLoad(); } catch { }
+                }
+            }
+            catch { }
+            try { OnDemandZstdWriteQueue.RequestCancel(); } catch { }
+            try { ZstdCompressor.KillActiveProcesses(); } catch { }
+            try { ClearBlocking(); } catch { }
+            try { VpbOsBusyHeartbeat.Shutdown(); } catch { }
+        }
+
         internal static void BeginBulkZstd(bool decompress)
         {
             s_BulkZstdActive = true;
