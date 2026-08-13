@@ -63,11 +63,14 @@ namespace VPB
         {
             if (SuperController.singleton == null) return null;
 
-            // 0. Prefer the target selected in the GalleryPanel dropdown
+            // 0. Prefer the target selected in the GalleryPanel dropdown. Every caller here applies a person
+            // preset, so skip a CUA selection (the CUA category repurposes the dropdown) and fall through to
+            // the person lookup below — ResolveCuaTargetAtom is the accessor for asset targets.
             try
             {
                 Atom selectedInDropdown = SelectedTargetAtom;
-                if (selectedInDropdown != null) return selectedInDropdown;
+                if (selectedInDropdown != null && !SceneUtils.IsCustomUnityAssetAtom(selectedInDropdown))
+                    return selectedInDropdown;
             }
             catch { }
 
@@ -333,9 +336,10 @@ namespace VPB
 
                     if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle") || pathLower.EndsWith(".unity3d"))
                     {
-                        Atom selected = null;
-                        try { selected = SuperController.singleton != null ? SuperController.singleton.GetSelectedAtom() : null; } catch { selected = null; }
-                        if (selected != null && selected.type == "CustomUnityAsset") dragger.LoadCUAIntoAtom(selected, file.Uid);
+                        // Gallery Target first (CUA category lists CustomUnityAsset atoms), then whatever is
+                        // selected in VaM, and only spawn a fresh CUA when neither names one.
+                        Atom target = ResolveCuaTargetAtom();
+                        if (target != null) dragger.LoadCUAIntoAtom(target, file.Uid);
                         else dragger.LoadCUA(file.Uid);
                         return true;
                     }

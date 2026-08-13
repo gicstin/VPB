@@ -992,6 +992,34 @@ namespace VPB
             return !string.IsNullOrEmpty(title) && title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        /// <summary>
+        /// CUA category ("CUA" / Custom/Assets): an .assetbundle pick applies to a CustomUnityAsset atom, so the
+        /// Target picker must list those instead of Persons — otherwise there is no way to say which CUA receives it.
+        /// </summary>
+        public bool IsCuaTargetMode()
+        {
+            string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+            return !string.IsNullOrEmpty(title) && title.IndexOf("CUA", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Gallery Target when it is a CUA, else VaM's selected atom when that is a CUA. Null = spawn one.</summary>
+        public Atom ResolveCuaTargetAtom()
+        {
+            try
+            {
+                Atom fromDropdown = SelectedTargetAtom;
+                if (SceneUtils.IsCustomUnityAssetAtom(fromDropdown)) return fromDropdown;
+            }
+            catch { }
+            try
+            {
+                Atom selected = SuperController.singleton != null ? SuperController.singleton.GetSelectedAtom() : null;
+                if (SceneUtils.IsCustomUnityAssetAtom(selected)) return selected;
+            }
+            catch { }
+            return null;
+        }
+
         private void CacheCategoryCounts()
         {
             if (categories == null) return;
@@ -4097,6 +4125,7 @@ namespace VPB
             targetDropdownOptions.Clear();
 
             bool subSceneMode = IsSubSceneTargetMode();
+            bool cuaMode = !subSceneMode && IsCuaTargetMode();
             if (SuperController.singleton != null)
             {
                 List<Atom> allAtoms = null;
@@ -4108,7 +4137,9 @@ namespace VPB
                         if (a == null) continue;
                         try
                         {
-                            bool include = subSceneMode ? SceneUtils.IsSubSceneAtom(a) : SceneUtils.IsPersonLikeAtom(a);
+                            bool include = subSceneMode
+                                ? SceneUtils.IsSubSceneAtom(a)
+                                : (cuaMode ? SceneUtils.IsCustomUnityAssetAtom(a) : SceneUtils.IsPersonLikeAtom(a));
                             if (include)
                             {
                                 string uid = a.uid;

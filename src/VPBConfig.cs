@@ -623,21 +623,202 @@ namespace VPB
         /// <summary>When anchored to VaM menu, hide the gallery if a full-screen VaM panel becomes active (Settings, Hub, package managers) so they never overlap.</summary>
         public bool AnchorYieldsToVamPanels = true;
 
-        // VR quick-menu wrist watch (the assignable-button grid moved onto a controller).
-        /// <summary>Master show/hide for the VR wrist watch (toggled from the footer button).</summary>
+        // VR wrist watch (separate controller canvas; HUD assignable grid stays).
+        public static readonly Vector3 QuickMenuVrWatchOffsetDefault = new Vector3(0.045f, -0.012f, 0.03f);
+        public const float QuickMenuVrWatchTowardDefault = 0.04f;
+        public const float QuickMenuVrWatchScaleMulDefault = 0.75f;
+        public const int QuickMenuVrWatchExtraSlotCount = 4;
+        public const int QuickMenuVrWatchAssignSlotCount = 8;
+        public const int QuickMenuVrWatchPageCount = 10;
+
+        /// <summary>Master show/hide for the VR wrist watch (footer W / watch hide / Settings).</summary>
         public bool QuickMenuVrWatchVisible = true;
-        /// <summary>Which hand the watch rides on: "Off" / "Left only" / "Right only" / "Opposite to menu".</summary>
+        /// <summary>Which hand: "Left only" / "Right only" / "Opposite to menu" / "Same hand". No Off.</summary>
         public string QuickMenuVrWatchMode = "Opposite to menu";
-        /// <summary>When true the watch only appears while the VaM menu is open; otherwise it shows at all times in VR.</summary>
+        /// <summary>When the face appears: "Glance" / "Menu" / "Always".</summary>
+        public string QuickMenuVrWatchShowWhen = "Glance";
+        /// <summary>Legacy; migrated into QuickMenuVrWatchShowWhen on load.</summary>
         public bool QuickMenuVrWatchOnlyWithMenu = true;
-        /// <summary>When true the watch face billboards to point at the player's eye; otherwise uses fixed local euler.</summary>
+        /// <summary>When true, Switch Watch Hand writes Left/Right into QuickMenuVrWatchMode.</summary>
+        public bool QuickMenuVrWatchRememberHand = false;
+        /// <summary>Watch face billboards toward the player's eye.</summary>
         public bool QuickMenuVrWatchFaceUser = true;
-        /// <summary>World scale of the watch canvas.</summary>
-        public float QuickMenuVrWatchScale = 0.0005f;
-        /// <summary>Distance the panel is pulled from the controller toward the eye (off the controller's pointer ray).</summary>
-        public float QuickMenuVrWatchTowardUserDist = 0.12f;
-        /// <summary>Local position offset of the watch canvas on the controller.</summary>
-        public Vector3 QuickMenuVrWatchOffset = new Vector3(0f, 0.05f, 0.04f);
+        /// <summary>Visual size multiplier. 1.0 = HUD meters-per-pixel after worldScale compensate.</summary>
+        public float QuickMenuVrWatchScaleMul = QuickMenuVrWatchScaleMulDefault;
+        /// <summary>Legacy absolute world scale; migrated to ScaleMul on load.</summary>
+        public float QuickMenuVrWatchScale = 0.001f;
+        /// <summary>Distance the panel is pulled from the controller toward the eye.</summary>
+        public float QuickMenuVrWatchTowardUserDist = QuickMenuVrWatchTowardDefault;
+        /// <summary>Local position offset of the watch canvas on the controller (X flipped on right hand).</summary>
+        public Vector3 QuickMenuVrWatchOffset = QuickMenuVrWatchOffsetDefault;
+        /// <summary>True after the first-run wrist-watch cue has finished.</summary>
+        public bool QuickMenuVrWatchOnboardingSeen = false;
+        /// <summary>Legacy extra wrist-watch actions; migrated into <see cref="QuickMenuVrWatchButtonsPages"/> page 0.</summary>
+        public string[] QuickMenuVrWatchExtraActions;
+        /// <summary>Watch-local assignable pages [page][slot] => action id. Independent from HUD quick-menu pages.</summary>
+        public string[][] QuickMenuVrWatchButtonsPages;
+        /// <summary>Current watch assignable page (0-based).</summary>
+        public int QuickMenuVrWatchCurrentPage;
+        /// <summary>True after extras/defaults have been copied into watch pages once.</summary>
+        public bool QuickMenuVrWatchButtonsMigrated;
+        /// <summary>True after one-time migrate of old 1.0 default scale to <see cref="QuickMenuVrWatchScaleMulDefault"/>.</summary>
+        public bool QuickMenuVrWatchScaleMulV2;
+
+        public void ResetVrWatchPose()
+        {
+            QuickMenuVrWatchOffset = QuickMenuVrWatchOffsetDefault;
+            QuickMenuVrWatchTowardUserDist = QuickMenuVrWatchTowardDefault;
+            QuickMenuVrWatchScaleMul = QuickMenuVrWatchScaleMulDefault;
+            QuickMenuVrWatchScale = VpbWorldSpaceUiScale.MetersPerUiPixel * QuickMenuVrWatchScaleMulDefault;
+            QuickMenuVrWatchFaceUser = true;
+        }
+
+        private void MigrateVrWatchSettings(JSONNode node)
+        {
+            if (node == null) return;
+
+            if (string.Equals(QuickMenuVrWatchMode, "Off", System.StringComparison.Ordinal))
+            {
+                QuickMenuVrWatchVisible = false;
+                QuickMenuVrWatchMode = "Opposite to menu";
+            }
+
+            if (node["QuickMenuVrWatchShowWhen"] == null)
+            {
+                if (node["QuickMenuVrWatchOnlyWithMenu"] != null && !QuickMenuVrWatchOnlyWithMenu)
+                    QuickMenuVrWatchShowWhen = "Always";
+                else
+                    QuickMenuVrWatchShowWhen = "Menu";
+            }
+
+            if (node["QuickMenuVrWatchScaleMul"] == null && node["QuickMenuVrWatchScale"] != null)
+            {
+                float old = QuickMenuVrWatchScale;
+                if (Mathf.Abs(old - 0.0005f) < 1e-6f)
+                    QuickMenuVrWatchScaleMul = QuickMenuVrWatchScaleMulDefault;
+                else
+                    QuickMenuVrWatchScaleMul = Mathf.Clamp(old / VpbWorldSpaceUiScale.MetersPerUiPixel, 0.4f, 3f);
+            }
+
+            if (node["QuickMenuVrWatchTowardUserDist"] != null &&
+                Mathf.Abs(QuickMenuVrWatchTowardUserDist - 0.12f) < 1e-5f)
+                QuickMenuVrWatchTowardUserDist = QuickMenuVrWatchTowardDefault;
+
+            if (node["QuickMenuVrWatchOffset"] != null)
+            {
+                Vector3 o = QuickMenuVrWatchOffset;
+                if (Mathf.Abs(o.x) < 1e-5f && Mathf.Abs(o.y - 0.05f) < 1e-5f && Mathf.Abs(o.z - 0.04f) < 1e-5f)
+                    QuickMenuVrWatchOffset = QuickMenuVrWatchOffsetDefault;
+            }
+
+            if (!QuickMenuVrWatchScaleMulV2 && node["QuickMenuVrWatchScaleMul"] != null &&
+                Mathf.Abs(QuickMenuVrWatchScaleMul - 1f) < 1e-5f)
+                QuickMenuVrWatchScaleMul = QuickMenuVrWatchScaleMulDefault;
+            QuickMenuVrWatchScaleMulV2 = true;
+            EnsureWatchExtraActions();
+            EnsureWatchButtonPages();
+            MigrateWatchExtrasIntoPages();
+        }
+
+        public void EnsureWatchExtraActions()
+        {
+            string[] src = QuickMenuVrWatchExtraActions;
+            if (src != null && src.Length == QuickMenuVrWatchExtraSlotCount) return;
+            string[] next = new string[QuickMenuVrWatchExtraSlotCount];
+            int n = src != null ? src.Length : 0;
+            if (n > QuickMenuVrWatchExtraSlotCount) n = QuickMenuVrWatchExtraSlotCount;
+            for (int i = 0; i < n; i++) next[i] = src[i] ?? "";
+            for (int i = n; i < QuickMenuVrWatchExtraSlotCount; i++) next[i] = "";
+            QuickMenuVrWatchExtraActions = next;
+        }
+
+        public string GetWatchExtraAction(int idx)
+        {
+            EnsureWatchExtraActions();
+            if (idx < 0 || idx >= QuickMenuVrWatchExtraSlotCount) return "";
+            string v = QuickMenuVrWatchExtraActions[idx];
+            return v ?? "";
+        }
+
+        public void SetWatchExtraAction(int idx, string id)
+        {
+            EnsureWatchExtraActions();
+            if (idx < 0 || idx >= QuickMenuVrWatchExtraSlotCount) return;
+            QuickMenuVrWatchExtraActions[idx] = id ?? "";
+        }
+
+        public void EnsureWatchButtonPages()
+        {
+            int pages = QuickMenuVrWatchPageCount;
+            int slots = QuickMenuVrWatchAssignSlotCount;
+            string[][] src = QuickMenuVrWatchButtonsPages;
+            bool ok = src != null && src.Length == pages;
+            if (ok)
+            {
+                for (int p = 0; p < pages; p++)
+                {
+                    if (src[p] == null || src[p].Length != slots)
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if (ok)
+            {
+                MigrateWatchExtrasIntoPages();
+                return;
+            }
+
+            string[][] next = new string[pages][];
+            for (int p = 0; p < pages; p++)
+            {
+                string[] row = new string[slots];
+                string[] old = (src != null && p < src.Length) ? src[p] : null;
+                int n = old != null ? old.Length : 0;
+                if (n > slots) n = slots;
+                for (int s = 0; s < n; s++) row[s] = old[s] ?? "";
+                for (int s = n; s < slots; s++) row[s] = "";
+                next[p] = row;
+            }
+            QuickMenuVrWatchButtonsPages = next;
+            if (QuickMenuVrWatchCurrentPage < 0) QuickMenuVrWatchCurrentPage = 0;
+            if (QuickMenuVrWatchCurrentPage >= pages) QuickMenuVrWatchCurrentPage = 0;
+            MigrateWatchExtrasIntoPages();
+        }
+
+        private void MigrateWatchExtrasIntoPages()
+        {
+            if (QuickMenuVrWatchButtonsMigrated) return;
+            if (QuickMenuVrWatchButtonsPages == null || QuickMenuVrWatchButtonsPages.Length < 1) return;
+            if (QuickMenuVrWatchButtonsPages[0] == null ||
+                QuickMenuVrWatchButtonsPages[0].Length != QuickMenuVrWatchAssignSlotCount)
+                return;
+            EnsureWatchExtraActions();
+            bool page0Empty = true;
+            string[] row = QuickMenuVrWatchButtonsPages[0];
+            for (int s = 0; s < QuickMenuVrWatchAssignSlotCount; s++)
+            {
+                if (row[s] != null && row[s].Length > 0)
+                {
+                    page0Empty = false;
+                    break;
+                }
+            }
+            if (page0Empty)
+            {
+                string[] seed = { "save", "undo", "redo", "random", "hub", "history", "target_atom", "creator_mode" };
+                int n = seed.Length;
+                if (n > QuickMenuVrWatchAssignSlotCount) n = QuickMenuVrWatchAssignSlotCount;
+                for (int s = 0; s < n; s++) row[s] = seed[s];
+                for (int i = 0; i < QuickMenuVrWatchExtraSlotCount; i++)
+                {
+                    string id = QuickMenuVrWatchExtraActions[i];
+                    if (!string.IsNullOrEmpty(id)) row[i] = id;
+                }
+            }
+            QuickMenuVrWatchButtonsMigrated = true;
+        }
 
         // Interaction toggles (persisted)
         /// <summary>"Off", "Desktop Only", "VR Only", "Desktop &amp; VR". Default Desktop &amp; VR.</summary>
@@ -1728,18 +1909,63 @@ namespace VPB
                         if (node["AnchorYieldsToVamPanels"] != null) AnchorYieldsToVamPanels = node["AnchorYieldsToVamPanels"].AsBool;
                         if (node["QuickMenuVrWatchVisible"] != null) QuickMenuVrWatchVisible = node["QuickMenuVrWatchVisible"].AsBool;
                         if (node["QuickMenuVrWatchMode"] != null) QuickMenuVrWatchMode = node["QuickMenuVrWatchMode"].Value;
+                        if (node["QuickMenuVrWatchShowWhen"] != null) QuickMenuVrWatchShowWhen = node["QuickMenuVrWatchShowWhen"].Value;
                         if (node["QuickMenuVrWatchOnlyWithMenu"] != null) QuickMenuVrWatchOnlyWithMenu = node["QuickMenuVrWatchOnlyWithMenu"].AsBool;
+                        if (node["QuickMenuVrWatchRememberHand"] != null) QuickMenuVrWatchRememberHand = node["QuickMenuVrWatchRememberHand"].AsBool;
                         if (node["QuickMenuVrWatchFaceUser"] != null) QuickMenuVrWatchFaceUser = node["QuickMenuVrWatchFaceUser"].AsBool;
-                        if (node["QuickMenuVrWatchScale"] != null) QuickMenuVrWatchScale = Mathf.Clamp(node["QuickMenuVrWatchScale"].AsFloat, 0.0002f, 0.0015f);
+                        if (node["QuickMenuVrWatchScaleMul"] != null)
+                            QuickMenuVrWatchScaleMul = Mathf.Clamp(node["QuickMenuVrWatchScaleMul"].AsFloat, 0.4f, 3f);
+                        if (node["QuickMenuVrWatchScale"] != null) QuickMenuVrWatchScale = node["QuickMenuVrWatchScale"].AsFloat;
                         if (node["QuickMenuVrWatchTowardUserDist"] != null) QuickMenuVrWatchTowardUserDist = Mathf.Clamp(node["QuickMenuVrWatchTowardUserDist"].AsFloat, -0.5f, 0.5f);
                         if (node["QuickMenuVrWatchOffset"] != null)
                         {
                             var w = node["QuickMenuVrWatchOffset"];
                             QuickMenuVrWatchOffset = new Vector3(
                                 w["x"].AsFloat,
-                                w["y"] != null ? w["y"].AsFloat : 0.05f,
-                                w["z"] != null ? w["z"].AsFloat : 0.04f);
+                                w["y"] != null ? w["y"].AsFloat : QuickMenuVrWatchOffsetDefault.y,
+                                w["z"] != null ? w["z"].AsFloat : QuickMenuVrWatchOffsetDefault.z);
                         }
+                        if (node["QuickMenuVrWatchOnboardingSeen"] != null) QuickMenuVrWatchOnboardingSeen = node["QuickMenuVrWatchOnboardingSeen"].AsBool;
+                        if (node["QuickMenuVrWatchScaleMulV2"] != null) QuickMenuVrWatchScaleMulV2 = node["QuickMenuVrWatchScaleMulV2"].AsBool;
+                        if (node["QuickMenuVrWatchExtraActions"] != null)
+                        {
+                            JSONNode ex = node["QuickMenuVrWatchExtraActions"];
+                            EnsureWatchExtraActions();
+                            int n = ex.Count;
+                            if (n > QuickMenuVrWatchExtraSlotCount) n = QuickMenuVrWatchExtraSlotCount;
+                            for (int i = 0; i < n; i++)
+                                QuickMenuVrWatchExtraActions[i] = ex[i] != null ? ex[i].Value : "";
+                        }
+                        if (node["QuickMenuVrWatchButtonsMigrated"] != null)
+                            QuickMenuVrWatchButtonsMigrated = node["QuickMenuVrWatchButtonsMigrated"].AsBool;
+                        if (node["QuickMenuVrWatchCurrentPage"] != null)
+                            QuickMenuVrWatchCurrentPage = node["QuickMenuVrWatchCurrentPage"].AsInt;
+                        if (node["QuickMenuVrWatchButtonsPages"] != null)
+                        {
+                            JSONNode pages = node["QuickMenuVrWatchButtonsPages"];
+                            int pageCount = pages.Count;
+                            if (pageCount > 0)
+                            {
+                                QuickMenuVrWatchButtonsPages = new string[pageCount][];
+                                for (int p = 0; p < pageCount; p++)
+                                {
+                                    JSONNode pa = pages[p];
+                                    if (pa != null && pa.Count > 0)
+                                    {
+                                        int slotCount = pa.Count;
+                                        var slots = new string[slotCount];
+                                        for (int s = 0; s < slotCount; s++)
+                                            slots[s] = pa[s] != null ? pa[s].Value : "";
+                                        QuickMenuVrWatchButtonsPages[p] = slots;
+                                    }
+                                    else
+                                    {
+                                        QuickMenuVrWatchButtonsPages[p] = new string[0];
+                                    }
+                                }
+                            }
+                        }
+                        MigrateVrWatchSettings(node);
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["SideButtonScaleVR"] != null) SideButtonScaleVR = node["SideButtonScaleVR"].AsFloat;
                         else SideButtonScaleVR = SideButtonScale;
@@ -2163,15 +2389,42 @@ namespace VPB
                 node["AnchorYieldsToVamPanels"].AsBool = AnchorYieldsToVamPanels;
                 node["QuickMenuVrWatchVisible"].AsBool = QuickMenuVrWatchVisible;
                 node["QuickMenuVrWatchMode"] = QuickMenuVrWatchMode;
+                node["QuickMenuVrWatchShowWhen"] = QuickMenuVrWatchShowWhen;
                 node["QuickMenuVrWatchOnlyWithMenu"].AsBool = QuickMenuVrWatchOnlyWithMenu;
+                node["QuickMenuVrWatchRememberHand"].AsBool = QuickMenuVrWatchRememberHand;
                 node["QuickMenuVrWatchFaceUser"].AsBool = QuickMenuVrWatchFaceUser;
-                node["QuickMenuVrWatchScale"].AsFloat = QuickMenuVrWatchScale;
+                node["QuickMenuVrWatchScaleMul"].AsFloat = QuickMenuVrWatchScaleMul;
+                node["QuickMenuVrWatchScale"].AsFloat = VpbWorldSpaceUiScale.MetersPerUiPixel * QuickMenuVrWatchScaleMul;
                 node["QuickMenuVrWatchTowardUserDist"].AsFloat = QuickMenuVrWatchTowardUserDist;
                 JSONClass w = new JSONClass();
                 w["x"].AsFloat = QuickMenuVrWatchOffset.x;
                 w["y"].AsFloat = QuickMenuVrWatchOffset.y;
                 w["z"].AsFloat = QuickMenuVrWatchOffset.z;
                 node["QuickMenuVrWatchOffset"] = w;
+                node["QuickMenuVrWatchOnboardingSeen"].AsBool = QuickMenuVrWatchOnboardingSeen;
+                node["QuickMenuVrWatchScaleMulV2"].AsBool = QuickMenuVrWatchScaleMulV2;
+                {
+                    EnsureWatchExtraActions();
+                    JSONArray extras = new JSONArray();
+                    for (int i = 0; i < QuickMenuVrWatchExtraSlotCount; i++)
+                        extras.Add(QuickMenuVrWatchExtraActions[i] ?? "");
+                    node["QuickMenuVrWatchExtraActions"] = extras;
+                }
+                node["QuickMenuVrWatchButtonsMigrated"].AsBool = QuickMenuVrWatchButtonsMigrated;
+                node["QuickMenuVrWatchCurrentPage"].AsInt = QuickMenuVrWatchCurrentPage;
+                {
+                    EnsureWatchButtonPages();
+                    JSONArray pages = new JSONArray();
+                    for (int p = 0; p < QuickMenuVrWatchPageCount; p++)
+                    {
+                        JSONArray slots = new JSONArray();
+                        var arr = QuickMenuVrWatchButtonsPages[p];
+                        for (int s = 0; s < QuickMenuVrWatchAssignSlotCount; s++)
+                            slots.Add(arr[s] ?? "");
+                        pages.Add(slots);
+                    }
+                    node["QuickMenuVrWatchButtonsPages"] = pages;
+                }
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["SideButtonScaleVR"].AsFloat = SideButtonScaleVR;
                 node["SideButtonScaleDesktop"].AsFloat = SideButtonScaleDesktop;

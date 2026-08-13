@@ -22,8 +22,42 @@ namespace VPB
         private static float _ingameBurstUntilRealtime;
         private static float _lastCheesyFxErrorRealtime = -999f;
 
+        private static int _lastPatchScanAssemblyCount = -1;
+
+        private static bool AllPatchesApplied
+        {
+            get
+            {
+                return _parentHoldLinkPatched
+                    && _unityLogSourcePatched
+                    && _loggerInternalLogEventPatched
+                    && _unityLogListenerPatched
+                    && _superControllerInGameLogPatched
+                    && _superControllerLogUiFontPatched;
+            }
+        }
+
+        /// <summary>
+        /// True when a still-unpatched third-party type could plausibly have appeared since the last scan.
+        /// <see cref="PatchAll"/> resolves types via <c>AccessTools.TypeByName</c>, which walks every type in
+        /// every loaded assembly — far too expensive to repeat on each Unity scene load. CustomUnityAsset
+        /// atoms load their .assetbundle scene additively on every skybox/environment pick, so that path fires
+        /// constantly. New third-party types can only arrive with a new assembly, so gate on the assembly count.
+        /// </summary>
+        internal static bool ShouldRetryPendingPatches()
+        {
+            if (AllPatchesApplied) return false;
+            int count;
+            try { count = AppDomain.CurrentDomain.GetAssemblies().Length; }
+            catch { return true; }
+            if (count == _lastPatchScanAssemblyCount) return false;
+            _lastPatchScanAssemblyCount = count;
+            return true;
+        }
+
         public static void PatchAll(Harmony harmony)
         {
+            try { _lastPatchScanAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length; } catch { }
             try
             {
                 // Patch MacGruber.ParentHoldLink.OnEnable to prevent NRE during LateRestore

@@ -1162,7 +1162,7 @@ namespace VPB
             footerWatchToggleOnSprite  = UI.LoadIconSprite("vpb_icons/device_watch.png",     Color.white);
             footerWatchToggleOffSprite = UI.LoadIconSprite("vpb_icons/device_watch_off.png", Color.white);
             { Sprite init = footerWatchToggleOnSprite ?? footerWatchToggleOffSprite; if (init != null) { UI.AddIconToButton(footerWatchToggleBtn, init); footerWatchToggleIconImage = footerWatchToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
-            AddTooltip(footerWatchToggleBtn, "gallery.tooltip.vr_watch_toggle", "Show/hide the VR wrist watch");
+            AddTooltip(footerWatchToggleBtn, "gallery.tooltip.vr_watch_toggle", "Show/hide VR wrist watch (look at inner wrist)");
             footerWatchToggleBtn.SetActive(false);
 
             // Sidebar toggle lives on the side-rail Scene Import button (above Tags); no footer button.
@@ -2470,6 +2470,11 @@ namespace VPB
             if (!XrUtils.IsVrActive()) return;
             VPBConfig.Instance.QuickMenuVrWatchVisible = !VPBConfig.Instance.QuickMenuVrWatchVisible;
             VPBConfig.Instance.Save();
+            UpdateFooterVrWatchState();
+        }
+
+        internal void NotifyFooterVrWatchState()
+        {
             UpdateFooterVrWatchState();
         }
 

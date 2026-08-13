@@ -437,7 +437,12 @@ namespace VPB
                     }
                     else
                     {
-                        LoadCUA(FileEntry.Uid);
+                        // Dropped on empty space: fall back to the panel's CUA Target before spawning a new atom,
+                        // so repeat picks keep replacing the same CUA instead of stacking duplicates.
+                        Atom fallback = null;
+                        try { if (Panel != null) fallback = Panel.ResolveCuaTargetAtom(); } catch { }
+                        if (fallback != null) LoadCUAIntoAtom(fallback, FileEntry.Uid);
+                        else LoadCUA(FileEntry.Uid);
                     }
                 }
                 else
@@ -580,7 +585,11 @@ namespace VPB
                  }
                  else
                  {
-                     statusMsg = $"Drop to create new Custom Unity Asset";
+                     Atom cuaTarget = null;
+                     try { if (Panel != null) cuaTarget = Panel.ResolveCuaTargetAtom(); } catch { }
+                     statusMsg = cuaTarget != null
+                         ? $"Drop to load into {cuaTarget.name}"
+                         : $"Drop to create new Custom Unity Asset";
                  }
             }
             else if (itemType == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry))

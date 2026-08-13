@@ -94,15 +94,28 @@ namespace VPB
                 }
 
                 // Merge load: prefer public LoadMerge when available, otherwise fallback to LoadInternal.
+                // LoadInternal's editMode flag is not "should I merge in edit mode" — it assigns gameMode
+                // outright, and both LoadMerge and the literal `false` below force Play. A merge adds to the
+                // session the user is already editing, so keep whatever mode they were in; otherwise a merge
+                // silently drops them from Edit to Play (targets vanish, atom UI closes).
+                bool wasEditMode = false;
+                try { wasEditMode = sc.gameMode == SuperController.GameMode.Edit; } catch { }
+
                 if (s_LoadMergeMethod != null)
                 {
                     s_LoadMergeMethod.Invoke(sc, new object[] { normalizedPath });
+                    // LoadInternal assigns gameMode synchronously before starting LoadCo, so this lands before
+                    // the coroutine's first frame.
+                    if (wasEditMode)
+                    {
+                        try { sc.gameMode = SuperController.GameMode.Edit; } catch { }
+                    }
                     return true;
                 }
 
                 if (s_LoadInternalMethod != null)
                 {
-                    s_LoadInternalMethod.Invoke(sc, new object[] { normalizedPath, true, false });
+                    s_LoadInternalMethod.Invoke(sc, new object[] { normalizedPath, true, wasEditMode });
                     return true;
                 }
 

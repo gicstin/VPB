@@ -652,6 +652,10 @@ namespace VPB
                 VPBConfig.Instance.StartSceneLoad();
             }
 
+            // Issue #80: clear per-session clothing texture bookkeeping before anything loads.
+            // Must be at load START — clearing at load END would discard expectations for the
+            // custom texture loads still in flight when the scene finishes.
+            try { DAZClothingHook.ResetTransientState(); } catch { }
         }
 
         public static bool IsSceneLoadActive()

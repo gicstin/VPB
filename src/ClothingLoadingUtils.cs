@@ -2211,17 +2211,13 @@ namespace VPB
             s_SetAllParametersMethod.Invoke(mo, null);
         }
 
-        static int TryParseCustomTextureSlotIndex(string urlParamName)
+        // VaM registers custom texture URL params as "customTexture" + textureGroup1.<name>, i.e.
+        // customTexture_MainTex / _SpecTex / _GlossTex / _AlphaTex / _BumpMap / _DecalTex. Only the
+        // tile/offset FLOAT params are numbered (customTexture1TileX). Resolving the slot needs the
+        // owning MaterialOptions' texture group, not a digit.
+        static int TryGetCustomTextureSlotIndex(MaterialOptions mo, string urlParamName)
         {
-            // customTexture1Url .. customTexture6Url (and suffix variants containing the slot digit).
-            if (string.IsNullOrEmpty(urlParamName)) return -1;
-            if (!urlParamName.StartsWith("customTexture", StringComparison.OrdinalIgnoreCase)) return -1;
-
-            int start = "customTexture".Length;
-            if (start >= urlParamName.Length) return -1;
-            char c = urlParamName[start];
-            if (c < '1' || c > '6') return -1;
-            return c - '1';
+            return MaterialOptionsTextureGuard.GetCustomTextureSlotForUrlParam(mo, urlParamName);
         }
 
         internal static void ResyncAllPersonClothingCustomTextures()
@@ -2388,9 +2384,16 @@ namespace VPB
                 if (string.IsNullOrEmpty(val)) continue;
                 if (string.Equals(val, "NULL", StringComparison.OrdinalIgnoreCase)) continue;
 
-                int slot = TryParseCustomTextureSlotIndex(name);
-                if (slot >= 0 && GetLoadedCustomTexture(mo, slot) != null)
-                    continue; // already in RAM; SetAllParameters pushed it
+                // Skip only when this slot's loaded texture is the one THIS url produced. A slot that
+                // holds a texture from an older url (newest load never arrived, or its callback was
+                // dropped as stale) must still be re-queued.
+                int slot = TryGetCustomTextureSlotIndex(mo, name);
+                if (slot >= 0
+                    && GetLoadedCustomTexture(mo, slot) != null
+                    && MaterialOptionsTextureGuard.IsSlotAppliedForUrl(mo, slot, val))
+                {
+                    continue; // already in RAM and current; SetAllParameters pushed it
+                }
 
                 try { ForceUrlCallback(url); }
                 catch (Exception ex)

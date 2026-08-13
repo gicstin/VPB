@@ -636,6 +636,7 @@ namespace VPB
         {
             try { VpbProgressService.ShutdownForQuit(); } catch { }
             try { VpbPerfController.Shutdown(); } catch { }
+            try { DAZClothingHook.ResetTransientState(); } catch { }
             try
             {
                 var sc = SuperController.singleton;
@@ -666,6 +667,7 @@ namespace VPB
             {
                 Destroy(m_QuickMenuCanvas.gameObject);
             }
+            try { QuickMenuDestroyWatch(); } catch { }
             VPBLogger.Destroy();
         }
 
@@ -685,13 +687,21 @@ namespace VPB
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             try { VamStartupProfiler.Milestone("Unity.sceneLoaded name=" + (scene != null ? scene.name : "") + " mode=" + mode); } catch { }
-            LogUtil.LogWarning("OnSceneLoaded " + scene.name + " " + mode.ToString());
-            if (m_Harmony != null)
+
+            // Additive = CustomUnityAsset payload, not a VaM scene-lifecycle event. AssetLoader
+            // .LoadSceneIntoTransformAsync loads the .assetbundle's Unity scene additively every time a CUA
+            // asset is picked, so a skybox/environment pack fires this once per selection. Only a Single load
+            // (engine scene reload / Hard Reset) means the plugin session must be re-armed.
+            bool hardReset = (mode == LoadSceneMode.Single);
+            if (hardReset)
+                LogUtil.Log("[VPB] Unity scene reloaded (Single): " + (scene != null ? scene.name : ""));
+
+            if (m_Harmony != null && (hardReset || ThirdPartyFixHook.ShouldRetryPendingPatches()))
             {
                 ThirdPartyFixHook.PatchAll(m_Harmony);
                 try { VamStartupProfilerPatches.TryApplyLateOptionalPatches(m_Harmony); } catch { }
             }
-            if (mode == LoadSceneMode.Single)
+            if (hardReset)
             {
                 m_Inited = false;
                 IsFileManagerInited = false;
@@ -1108,7 +1118,11 @@ namespace VPB
                             if (requiresGallery)
                             {
                                 var go = m_QuickMenuGridButtons[i];
-                                if (go != null && go.activeSelf != shouldShow) go.SetActive(shouldShow);
+                                if (go != null && go.activeSelf != shouldShow)
+                                {
+                                    go.SetActive(shouldShow);
+                                    if (i < QuickMenuWatchHudSlotCount) QuickMenuSyncWatchSlot(i);
+                                }
                             }
 
                             if (a == QuickMenuAssignableAction.ShowHide ||
@@ -1125,7 +1139,7 @@ namespace VPB
                 catch { }
             }
 
-            // VR wrist watch: move the grid onto the opposite controller while the VAM menu is open.
+            // VR wrist watch: separate canvas on a controller. HUD grid stays.
             try { QuickMenuUpdateVrWatch(); } catch { }
 
             // Live preview: reposition the quick-menu grid when the anchor setting changes.
@@ -1582,6 +1596,7 @@ namespace VPB
 
                 // Load persisted page configs (or seed defaults on first run).
                 QuickMenuEnsureDefaultsAndLoadFromConfig();
+                try { QuickMenuEnsureWatchAssignments(); } catch { }
 
                 // Tooltip UI (positioned by QuickMenuApplyGridLayoutFromAnchor / live updates)
                 QuickMenuEnsureTooltipUI();

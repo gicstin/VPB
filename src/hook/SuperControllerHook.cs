@@ -1203,6 +1203,49 @@ namespace VPB
         public static void PostDeactivateWorldUI(SuperController __instance)
         {
             MessageKit.post(MessageDef.DeactivateWorldUI);
+            LogUiStateChange("DeactivateWorldUI");
+        }
+
+        /// <summary>
+        /// Dev-mode only: name whoever closes the VaM UI or flips Edit/Play. VaM changes gameMode from exactly
+        /// four places (LoadInternal / LoadFromJSONEmbed with editMode:false, the P key, the HUD mode toggles),
+        /// and none of them are obvious from a user report of "the UI vanished and it went to Play mode".
+        /// Costs a cached-bool read when dev mode is off; these are cold paths, never per-frame.
+        /// </summary>
+        private static bool IsUiStateTraceEnabled()
+        {
+            try { return VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode; }
+            catch { return false; }
+        }
+
+        private static void LogUiStateChange(string what)
+        {
+            if (!IsUiStateTraceEnabled()) return;
+            try
+            {
+                LogUtil.LogWarning("[VPB][UISTATE] " + what
+                    + "\n" + new StackTrace(2, true));
+            }
+            catch { }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuperController), "gameMode", MethodType.Setter)]
+        public static void PreSetGameMode(SuperController __instance, SuperController.GameMode value)
+        {
+            try
+            {
+                if (__instance == null || __instance.gameMode == value) return;
+                LogUiStateChange("gameMode " + __instance.gameMode + " -> " + value);
+            }
+            catch { }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuperController), "HideMainHUD")]
+        public static void PreHideMainHUD()
+        {
+            LogUiStateChange("HideMainHUD");
         }
 
         static bool s_ReturnToSceneViewOnStartupApplied;

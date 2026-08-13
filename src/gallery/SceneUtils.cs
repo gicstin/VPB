@@ -307,6 +307,19 @@ namespace VPB
             catch { return false; }
         }
 
+        public static bool IsCustomUnityAssetAtomType(string type)
+        {
+            return string.Equals(type, "CustomUnityAsset", StringComparison.Ordinal);
+        }
+
+        /// <summary>Target type for the CUA category — assetbundle picks apply to these, not to Persons.</summary>
+        public static bool IsCustomUnityAssetAtom(Atom atom)
+        {
+            if (atom == null) return false;
+            try { return IsCustomUnityAssetAtomType(atom.type); }
+            catch { return false; }
+        }
+
         public static Atom DetectAtom(Vector2 screenPos, Camera cam, out string statusMsg)
         {
             RaycastHit hit;

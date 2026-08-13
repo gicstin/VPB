@@ -46,6 +46,7 @@ namespace VPB
             SyncQuickMenuPopupRoundedBg(m_QuickMenuAssignRandomPopupRoot, frac);
             RoundedRect tooltipRounded = m_QmTooltipBackdrop as RoundedRect;
             if (tooltipRounded != null) tooltipRounded.cornerRadiusFraction = frac;
+            try { QuickMenuSyncWatchCornerRadius(frac); } catch { }
             if (m_QuickMenuGridButtons != null)
             {
                 for (int i = 0; i < m_QuickMenuGridButtons.Length; i++)
@@ -487,6 +488,11 @@ namespace VPB
                     : VPBTranslation.T("hook.qmtooltip.edit_on", "Enable editing");
 
             var a = QuickMenuGetSlotAction(idx);
+            return QuickMenuGetActionTooltip(a, idx);
+        }
+
+        private string QuickMenuGetActionTooltip(QuickMenuAssignableAction a, int idx)
+        {
             switch (a)
             {
                 case QuickMenuAssignableAction.CreateGallery: return (idx >= 0 && idx <= 3) ? VPBTranslation.T("hook.qmtooltip.core_locked_create_gallery", "Create Gallery (core locked)") : VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery");
@@ -592,13 +598,6 @@ namespace VPB
                 }
             }
             catch { }
-
-            // Watch mode overrides everything: center the grid on the controller palm.
-            if (m_QmWatchActive)
-            {
-                isVR = true;
-                center = QuickMenuWatchCenter;
-            }
 
             if (isVR == m_QmLastAnchorIsVR &&
                 Mathf.Abs(center.x - m_QmLastAnchorCenter.x) < 0.01f &&
@@ -1519,6 +1518,9 @@ namespace VPB
                 }
                 QuickMenuApplyBackdropColors(bgImg, normal, hover);
             }
+
+            if (idx >= 0 && idx < QuickMenuWatchHudSlotCount)
+                QuickMenuSyncWatchSlot(idx);
         }
 
         private void QuickMenuExecuteAssignment(QuickMenuAssignableAction action)
@@ -1749,6 +1751,17 @@ namespace VPB
                     break;
                 case QuickMenuAssignableAction.PerfStepDown:
                     try { VpbPerfController.StepBy(-1, true, true); } catch { }
+                    break;
+                case QuickMenuAssignableAction.CoreSettingsButton:
+                {
+                    var p = QuickMenuGetTargetPanel();
+                    if (p == null) { OpenGallery(); p = QuickMenuGetTargetPanel(); }
+                    if (p != null) p.OpenSettingsSideTab();
+                    break;
+                }
+                case QuickMenuAssignableAction.CorePageButton:
+                    QuickMenuChangePage(+1);
+                    QuickMenuRefreshAllSlotVisuals();
                     break;
                 case QuickMenuAssignableAction.None:
                 default:
@@ -2422,6 +2435,7 @@ namespace VPB
                 case QuickMenuAssignableAction.RandomPose: return m_QmIconHexPose ?? m_QmIconRandom;
                 case QuickMenuAssignableAction.RandomAppearance: return m_QmIconHexAppearance ?? m_QmIconRandom;
                 case QuickMenuAssignableAction.RandomSkin: return m_QmIconHexSkin ?? m_QmIconRandom;
+                case QuickMenuAssignableAction.RandomSceneImport: return m_QmIconHexScene ?? m_QmIconRandom;
                 case QuickMenuAssignableAction.Undo: return m_QmIconUndo;
                 case QuickMenuAssignableAction.Redo: return m_QmIconRedo;
                 case QuickMenuAssignableAction.Hub: return m_QmIconHub;
@@ -2439,6 +2453,7 @@ namespace VPB
                 case QuickMenuAssignableAction.OpenCategoryPose: return m_QmIconCategoryPose ?? m_QmIconOpenCategory;
                 case QuickMenuAssignableAction.OpenCategoryAppearance: return m_QmIconCategoryAppearance ?? m_QmIconOpenCategory;
                 case QuickMenuAssignableAction.OpenCategoryPlugins: return m_QmIconCategoryPlugins ?? m_QmIconOpenCategory;
+                case QuickMenuAssignableAction.OpenCategoryAll: return m_QmIconCategoryAll ?? m_QmIconOpenCategory;
                 case QuickMenuAssignableAction.CoreSettingsButton: return m_QmIconEditPlus ?? m_QmIconEditOff;
                 case QuickMenuAssignableAction.CorePageButton: return (m_QmIconPages != null && m_QmIconPages.Length > 0) ? m_QmIconPages[0] : m_QmIconAssignEmpty;
                 case QuickMenuAssignableAction.TargetAtom: return m_QmIconTargetAtom ?? m_QmIconAssignEmpty;

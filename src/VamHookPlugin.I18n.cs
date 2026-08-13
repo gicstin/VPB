@@ -23,6 +23,7 @@ namespace VPB
         private void OnImGuiLocaleChanged()
         {
             try { RefreshQuickMenuButtonLabels(); } catch { }
+            try { QuickMenuInvalidateWatchStrings(); } catch { }
         }
 
         internal void RefreshQuickMenuButtonLabels()

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -257,6 +258,12 @@ namespace VPB
                 () => { try { OpenSettingsGroup("performance"); } catch { } });
             AddCommandPaletteEntry("settings_browsing", "gallery.cmd.settings_browsing", "Settings → Browsing", "", GView, "lists tags search",
                 () => { try { OpenSettingsGroup("browsing"); } catch { } });
+            AddCommandPaletteEntry("vr_watch_toggle", "gallery.cmd.vr_watch_toggle", "Toggle VR wrist watch", "", GView, "watch wrist glance controller",
+                () => { try { ToggleVrWatchVisible(); } catch { } },
+                () => { try { return XrUtils.IsVrActive(); } catch { return false; } });
+            AddCommandPaletteEntry("vr_watch_settings", "gallery.cmd.vr_watch_settings", "Settings → VR wrist watch", "", GView, "watch wrist vr hand glance",
+                () => { try { OpenSettingsGroup("vr"); } catch { } },
+                () => { try { return XrUtils.IsVrActive(); } catch { return false; } });
 
             // --- Tools ---
             AddCommandPaletteEntry("exit_scene_tools", "gallery.cmd.exit_scene_tools", "Exit Scene Tools", "Esc", GTools, "leave creator",

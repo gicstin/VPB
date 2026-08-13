@@ -283,7 +283,16 @@ namespace VPB
                 shouldUnload = false;
             }
 
-            // 2. If not in cache, try loading
+            // 2. Not in our cache yet, but VaM/another CUA may already hold it. Callers hit this right after
+            // setting assetUrl, so the queued LoadBundleFileAsync for the same file is often still in flight —
+            // loading a second copy here races it and leaves us owning a bundle the live atom is using.
+            if (ab == null)
+            {
+                ab = FindLoadedAssetBundleByPath(path);
+                if (ab != null) shouldUnload = false;
+            }
+
+            // 3. Genuinely not loaded anywhere: load our own throwaway copy.
             if (ab == null)
             {
                 if (MVR.FileManagement.FileManager.IsFileInPackage(path))
@@ -315,36 +324,44 @@ namespace VPB
                 if (ab != null) shouldUnload = true;
             }
 
-            // 3. If still null, it might be loaded by VaM but not in our cache. 
-            // AssetBundle.LoadFromFile returns null if already loaded.
-            // Try to find it in all loaded bundles.
+            // 4. Load raced with VaM's own queued load (LoadFromFileAsync returns null for an already-loaded
+            // file). Re-check the loaded set rather than reporting "no assets".
             if (ab == null)
             {
-                // Heuristic: Check by file name
-                string fileName = Path.GetFileNameWithoutExtension(path);
-                var allBundles = AssetBundle.GetAllLoadedAssetBundles();
-                foreach (var b in allBundles)
-                {
-                    if (b.name.Equals(fileName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        ab = b;
-                        shouldUnload = false;
-                        break;
-                    }
-                }
+                ab = FindLoadedAssetBundleByPath(path);
             }
 
             if (ab != null)
             {
                 string[] names = ab.GetAllAssetNames();
                 List<string> result = new List<string>(names);
-                if (shouldUnload) ab.Unload(true);
+                // Unload(false) only: this listing is metadata-only, and the same bundle may already back a
+                // live CUA. Unload(true) would destroy that atom's loaded objects mid-use.
+                if (shouldUnload) ab.Unload(false);
                 callback?.Invoke(result);
             }
             else
             {
                 callback?.Invoke(null);
             }
+        }
+
+        /// <summary>Find an already-loaded bundle for <paramref name="path"/> by its file name (bundle names
+        /// are the file stem in VaM's packaging). Returns null when nothing matches.</summary>
+        private static AssetBundle FindLoadedAssetBundleByPath(string path)
+        {
+            try
+            {
+                string fileName = Path.GetFileNameWithoutExtension(path);
+                if (string.IsNullOrEmpty(fileName)) return null;
+                foreach (var b in AssetBundle.GetAllLoadedAssetBundles())
+                {
+                    if (b != null && b.name != null && b.name.Equals(fileName, StringComparison.OrdinalIgnoreCase))
+                        return b;
+                }
+            }
+            catch { }
+            return null;
         }
 
 		private void OnDestroy()

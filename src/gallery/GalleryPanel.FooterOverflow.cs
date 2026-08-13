@@ -284,7 +284,7 @@ namespace VPB
                 bool on = VPBConfig.Instance != null && VPBConfig.Instance.QuickMenuVrWatchVisible;
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_vr_watch", "VR wrist watch"),
                     () => { CloseFooterOverflowMenu(); ToggleVrWatchVisible(); }, on, icon: icon,
-                    tipKey: "gallery.tooltip.vr_watch_toggle", tipDefault: "Show/hide the VR wrist watch");
+                    tipKey: "gallery.tooltip.vr_watch_toggle", tipDefault: "Show/hide VR wrist watch (look at inner wrist)");
             }
             else if (go == footerHoldToLaunchToggleBtn)
             {

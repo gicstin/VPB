@@ -1656,7 +1656,33 @@ namespace VPB
         private string GetTargetAtomDisplayLabel(Atom atom, string uid)
         {
             if (IsSubSceneTargetMode()) return GetSubSceneAtomDisplayLabel(atom, uid);
+            if (IsCuaTargetMode()) return GetCuaAtomDisplayLabel(atom, uid);
             return GetPersonAtomDisplayLabel(atom, uid);
+        }
+
+        /// <summary>CUA target label: the asset currently loaded into the atom, so several CUAs are tellable apart.</summary>
+        private string GetCuaAtomDisplayLabel(Atom atom, string uid)
+        {
+            if (atom == null) return uid ?? "Unknown";
+            try
+            {
+                JSONStorable asset = atom.GetStorableByID("asset");
+                if (asset != null)
+                {
+                    JSONStorableString nameParam = null;
+                    try { nameParam = asset.GetStringJSONParam("assetName"); } catch { }
+                    string val = nameParam != null ? nameParam.val : null;
+                    if (!string.IsNullOrEmpty(val) && !string.Equals(val, "None", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // assetName is a bundle-internal path ("assets/skyboxes/cloudy 1.unity").
+                        string name = MVR.FileManagementSecure.FileManagerSecure.GetFileName(val);
+                        if (!string.IsNullOrEmpty(name))
+                            return $"{name} ({uid})";
+                    }
+                }
+            }
+            catch { }
+            return uid ?? "Unknown";
         }
 
         private string GetSubSceneAtomDisplayLabel(Atom atom, string uid)
@@ -1762,7 +1788,7 @@ namespace VPB
 
             string activeLabel = IsSubSceneTargetMode()
                 ? VPBTranslation.T("gallery.tbox.subscene_target", "SubScene")
-                : "Target";
+                : (IsCuaTargetMode() ? VPBTranslation.T("gallery.tbox.cua_target", "CUA") : "Target");
             try
             {
                 int i = targetDropdownValue;
@@ -1785,7 +1811,9 @@ namespace VPB
             if (tboxTargetDropdownBtnText != null) tboxTargetDropdownBtnText.gameObject.SetActive(true);
             AddTooltipPlain(btn, IsSubSceneTargetMode()
                 ? VPBTranslation.T("gallery.tbox.subscene_target_select", "Select active SubScene target. Right click: cycle targets")
-                : VPBTranslation.T("gallery.tbox.target_select", "Select active person target. Right click: cycle targets"));
+                : (IsCuaTargetMode()
+                    ? VPBTranslation.T("gallery.tbox.cua_target_select", "Select which Custom Unity Asset atom receives the asset. None = spawn a new one. Right click: cycle targets")
+                    : VPBTranslation.T("gallery.tbox.target_select", "Select active person target. Right click: cycle targets")));
             try { AddRightClickDelegate(btn, () => CycleTarget(true)); } catch { }
 
             try

@@ -85,11 +85,27 @@ namespace VPB
                 {
                     LogUtil.LogWarning("DAZClothingHook: DAZSkinWrap.InitMaterials not found; GPU-init texture rebind disabled.");
                 }
+
+                // Ordering guard: a garment's own baked customTexture_* urls race the preset's urls
+                // because VPB bypasses VaM's FIFO image queue. Without this, the InitMaterials rebind
+                // above faithfully re-pushes whatever won the race — including the factory texture.
+                MaterialOptionsTextureGuard.PatchAll(harmony);
             }
             catch (Exception ex)
             {
                 LogUtil.LogError("DAZClothingHook PatchAll failed: " + ex);
             }
+        }
+
+        /// <summary>
+        /// Drop per-session bookkeeping. Called at scene-load start and plugin teardown: statics do
+        /// not reset between scene loads, Unity recycles instance ids, and a coroutine killed with
+        /// its host never runs its finally — so a leaked id would silently suppress a later resync.
+        /// </summary>
+        public static void ResetTransientState()
+        {
+            try { s_PendingCustomTexResync.Clear(); } catch { }
+            try { MaterialOptionsTextureGuard.Reset(); } catch { }
         }
 
         static System.Reflection.MethodInfo FindSetActiveClothingItem()
