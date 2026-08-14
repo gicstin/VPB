@@ -341,8 +341,10 @@ namespace VPB
         }
         /// <summary>Category on cold VaM launch only: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", "Plugins", or "LastUsed". In-session Close/reopen uses <see cref="LastGalleryCategory"/>.</summary>
         public string InitialGalleryCategory = "Scenes";
-        /// <summary>Global source filter for gallery: All (default), Local (loose files only), or Var (.var packages only).</summary>
+        /// <summary>Global source filter for gallery: All (default), Local (loose files only), or Var (.var packages only). Last-used live value; per-category memory lives in CategoryFilterState when <see cref="GallerySourceFilterIndependent"/>.</summary>
         public GlobalSourceFilterValue GlobalSourceFilter = GlobalSourceFilterValue.All;
+        /// <summary>When true (default), All/Local/.var is remembered per category. When false, one source filter is shared (synced) across categories.</summary>
+        public bool GallerySourceFilterIndependent = true;
 
         private static readonly string[] s_InitialGalleryCategoryCanonical = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "Plugins", "LastUsed" };
 
@@ -980,6 +982,22 @@ namespace VPB
             return "Filter tags";
         }
 
+        /// <summary>Settings cycle: Independent (default) vs Synced for All/Local/.var source filter.</summary>
+        public static bool ParseGallerySourceFilterIndependent(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return true;
+            if (string.Equals(value, "Synced", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Shared", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Sync", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
+        }
+
+        public static string FormatGallerySourceFilterScopeForSettings(bool independent)
+        {
+            return independent ? "Independent" : "Synced";
+        }
+
         /// <summary>Resolved default when opening User Tags side panel or clearing category tag filters.</summary>
         public UserTagAvailMode ResolveDefaultUserTagAvailMode()
         {
@@ -1509,6 +1527,7 @@ namespace VPB
             GalleryScrollButtonsEnabled = true;
             GalleryVrThumbstickScrollEnabled = true;
             GlobalSourceFilter = GlobalSourceFilterValue.All;
+            GallerySourceFilterIndependent = true;
             GalleryUiScaleAutoSeeded = false;
             GalleryUiScaleAutoSeedRevision = 0;
             GalleryUiScaleUnifiedMigrated = false;
@@ -1652,6 +1671,8 @@ namespace VPB
                             }
                             GlobalSourceFilter = parsed;
                         }
+                        if (node["gallery_source_filter_independent"] != null)
+                            GallerySourceFilterIndependent = node["gallery_source_filter_independent"].AsBool;
                         if (node["GalleryDefaultLeftSidePanel"] != null)
                             GalleryDefaultLeftSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultLeftSidePanel"].Value);
                         if (node["GalleryDefaultRightSidePanel"] != null)
@@ -2233,6 +2254,7 @@ namespace VPB
                 node["SceneImportCacheLimitMb"].AsInt = SceneImportCacheLimitMb;
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
                 node["global_source_filter"] = GlobalSourceFilter.ToString();
+                node["gallery_source_filter_independent"].AsBool = GallerySourceFilterIndependent;
                 node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;
                 node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
                 node["LastGalleryLeftSidePanel"] = NormalizeGallerySidePanel(LastGalleryLeftSidePanel);

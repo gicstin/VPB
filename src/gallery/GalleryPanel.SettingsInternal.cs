@@ -1165,6 +1165,21 @@ namespace VPB
                     VPBConfig.Instance.TriggerChange();
                 }
             });
+            defs.Add(new InternalSettingDefinition {
+                Key = "search.sourceFilterScope", GroupKey = "search",
+                Label = VPBTranslation.T("settings.gallery_source_filter_scope", "Source filter per category"),
+                Tooltip = VPBTranslation.T(
+                    "settings.tip.gallery_source_filter_scope",
+                    "Independent (default): Scenes can be .var while Character Presets stay Local. Synced: one All/Local/.var filter for every category."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Independent", "Synced" },
+                GetString = () => VPBConfig.FormatGallerySourceFilterScopeForSettings(VPBConfig.Instance.GallerySourceFilterIndependent),
+                SetString = v =>
+                {
+                    ApplySourceFilterScopeFromSettings(v);
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
 
             defs.Add(new InternalSettingDefinition {
                 Key = "hover.mode", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_mode", "Hover preview"),
@@ -1471,7 +1486,18 @@ namespace VPB
                 Key = "vr.watchVisible", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_visible", "Show VR wrist watch"),
                 Tooltip = VPBTranslation.T("settings.tip.vr.watch_visible", "Wrist face: core HUD actions in the center, 8 assignable buttons on the sides, pager for watch pages only (HUD grid pages stay). Look at inner wrist to show (Glance)."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchVisible,
-                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchVisible = v; VPBConfig.Instance.TriggerChange(); UpdateFooterVrWatchState(); }
+                SetBool = v =>
+                {
+                    VPBConfig.Instance.QuickMenuVrWatchVisible = v;
+                    VPBConfig.Instance.TriggerChange();
+                    UpdateFooterVrWatchState();
+                    try
+                    {
+                        if (VamHookPlugin.singleton != null)
+                            VamHookPlugin.singleton.QuickMenuOnWatchVisibleToggled(v);
+                    }
+                    catch { }
+                }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "vr.watchMode", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_mode", "Watch hand"),

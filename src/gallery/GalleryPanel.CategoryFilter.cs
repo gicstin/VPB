@@ -58,7 +58,77 @@ namespace VPB
             s.BrowseLoadedMode = (int)_browseLoadedMode;
             s.BrowseUnusedMode = (int)_browseUnusedCycle;
             s.LicenseFilter = currentLicenseFilter ?? "";
+            s.SourceFilter = (int)currentGlobalSourceFilter;
+            s.HasSourceFilter = true;
             return s;
+        }
+
+        private bool IsSourceFilterIndependent()
+        {
+            try
+            {
+                return VPBConfig.Instance == null || VPBConfig.Instance.GallerySourceFilterIndependent;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private static VPBConfig.GlobalSourceFilterValue SourceFilterValueFromInt(int v)
+        {
+            if (v == (int)VPBConfig.GlobalSourceFilterValue.Local)
+                return VPBConfig.GlobalSourceFilterValue.Local;
+            if (v == (int)VPBConfig.GlobalSourceFilterValue.Var)
+                return VPBConfig.GlobalSourceFilterValue.Var;
+            return VPBConfig.GlobalSourceFilterValue.All;
+        }
+
+        private static bool LegacyCategorySourceFilterIsLocal(CategoryFilterState state)
+        {
+            if (state == null) return false;
+            return string.Equals(state.SceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(state.AppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Settings cycle Independent/Synced. Independent: stamp live source as this category's memory.
+        /// Synced: save current category first so Independent round-trip keeps All/Local/.var.
+        /// </summary>
+        private void ApplySourceFilterScopeFromSettings(string label)
+        {
+            bool nextIndependent = VPBConfig.ParseGallerySourceFilterIndependent(label);
+            bool wasIndependent = IsSourceFilterIndependent();
+            if (VPBConfig.Instance == null) return;
+
+            if (wasIndependent == nextIndependent)
+            {
+                VPBConfig.Instance.GallerySourceFilterIndependent = nextIndependent;
+                return;
+            }
+
+            if (wasIndependent && !nextIndependent)
+            {
+                try { SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath); } catch { }
+                VPBConfig.Instance.GallerySourceFilterIndependent = false;
+                try { VPBConfig.Instance.Save(false); } catch { }
+                ShowTemporaryStatus(
+                    VPBTranslation.T(
+                        "gallery.filter.source_scope_synced_status",
+                        "Source filter Synced — All/Local/.var shared across categories."),
+                    2.25f);
+            }
+            else
+            {
+                VPBConfig.Instance.GallerySourceFilterIndependent = true;
+                try { SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath); } catch { }
+                try { VPBConfig.Instance.Save(false); } catch { }
+                ShowTemporaryStatus(
+                    VPBTranslation.T(
+                        "gallery.filter.source_scope_independent_status",
+                        "Source filter Independent — each category remembers All/Local/.var."),
+                    2.25f);
+            }
         }
 
         private void SaveCurrentCategoryFilterState(string categoryTitle, string path)
@@ -66,6 +136,17 @@ namespace VPB
             if (!hasLoadedContent) return;
             string key = MakeCategoryFilterKey(categoryTitle, path);
             var state = CaptureCurrentFilterState();
+            if (!IsSourceFilterIndependent())
+            {
+                CategoryFilterState prev;
+                if (_categoryFilterStates.TryGetValue(key, out prev) && prev != null && prev.HasSourceFilter)
+                {
+                    state.SourceFilter = prev.SourceFilter;
+                    state.HasSourceFilter = true;
+                }
+                else
+                    state.HasSourceFilter = false;
+            }
             _categoryFilterStates[key] = state;
 
             string panelId = PanelId;
@@ -215,23 +296,7 @@ namespace VPB
                 try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = state.UserTagInheritVarToChildren != 0;
 
-            // Migrate legacy per-category Scene/Appearance Local → global Source Local.
-            try
-            {
-                bool legacyLocal =
-                    string.Equals(state.SceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(state.AppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
-                if (legacyLocal && currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.Local)
-                {
-                    currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.Local;
-                    if (VPBConfig.Instance != null)
-                    {
-                        VPBConfig.Instance.GlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.Local;
-                        try { VPBConfig.Instance.Save(); } catch { }
-                    }
-                }
-            }
-            catch { }
+            ApplyRestoredSourceFilter(state);
             currentPackagePathFilter = state.PackagePathFilter ?? "";
             clothingSubfilter = (ClothingSubfilter)state.ClothingSubfilter;
             hairSubfilter = (HairSubfilter)state.HairSubfilter;
@@ -323,8 +388,33 @@ namespace VPB
                 _browseUnusedSavedSort = null;
             }
             currentLicenseFilter = "";
+            if (IsSourceFilterIndependent()
+                && currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
+            {
+                currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.GlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
+            }
             try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
             SyncBrowseFilterChipChrome();
+        }
+
+        private void ApplyRestoredSourceFilter(CategoryFilterState state)
+        {
+            if (state == null || !IsSourceFilterIndependent()) return;
+
+            VPBConfig.GlobalSourceFilterValue desired;
+            if (state.HasSourceFilter)
+                desired = SourceFilterValueFromInt(state.SourceFilter);
+            else if (LegacyCategorySourceFilterIsLocal(state))
+                desired = VPBConfig.GlobalSourceFilterValue.Local;
+            else
+                return;
+
+            if (currentGlobalSourceFilter == desired) return;
+            currentGlobalSourceFilter = desired;
+            if (VPBConfig.Instance != null)
+                VPBConfig.Instance.GlobalSourceFilter = desired;
         }
 
         private static BrowseFilterCycle ClampBrowseFilterCycle(int v)

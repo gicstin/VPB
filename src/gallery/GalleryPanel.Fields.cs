@@ -648,8 +648,8 @@ namespace VPB
         private string userTagAppliedRemoveAnchor = null;
         private readonly List<UserTagSideTabEntry> cachedAppliedUserTagsSelection = new List<UserTagSideTabEntry>(32);
 
-        // Mirror of VPBConfig.GlobalSourceFilter. Read in init, written by dropdown click handlers,
-        // applied as the early gate in PassesFilters. Scene/Appearance side "Local only" mirrors this.
+        // Live All/Local/.var source filter. Per-category when GallerySourceFilterIndependent;
+        // otherwise one shared value (also persisted as VPBConfig.GlobalSourceFilter).
         private VPBConfig.GlobalSourceFilterValue currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
 
         /// <summary>Filter menu cycle: Off / Apply (prefer) / Only. Visible 3-way segment (no Shift+click).</summary>

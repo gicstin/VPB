@@ -225,6 +225,8 @@ namespace VPB
         private static bool s_UiPendingWarnLogged;
 
         public static string CurrentScenePackageUid;
+        /// <summary>Last non-merge scene load path from SuperController (VAR uid:/internal or local Saves/scene path).</summary>
+        public static string CurrentSceneSaveName;
 
         private Harmony m_Harmony;
 
@@ -1140,7 +1142,8 @@ namespace VPB
             }
 
             // VR wrist watch: separate canvas on a controller. HUD grid stays.
-            try { QuickMenuUpdateVrWatch(); } catch { }
+            try { QuickMenuUpdateVrWatch(); }
+            catch (Exception ex) { QuickMenuLogWatchUpdateError(ex); }
 
             // Live preview: reposition the quick-menu grid when the anchor setting changes.
             // (Do this every frame; the helper is internally throttled.)

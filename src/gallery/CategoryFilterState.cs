@@ -36,9 +36,13 @@ namespace VPB
         public int BrowseUnusedMode = 0;
         /// <summary>Title-bar Filter license type (meta.json licenseType). Empty = off.</summary>
         public string LicenseFilter = "";
+        /// <summary>Title-bar Source All/Local/.var. Written when Independent; omitted in JSON when unset.</summary>
+        public int SourceFilter = 0;
+        /// <summary>True when <see cref="SourceFilter"/> was stored (not inherited from live synced value).</summary>
+        public bool HasSourceFilter;
 
         // Maps legacy per-category source-filter strings. "" / non-local → ignored.
-        // "local" migrates to title-bar global Source Local on ApplyCategoryFilterState.
+        // "local" migrates to title-bar Source Local on Independent restore.
         private static string MigrateLegacySourceFilter(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";
@@ -49,6 +53,13 @@ namespace VPB
         }
 
         private static int ClampBrowseCycle(int v)
+        {
+            if (v < 0) return 0;
+            if (v > 2) return 2;
+            return v;
+        }
+
+        internal static int ClampSourceFilter(int v)
         {
             if (v < 0) return 0;
             if (v > 2) return 2;
@@ -97,6 +108,8 @@ namespace VPB
             node["bl"].AsInt = BrowseLoadedMode;
             node["bu"].AsInt = BrowseUnusedMode;
             node["lf"] = LicenseFilter ?? "";
+            if (HasSourceFilter)
+                node["gsf"].AsInt = ClampSourceFilter(SourceFilter);
 
             return VPB.src.util.JsonSerializationUtil.Serialize(node, 4096);
         }
@@ -166,6 +179,11 @@ namespace VPB
                 }
 
                 s.LicenseFilter = node["lf"] != null ? (node["lf"].Value ?? "") : "";
+                if (node["gsf"] != null)
+                {
+                    s.HasSourceFilter = true;
+                    s.SourceFilter = ClampSourceFilter(node["gsf"].AsInt);
+                }
 
                 // Legacy: exclusive sort modes lived on FileSortState.
                 if (s.FileSortState != null)

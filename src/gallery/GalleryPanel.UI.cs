@@ -2468,9 +2468,27 @@ namespace VPB
         {
             if (VPBConfig.Instance == null) return;
             if (!XrUtils.IsVrActive()) return;
-            VPBConfig.Instance.QuickMenuVrWatchVisible = !VPBConfig.Instance.QuickMenuVrWatchVisible;
+
+            bool shown = false;
+            try
+            {
+                if (VamHookPlugin.singleton != null)
+                    shown = VamHookPlugin.singleton.QuickMenuIsWatchShown();
+            }
+            catch { }
+
+            // Config can already be ON while Glance never showed the face (Index / OpenVR).
+            // First click then must SHOW, not flip the flag off.
+            bool on = !shown;
+            VPBConfig.Instance.QuickMenuVrWatchVisible = on;
             VPBConfig.Instance.Save();
             UpdateFooterVrWatchState();
+            try
+            {
+                if (VamHookPlugin.singleton != null)
+                    VamHookPlugin.singleton.QuickMenuOnWatchVisibleToggled(on);
+            }
+            catch { }
         }
 
         internal void NotifyFooterVrWatchState()

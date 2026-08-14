@@ -36,7 +36,6 @@ namespace VPB
             entry.CategoryPath = currentPath;
             entry.CategoryTitle = currentCategoryTitle;
             PopulateQuickFilterEntryFromCategoryFilterState(entry, CaptureCurrentFilterState());
-            // Local Only / Source All|Local|Var lives on title-bar global filter — not CategoryFilterState.
             entry.GlobalSourceFilter = QuickFilterEntry.ClampGlobalSourceFilter((int)currentGlobalSourceFilter);
             CaptureQuickFilterSideTabState(entry);
 
@@ -273,8 +272,7 @@ namespace VPB
 
             // 2. Restore full filter state (scene/appearance local-only, untagged, subfilters, etc.)
             ApplyCategoryFilterState(CategoryFilterStateFromQuickFilterEntry(entry), restoreUserTagFilter: true, quietUi: quietUi);
-            // Global Source (Local Only) is session-level; CategoryFilterState only migrates legacy one-way.
-            // Always restore All/Local/Var from the preset so Local does not linger across presets.
+            // Preset Source All/Local/.var always applies (Independent: this category; Synced: shared live value).
             ApplyQuickFilterGlobalSourceFilter(entry, quietUi);
             try { ReconcileAutoGenderForCurrentTarget(); } catch { }
 
@@ -520,6 +518,8 @@ namespace VPB
             entry.BrowseLoadedMode = state.BrowseLoadedMode;
             entry.BrowseUnusedMode = state.BrowseUnusedMode;
             entry.LicenseFilter = state.LicenseFilter ?? "";
+            if (state.HasSourceFilter)
+                entry.GlobalSourceFilter = QuickFilterEntry.ClampGlobalSourceFilter(state.SourceFilter);
         }
 
         private static CategoryFilterState CategoryFilterStateFromQuickFilterEntry(QuickFilterEntry entry)
@@ -548,6 +548,8 @@ namespace VPB
             state.BrowseLoadedMode = entry.BrowseLoadedMode;
             state.BrowseUnusedMode = entry.BrowseUnusedMode;
             state.LicenseFilter = entry.LicenseFilter ?? "";
+            state.SourceFilter = QuickFilterEntry.ClampGlobalSourceFilter(entry.GlobalSourceFilter);
+            state.HasSourceFilter = true;
             return state;
         }
 

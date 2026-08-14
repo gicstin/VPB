@@ -1508,7 +1508,7 @@ namespace VPB
 
                 if (!string.IsNullOrEmpty(saveName))
                 {
-                    // Track current scene package UID for UninstallAll protection
+                    // Track current scene package UID / save path for delete warnings
                     int idx = saveName.IndexOf(":/");
                     if (idx >= 0)
                     {
@@ -1519,6 +1519,8 @@ namespace VPB
                         // Only clear if not merging (merging implies we are adding to current scene)
                         VamHookPlugin.CurrentScenePackageUid = null;
                     }
+                    if (!loadMerge)
+                        VamHookPlugin.CurrentSceneSaveName = saveName;
                 }
 
                 if (!LogUtil.IsSceneClickActive())

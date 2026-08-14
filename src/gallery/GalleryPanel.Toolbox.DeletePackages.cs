@@ -68,15 +68,15 @@ namespace VPB
                     continue;
                 }
 
-                // Critical: do not delete the currently loaded scene's package
-                if (!string.IsNullOrEmpty(currentScenePkg) && string.Equals(uid, currentScenePkg, StringComparison.OrdinalIgnoreCase))
-                {
-                    blocked.Add($"{uid}.var (current scene package)");
-                    continue;
-                }
+                // Currently loaded scene package: allow delete (file move + undo) but warn.
+                // Blocking it hid Delete for the open scene; confirm dialog is the friction (High risk).
+                bool isLoadedScenePkg = !string.IsNullOrEmpty(currentScenePkg)
+                    && string.Equals(uid, currentScenePkg, StringComparison.OrdinalIgnoreCase);
+                if (isLoadedScenePkg)
+                    warned.Add(uid + ".var (currently loaded scene)");
 
-                // Critical: if the running scene references this package, require confirm (or block if you prefer)
-                if (runningSceneDeps != null && runningSceneDeps.Contains(uid))
+                // Running scene dependency (skip if already called out as the loaded scene package).
+                if (!isLoadedScenePkg && runningSceneDeps != null && runningSceneDeps.Contains(uid))
                 {
                     warned.Add($"{uid}.var (referenced by running scene)");
                 }
@@ -125,6 +125,82 @@ namespace VPB
                 }
 
                 toDelete.Add(uid);
+            }
+        }
+
+        private static string NormalizeScenePathForCompare(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            return path.Replace('\\', '/').Trim();
+        }
+
+        private static bool IsCurrentlyLoadedLocalScene(string absJson, string galleryRel)
+        {
+            string loaded = null;
+            try { loaded = VamHookPlugin.CurrentSceneSaveName; }
+            catch { loaded = null; }
+            if (string.IsNullOrEmpty(loaded)) return false;
+            if (loaded.IndexOf(":/", StringComparison.Ordinal) >= 0) return false;
+
+            string loadedNorm = NormalizeScenePathForCompare(loaded);
+            if (loadedNorm.Length == 0) return false;
+
+            if (!string.IsNullOrEmpty(galleryRel)
+                && string.Equals(NormalizeScenePathForCompare(galleryRel), loadedNorm, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (string.IsNullOrEmpty(absJson)) return false;
+            string absNorm = NormalizeScenePathForCompare(absJson);
+            if (string.Equals(absNorm, loadedNorm, StringComparison.OrdinalIgnoreCase)) return true;
+            if (absNorm.Length > loadedNorm.Length
+                && absNorm.EndsWith("/" + loadedNorm, StringComparison.OrdinalIgnoreCase))
+                return true;
+            try
+            {
+                string loadedFull = FileManager.GetFullPath(loaded);
+                if (!string.IsNullOrEmpty(loadedFull)
+                    && string.Equals(
+                        NormalizeScenePathForCompare(loadedFull),
+                        absNorm,
+                        StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool SelectionDeletesCurrentlyLoadedScene(
+            List<string> packageUidsToDelete,
+            string currentScenePkg,
+            List<LocalSceneDeleteItem> localScenes)
+        {
+            if (!string.IsNullOrEmpty(currentScenePkg) && packageUidsToDelete != null)
+            {
+                for (int i = 0; i < packageUidsToDelete.Count; i++)
+                {
+                    if (string.Equals(packageUidsToDelete[i], currentScenePkg, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            if (localScenes == null) return false;
+            for (int i = 0; i < localScenes.Count; i++)
+            {
+                if (IsCurrentlyLoadedLocalScene(localScenes[i].AbsoluteJson, localScenes[i].GalleryRelativePath))
+                    return true;
+            }
+            return false;
+        }
+
+        private static void AppendLoadedLocalSceneWarnings(List<LocalSceneDeleteItem> localScenes, List<string> warned)
+        {
+            if (localScenes == null || warned == null) return;
+            for (int i = 0; i < localScenes.Count; i++)
+            {
+                if (!IsCurrentlyLoadedLocalScene(localScenes[i].AbsoluteJson, localScenes[i].GalleryRelativePath))
+                    continue;
+                string label = localScenes[i].GalleryRelativePath;
+                if (string.IsNullOrEmpty(label)) label = localScenes[i].AbsoluteJson;
+                warned.Add(label + " (currently loaded scene)");
             }
         }
 
@@ -214,11 +290,22 @@ namespace VPB
                     return;
                 }
 
+                bool deletingLoadedScene = SelectionDeletesCurrentlyLoadedScene(toDelete, currentScenePkg, localScenes);
+                if (deletingLoadedScene)
+                    AppendLoadedLocalSceneWarnings(localScenes, warned);
+
                 // Related-entry dump: useful when a package hides collateral gallery items.
                 // Multi-select with one listing per package = selection echo — skip (Hick / memory load).
                 string relatedBlock = BuildRelatedEntriesBlock(relatedEntries, toDelete.Count);
 
                 var summaryLines = new List<string>();
+                if (deletingLoadedScene)
+                {
+                    summaryLines.Add(VPBTranslation.T(
+                        "gallery.delete.warn_current_scene",
+                        "Includes the currently loaded scene. Files move to DeletedPackages/DeletedScenes; scene stays in memory until you load another. Ctrl+Z undoes the move."));
+                    summaryLines.Add("");
+                }
                 if (toDelete.Count > 0)
                 {
                     summaryLines.Add($"Move {toDelete.Count} package(s) into '{DeletedPackagesFolderName}':");

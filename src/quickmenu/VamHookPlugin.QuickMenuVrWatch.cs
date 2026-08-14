@@ -1,6 +1,8 @@
+using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -24,6 +26,10 @@ namespace VPB
         private const float QuickMenuWatchLatchDelaySec = 0.25f;
         private const float QuickMenuWatchGlanceShowDot = 0.42f;
         private const float QuickMenuWatchGlanceHideDot = 0.22f;
+        // Index / OpenVR: wrist-forward (Euler 90,180,0) misses knuckles pose. Also show when HMD looks at hand.
+        private const float QuickMenuWatchGlanceLookShow = 0.55f;
+        private const float QuickMenuWatchGlanceLookHide = 0.35f;
+        private const float QuickMenuWatchGlanceMaxDistSqr = 4f; // 2m (was 1.2m)
         private const float QuickMenuWatchTutorialSec = 5f;
         private const float QuickMenuWatchBtn = 40f;
         private const float QuickMenuWatchGap = 10f;
@@ -158,6 +164,11 @@ namespace VPB
         private string m_WatchCfgHandRaw;
         private string m_WatchCfgShowRaw;
         private bool m_WatchAssignmentsLoaded;
+        private bool m_WatchFailLogged;
+        private bool m_WatchHandsDumpLogged;
+        private bool m_WatchAttachLogged;
+        private bool m_WatchUpdateErrorLogged;
+        private float m_WatchEyeRetryAt;
 
         internal void QuickMenuDestroyWatch()
         {
@@ -201,6 +212,109 @@ namespace VPB
             m_WatchVisibleNow = false;
             m_WatchAddedToSc = false;
             m_WatchLastLocalScale = -1f;
+            m_WatchFailLogged = false;
+        }
+
+        internal void QuickMenuLogWatchUpdateError(System.Exception ex)
+        {
+            if (m_WatchUpdateErrorLogged) return;
+            m_WatchUpdateErrorLogged = true;
+            try
+            {
+                LogUtil.LogWarning("[VPB] VR wrist watch update failed: " + (ex != null ? ex.Message : "unknown"));
+            }
+            catch { }
+        }
+
+        internal void QuickMenuOnWatchVisibleToggled(bool on)
+        {
+            if (!on)
+            {
+                m_WatchPinned = false;
+                m_WatchGlanced = false;
+                m_WatchTutorialUntil = 0f;
+                return;
+            }
+            // Footer / Settings ON must show the face immediately — Glance on Index never fires for many users.
+            m_WatchGlanced = true;
+            try { m_WatchTutorialUntil = Time.unscaledTime + QuickMenuWatchTutorialSec; }
+            catch { m_WatchTutorialUntil = 0f; }
+        }
+
+        internal bool QuickMenuIsWatchShown()
+        {
+            return m_WatchVisibleNow && m_WatchCanvas != null &&
+                   m_WatchCanvas.gameObject.activeInHierarchy;
+        }
+
+        private void QuickMenuLogWatchFailOnce(string reason)
+        {
+            if (m_WatchFailLogged) return;
+            m_WatchFailLogged = true;
+            try { LogUtil.LogWarning("[VPB] VR wrist watch hidden: " + reason); } catch { }
+        }
+
+        private void QuickMenuLogWatchHandsDumpOnce(SuperController sc, string reason)
+        {
+            if (m_WatchHandsDumpLogged) return;
+            m_WatchHandsDumpLogged = true;
+            m_WatchFailLogged = true;
+            try
+            {
+                StringBuilder sb = new StringBuilder(256);
+                sb.Append("[VPB] VR wrist watch hidden: ").Append(reason);
+                if (sc != null)
+                {
+                    bool openVr = false;
+                    bool ovr = false;
+                    try { openVr = sc.isOpenVR; } catch { }
+                    try { ovr = sc.isOVR; } catch { }
+                    sb.Append(" | isOpenVR=").Append(openVr ? "1" : "0");
+                    sb.Append(" isOVR=").Append(ovr ? "1" : "0");
+                    QuickMenuAppendHandDump(sb, " viveMountL", sc.viveHandMountLeft);
+                    QuickMenuAppendHandDump(sb, " viveMountR", sc.viveHandMountRight);
+                    QuickMenuAppendHandDump(sb, " viveL", sc.viveObjectLeft);
+                    QuickMenuAppendHandDump(sb, " viveR", sc.viveObjectRight);
+                    QuickMenuAppendHandDump(sb, " touchL", sc.touchObjectLeft);
+                    QuickMenuAppendHandDump(sb, " touchR", sc.touchObjectRight);
+                }
+                LogUtil.LogWarning(sb.ToString());
+            }
+            catch { }
+        }
+
+        private void QuickMenuLogWatchAttachOnce(Transform hand)
+        {
+            if (m_WatchAttachLogged || hand == null) return;
+            m_WatchAttachLogged = true;
+            try
+            {
+                var sc = SuperController.singleton;
+                bool openVr = false;
+                try { if (sc != null) openVr = sc.isOpenVR; } catch { }
+                Vector3 p = hand.position;
+                LogUtil.Log("[VPB] VR wrist watch attached | openVR=" + (openVr ? "1" : "0")
+                    + " left=" + (m_WatchIsLeft ? "1" : "0")
+                    + " hand=" + hand.name
+                    + " pos=" + p.x.ToString("F2") + "," + p.y.ToString("F2") + "," + p.z.ToString("F2"));
+            }
+            catch { }
+        }
+
+        private static void QuickMenuAppendHandDump(StringBuilder sb, string label, Transform t)
+        {
+            sb.Append(label).Append('=');
+            if (t == null)
+            {
+                sb.Append("null");
+                return;
+            }
+            sb.Append(t.name);
+            bool active = false;
+            try { active = t.gameObject.activeInHierarchy; } catch { }
+            sb.Append(" act=").Append(active ? "1" : "0");
+            Vector3 p = t.position;
+            sb.Append(" (").Append(p.x.ToString("F2")).Append(',').Append(p.y.ToString("F2")).Append(',').Append(p.z.ToString("F2")).Append(')');
         }
 
         internal void QuickMenuSyncWatchCornerRadius(float frac)
@@ -277,7 +391,7 @@ namespace VPB
             }
 
             var scHand = SuperController.singleton;
-            bool isLeft = scHand != null && watchHand == scHand.touchObjectLeft;
+            bool isLeft = QuickMenuIsLeftWatchHand(scHand, watchHand);
             if (isLeft != m_WatchIsLeft)
             {
                 m_WatchIsLeft = isLeft;
@@ -340,10 +454,25 @@ namespace VPB
             {
                 m_WatchTf.SetParent(watchHand, false);
                 m_WatchHand = watchHand;
+                QuickMenuLogWatchAttachOnce(watchHand);
+            }
+
+            if (!m_WatchTf.gameObject.activeInHierarchy && m_WatchTf.gameObject.activeSelf)
+            {
+                QuickMenuLogWatchFailOnce("watch parent inactive in hierarchy");
+                if (m_WatchVisibleNow) QuickMenuSetWatchShown(false);
+                return;
             }
 
             QuickMenuApplyWatchPose();
             QuickMenuSetWatchShown(true);
+            if (m_WatchCanvas != null && m_WatchCanvas.worldCamera == null &&
+                Time.unscaledTime >= m_WatchEyeRetryAt)
+            {
+                m_WatchEyeRetryAt = Time.unscaledTime + 0.5f;
+                Camera eye = QuickMenuGetPlayerCameraComponent();
+                if (eye != null) m_WatchCanvas.worldCamera = eye;
+            }
             QuickMenuRefreshWatchStatus();
             QuickMenuSyncWatchPageLabel();
             QuickMenuSyncWatchAssignLiveIcons();
@@ -385,31 +514,101 @@ namespace VPB
             QuickMenuEnsureWatchAssignments();
         }
 
+        private static bool QuickMenuHandLooksTracked(Transform hand)
+        {
+            if (hand == null) return false;
+            try { return hand.gameObject.activeInHierarchy; }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Active VR controller mounts. Oculus (Quest Link) uses <c>touch*</c>; SteamVR/OpenVR uses
+        /// <c>vive*</c>. VaM disables the unused rig, so <c>touchObject*</c> is dead on SteamVR.
+        /// </summary>
+        internal static void GetVamVrHandTransforms(SuperController sc, out Transform left, out Transform right)
+        {
+            left = null;
+            right = null;
+            if (sc == null) return;
+
+            bool openVr = false;
+            try { openVr = sc.isOpenVR; } catch { }
+
+            if (openVr)
+            {
+                try { left = sc.viveHandMountLeft; } catch { }
+                try { right = sc.viveHandMountRight; } catch { }
+                if (left == null) try { left = sc.viveObjectLeft; } catch { }
+                if (right == null) try { right = sc.viveObjectRight; } catch { }
+            }
+            else
+            {
+                try { left = sc.touchHandMountLeft; } catch { }
+                try { right = sc.touchHandMountRight; } catch { }
+                if (left == null) try { left = sc.touchObjectLeft; } catch { }
+                if (right == null) try { right = sc.touchObjectRight; } catch { }
+            }
+            if (left == null) try { left = sc.leftHand; } catch { }
+            if (right == null) try { right = sc.rightHand; } catch { }
+        }
+
+        private static bool QuickMenuIsLeftWatchHand(SuperController sc, Transform hand)
+        {
+            if (hand == null || sc == null) return false;
+            Transform left;
+            Transform right;
+            GetVamVrHandTransforms(sc, out left, out right);
+            if (left != null && hand == left) return true;
+            if (right != null && hand == right) return false;
+            try
+            {
+                if (hand == sc.viveObjectLeft || hand == sc.viveHandMountLeft ||
+                    hand == sc.viveCenterHandLeft || hand == sc.touchObjectLeft ||
+                    hand == sc.touchHandMountLeft || hand == sc.leftHand)
+                    return true;
+            }
+            catch { }
+            return false;
+        }
+
         private Transform QuickMenuResolveWatchHand()
         {
             var sc = SuperController.singleton;
             if (sc == null) return null;
-            Transform left = sc.touchObjectLeft;
-            Transform right = sc.touchObjectRight;
+            Transform left;
+            Transform right;
+            GetVamVrHandTransforms(sc, out left, out right);
+
+            bool leftOk = QuickMenuHandLooksTracked(left);
+            bool rightOk = QuickMenuHandLooksTracked(right);
+            if (!leftOk) left = null;
+            if (!rightOk) right = null;
+
+            if (left == null && right == null)
+            {
+                QuickMenuLogWatchHandsDumpOnce(sc, "no tracked VR controller");
+                return null;
+            }
+
+            // Explicit choice never steals the other controller unless that choice is untracked.
+            if (m_WatchSessionHand == 1) return left != null ? left : right;
+            if (m_WatchSessionHand == 2) return right != null ? right : left;
+            if (m_WatchCfgHand == QuickMenuVrWatchMode.LeftOnly) return left != null ? left : right;
+            if (m_WatchCfgHand == QuickMenuVrWatchMode.RightOnly) return right != null ? right : left;
+
             Transform hud = sc.mainHUD;
-
-            if (left == null && right == null) return null;
-
-            // Explicit choice never steals the other controller (even if that hand is untracked).
-            if (m_WatchSessionHand == 1) return left;
-            if (m_WatchSessionHand == 2) return right;
-            if (m_WatchCfgHand == QuickMenuVrWatchMode.LeftOnly) return left;
-            if (m_WatchCfgHand == QuickMenuVrWatchMode.RightOnly) return right;
-
-            // Opposite/Same only: one tracked controller.
-            if (left == null) return right;
-            if (right == null) return left;
 
             switch (m_WatchCfgHand)
             {
                 case QuickMenuVrWatchMode.SameAsMenu:
                 case QuickMenuVrWatchMode.OppositeToMenu:
-                    if (m_WatchLatchedHand == null && hud != null &&
+                    if (m_WatchLatchedHand != null &&
+                        !QuickMenuHandLooksTracked(m_WatchLatchedHand))
+                    {
+                        m_WatchLatchedHand = null;
+                        m_WatchLatchPending = true;
+                    }
+                    if (m_WatchLatchedHand == null && hud != null && left != null && right != null &&
                         (!m_WatchLatchPending || (Time.unscaledTime - m_WatchOpenTime) >= QuickMenuWatchLatchDelaySec))
                     {
                         float dl = (left.position - hud.position).sqrMagnitude;
@@ -420,11 +619,14 @@ namespace VPB
                             : ((menuHand == left) ? right : left);
                         m_WatchLatchPending = false;
                     }
-                    if (m_WatchLatchedHand != null) return m_WatchLatchedHand;
+                    if (m_WatchLatchedHand != null && QuickMenuHandLooksTracked(m_WatchLatchedHand))
+                        return m_WatchLatchedHand;
                     // No latch yet (menu never opened): opposite → left (laser typically right).
-                    return (m_WatchCfgHand == QuickMenuVrWatchMode.SameAsMenu) ? right : left;
+                    if (m_WatchCfgHand == QuickMenuVrWatchMode.SameAsMenu)
+                        return right != null ? right : left;
+                    return left != null ? left : right;
                 default:
-                    return left;
+                    return left != null ? left : right;
             }
         }
 
@@ -438,12 +640,18 @@ namespace VPB
             Vector3 watchPos = hand.TransformPoint(offset);
             Vector3 away = watchPos - cam.position;
             float mag2 = away.sqrMagnitude;
-            if (mag2 < 0.0064f || mag2 > 1.44f) return m_WatchGlanced; // 8cm–1.2m
+            if (mag2 < 0.0064f || mag2 > QuickMenuWatchGlanceMaxDistSqr) return m_WatchGlanced; // 8cm–2m
 
+            float inv = 1f / Mathf.Sqrt(mag2);
             Vector3 restFwd = (hand.rotation * QuickMenuWatchWristLocalRot) * Vector3.forward;
-            float dot = (away.x * restFwd.x + away.y * restFwd.y + away.z * restFwd.z) * (1f / Mathf.Sqrt(mag2));
-            if (m_WatchGlanced) return dot >= QuickMenuWatchGlanceHideDot;
-            return dot >= QuickMenuWatchGlanceShowDot;
+            float wristDot = (away.x * restFwd.x + away.y * restFwd.y + away.z * restFwd.z) * inv;
+
+            Vector3 camFwd = cam.forward;
+            float lookDot = (camFwd.x * away.x + camFwd.y * away.y + camFwd.z * away.z) * inv;
+
+            if (m_WatchGlanced)
+                return wristDot >= QuickMenuWatchGlanceHideDot || lookDot >= QuickMenuWatchGlanceLookHide;
+            return wristDot >= QuickMenuWatchGlanceShowDot || lookDot >= QuickMenuWatchGlanceLookShow;
         }
 
         private void QuickMenuSetWatchShown(bool show)
@@ -458,6 +666,11 @@ namespace VPB
                 m_WatchCanvas.gameObject.SetActive(show);
             if (show)
             {
+                if (m_WatchCanvas != null && m_WatchCanvas.worldCamera == null)
+                {
+                    Camera eye = QuickMenuGetPlayerCameraComponent();
+                    if (eye != null) m_WatchCanvas.worldCamera = eye;
+                }
                 for (int i = 0; i < QuickMenuWatchHudSlotCount; i++)
                     QuickMenuSyncWatchSlot(i);
                 QuickMenuSyncWatchAssignAll();
@@ -478,6 +691,31 @@ namespace VPB
             var sc = SuperController.singleton;
             if (sc == null || sc.mainHUD == null) return;
 
+            try
+            {
+                QuickMenuEnsureWatchCanvasBody(sc);
+            }
+            catch (System.Exception ex)
+            {
+                QuickMenuLogWatchUpdateError(ex);
+                try
+                {
+                    if (m_WatchCanvas != null)
+                    {
+                        if (m_WatchAddedToSc && sc != null) sc.RemoveCanvas(m_WatchCanvas);
+                        UnityEngine.Object.Destroy(m_WatchCanvas.gameObject);
+                    }
+                }
+                catch { }
+                m_WatchCanvas = null;
+                m_WatchCanvasRT = null;
+                m_WatchTf = null;
+                m_WatchAddedToSc = false;
+            }
+        }
+
+        private void QuickMenuEnsureWatchCanvasBody(SuperController sc)
+        {
             QuickMenuEnsureWatchAssignments();
 
             float grid = QuickMenuWatchBtn * 2f + QuickMenuWatchGap;
@@ -495,6 +733,8 @@ namespace VPB
             m_WatchCanvas = root.AddComponent<Canvas>();
             m_WatchCanvas.renderMode = RenderMode.WorldSpace;
             m_WatchCanvas.pixelPerfect = false;
+            Camera eye = QuickMenuGetPlayerCameraComponent();
+            if (eye != null) m_WatchCanvas.worldCamera = eye;
             m_WatchTf = root.transform;
 
             CanvasScaler cs = root.AddComponent<CanvasScaler>();
@@ -1359,17 +1599,16 @@ namespace VPB
         private void QuickMenuSwitchWatchHand()
         {
             var sc = SuperController.singleton;
-            bool currentlyLeft;
-            if (m_WatchHand != null && sc != null && m_WatchHand == sc.touchObjectLeft)
-                currentlyLeft = true;
-            else if (m_WatchHand != null && sc != null && m_WatchHand == sc.touchObjectRight)
-                currentlyLeft = false;
-            else
+            Transform left;
+            Transform right;
+            GetVamVrHandTransforms(sc, out left, out right);
+            bool currentlyLeft = QuickMenuIsLeftWatchHand(sc, m_WatchHand);
+            if (m_WatchHand == null)
                 currentlyLeft = m_WatchCfgHand == QuickMenuVrWatchMode.LeftOnly;
 
             bool wantLeft = !currentlyLeft;
             m_WatchSessionHand = wantLeft ? (byte)1 : (byte)2;
-            m_WatchLatchedHand = (sc != null) ? (wantLeft ? sc.touchObjectLeft : sc.touchObjectRight) : null;
+            m_WatchLatchedHand = wantLeft ? left : right;
             m_WatchLatchPending = false;
             m_WatchStatusNeedRebuild = true;
 
@@ -1461,7 +1700,49 @@ namespace VPB
             try
             {
                 var sc = SuperController.singleton;
-                if (sc != null && sc.centerCameraTarget != null) return sc.centerCameraTarget.transform;
+                if (sc != null)
+                {
+                    if (sc.isOpenVR && sc.ViveCenterCamera != null)
+                        return sc.ViveCenterCamera.transform;
+                    if (sc.isOVR && sc.OVRCenterCamera != null)
+                        return sc.OVRCenterCamera.transform;
+                    if (sc.centerCameraTarget != null) return sc.centerCameraTarget.transform;
+                }
+            }
+            catch { }
+            try
+            {
+                if (Camera.main != null) return Camera.main.transform;
+            }
+            catch { }
+            return null;
+        }
+
+        private static Camera QuickMenuGetPlayerCameraComponent()
+        {
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc != null)
+                {
+                    if (sc.isOpenVR && sc.ViveCenterCamera != null) return sc.ViveCenterCamera;
+                    if (sc.isOVR && sc.OVRCenterCamera != null) return sc.OVRCenterCamera;
+                }
+            }
+            catch { }
+            try
+            {
+                if (Camera.main != null) return Camera.main;
+            }
+            catch { }
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc != null && sc.centerCameraTarget != null)
+                {
+                    Camera c = sc.centerCameraTarget.GetComponent<Camera>();
+                    if (c != null) return c;
+                }
             }
             catch { }
             return null;
