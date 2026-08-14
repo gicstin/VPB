@@ -13,7 +13,6 @@ namespace VPB
         public static long QmRefresh;
         public static long QmIconCreate;
         public static long QmIconSwap;
-        public static long PointerSib;
         public static long GalUpdateFull;
         public static long SetCanvasVisibleOn;
         public static long SetCanvasVisibleOff;
@@ -32,7 +31,7 @@ namespace VPB
         public static long GetVarEntryHookHeavy;
         public static long ScriptCtrlCreate;
 
-        static long _lastQmRefresh, _lastQmIconCreate, _lastQmIconSwap, _lastPointerSib;
+        static long _lastQmRefresh, _lastQmIconCreate, _lastQmIconSwap;
         static long _lastGalUpdateFull;
         static long _lastSetCanvasVisibleOn, _lastSetCanvasVisibleOff, _lastMenuGateFlip;
         static long _lastUserTagBind, _lastUserTagVirtVis, _lastUserTagScrollCb, _lastUserTagPinnedRebuild, _lastTooltipAttach;
@@ -75,7 +74,6 @@ namespace VPB
                     _lastQmRefresh = QmRefresh;
                     _lastQmIconCreate = QmIconCreate;
                     _lastQmIconSwap = QmIconSwap;
-                    _lastPointerSib = PointerSib;
                     _lastGalUpdateFull = GalUpdateFull;
                     _lastSetCanvasVisibleOn = SetCanvasVisibleOn;
                     _lastSetCanvasVisibleOff = SetCanvasVisibleOff;
@@ -111,7 +109,6 @@ namespace VPB
                 long qmRefresh = QmRefresh - _lastQmRefresh;
                 long qmIcon = QmIconCreate - _lastQmIconCreate;
                 long qmSwap = QmIconSwap - _lastQmIconSwap;
-                long pointerSib = PointerSib - _lastPointerSib;
                 long galFull = GalUpdateFull - _lastGalUpdateFull;
                 long setOn = SetCanvasVisibleOn - _lastSetCanvasVisibleOn;
                 long setOff = SetCanvasVisibleOff - _lastSetCanvasVisibleOff;
@@ -130,7 +127,6 @@ namespace VPB
                 _lastQmRefresh = QmRefresh;
                 _lastQmIconCreate = QmIconCreate;
                 _lastQmIconSwap = QmIconSwap;
-                _lastPointerSib = PointerSib;
                 _lastGalUpdateFull = GalUpdateFull;
                 _lastSetCanvasVisibleOn = SetCanvasVisibleOn;
                 _lastSetCanvasVisibleOff = SetCanvasVisibleOff;
@@ -178,17 +174,15 @@ namespace VPB
                 catch { }
 
                 string msg = string.Format(
-                    "[VPB.Diag] fps={0:0.0} loopFps={19:0.0} dt={1:0.00}s | panels={2} gallVis={3} gallHid={4} gallSubtreeActive={5}" +
+                    "[VPB.Diag] fps={0:0.0} loopFps={18:0.0} dt={1:0.00}s | panels={2} gallVis={3} gallHid={4} gallSubtreeActive={5}" +
                     " | qmRefresh={6}/s qmIconCreate={7}/s qmIconSwap={8}/s" +
                     " | galUpd={9}/s setVisOn={10}/s setVisOff={11}/s gateFlip={12}/s" +
-                    " | pointerSib={13}/s" +
-                    " | utBind={14}/s utVirtVis={15}/s utScrollCb={16}/s utPinnedRebuild={17}/s tooltipAttach={18}/s" +
-                    " | fxHook={20} fxHeavy={21} getVar={22} getVarHeavy={24} scriptCtrl={23} (raw/interval)",
+                    " | utBind={13}/s utVirtVis={14}/s utScrollCb={15}/s utPinnedRebuild={16}/s tooltipAttach={17}/s" +
+                    " | fxHook={19} fxHeavy={20} getVar={21} getVarHeavy={23} scriptCtrl={22} (raw/interval)",
                     fps, dt, panels, vis, hid, subtree,
                     (long)(qmRefresh / dt), (long)(qmIcon / dt), (long)(qmSwap / dt),
                     (long)(galFull / dt),
                     (long)(setOn / dt), (long)(setOff / dt), (long)(gateFlip / dt),
-                    (long)(pointerSib / dt),
                     (long)(utBind / dt), (long)(utVirtVis / dt), (long)(utScrollCb / dt),
                     (long)(utPinnedRebuild / dt), (long)(tooltipAttach / dt),
                     loopFps,

@@ -671,92 +671,11 @@ namespace VPB
             }
 
             try { ValidateHoverPreviewActive(); } catch { }
-
-            // Pointer Dot Logic
-            if (pointerDotGO != null && canvas != null)
-            {
-                Vector3 pointerWorld;
-                if (hoverCount > 0 && TryGetGalleryPointerWorld(out pointerWorld))
-                {
-                    if (!pointerDotGO.activeSelf) pointerDotGO.SetActive(true);
-                    // Use standard 5mm offset to prevent z-fighting
-                    pointerDotGO.transform.position = pointerWorld - canvas.transform.forward * 0.005f;
-                    Transform pdParent = pointerDotGO.transform.parent;
-                    if (pdParent != null && pointerDotGO.transform.GetSiblingIndex() != pdParent.childCount - 1)
-                    {
-                        if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.PointerSib++;
-                        pointerDotGO.transform.SetAsLastSibling();
-                    }
-                }
-                else
-                {
-                    if (pointerDotGO.activeSelf) pointerDotGO.SetActive(false);
-                }
-            }
         }
 
         public void ResetFollowOffsets()
         {
             offsetsInitialized = false;
-        }
-
-        /// <summary>
-        /// World hit for the gallery pointer cursor. SteamVR/OpenVR often leaves
-        /// <see cref="PointerEventData.pointerCurrentRaycast"/>.worldPosition at 0,0,0 — never place the dot there.
-        /// </summary>
-        private bool TryGetGalleryPointerWorld(out Vector3 world)
-        {
-            world = Vector3.zero;
-            if (currentPointerData != null)
-            {
-                try
-                {
-                    if (currentPointerData.pointerCurrentRaycast.isValid)
-                    {
-                        Vector3 wp = currentPointerData.pointerCurrentRaycast.worldPosition;
-                        if (wp.sqrMagnitude > 1e-6f)
-                        {
-                            world = wp;
-                            return true;
-                        }
-                    }
-                }
-                catch { }
-            }
-
-            if (canvas == null) return false;
-            Transform canvasTf = canvas.transform;
-            SuperController sc = SuperController.singleton;
-            if (sc == null) return false;
-
-            Plane plane = new Plane(canvasTf.forward, canvasTf.position);
-            float best = float.MaxValue;
-            bool hit = false;
-            Transform leftHand;
-            Transform rightHand;
-            VamHookPlugin.GetVamVrHandTransforms(sc, out leftHand, out rightHand);
-            hit |= TryProjectHandOnCanvasPlane(rightHand, ref plane, ref best, ref world);
-            hit |= TryProjectHandOnCanvasPlane(leftHand, ref plane, ref best, ref world);
-            return hit;
-        }
-
-        private static bool TryProjectHandOnCanvasPlane(Transform hand, ref Plane plane, ref float best, ref Vector3 world)
-        {
-            if (hand == null) return false;
-            try
-            {
-                if (!hand.gameObject.activeInHierarchy) return false;
-            }
-            catch { return false; }
-
-            Ray ray = new Ray(hand.position, hand.forward);
-            float enter;
-            if (!plane.Raycast(ray, out enter)) return false;
-            if (enter < 0.02f || enter > 8f) return false;
-            if (enter >= best) return false;
-            best = enter;
-            world = ray.GetPoint(enter);
-            return true;
         }
 
         public void RepositionInFront()

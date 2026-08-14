@@ -1056,7 +1056,6 @@ namespace VPB
         private bool isResizing = false;
         private int hoverCount = 0;
         private UIDraggable dragger;
-        private GameObject pointerDotGO;
         internal PointerEventData currentPointerData;
 
         private RectTransform previewBorderRT;

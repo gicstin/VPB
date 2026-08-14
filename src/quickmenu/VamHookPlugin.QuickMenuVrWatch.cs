@@ -21,34 +21,86 @@ namespace VPB
         Always,
     }
 
+    internal enum QuickMenuWatchFaceMode
+    {
+        Collapsed,
+        Compact,
+        Expanded,
+    }
+
     public partial class VamHookPlugin
     {
         private const float QuickMenuWatchLatchDelaySec = 0.25f;
         private const float QuickMenuWatchGlanceShowDot = 0.42f;
         private const float QuickMenuWatchGlanceHideDot = 0.22f;
-        // Index / OpenVR: wrist-forward (Euler 90,180,0) misses knuckles pose. Also show when HMD looks at hand.
-        private const float QuickMenuWatchGlanceLookShow = 0.55f;
-        private const float QuickMenuWatchGlanceLookHide = 0.35f;
-        private const float QuickMenuWatchGlanceMaxDistSqr = 4f; // 2m (was 1.2m)
-        private const float QuickMenuWatchTutorialSec = 5f;
+        private const float QuickMenuWatchGlanceLookShow = 0.80f;
+        private const float QuickMenuWatchGlanceLookHide = 0.65f;
+        private const float QuickMenuWatchGlanceMaxDistSqr = 4f;
+        private const float QuickMenuWatchGlanceLookMaxDistSqr = 0.64f;
+        private const float QuickMenuWatchTutorialSec = 6f;
+        private const float QuickMenuWatchFadeSec = 0.12f;
+        private const float QuickMenuWatchFadeScaleFrom = 0.88f;
+        // Reach radii for freeze-on-approach, squared. 0.25 m/0.35 m (the old values) fire when the
+        // hands are merely held together, which reads as the watch pinning itself.
+        private const float QuickMenuWatchFreezeEnterSqr = 0.0196f;  // 0.14 m
+        private const float QuickMenuWatchFreezeExitSqr = 0.04f;     // 0.20 m
+        private const float QuickMenuWatchFreezeBreakSqr = 0.0625f;  // 0.25 m of wrist travel
+        private const float QuickMenuWatchHoldConfirmSec = 0.4f;
+        private const float QuickMenuWatchShoulderOutM = 0.18f;
+        private const float QuickMenuWatchShoulderDownM = 0.22f;
+        private const float QuickMenuWatchGripHoldSec = 0.3f;
+        private const float QuickMenuWatchGripCooldownSec = 0.7f;
+        private const float QuickMenuWatchGripAnalog = 0.65f;
+        private const int QuickMenuWatchCanvasMaxFails = 3;
+        private const float QuickMenuWatchCanvasRetrySec = 3f;
+        private const float QuickMenuWatchRaycastFade = 0.5f;
+
         private const float QuickMenuWatchBtn = 40f;
         private const float QuickMenuWatchGap = 10f;
         private const float QuickMenuWatchRailGap = 8f;
         private const float QuickMenuWatchChrome = 32f;
+        private const float QuickMenuWatchChromeSm = 28f;
         private const float QuickMenuWatchChromeGap = 8f;
-        private const int QuickMenuWatchStaticChromeCount = 4;
+        private const float QuickMenuWatchChromeGapSm = 6f;
+        private const float QuickMenuWatchPagerBtn = 24f;
+        private const float QuickMenuWatchPagerGap = 4f;
+        private const float QuickMenuWatchDotSize = 34f;
+        private const float QuickMenuWatchDotPad = 4f;
+        private const float QuickMenuWatchLabelH = 16f;
         private const float QuickMenuWatchBezelCornerPx = 8f;
         private const float QuickMenuWatchPad = 10f;
         private const float QuickMenuWatchStatusH = 26f;
+        private const float QuickMenuWatchStatusGap = 6f;
+        private const float QuickMenuWatchCompactCols = 3f;
+        private const int QuickMenuWatchCompactSlotCount = 6;
         private const int QuickMenuWatchHudSlotCount = 4;
         private const int QuickMenuWatchAssignSlotCount = VPBConfig.QuickMenuVrWatchAssignSlotCount;
-        private const int QuickMenuWatchAssignSheetCols = 6;
-        private const float QuickMenuWatchAssignCell = 32f;
+        private const int QuickMenuWatchChromeCount = 6;
+        private const int QuickMenuWatchAssignSheetCols = 9;
+        private const float QuickMenuWatchAssignCellW = 52f;
+        private const float QuickMenuWatchAssignCellH = 42f;
+        private const float QuickMenuWatchAssignIcon = 26f;
         private const float QuickMenuWatchAssignGap = 4f;
+        private const float QuickMenuWatchAssignHeaderH = 20f;
+        private const float QuickMenuWatchAssignSectionGap = 6f;
+        private const float QuickMenuWatchAssignPad = 8f;
         private const int QuickMenuWatchStatusFont = 20;
-        private const int QuickMenuWatchPageFont = 18;
+        private const int QuickMenuWatchLabelFont = 12;
         private const int QuickMenuWatchCueFont = 16;
+        private const int QuickMenuWatchTipFont = 17;
+        private const float QuickMenuWatchTipW = 320f;
+        private const float QuickMenuWatchTipH = 62f;
+        private const float QuickMenuWatchTipGap = 10f;
+        private const int QuickMenuWatchSheetLabelFont = 11;
+        private const int QuickMenuWatchSheetHeaderFont = 14;
         private const float QuickMenuWatchFontDppu = 8f;
+
+        private const int QuickMenuWatchChromeCollapse = 0;
+        private const int QuickMenuWatchChromeHand = 1;
+        private const int QuickMenuWatchChromePin = 2;
+        private const int QuickMenuWatchChromeEdit = 3;
+        private const int QuickMenuWatchChromeExpand = 4;
+        private const int QuickMenuWatchChromeHelp = 5;
 
         private static readonly QuickMenuAssignableAction[] QuickMenuWatchAssignCatalog =
         {
@@ -59,6 +111,7 @@ namespace VPB
             QuickMenuAssignableAction.ShowHide,
             QuickMenuAssignableAction.BringFront,
             QuickMenuAssignableAction.CloseAll,
+
             QuickMenuAssignableAction.Save,
             QuickMenuAssignableAction.Undo,
             QuickMenuAssignableAction.Redo,
@@ -66,19 +119,23 @@ namespace VPB
             QuickMenuAssignableAction.Cleanup,
             QuickMenuAssignableAction.CreatorMode,
             QuickMenuAssignableAction.TargetAtom,
+
             QuickMenuAssignableAction.ReplaceAddToggle,
-            QuickMenuAssignableAction.CompressCache,
             QuickMenuAssignableAction.AutoHideGallery,
             QuickMenuAssignableAction.ShowHiddenPackages,
             QuickMenuAssignableAction.FpsCounter,
             QuickMenuAssignableAction.History,
             QuickMenuAssignableAction.PerfMode,
+            QuickMenuAssignableAction.ToggleImportSidebar,
+
             QuickMenuAssignableAction.RemoveAllClothing,
             QuickMenuAssignableAction.RemoveAllHair,
-            QuickMenuAssignableAction.ToggleImportSidebar,
             QuickMenuAssignableAction.StarFilter,
+            QuickMenuAssignableAction.CompressCache,
+
             QuickMenuAssignableAction.PerfStepUp,
             QuickMenuAssignableAction.PerfStepDown,
+
             QuickMenuAssignableAction.Random,
             QuickMenuAssignableAction.RandomScenes,
             QuickMenuAssignableAction.RandomSubScenes,
@@ -88,6 +145,7 @@ namespace VPB
             QuickMenuAssignableAction.RandomAppearance,
             QuickMenuAssignableAction.RandomSkin,
             QuickMenuAssignableAction.RandomSceneImport,
+
             QuickMenuAssignableAction.OpenCategoryScenes,
             QuickMenuAssignableAction.OpenCategorySubScenes,
             QuickMenuAssignableAction.OpenCategoryClothing,
@@ -99,33 +157,64 @@ namespace VPB
             QuickMenuAssignableAction.OpenCategoryAll,
         };
 
+        private static readonly int[] QuickMenuWatchAssignSectionStarts = { 0, 7, 14, 21, 25, 27, 36 };
+
         private static readonly Quaternion QuickMenuWatchWristLocalRot = Quaternion.Euler(90f, 180f, 0f);
         private static readonly Color QuickMenuWatchBezelColor = new Color(0.10f, 0.10f, 0.10f, 0.92f);
         private static readonly Color QuickMenuWatchChromeIdle = new Color(0.22f, 0.22f, 0.22f, 0.95f);
         private static readonly Color QuickMenuWatchChromeIdleHover = new Color(0.34f, 0.34f, 0.34f, 0.95f);
         private static readonly Color QuickMenuWatchChromeOn = new Color(0.28f, 0.38f, 0.31f, 0.95f);
         private static readonly Color QuickMenuWatchChromeOnHover = new Color(0.36f, 0.50f, 0.40f, 0.95f);
+        private static readonly Color QuickMenuWatchChromeDanger = new Color(0.44f, 0.20f, 0.20f, 0.95f);
+        private static readonly Color QuickMenuWatchChromeDangerHover = new Color(0.58f, 0.26f, 0.26f, 0.95f);
+        private static readonly Color QuickMenuWatchSlotDisabled = new Color(0.08f, 0.08f, 0.08f, 1f);
+        private static readonly Color QuickMenuWatchLabelColor = new Color(0.78f, 0.78f, 0.80f, 1f);
+        private static readonly Color QuickMenuWatchEmptyIconTint = new Color(1f, 1f, 1f, 0.3f);
+        private static readonly Color QuickMenuWatchCueBackdrop = new Color(0.06f, 0.06f, 0.07f, 0.94f);
+
         private Canvas m_WatchCanvas;
         private RectTransform m_WatchCanvasRT;
+        private CanvasGroup m_WatchCanvasGroup;
         private Transform m_WatchTf;
         private Image m_WatchBezel;
+        private RectTransform m_WatchBezelRt;
         private Text m_WatchStatusText;
+        private RectTransform m_WatchStatusRt;
         private Text m_WatchCueText;
         private GameObject m_WatchCueGo;
+        private RectTransform m_WatchCueRt;
+        private GameObject m_WatchTipGo;
+        private RectTransform m_WatchTipRt;
+        private Text m_WatchTipText;
         private GameObject[] m_WatchSlotGos;
+        private RectTransform[] m_WatchSlotRts;
         private Image[] m_WatchSlotIcons;
+        private RectTransform[] m_WatchSlotIconRts;
         private Image[] m_WatchSlotBackdrops;
+        private Text[] m_WatchSlotLabels;
         private GameObject[] m_WatchAssignGos;
+        private RectTransform[] m_WatchAssignRts;
         private Image[] m_WatchAssignIcons;
+        private RectTransform[] m_WatchAssignIconRts;
         private Image[] m_WatchAssignBackdrops;
-        private Image m_WatchPinBg;
-        private QuickMenuSquareHover m_WatchPinHover;
-        private VrWatchHoverTip m_WatchPinTip;
-        private Image m_WatchEditBg;
-        private QuickMenuSquareHover m_WatchEditHover;
-        private VrWatchHoverTip m_WatchEditTip;
-        private Text m_WatchPageText;
-        private int m_WatchPageShown = -1;
+        private Text[] m_WatchAssignLabels;
+        private GameObject[] m_WatchChromeGos;
+        private RectTransform[] m_WatchChromeRts;
+        private Image[] m_WatchChromeBgs;
+        private QuickMenuSquareHover[] m_WatchChromeHovers;
+        private VrWatchHoverTip[] m_WatchChromeTips;
+        private Image[] m_WatchChromeIcons;
+        private Sprite m_WatchIconExpand;
+        private Sprite m_WatchIconCompact;
+        private Sprite m_WatchIconPinOn;
+        private Sprite m_WatchIconPinOff;
+        private GameObject m_WatchPagerPrevGo;
+        private RectTransform m_WatchPagerPrevRt;
+        private GameObject m_WatchPagerNextGo;
+        private RectTransform m_WatchPagerNextRt;
+        private GameObject m_WatchDotGo;
+        private RectTransform m_WatchDotRt;
+
         private QuickMenuAssignableAction[][] m_WatchPageAssignments;
         private int m_WatchCurrentPage;
         private bool m_WatchEditMode;
@@ -133,31 +222,63 @@ namespace VPB
         private GameObject m_WatchAssignSheet;
         private RectTransform m_WatchAssignSheetRt;
         private Image m_WatchAssignSheetBg;
+        private Image[] m_WatchAssignPickBgs;
         private float m_WatchAssignSheetW;
+
         private Transform m_WatchHand;
+        private Transform m_WatchOtherHand;
         private Transform m_WatchLatchedHand;
+        private Transform m_WatchHandLeft;
+        private Transform m_WatchHandRight;
         private bool m_WatchMenuWasVisible;
         private bool m_WatchLatchPending;
         private float m_WatchOpenTime;
         private bool m_WatchVisibleNow;
+        private bool m_WatchActive;
+        private float m_WatchFade;
         private bool m_WatchGlanced;
-        private bool m_WatchPinned;
+        private float m_WatchGlanceCandidateSince = -1f;
+        private bool m_WatchWorldLocked;
+        private bool m_WatchWorldLockBeforeEdit;
+        private bool m_WatchFrozen;
         private bool m_WatchCalibrating;
         private bool m_WatchIsLeft;
-        private byte m_WatchSessionHand; // 0 none, 1 left, 2 right
+        private byte m_WatchSessionHand;
         private float m_WatchTutorialUntil;
         private bool m_WatchStatusNeedRebuild = true;
         private string m_WatchStatusShown = "";
         private string m_WatchHoverStatus;
+        private int m_WatchHoverToken;
         private bool m_WatchAddedToSc;
-        private float m_WatchLastLocalScale = -1f;
+        private float m_WatchLastAppliedScale = -1f;
+        private QuickMenuWatchFaceMode m_WatchFaceMode = QuickMenuWatchFaceMode.Compact;
+        private QuickMenuWatchFaceMode m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
+        private bool m_WatchLayoutLabels;
+        private bool m_WatchLayoutEdit;
+        private bool m_WatchHudEditShown;
+        private int m_WatchPressKind;
+        private int m_WatchPressIdx = -1;
+        private float m_WatchPressStart;
+        private bool m_WatchHoldFired;
+        private QuickMenuAssignableAction m_WatchPressAction;
+        private readonly StringBuilder m_WatchStatusSb = new StringBuilder(64);
+        private string m_WatchTipSrc;
+        private string m_WatchTipFlat;
+        private string m_WatchTipShown = "";
 
-        // Cached settings (copied on change; hot path never parses strings).
         private bool m_WatchCfgVisible = true;
         private QuickMenuVrWatchMode m_WatchCfgHand = QuickMenuVrWatchMode.OppositeToMenu;
         private QuickMenuVrWatchShowWhen m_WatchCfgShowWhen = QuickMenuVrWatchShowWhen.Glance;
         private bool m_WatchCfgFaceUser = true;
+        private float m_WatchCfgShoulderBlend = VPBConfig.QuickMenuVrWatchShoulderBlendDefault;
         private bool m_WatchCfgRememberHand;
+        private bool m_WatchCfgFreeze = true;
+        private bool m_WatchCfgGripPin = true;
+        private float m_WatchGripHeldSince = -1f;
+        private float m_WatchGripReadyAt;
+        private bool m_WatchCfgLabels;
+        private bool m_WatchCfgHoldConfirm = true;
+        private float m_WatchCfgGlanceDwell = VPBConfig.QuickMenuVrWatchGlanceDwellDefault;
         private float m_WatchCfgScaleMul = 1f;
         private float m_WatchCfgToward = 0.04f;
         private Vector3 m_WatchCfgOffset = VPBConfig.QuickMenuVrWatchOffsetDefault;
@@ -169,6 +290,8 @@ namespace VPB
         private bool m_WatchAttachLogged;
         private bool m_WatchUpdateErrorLogged;
         private float m_WatchEyeRetryAt;
+        private int m_WatchCanvasFailCount;
+        private float m_WatchCanvasRetryAt;
 
         internal void QuickMenuDestroyWatch()
         {
@@ -184,35 +307,76 @@ namespace VPB
             }
             m_WatchCanvas = null;
             m_WatchCanvasRT = null;
+            m_WatchCanvasGroup = null;
             m_WatchTf = null;
             m_WatchBezel = null;
+            m_WatchBezelRt = null;
             m_WatchStatusText = null;
+            m_WatchStatusRt = null;
             m_WatchCueText = null;
             m_WatchCueGo = null;
+            m_WatchCueRt = null;
+            m_WatchTipGo = null;
+            m_WatchTipRt = null;
+            m_WatchTipText = null;
+            m_WatchTipSrc = null;
+            m_WatchTipShown = "";
+            m_WatchHoverStatus = null;
             m_WatchSlotGos = null;
+            m_WatchSlotRts = null;
             m_WatchSlotIcons = null;
+            m_WatchSlotIconRts = null;
             m_WatchSlotBackdrops = null;
+            m_WatchSlotLabels = null;
             m_WatchAssignGos = null;
+            m_WatchAssignRts = null;
             m_WatchAssignIcons = null;
+            m_WatchAssignIconRts = null;
             m_WatchAssignBackdrops = null;
-            m_WatchPinBg = null;
-            m_WatchPinHover = null;
-            m_WatchPinTip = null;
-            m_WatchEditBg = null;
-            m_WatchEditHover = null;
-            m_WatchEditTip = null;
-            m_WatchPageText = null;
-            m_WatchPageShown = -1;
+            m_WatchAssignLabels = null;
+            m_WatchChromeGos = null;
+            m_WatchChromeRts = null;
+            m_WatchChromeBgs = null;
+            m_WatchChromeHovers = null;
+            m_WatchChromeTips = null;
+            m_WatchChromeIcons = null;
+            m_WatchPagerPrevGo = null;
+            m_WatchPagerPrevRt = null;
+            m_WatchPagerNextGo = null;
+            m_WatchPagerNextRt = null;
+            m_WatchDotGo = null;
+            m_WatchDotRt = null;
             m_WatchAssignTargetIdx = -1;
             m_WatchAssignSheet = null;
             m_WatchAssignSheetRt = null;
             m_WatchAssignSheetBg = null;
+            m_WatchAssignPickBgs = null;
             m_WatchHand = null;
+            m_WatchOtherHand = null;
             m_WatchLatchedHand = null;
+            m_WatchHandLeft = null;
+            m_WatchHandRight = null;
             m_WatchVisibleNow = false;
+            m_WatchActive = false;
+            m_WatchFade = 0f;
+            m_WatchFrozen = false;
+            m_WatchWorldLocked = false;
+            m_WatchCalibrating = false;
+            m_WatchEditMode = false;
+            m_WatchPressKind = 0;
+            m_WatchPressIdx = -1;
+            m_WatchHoldFired = false;
             m_WatchAddedToSc = false;
-            m_WatchLastLocalScale = -1f;
+            m_WatchLastAppliedScale = -1f;
+            m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
             m_WatchFailLogged = false;
+            m_WatchAttachLogged = false;
+            m_WatchHudEditShown = false;
+            // Shown-string caches must die with the widgets they mirror: a rebuilt Text starts
+            // empty, so a stale cache would suppress the first assignment and leave it blank.
+            m_WatchStatusShown = "";
+            m_WatchTipFlat = null;
+            m_WatchStatusNeedRebuild = true;
         }
 
         internal void QuickMenuLogWatchUpdateError(System.Exception ex)
@@ -228,17 +392,39 @@ namespace VPB
 
         internal void QuickMenuOnWatchVisibleToggled(bool on)
         {
+            QuickMenuNotifyWatchFooters();
             if (!on)
             {
-                m_WatchPinned = false;
+                m_WatchWorldLocked = false;
                 m_WatchGlanced = false;
+                m_WatchGlanceCandidateSince = -1f;
                 m_WatchTutorialUntil = 0f;
                 return;
             }
-            // Footer / Settings ON must show the face immediately — Glance on Index never fires for many users.
+            var c = VPBConfig.Instance;
+            if (c != null && c.QuickMenuVrWatchCollapsed)
+            {
+                c.QuickMenuVrWatchCollapsed = false;
+                try { c.Save(false, true); } catch { }
+            }
             m_WatchGlanced = true;
             try { m_WatchTutorialUntil = Time.unscaledTime + QuickMenuWatchTutorialSec; }
             catch { m_WatchTutorialUntil = 0f; }
+        }
+
+        private static void QuickMenuNotifyWatchFooters()
+        {
+            try
+            {
+                var g = Gallery.singleton;
+                if (g == null || g.Panels == null) return;
+                for (int i = 0; i < g.Panels.Count; i++)
+                {
+                    var p = g.Panels[i];
+                    if (p != null) p.NotifyFooterVrWatchState();
+                }
+            }
+            catch { }
         }
 
         internal bool QuickMenuIsWatchShown()
@@ -320,40 +506,42 @@ namespace VPB
         internal void QuickMenuSyncWatchCornerRadius(float frac)
         {
             QuickMenuApplyWatchBezelRadius(frac);
-            if (m_WatchSlotBackdrops != null)
+            QuickMenuSyncWatchRoundedArray(m_WatchSlotBackdrops, frac);
+            QuickMenuSyncWatchRoundedArray(m_WatchAssignBackdrops, frac);
+            QuickMenuSyncWatchRoundedArray(m_WatchChromeBgs, frac);
+            QuickMenuSyncWatchRoundedArray(m_WatchAssignPickBgs, frac);
+        }
+
+        private static void QuickMenuSyncWatchRoundedArray(Image[] imgs, float frac)
+        {
+            if (imgs == null) return;
+            for (int i = 0; i < imgs.Length; i++)
             {
-                for (int i = 0; i < m_WatchSlotBackdrops.Length; i++)
-                {
-                    RoundedRect rr = m_WatchSlotBackdrops[i] as RoundedRect;
-                    if (rr != null) rr.cornerRadiusFraction = frac;
-                }
-            }
-            if (m_WatchAssignBackdrops != null)
-            {
-                for (int i = 0; i < m_WatchAssignBackdrops.Length; i++)
-                {
-                    RoundedRect rr = m_WatchAssignBackdrops[i] as RoundedRect;
-                    if (rr != null) rr.cornerRadiusFraction = frac;
-                }
+                RoundedRect rr = imgs[i] as RoundedRect;
+                if (rr != null) rr.cornerRadiusFraction = frac;
             }
         }
 
+        /// <summary>
+        /// Locale change. The assign sheet bakes its section headers, pick labels and per-pick
+        /// tooltips at build time, so a piecemeal refresh cannot retranslate it — drop the whole
+        /// canvas and let the next update rebuild it. Cold path (locale switches are rare).
+        /// </summary>
         internal void QuickMenuInvalidateWatchStrings()
         {
-            m_WatchStatusNeedRebuild = true;
-            if (m_WatchCueText != null)
-                m_WatchCueText.text = VPBTranslation.T("hook.watch.cue", "Look at inner wrist to show again. HUD grid stays.");
-            if (m_WatchPinTip != null) m_WatchPinTip.tip = QuickMenuWatchPinTipText();
-            if (m_WatchEditTip != null) m_WatchEditTip.tip = QuickMenuWatchEditTipText();
+            m_WatchTipSrc = null;
+            m_WatchTipShown = "";
+            m_WatchHoverStatus = null;
+            m_WatchCanvasFailCount = 0;
+            m_WatchCanvasRetryAt = 0f;
+            QuickMenuDestroyWatch();
         }
 
-        // Called every frame from Update. HUD grid is never reparented.
         private void QuickMenuUpdateVrWatch()
         {
-            bool vr = QuickMenuIsVrActive();
-            if (!vr)
+            if (!QuickMenuIsVrActive())
             {
-                if (m_WatchVisibleNow) QuickMenuSetWatchShown(false);
+                QuickMenuHideWatchImmediate();
                 return;
             }
 
@@ -361,15 +549,20 @@ namespace VPB
 
             if (!m_WatchCfgVisible)
             {
-                if (m_WatchVisibleNow) QuickMenuSetWatchShown(false);
+                QuickMenuHideWatchImmediate();
                 return;
             }
+
+            float now = Time.unscaledTime;
+            var sc = SuperController.singleton;
+            GetVamVrHandTransforms(sc, out m_WatchHandLeft, out m_WatchHandRight);
+            if (!QuickMenuHandLooksTracked(m_WatchHandLeft)) m_WatchHandLeft = null;
+            if (!QuickMenuHandLooksTracked(m_WatchHandRight)) m_WatchHandRight = null;
 
             bool menuVis = QuickMenuIsVamMenuVisible();
             if (menuVis && !m_WatchMenuWasVisible)
             {
-                m_WatchOpenTime = Time.unscaledTime;
-                // Explicit Left/Right / session switch stay. Opposite/Same re-latch which hand opened menu.
+                m_WatchOpenTime = now;
                 if (m_WatchSessionHand == 0 &&
                     (m_WatchCfgHand == QuickMenuVrWatchMode.OppositeToMenu ||
                      m_WatchCfgHand == QuickMenuVrWatchMode.SameAsMenu))
@@ -379,28 +572,28 @@ namespace VPB
                 }
                 var cfg = VPBConfig.Instance;
                 if (cfg != null && !cfg.QuickMenuVrWatchOnboardingSeen && m_WatchTutorialUntil <= 0f)
-                    m_WatchTutorialUntil = Time.unscaledTime + QuickMenuWatchTutorialSec;
+                    m_WatchTutorialUntil = now + QuickMenuWatchTutorialSec;
             }
             m_WatchMenuWasVisible = menuVis;
 
-            Transform watchHand = QuickMenuResolveWatchHand();
+            Transform watchHand = QuickMenuResolveWatchHand(sc);
             if (watchHand == null)
             {
-                if (m_WatchVisibleNow) QuickMenuSetWatchShown(false);
+                QuickMenuHideWatchImmediate();
                 return;
             }
 
-            var scHand = SuperController.singleton;
-            bool isLeft = QuickMenuIsLeftWatchHand(scHand, watchHand);
+            bool isLeft = QuickMenuIsLeftWatchHand(sc, watchHand);
             if (isLeft != m_WatchIsLeft)
             {
                 m_WatchIsLeft = isLeft;
                 m_WatchStatusNeedRebuild = true;
                 QuickMenuPlaceWatchAssignSheet();
             }
+            m_WatchOtherHand = isLeft ? m_WatchHandRight : m_WatchHandLeft;
 
-            bool tutorial = m_WatchTutorialUntil > 0f && Time.unscaledTime < m_WatchTutorialUntil;
-            if (m_WatchTutorialUntil > 0f && Time.unscaledTime >= m_WatchTutorialUntil)
+            bool tutorial = m_WatchTutorialUntil > 0f && now < m_WatchTutorialUntil;
+            if (m_WatchTutorialUntil > 0f && now >= m_WatchTutorialUntil)
             {
                 m_WatchTutorialUntil = 0f;
                 try
@@ -415,15 +608,11 @@ namespace VPB
                 catch { }
             }
 
-            bool glanced = QuickMenuComputeWatchGlance(watchHand);
-            if (m_WatchGlanced)
-            {
-                if (!glanced) m_WatchGlanced = false;
-            }
-            else if (glanced) m_WatchGlanced = true;
+            QuickMenuUpdateWatchGlance(watchHand, now);
+            QuickMenuTickWatchGripPin(sc, now);
 
             bool wantShow;
-            if (m_WatchCalibrating || tutorial || m_WatchPinned)
+            if (m_WatchCalibrating || tutorial || m_WatchWorldLocked || m_WatchEditMode)
                 wantShow = true;
             else
             {
@@ -441,42 +630,75 @@ namespace VPB
                 }
             }
 
-            if (!wantShow)
+            m_WatchVisibleNow = wantShow;
+
+            if (!wantShow && m_WatchFade <= 0f)
             {
-                if (m_WatchVisibleNow) QuickMenuSetWatchShown(false);
+                QuickMenuSetWatchActive(false);
                 return;
             }
 
             if (m_WatchCanvas == null) QuickMenuEnsureWatchCanvas();
             if (m_WatchTf == null) return;
 
-            if (m_WatchTf.parent != watchHand)
-            {
-                m_WatchTf.SetParent(watchHand, false);
-                m_WatchHand = watchHand;
-                QuickMenuLogWatchAttachOnce(watchHand);
-            }
+            m_WatchHand = watchHand;
+            QuickMenuEnsureWatchParent();
 
             if (!m_WatchTf.gameObject.activeInHierarchy && m_WatchTf.gameObject.activeSelf)
             {
                 QuickMenuLogWatchFailOnce("watch parent inactive in hierarchy");
-                if (m_WatchVisibleNow) QuickMenuSetWatchShown(false);
+                QuickMenuHideWatchImmediate();
                 return;
             }
 
+            QuickMenuSetWatchActive(true);
+            QuickMenuApplyWatchLayout();
+            QuickMenuTickWatchHold(now);
             QuickMenuApplyWatchPose();
-            QuickMenuSetWatchShown(true);
-            if (m_WatchCanvas != null && m_WatchCanvas.worldCamera == null &&
-                Time.unscaledTime >= m_WatchEyeRetryAt)
+            QuickMenuTickWatchFade(wantShow);
+
+            if (m_WatchCanvas != null && m_WatchCanvas.worldCamera == null && now >= m_WatchEyeRetryAt)
             {
-                m_WatchEyeRetryAt = Time.unscaledTime + 0.5f;
+                m_WatchEyeRetryAt = now + 0.5f;
                 Camera eye = QuickMenuGetPlayerCameraComponent();
                 if (eye != null) m_WatchCanvas.worldCamera = eye;
             }
+
+            QuickMenuSyncWatchHudEditState();
             QuickMenuRefreshWatchStatus();
-            QuickMenuSyncWatchPageLabel();
             QuickMenuSyncWatchAssignLiveIcons();
             QuickMenuSetWatchCueShown(tutorial);
+        }
+
+        private void QuickMenuEnsureWatchParent()
+        {
+            if (m_WatchTf == null) return;
+
+            bool detached = m_WatchWorldLocked || m_WatchFrozen;
+            Transform want = m_WatchHand;
+            if (detached)
+            {
+                Transform root = null;
+                try { root = VpbWorldSpaceUiScale.GetPlayerUiRoot(); } catch { }
+                // Never leave a locked/frozen watch parented to the wrist — it would be dragged
+                // along by the hand. With no usable UI root, park it at the scene root instead.
+                want = (root != null && root != m_WatchHand && root.gameObject.activeInHierarchy)
+                    ? root
+                    : null;
+            }
+            else if (want == null) return;
+            if (m_WatchTf.parent == want) return;
+
+            Vector3 wp = m_WatchTf.position;
+            Quaternion wr = m_WatchTf.rotation;
+            m_WatchTf.SetParent(want, false);
+            m_WatchLastAppliedScale = -1f;
+            if (detached)
+            {
+                m_WatchTf.position = wp;
+                m_WatchTf.rotation = wr;
+            }
+            QuickMenuLogWatchAttachOnce(m_WatchHand);
         }
 
         private void QuickMenuPullWatchSettings()
@@ -486,10 +708,41 @@ namespace VPB
 
             m_WatchCfgVisible = c.QuickMenuVrWatchVisible;
             m_WatchCfgFaceUser = c.QuickMenuVrWatchFaceUser;
+            m_WatchCfgShoulderBlend = Mathf.Clamp01(c.QuickMenuVrWatchShoulderBlend);
             m_WatchCfgRememberHand = c.QuickMenuVrWatchRememberHand;
-            m_WatchCfgScaleMul = c.QuickMenuVrWatchScaleMul;
+            m_WatchCfgFreeze = c.QuickMenuVrWatchFreezeOnApproach;
+
+            bool gripPin = c.QuickMenuVrWatchGripPin;
+            if (gripPin != m_WatchCfgGripPin)
+            {
+                m_WatchCfgGripPin = gripPin;
+                m_WatchGripHeldSince = -1f;
+                // Cue and pin tooltip both name the gesture.
+                if (m_WatchCueText != null) m_WatchCueText.text = QuickMenuWatchCueTextValue();
+                QuickMenuRefreshWatchChromeTips();
+            }
+            m_WatchCfgHoldConfirm = c.QuickMenuVrWatchHoldConfirm;
+            m_WatchCfgGlanceDwell = c.QuickMenuVrWatchGlanceDwell;
+            m_WatchCfgScaleMul = Mathf.Clamp(c.QuickMenuVrWatchScaleMul,
+                VPBConfig.QuickMenuVrWatchScaleMulMin, VPBConfig.QuickMenuVrWatchScaleMulMax);
             m_WatchCfgToward = c.QuickMenuVrWatchTowardUserDist;
             m_WatchCfgOffset = c.QuickMenuVrWatchOffset;
+
+            bool labels = c.QuickMenuVrWatchLabels;
+            if (labels != m_WatchCfgLabels)
+            {
+                m_WatchCfgLabels = labels;
+                m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
+            }
+
+            QuickMenuWatchFaceMode mode = c.QuickMenuVrWatchCollapsed
+                ? QuickMenuWatchFaceMode.Collapsed
+                : (c.QuickMenuVrWatchExpanded ? QuickMenuWatchFaceMode.Expanded : QuickMenuWatchFaceMode.Compact);
+            if (mode != m_WatchFaceMode)
+            {
+                m_WatchFaceMode = mode;
+                m_WatchStatusNeedRebuild = true;
+            }
 
             string handRaw = c.QuickMenuVrWatchMode;
             if (!string.Equals(handRaw, m_WatchCfgHandRaw, System.StringComparison.Ordinal))
@@ -552,14 +805,11 @@ namespace VPB
             if (right == null) try { right = sc.rightHand; } catch { }
         }
 
-        private static bool QuickMenuIsLeftWatchHand(SuperController sc, Transform hand)
+        private bool QuickMenuIsLeftWatchHand(SuperController sc, Transform hand)
         {
             if (hand == null || sc == null) return false;
-            Transform left;
-            Transform right;
-            GetVamVrHandTransforms(sc, out left, out right);
-            if (left != null && hand == left) return true;
-            if (right != null && hand == right) return false;
+            if (m_WatchHandLeft != null && hand == m_WatchHandLeft) return true;
+            if (m_WatchHandRight != null && hand == m_WatchHandRight) return false;
             try
             {
                 if (hand == sc.viveObjectLeft || hand == sc.viveHandMountLeft ||
@@ -571,18 +821,11 @@ namespace VPB
             return false;
         }
 
-        private Transform QuickMenuResolveWatchHand()
+        private Transform QuickMenuResolveWatchHand(SuperController sc)
         {
-            var sc = SuperController.singleton;
             if (sc == null) return null;
-            Transform left;
-            Transform right;
-            GetVamVrHandTransforms(sc, out left, out right);
-
-            bool leftOk = QuickMenuHandLooksTracked(left);
-            bool rightOk = QuickMenuHandLooksTracked(right);
-            if (!leftOk) left = null;
-            if (!rightOk) right = null;
+            Transform left = m_WatchHandLeft;
+            Transform right = m_WatchHandRight;
 
             if (left == null && right == null)
             {
@@ -590,7 +833,6 @@ namespace VPB
                 return null;
             }
 
-            // Explicit choice never steals the other controller unless that choice is untracked.
             if (m_WatchSessionHand == 1) return left != null ? left : right;
             if (m_WatchSessionHand == 2) return right != null ? right : left;
             if (m_WatchCfgHand == QuickMenuVrWatchMode.LeftOnly) return left != null ? left : right;
@@ -602,8 +844,7 @@ namespace VPB
             {
                 case QuickMenuVrWatchMode.SameAsMenu:
                 case QuickMenuVrWatchMode.OppositeToMenu:
-                    if (m_WatchLatchedHand != null &&
-                        !QuickMenuHandLooksTracked(m_WatchLatchedHand))
+                    if (m_WatchLatchedHand != null && !QuickMenuHandLooksTracked(m_WatchLatchedHand))
                     {
                         m_WatchLatchedHand = null;
                         m_WatchLatchPending = true;
@@ -621,7 +862,6 @@ namespace VPB
                     }
                     if (m_WatchLatchedHand != null && QuickMenuHandLooksTracked(m_WatchLatchedHand))
                         return m_WatchLatchedHand;
-                    // No latch yet (menu never opened): opposite → left (laser typically right).
                     if (m_WatchCfgHand == QuickMenuVrWatchMode.SameAsMenu)
                         return right != null ? right : left;
                     return left != null ? left : right;
@@ -630,53 +870,181 @@ namespace VPB
             }
         }
 
-        private bool QuickMenuComputeWatchGlance(Transform hand)
+        private void QuickMenuUpdateWatchGlance(Transform hand, float now)
         {
             Transform cam = QuickMenuGetPlayerCamera();
-            if (cam == null || hand == null) return m_WatchGlanced;
+            if (cam == null || hand == null) return;
 
             Vector3 offset = m_WatchCfgOffset;
             if (!m_WatchIsLeft) offset.x = -offset.x;
             Vector3 watchPos = hand.TransformPoint(offset);
             Vector3 away = watchPos - cam.position;
             float mag2 = away.sqrMagnitude;
-            if (mag2 < 0.0064f || mag2 > QuickMenuWatchGlanceMaxDistSqr) return m_WatchGlanced; // 8cm–2m
+            if (mag2 < 0.0064f || mag2 > QuickMenuWatchGlanceMaxDistSqr) return;
 
             float inv = 1f / Mathf.Sqrt(mag2);
             Vector3 restFwd = (hand.rotation * QuickMenuWatchWristLocalRot) * Vector3.forward;
             float wristDot = (away.x * restFwd.x + away.y * restFwd.y + away.z * restFwd.z) * inv;
 
-            Vector3 camFwd = cam.forward;
-            float lookDot = (camFwd.x * away.x + camFwd.y * away.y + camFwd.z * away.z) * inv;
+            float lookDot = -1f;
+            if (mag2 <= QuickMenuWatchGlanceLookMaxDistSqr)
+            {
+                Vector3 camFwd = cam.forward;
+                lookDot = (camFwd.x * away.x + camFwd.y * away.y + camFwd.z * away.z) * inv;
+            }
 
             if (m_WatchGlanced)
-                return wristDot >= QuickMenuWatchGlanceHideDot || lookDot >= QuickMenuWatchGlanceLookHide;
-            return wristDot >= QuickMenuWatchGlanceShowDot || lookDot >= QuickMenuWatchGlanceLookShow;
-        }
-
-        private void QuickMenuSetWatchShown(bool show)
-        {
-            if (m_WatchVisibleNow == show && (m_WatchCanvas == null || m_WatchCanvas.gameObject.activeSelf == show))
             {
-                m_WatchVisibleNow = show;
+                bool hold = wristDot >= QuickMenuWatchGlanceHideDot || lookDot >= QuickMenuWatchGlanceLookHide;
+                if (!hold)
+                {
+                    m_WatchGlanced = false;
+                    m_WatchGlanceCandidateSince = -1f;
+                }
                 return;
             }
-            m_WatchVisibleNow = show;
-            if (m_WatchCanvas != null && m_WatchCanvas.gameObject.activeSelf != show)
-                m_WatchCanvas.gameObject.SetActive(show);
-            if (show)
+
+            bool candidate = wristDot >= QuickMenuWatchGlanceShowDot || lookDot >= QuickMenuWatchGlanceLookShow;
+            if (!candidate)
             {
-                if (m_WatchCanvas != null && m_WatchCanvas.worldCamera == null)
-                {
-                    Camera eye = QuickMenuGetPlayerCameraComponent();
-                    if (eye != null) m_WatchCanvas.worldCamera = eye;
-                }
-                for (int i = 0; i < QuickMenuWatchHudSlotCount; i++)
-                    QuickMenuSyncWatchSlot(i);
-                QuickMenuSyncWatchAssignAll();
-                QuickMenuSyncWatchPageLabel();
-                QuickMenuRefreshWatchChromeColors();
+                m_WatchGlanceCandidateSince = -1f;
+                return;
             }
+            if (m_WatchGlanceCandidateSince < 0f)
+            {
+                m_WatchGlanceCandidateSince = now;
+                if (m_WatchCfgGlanceDwell > 0f) return;
+            }
+            if (now - m_WatchGlanceCandidateSince >= m_WatchCfgGlanceDwell)
+                m_WatchGlanced = true;
+        }
+
+        /// <summary>
+        /// Squeeze the grip on the hand wearing the watch to take it off and leave it hanging in
+        /// place; squeeze again to put it back on. One-handed, needs no aiming, and works on the
+        /// arm the face is actually strapped to — the Pin chrome button needs the other controller.
+        /// Pinning is gated on the face being turned toward you so a grab elsewhere in the scene
+        /// cannot trip it; unpinning is not, because a pinned face is no longer on the wrist.
+        /// </summary>
+        private void QuickMenuTickWatchGripPin(SuperController sc, float now)
+        {
+            if (!m_WatchCfgGripPin || m_WatchEditMode || m_WatchCalibrating || sc == null)
+            {
+                m_WatchGripHeldSince = -1f;
+                return;
+            }
+
+            bool held = false;
+            try { held = m_WatchIsLeft ? sc.GetLeftHoldGrab() : sc.GetRightHoldGrab(); }
+            catch { held = false; }
+            if (!held)
+            {
+                // Wands report grip as a digital hold; analog grips can miss the above.
+                try
+                {
+                    float v = m_WatchIsLeft ? sc.GetLeftGrabVal() : sc.GetRightGrabVal();
+                    held = v >= QuickMenuWatchGripAnalog;
+                }
+                catch { held = false; }
+            }
+
+            if (!held)
+            {
+                m_WatchGripHeldSince = -1f;
+                return;
+            }
+            if (now < m_WatchGripReadyAt) return;
+            if (!m_WatchWorldLocked && !m_WatchGlanced)
+            {
+                m_WatchGripHeldSince = -1f;
+                return;
+            }
+
+            if (m_WatchGripHeldSince < 0f)
+            {
+                m_WatchGripHeldSince = now;
+                return;
+            }
+            if (now - m_WatchGripHeldSince < QuickMenuWatchGripHoldSec) return;
+
+            m_WatchGripHeldSince = -1f;
+            m_WatchGripReadyAt = now + QuickMenuWatchGripCooldownSec;
+            // Keep it on screen through the swap so the state change is visible.
+            m_WatchGlanced = true;
+            QuickMenuSetWatchWorldLocked(!m_WatchWorldLocked);
+        }
+
+        private void QuickMenuHideWatchImmediate()
+        {
+            m_WatchVisibleNow = false;
+            m_WatchFade = 0f;
+            m_WatchPressIdx = -1;
+            m_WatchHoldFired = false;
+            m_WatchFrozen = false;
+            // A watch that is gone cannot be dragged; a stuck calibrate flag would force it
+            // permanently visible once it comes back.
+            m_WatchCalibrating = false;
+            m_WatchGlanceCandidateSince = -1f;
+            m_WatchHoverStatus = null;
+            if (m_WatchTipGo != null && m_WatchTipGo.activeSelf) m_WatchTipGo.SetActive(false);
+            if (m_WatchCanvasGroup != null)
+            {
+                m_WatchCanvasGroup.alpha = 0f;
+                m_WatchCanvasGroup.blocksRaycasts = false;
+            }
+            QuickMenuSetWatchActive(false);
+        }
+
+        private void QuickMenuSetWatchActive(bool active)
+        {
+            if (m_WatchActive == active && (m_WatchCanvas == null || m_WatchCanvas.gameObject.activeSelf == active))
+            {
+                m_WatchActive = active;
+                return;
+            }
+            m_WatchActive = active;
+            if (m_WatchCanvas != null && m_WatchCanvas.gameObject.activeSelf != active)
+                m_WatchCanvas.gameObject.SetActive(active);
+            if (!active)
+            {
+                // Deactivating swallows the pending OnPointerUp/Exit. A surviving press would
+                // finish its hold timer on the next show and fire a destructive action unasked.
+                m_WatchPressIdx = -1;
+                m_WatchHoldFired = false;
+                m_WatchHoverStatus = null;
+                return;
+            }
+
+            if (m_WatchCanvas != null && m_WatchCanvas.worldCamera == null)
+            {
+                Camera eye = QuickMenuGetPlayerCameraComponent();
+                if (eye != null) m_WatchCanvas.worldCamera = eye;
+            }
+            for (int i = 0; i < QuickMenuWatchHudSlotCount; i++)
+                QuickMenuSyncWatchSlot(i);
+            QuickMenuSyncWatchAssignAll();
+            QuickMenuRefreshWatchChromeColors();
+        }
+
+        private void QuickMenuTickWatchFade(bool wantShow)
+        {
+            float target = wantShow ? 1f : 0f;
+            if (Mathf.Abs(m_WatchFade - target) > 1e-4f)
+            {
+                float step = Time.unscaledDeltaTime / QuickMenuWatchFadeSec;
+                m_WatchFade = Mathf.MoveTowards(m_WatchFade, target, step);
+            }
+            else m_WatchFade = target;
+
+            if (m_WatchCanvasGroup != null)
+            {
+                m_WatchCanvasGroup.alpha = m_WatchFade;
+                // A fading-out watch is still a live raycast target; don't let a barely-visible
+                // face eat the pointer (or take a click) on the way out.
+                bool hit = wantShow && m_WatchFade >= QuickMenuWatchRaycastFade;
+                if (m_WatchCanvasGroup.blocksRaycasts != hit) m_WatchCanvasGroup.blocksRaycasts = hit;
+            }
+            if (m_WatchFade <= 0f) QuickMenuSetWatchActive(false);
         }
 
         private void QuickMenuSetWatchCueShown(bool show)
@@ -688,15 +1056,22 @@ namespace VPB
         private void QuickMenuEnsureWatchCanvas()
         {
             if (m_WatchCanvas != null) return;
+            // A build that throws leaves nothing behind; without a backoff we would allocate and
+            // destroy the whole widget tree every frame. Retry a few times, then stay down.
+            if (m_WatchCanvasFailCount >= QuickMenuWatchCanvasMaxFails) return;
+            if (m_WatchCanvasFailCount > 0 && Time.unscaledTime < m_WatchCanvasRetryAt) return;
             var sc = SuperController.singleton;
             if (sc == null || sc.mainHUD == null) return;
 
             try
             {
                 QuickMenuEnsureWatchCanvasBody(sc);
+                m_WatchCanvasFailCount = 0;
             }
             catch (System.Exception ex)
             {
+                m_WatchCanvasFailCount++;
+                m_WatchCanvasRetryAt = Time.unscaledTime + QuickMenuWatchCanvasRetrySec;
                 QuickMenuLogWatchUpdateError(ex);
                 try
                 {
@@ -709,6 +1084,7 @@ namespace VPB
                 catch { }
                 m_WatchCanvas = null;
                 m_WatchCanvasRT = null;
+                m_WatchCanvasGroup = null;
                 m_WatchTf = null;
                 m_WatchAddedToSc = false;
             }
@@ -717,15 +1093,6 @@ namespace VPB
         private void QuickMenuEnsureWatchCanvasBody(SuperController sc)
         {
             QuickMenuEnsureWatchAssignments();
-
-            float grid = QuickMenuWatchBtn * 2f + QuickMenuWatchGap;
-            float chromeW = QuickMenuWatchChrome * QuickMenuWatchStaticChromeCount
-                + QuickMenuWatchChromeGap * (QuickMenuWatchStaticChromeCount - 1);
-            float innerW = grid > chromeW ? grid : chromeW;
-            float stackH = QuickMenuWatchBtn * 4f + QuickMenuWatchGap * 3f;
-            float bezelW = QuickMenuWatchPad + QuickMenuWatchBtn + QuickMenuWatchRailGap + innerW
-                + QuickMenuWatchRailGap + QuickMenuWatchBtn + QuickMenuWatchPad;
-            float bezelH = QuickMenuWatchPad + QuickMenuWatchStatusH + 6f + stackH + QuickMenuWatchPad;
 
             GameObject root = new GameObject("VPB_VrWatch_Canvas");
             if (sc.mainHUD.gameObject != null) root.layer = sc.mainHUD.gameObject.layer;
@@ -741,10 +1108,12 @@ namespace VPB
             if (cs != null)
             {
                 cs.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
-                cs.scaleFactor = 100f;
                 cs.dynamicPixelsPerUnit = QuickMenuWatchFontDppu;
             }
             root.AddComponent<GraphicRaycaster>();
+            m_WatchCanvasGroup = root.AddComponent<CanvasGroup>();
+            m_WatchCanvasGroup.alpha = 0f;
+            m_WatchCanvasGroup.blocksRaycasts = false;
 
             try
             {
@@ -758,130 +1127,186 @@ namespace VPB
             m_WatchCanvasRT.anchorMin = new Vector2(0.5f, 0.5f);
             m_WatchCanvasRT.anchorMax = new Vector2(0.5f, 0.5f);
             m_WatchCanvasRT.pivot = new Vector2(0.5f, 0.5f);
-            m_WatchCanvasRT.sizeDelta = new Vector2(bezelW, bezelH);
+            m_WatchCanvasRT.sizeDelta = new Vector2(160f, 178f);
 
             GameObject bezelGo = new GameObject("Bezel");
             bezelGo.transform.SetParent(root.transform, false);
             m_WatchBezel = AddQuickMenuRoundedBg(bezelGo, QuickMenuWatchBezelColor, true);
             QuickMenuApplyWatchBezelRadius(UI.ResolveGalleryElementCornerRadiusFraction());
-            RectTransform bezelRt = bezelGo.GetComponent<RectTransform>();
-            bezelRt.anchorMin = Vector2.zero;
-            bezelRt.anchorMax = Vector2.one;
-            bezelRt.sizeDelta = Vector2.zero;
-            bezelRt.anchoredPosition = Vector2.zero;
+            m_WatchBezelRt = bezelGo.GetComponent<RectTransform>();
+            m_WatchBezelRt.anchorMin = Vector2.zero;
+            m_WatchBezelRt.anchorMax = Vector2.one;
+            m_WatchBezelRt.sizeDelta = Vector2.zero;
+            m_WatchBezelRt.anchoredPosition = Vector2.zero;
             var drag = bezelGo.AddComponent<VrWatchBezelDrag>();
             drag.owner = this;
 
-            float yCursor = bezelH * 0.5f - QuickMenuWatchPad;
-            float yStatus = yCursor - QuickMenuWatchStatusH * 0.5f;
             m_WatchStatusText = UI.CreateLabel(root, "", QuickMenuWatchStatusFont, GalleryUiColorTokens.TextPrimary,
                 TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
-                false, false, AnchorPresets.middleCenter, new Vector2(innerW, QuickMenuWatchStatusH),
-                new Vector2(0f, yStatus), "Status");
-            if (m_WatchStatusText != null) m_WatchStatusText.resizeTextForBestFit = false;
-            yCursor -= QuickMenuWatchStatusH + 6f;
-
-            float yStackTop = yCursor;
-            float rowStep = QuickMenuWatchBtn + QuickMenuWatchGap;
-            float leftX = -(innerW * 0.5f + QuickMenuWatchRailGap + QuickMenuWatchBtn * 0.5f);
-            float rightX = -leftX;
-            float cell = QuickMenuWatchBtn + QuickMenuWatchGap;
-            float gridOriginX = -cell * 0.5f;
-            float chromeOriginX = -(chromeW * 0.5f) + QuickMenuWatchChrome * 0.5f;
-            float chromeStep = QuickMenuWatchChrome + QuickMenuWatchChromeGap;
-
-            m_WatchSlotGos = new GameObject[QuickMenuWatchHudSlotCount];
-            m_WatchSlotIcons = new Image[QuickMenuWatchHudSlotCount];
-            m_WatchSlotBackdrops = new Image[QuickMenuWatchHudSlotCount];
-            m_WatchAssignGos = new GameObject[QuickMenuWatchAssignSlotCount];
-            m_WatchAssignIcons = new Image[QuickMenuWatchAssignSlotCount];
-            m_WatchAssignBackdrops = new Image[QuickMenuWatchAssignSlotCount];
-
-            for (int row = 0; row < 4; row++)
+                false, false, AnchorPresets.middleCenter, new Vector2(140f, QuickMenuWatchStatusH),
+                Vector2.zero, "Status");
+            if (m_WatchStatusText != null)
             {
-                float yRow = yStackTop - QuickMenuWatchBtn * 0.5f - row * rowStep;
-                QuickMenuBuildWatchAssignSlot(root, row, leftX, yRow);
-                QuickMenuBuildWatchAssignSlot(root, row + 4, rightX, yRow);
-
-                if (row == 0 || row == 1)
-                {
-                    int hud0 = row * 2;
-                    int hud1 = hud0 + 1;
-                    QuickMenuBuildWatchHudSlot(root, hud0, gridOriginX, yRow);
-                    QuickMenuBuildWatchHudSlot(root, hud1, gridOriginX + cell, yRow);
-                }
-                else if (row == 2)
-                {
-                    QuickMenuBuildWatchChromeButton(root, 0, chromeOriginX, yRow, "vpb_icons/device_watch_off.png",
-                        () => { try { QuickMenuSetWatchVisibleFromWatch(false); } catch { } },
-                        VPBTranslation.T("hook.watch.tip.hide", "Hide watch"));
-                    QuickMenuBuildWatchChromeButton(root, 1, chromeOriginX + chromeStep, yRow,
-                        "vpb_icons/switch_horizontal.png",
-                        () => { try { QuickMenuSwitchWatchHand(); } catch { } },
-                        VPBTranslation.T("hook.watch.tip.hand", "Switch watch hand"));
-                    Image pinBg = QuickMenuBuildWatchChromeButton(root, 2,
-                        chromeOriginX + chromeStep * 2f, yRow,
-                        "vpb_icons/gallery_fixed.png",
-                        () => { try { QuickMenuToggleWatchPin(); } catch { } },
-                        QuickMenuWatchPinTipText());
-                    m_WatchPinBg = pinBg;
-                    if (pinBg != null)
-                    {
-                        m_WatchPinHover = pinBg.GetComponent<QuickMenuSquareHover>();
-                        m_WatchPinTip = pinBg.GetComponent<VrWatchHoverTip>();
-                    }
-                    Image editBg = QuickMenuBuildWatchChromeButton(root, 3,
-                        chromeOriginX + chromeStep * 3f, yRow,
-                        "vpb_icons/settings_plus.png",
-                        () => { try { QuickMenuToggleWatchEdit(); } catch { } },
-                        QuickMenuWatchEditTipText());
-                    m_WatchEditBg = editBg;
-                    if (editBg != null)
-                    {
-                        m_WatchEditHover = editBg.GetComponent<QuickMenuSquareHover>();
-                        m_WatchEditTip = editBg.GetComponent<VrWatchHoverTip>();
-                    }
-                }
-                else
-                {
-                    QuickMenuBuildWatchChromeButton(root, 10, chromeOriginX, yRow, "vpb_icons/nav_prev.png",
-                        () => { try { QuickMenuWatchChangePage(-1); } catch { } },
-                        VPBTranslation.T("hook.watch.tip.page_prev", "Previous watch page"));
-                    QuickMenuBuildWatchPageLabel(root, yRow);
-                    QuickMenuBuildWatchChromeButton(root, 11, chromeOriginX + chromeStep * 3f, yRow, "vpb_icons/nav_next.png",
-                        () => { try { QuickMenuWatchChangePage(+1); } catch { } },
-                        VPBTranslation.T("hook.watch.tip.page_next", "Next watch page"));
-                }
+                m_WatchStatusText.resizeTextForBestFit = false;
+                m_WatchStatusRt = m_WatchStatusText.rectTransform;
             }
 
-            QuickMenuBuildWatchAssignSheet(root);
+            m_WatchSlotGos = new GameObject[QuickMenuWatchHudSlotCount];
+            m_WatchSlotRts = new RectTransform[QuickMenuWatchHudSlotCount];
+            m_WatchSlotIcons = new Image[QuickMenuWatchHudSlotCount];
+            m_WatchSlotIconRts = new RectTransform[QuickMenuWatchHudSlotCount];
+            m_WatchSlotBackdrops = new Image[QuickMenuWatchHudSlotCount];
+            m_WatchSlotLabels = new Text[QuickMenuWatchHudSlotCount];
+            m_WatchAssignGos = new GameObject[QuickMenuWatchAssignSlotCount];
+            m_WatchAssignRts = new RectTransform[QuickMenuWatchAssignSlotCount];
+            m_WatchAssignIcons = new Image[QuickMenuWatchAssignSlotCount];
+            m_WatchAssignIconRts = new RectTransform[QuickMenuWatchAssignSlotCount];
+            m_WatchAssignBackdrops = new Image[QuickMenuWatchAssignSlotCount];
+            m_WatchAssignLabels = new Text[QuickMenuWatchAssignSlotCount];
+            m_WatchChromeGos = new GameObject[QuickMenuWatchChromeCount];
+            m_WatchChromeRts = new RectTransform[QuickMenuWatchChromeCount];
+            m_WatchChromeBgs = new Image[QuickMenuWatchChromeCount];
+            m_WatchChromeHovers = new QuickMenuSquareHover[QuickMenuWatchChromeCount];
+            m_WatchChromeTips = new VrWatchHoverTip[QuickMenuWatchChromeCount];
+            m_WatchChromeIcons = new Image[QuickMenuWatchChromeCount];
 
-            m_WatchCueGo = new GameObject("Cue");
-            m_WatchCueGo.transform.SetParent(root.transform, false);
-            RectTransform cueRt = m_WatchCueGo.AddComponent<RectTransform>();
-            cueRt.anchorMin = new Vector2(0.5f, 0.5f);
-            cueRt.anchorMax = new Vector2(0.5f, 0.5f);
-            cueRt.pivot = new Vector2(0.5f, 0.5f);
-            cueRt.sizeDelta = new Vector2(innerW, 40f);
-            cueRt.anchoredPosition = new Vector2(0f, bezelH * 0.5f + 24f);
-            m_WatchCueText = UI.CreateLabel(m_WatchCueGo,
-                VPBTranslation.T("hook.watch.cue", "Look at inner wrist to show again. HUD grid stays."),
-                QuickMenuWatchCueFont, GalleryUiColorTokens.TextPrimary, TextAnchor.MiddleCenter,
-                HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate, false, false,
-                AnchorPresets.stretchAll, Vector2.zero, Vector2.zero, "CueText");
-            if (m_WatchCueText != null) m_WatchCueText.resizeTextForBestFit = false;
-            m_WatchCueGo.SetActive(false);
+            for (int i = 0; i < QuickMenuWatchHudSlotCount; i++) QuickMenuBuildWatchHudSlot(root, i);
+            for (int i = 0; i < QuickMenuWatchAssignSlotCount; i++) QuickMenuBuildWatchAssignSlot(root, i);
+
+            m_WatchIconExpand = UI.LoadIconSprite("vpb_icons/chevron_down.png", Color.white);
+            m_WatchIconCompact = UI.LoadIconSprite("vpb_icons/chevron_up.png", Color.white);
+            m_WatchIconPinOn = UI.LoadIconSprite("vpb_icons/pin_on.png", Color.white);
+            m_WatchIconPinOff = UI.LoadIconSprite("vpb_icons/pin_off.png", Color.white);
+
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeCollapse, "vpb_icons/minimize.png",
+                () => { try { QuickMenuSetWatchCollapsed(true); } catch { } },
+                VPBTranslation.T("hook.watch.tip.collapse", "Minimise to dot"));
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeHand, "vpb_icons/switch_horizontal.png",
+                () => { try { QuickMenuSwitchWatchHand(); } catch { } },
+                VPBTranslation.T("hook.watch.tip.hand", "Switch watch hand"));
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromePin, "vpb_icons/pin_off.png",
+                () => { try { QuickMenuToggleWatchWorldLock(); } catch { } },
+                QuickMenuWatchPinTipText());
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeEdit, "vpb_icons/settings_plus.png",
+                () => { try { QuickMenuToggleWatchEdit(); } catch { } },
+                QuickMenuWatchEditTipText());
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeExpand, "vpb_icons/chevron_down.png",
+                () => { try { QuickMenuToggleWatchExpanded(); } catch { } },
+                QuickMenuWatchExpandTipText());
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeHelp, "vpb_icons/info_square.png",
+                () => { try { QuickMenuReplayWatchCue(); } catch { } },
+                VPBTranslation.T("hook.watch.tip.help", "Replay watch tips"));
+
+            m_WatchPagerPrevGo = QuickMenuBuildWatchPagerButton(root, "WatchPagerPrev", "vpb_icons/nav_prev.png",
+                () => { try { QuickMenuWatchChangePage(-1); } catch { } },
+                VPBTranslation.T("hook.watch.tip.page_prev", "Previous watch page"), out m_WatchPagerPrevRt);
+            m_WatchPagerNextGo = QuickMenuBuildWatchPagerButton(root, "WatchPagerNext", "vpb_icons/nav_next.png",
+                () => { try { QuickMenuWatchChangePage(+1); } catch { } },
+                VPBTranslation.T("hook.watch.tip.page_next", "Next watch page"), out m_WatchPagerNextRt);
+
+            QuickMenuBuildWatchDot(root);
+            QuickMenuBuildWatchAssignSheet(root);
+            QuickMenuBuildWatchTip(root);
+            QuickMenuBuildWatchCue(root);
 
             root.SetActive(false);
             m_WatchStatusNeedRebuild = true;
-            for (int i = 0; i < QuickMenuWatchHudSlotCount; i++)
-                QuickMenuSyncWatchSlot(i);
+            m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
+            QuickMenuApplyWatchLayout();
+            for (int i = 0; i < QuickMenuWatchHudSlotCount; i++) QuickMenuSyncWatchSlot(i);
             QuickMenuSyncWatchAssignAll();
-            QuickMenuSyncWatchPageLabel();
             QuickMenuRefreshWatchChromeColors();
         }
 
-        private void QuickMenuBuildWatchHudSlot(GameObject root, int hudIdx, float x, float y)
+        private void QuickMenuBuildWatchTip(GameObject root)
+        {
+            m_WatchTipGo = new GameObject("Tip");
+            m_WatchTipGo.transform.SetParent(root.transform, false);
+            m_WatchTipRt = m_WatchTipGo.AddComponent<RectTransform>();
+            m_WatchTipRt.anchorMin = new Vector2(0.5f, 0.5f);
+            m_WatchTipRt.anchorMax = new Vector2(0.5f, 0.5f);
+            m_WatchTipRt.pivot = new Vector2(0.5f, 1f);
+            m_WatchTipRt.sizeDelta = new Vector2(QuickMenuWatchTipW, QuickMenuWatchTipH);
+            AddQuickMenuRoundedBg(m_WatchTipGo, QuickMenuWatchCueBackdrop, false);
+            m_WatchTipText = UI.CreateLabel(m_WatchTipGo, "", QuickMenuWatchTipFont,
+                GalleryUiColorTokens.TextPrimary, TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate, false, false,
+                AnchorPresets.stretchAll, Vector2.zero, Vector2.zero, "TipText");
+            if (m_WatchTipText != null)
+            {
+                m_WatchTipText.resizeTextForBestFit = false;
+                RectTransform trt = m_WatchTipText.rectTransform;
+                trt.offsetMin = new Vector2(8f, 4f);
+                trt.offsetMax = new Vector2(-8f, -4f);
+            }
+            m_WatchTipGo.SetActive(false);
+        }
+
+        private void QuickMenuBuildWatchCue(GameObject root)
+        {
+            m_WatchCueGo = new GameObject("Cue");
+            m_WatchCueGo.transform.SetParent(root.transform, false);
+            m_WatchCueRt = m_WatchCueGo.AddComponent<RectTransform>();
+            m_WatchCueRt.anchorMin = new Vector2(0.5f, 0.5f);
+            m_WatchCueRt.anchorMax = new Vector2(0.5f, 0.5f);
+            m_WatchCueRt.pivot = new Vector2(0.5f, 0.5f);
+            m_WatchCueRt.sizeDelta = new Vector2(220f, 56f);
+            AddQuickMenuRoundedBg(m_WatchCueGo, QuickMenuWatchCueBackdrop, false);
+            m_WatchCueText = UI.CreateLabel(m_WatchCueGo, QuickMenuWatchCueTextValue(),
+                QuickMenuWatchCueFont, GalleryUiColorTokens.TextPrimary, TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate, false, false,
+                AnchorPresets.stretchAll, Vector2.zero, Vector2.zero, "CueText");
+            if (m_WatchCueText != null)
+            {
+                m_WatchCueText.resizeTextForBestFit = false;
+                RectTransform crt = m_WatchCueText.rectTransform;
+                crt.offsetMin = new Vector2(8f, 4f);
+                crt.offsetMax = new Vector2(-8f, -4f);
+            }
+            m_WatchCueGo.SetActive(false);
+        }
+
+        private void QuickMenuBuildWatchDot(GameObject root)
+        {
+            m_WatchDotGo = new GameObject("WatchDot");
+            m_WatchDotGo.transform.SetParent(root.transform, false);
+            m_WatchDotRt = m_WatchDotGo.AddComponent<RectTransform>();
+            m_WatchDotRt.anchorMin = new Vector2(0.5f, 0.5f);
+            m_WatchDotRt.anchorMax = new Vector2(0.5f, 0.5f);
+            m_WatchDotRt.pivot = new Vector2(0.5f, 0.5f);
+            m_WatchDotRt.sizeDelta = new Vector2(QuickMenuWatchDotSize, QuickMenuWatchDotSize);
+            m_WatchDotRt.anchoredPosition = Vector2.zero;
+            Image img = AddQuickMenuRoundedBg(m_WatchDotGo, QuickMenuWatchChromeIdle);
+            Button btn = m_WatchDotGo.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            btn.targetGraphic = img;
+            btn.onClick.AddListener(() => { try { QuickMenuSetWatchCollapsed(false); } catch { } });
+            QuickMenuAttachWatchHover(m_WatchDotGo, img, QuickMenuWatchChromeIdle, QuickMenuWatchChromeIdleHover,
+                VPBTranslation.T("hook.watch.tip.restore", "Restore watch face"));
+            QuickMenuAddWatchIcon(m_WatchDotGo, UI.LoadIconSprite("vpb_icons/device_watch.png", Color.white), 6f);
+            m_WatchDotGo.SetActive(false);
+        }
+
+        private static RectTransform QuickMenuAddWatchIcon(GameObject parent, Sprite spr, float inset)
+        {
+            if (spr == null) return null;
+            GameObject iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(parent.transform, false);
+            Image icon = iconGO.AddComponent<Image>();
+            icon.sprite = spr;
+            icon.color = Color.white;
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            RectTransform irt = iconGO.GetComponent<RectTransform>();
+            irt.anchorMin = Vector2.zero;
+            irt.anchorMax = Vector2.one;
+            irt.sizeDelta = new Vector2(-inset * 2f, -inset * 2f);
+            irt.anchoredPosition = Vector2.zero;
+            return irt;
+        }
+
+        private void QuickMenuBuildWatchHudSlot(GameObject root, int hudIdx)
         {
             GameObject go = new GameObject("WatchSlot_" + hudIdx);
             go.transform.SetParent(root.transform, false);
@@ -891,7 +1316,7 @@ namespace VPB
             rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(QuickMenuWatchBtn, QuickMenuWatchBtn);
-            rt.anchoredPosition = new Vector2(x, y);
+            m_WatchSlotRts[hudIdx] = rt;
 
             Color nb = QmBackdropAssignedOpaque;
             Image img = AddQuickMenuRoundedBg(go, nb);
@@ -902,6 +1327,18 @@ namespace VPB
             btn.targetGraphic = img;
             QuickMenuAttachWatchHover(go, img, nb, QmBackdropAssignedHoverOpaque, null);
 
+            GameObject iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(go.transform, false);
+            Image slotIcon = iconGO.AddComponent<Image>();
+            slotIcon.color = Color.white;
+            slotIcon.preserveAspect = true;
+            slotIcon.raycastTarget = false;
+            slotIcon.enabled = false;
+            m_WatchSlotIcons[hudIdx] = slotIcon;
+            m_WatchSlotIconRts[hudIdx] = iconGO.GetComponent<RectTransform>();
+
+            m_WatchSlotLabels[hudIdx] = QuickMenuBuildWatchSlotLabel(go, "HudLabel");
+
             int idxCopy = hudIdx;
             var tip = go.AddComponent<VrWatchSlotHover>();
             tip.owner = this;
@@ -909,7 +1346,7 @@ namespace VPB
             btn.onClick.AddListener(() => { try { QuickMenuOnWatchSlotClick(idxCopy); } catch { } });
         }
 
-        private void QuickMenuBuildWatchAssignSlot(GameObject root, int slotIdx, float x, float y)
+        private void QuickMenuBuildWatchAssignSlot(GameObject root, int slotIdx)
         {
             GameObject go = new GameObject("WatchAssign_" + slotIdx);
             go.transform.SetParent(root.transform, false);
@@ -919,7 +1356,7 @@ namespace VPB
             rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(QuickMenuWatchBtn, QuickMenuWatchBtn);
-            rt.anchoredPosition = new Vector2(x, y);
+            m_WatchAssignRts[slotIdx] = rt;
 
             Color nb = QmBackdropEmptyOpaque;
             Image img = AddQuickMenuRoundedBg(go, nb);
@@ -930,11 +1367,88 @@ namespace VPB
             btn.targetGraphic = img;
             QuickMenuAttachWatchHover(go, img, nb, QmBackdropEmptyHoverOpaque, null);
 
+            GameObject iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(go.transform, false);
+            Image slotIcon = iconGO.AddComponent<Image>();
+            slotIcon.color = Color.white;
+            slotIcon.preserveAspect = true;
+            slotIcon.raycastTarget = false;
+            slotIcon.enabled = false;
+            m_WatchAssignIcons[slotIdx] = slotIcon;
+            m_WatchAssignIconRts[slotIdx] = iconGO.GetComponent<RectTransform>();
+
+            m_WatchAssignLabels[slotIdx] = QuickMenuBuildWatchSlotLabel(go, "AssignLabel");
+
             int idxCopy = slotIdx;
             var tip = go.AddComponent<VrWatchAssignHover>();
             tip.owner = this;
             tip.slotIdx = idxCopy;
             btn.onClick.AddListener(() => { try { QuickMenuOnWatchAssignClick(idxCopy); } catch { } });
+        }
+
+        private static Text QuickMenuBuildWatchSlotLabel(GameObject parent, string name)
+        {
+            Text t = UI.CreateLabel(parent, "", QuickMenuWatchLabelFont, QuickMenuWatchLabelColor,
+                TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                false, false, AnchorPresets.middleCenter,
+                new Vector2(QuickMenuWatchBtn + 8f, QuickMenuWatchLabelH), Vector2.zero, name);
+            if (t != null)
+            {
+                t.resizeTextForBestFit = false;
+                t.gameObject.SetActive(false);
+            }
+            return t;
+        }
+
+        private void QuickMenuBuildWatchChromeButton(GameObject parent, int idx, string iconPath,
+            UnityEngine.Events.UnityAction onClick, string tip)
+        {
+            GameObject go = new GameObject("WatchChrome_" + idx);
+            go.transform.SetParent(parent.transform, false);
+            m_WatchChromeGos[idx] = go;
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(QuickMenuWatchChrome, QuickMenuWatchChrome);
+            m_WatchChromeRts[idx] = rt;
+
+            Image img = AddQuickMenuRoundedBg(go, QuickMenuWatchChromeIdle);
+            m_WatchChromeBgs[idx] = img;
+            Button btn = go.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            btn.targetGraphic = img;
+            btn.onClick.AddListener(onClick);
+            QuickMenuAttachWatchHover(go, img, QuickMenuWatchChromeIdle, QuickMenuWatchChromeIdleHover, tip);
+            m_WatchChromeHovers[idx] = go.GetComponent<QuickMenuSquareHover>();
+            m_WatchChromeTips[idx] = go.GetComponent<VrWatchHoverTip>();
+
+            RectTransform irt = QuickMenuAddWatchIcon(go, UI.LoadIconSprite(iconPath, Color.white), 4f);
+            if (irt != null) m_WatchChromeIcons[idx] = irt.GetComponent<Image>();
+        }
+
+        private GameObject QuickMenuBuildWatchPagerButton(GameObject parent, string name, string iconPath,
+            UnityEngine.Events.UnityAction onClick, string tip, out RectTransform rt)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent.transform, false);
+            rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(QuickMenuWatchPagerBtn, QuickMenuWatchPagerBtn);
+
+            Image img = AddQuickMenuRoundedBg(go, QuickMenuWatchChromeIdle);
+            Button btn = go.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            btn.targetGraphic = img;
+            btn.onClick.AddListener(onClick);
+            QuickMenuAttachWatchHover(go, img, QuickMenuWatchChromeIdle, QuickMenuWatchChromeIdleHover, tip);
+            QuickMenuAddWatchIcon(go, UI.LoadIconSprite(iconPath, Color.white), 3f);
+            go.SetActive(false);
+            return go;
         }
 
         private void QuickMenuAttachWatchHover(GameObject go, Image img, Color normal, Color hover, string tip)
@@ -959,42 +1473,6 @@ namespace VPB
             }
         }
 
-        private Image QuickMenuBuildWatchChromeButton(GameObject parent, int idx, float x, float y, string iconPath, UnityEngine.Events.UnityAction onClick, string tip)
-        {
-            GameObject go = new GameObject("WatchChrome_" + idx);
-            go.transform.SetParent(parent.transform, false);
-            RectTransform rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(QuickMenuWatchChrome, QuickMenuWatchChrome);
-            rt.anchoredPosition = new Vector2(x, y);
-            Image img = AddQuickMenuRoundedBg(go, QuickMenuWatchChromeIdle);
-            Button btn = go.AddComponent<Button>();
-            btn.transition = Selectable.Transition.None;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
-            btn.targetGraphic = img;
-            btn.onClick.AddListener(onClick);
-            QuickMenuAttachWatchHover(go, img, QuickMenuWatchChromeIdle, QuickMenuWatchChromeIdleHover, tip);
-            Sprite spr = UI.LoadIconSprite(iconPath, Color.white);
-            if (spr != null)
-            {
-                GameObject iconGO = new GameObject("Icon");
-                iconGO.transform.SetParent(go.transform, false);
-                Image icon = iconGO.AddComponent<Image>();
-                icon.sprite = spr;
-                icon.color = Color.white;
-                icon.preserveAspect = true;
-                icon.raycastTarget = false;
-                RectTransform irt = iconGO.GetComponent<RectTransform>();
-                irt.anchorMin = Vector2.zero;
-                irt.anchorMax = Vector2.one;
-                irt.sizeDelta = new Vector2(-8f, -8f);
-                irt.anchoredPosition = Vector2.zero;
-            }
-            return img;
-        }
-
         private void QuickMenuApplyWatchBezelRadius(float buttonFrac)
         {
             float px = buttonFrac <= 0f ? 0f : QuickMenuWatchBezelCornerPx;
@@ -1011,19 +1489,258 @@ namespace VPB
             rr.cornerRadius = px;
         }
 
-        private void QuickMenuBuildWatchPageLabel(GameObject parent, float y)
+        private void QuickMenuApplyWatchLayout()
         {
-            float w = QuickMenuWatchChrome * 2f + QuickMenuWatchChromeGap;
-            m_WatchPageText = UI.CreateLabel(parent, "", QuickMenuWatchPageFont, GalleryUiColorTokens.TextMuted,
-                TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
-                false, false, AnchorPresets.middleCenter, new Vector2(w, QuickMenuWatchChrome),
-                new Vector2(0f, y), "WatchPage");
-            if (m_WatchPageText != null) m_WatchPageText.resizeTextForBestFit = false;
-            m_WatchPageShown = -1;
+            if (m_WatchCanvasRT == null) return;
+            if (m_WatchLayoutApplied == m_WatchFaceMode &&
+                m_WatchLayoutLabels == m_WatchCfgLabels &&
+                m_WatchLayoutEdit == m_WatchEditMode)
+                return;
+
+            m_WatchLayoutApplied = m_WatchFaceMode;
+            m_WatchLayoutLabels = m_WatchCfgLabels;
+            m_WatchLayoutEdit = m_WatchEditMode;
+
+            switch (m_WatchFaceMode)
+            {
+                case QuickMenuWatchFaceMode.Collapsed:
+                    QuickMenuLayoutWatchCollapsed();
+                    break;
+                case QuickMenuWatchFaceMode.Expanded:
+                    QuickMenuLayoutWatchExpanded();
+                    break;
+                default:
+                    QuickMenuLayoutWatchCompact();
+                    break;
+            }
+
+            QuickMenuSyncWatchExpandIcon();
+            QuickMenuPlaceWatchAssignSheet();
+            QuickMenuPlaceWatchCue();
+            m_WatchStatusNeedRebuild = true;
+            for (int i = 0; i < QuickMenuWatchHudSlotCount; i++) QuickMenuSyncWatchSlot(i);
+            QuickMenuSyncWatchAssignAll();
+            QuickMenuRefreshWatchChromeColors();
+        }
+
+        private void QuickMenuLayoutWatchCollapsed()
+        {
+            float size = QuickMenuWatchDotSize + QuickMenuWatchDotPad * 2f;
+            m_WatchCanvasRT.sizeDelta = new Vector2(size, size);
+            QuickMenuSetWatchWidgetsActive(false, false, false, false);
+            if (m_WatchStatusText != null && m_WatchStatusText.gameObject.activeSelf)
+                m_WatchStatusText.gameObject.SetActive(false);
+            if (m_WatchDotGo != null && !m_WatchDotGo.activeSelf) m_WatchDotGo.SetActive(true);
+            if (m_WatchDotRt != null) m_WatchDotRt.anchoredPosition = Vector2.zero;
+        }
+
+        private void QuickMenuLayoutWatchCompact()
+        {
+            float cellH = m_WatchCfgLabels ? QuickMenuWatchBtn + QuickMenuWatchLabelH : QuickMenuWatchBtn;
+            float gridW = QuickMenuWatchCompactCols * QuickMenuWatchBtn + (QuickMenuWatchCompactCols - 1f) * QuickMenuWatchGap;
+            float chromeW = 5f * QuickMenuWatchChromeSm + 4f * QuickMenuWatchChromeGapSm;
+            float innerW = gridW > chromeW ? gridW : chromeW;
+            float stackH = cellH * 2f + QuickMenuWatchGap;
+            float bezelW = innerW + QuickMenuWatchPad * 2f;
+            float bezelH = QuickMenuWatchPad + QuickMenuWatchStatusH + QuickMenuWatchStatusGap + stackH
+                + QuickMenuWatchChromeGap + QuickMenuWatchChromeSm + QuickMenuWatchPad;
+
+            m_WatchCanvasRT.sizeDelta = new Vector2(bezelW, bezelH);
+            if (m_WatchDotGo != null && m_WatchDotGo.activeSelf) m_WatchDotGo.SetActive(false);
+
+            float yTop = bezelH * 0.5f - QuickMenuWatchPad;
+            QuickMenuLayoutWatchStatus(bezelW, yTop - QuickMenuWatchStatusH * 0.5f, false);
+
+            float stackTop = yTop - QuickMenuWatchStatusH - QuickMenuWatchStatusGap;
+            float colStep = QuickMenuWatchBtn + QuickMenuWatchGap;
+            float rowStep = cellH + QuickMenuWatchGap;
+            for (int i = 0; i < QuickMenuWatchAssignSlotCount; i++)
+            {
+                bool on = i < QuickMenuWatchCompactSlotCount;
+                QuickMenuSetGoActive(m_WatchAssignGos[i], on);
+                if (!on) continue;
+                int col = i % 3;
+                int row = i / 3;
+                float x = (col - 1) * colStep;
+                float y = stackTop - cellH * 0.5f - row * rowStep;
+                QuickMenuPlaceWatchSlot(m_WatchAssignRts[i], m_WatchAssignIconRts[i], m_WatchAssignLabels[i], x, y, cellH);
+            }
+
+            for (int i = 0; i < QuickMenuWatchHudSlotCount; i++) QuickMenuSetGoActive(m_WatchSlotGos[i], false);
+            QuickMenuSetGoActive(m_WatchPagerPrevGo, false);
+            QuickMenuSetGoActive(m_WatchPagerNextGo, false);
+
+            float chromeY = stackTop - stackH - QuickMenuWatchChromeGap - QuickMenuWatchChromeSm * 0.5f;
+            float chromeStep = QuickMenuWatchChromeSm + QuickMenuWatchChromeGapSm;
+            float chromeX = -(chromeW * 0.5f) + QuickMenuWatchChromeSm * 0.5f;
+            QuickMenuPlaceChrome(QuickMenuWatchChromeCollapse, chromeX, chromeY, QuickMenuWatchChromeSm, true);
+            QuickMenuPlaceChrome(QuickMenuWatchChromePin, chromeX + chromeStep, chromeY, QuickMenuWatchChromeSm, true);
+            QuickMenuPlaceChrome(QuickMenuWatchChromeExpand, chromeX + chromeStep * 2f, chromeY, QuickMenuWatchChromeSm, true);
+            QuickMenuPlaceChrome(QuickMenuWatchChromeEdit, chromeX + chromeStep * 3f, chromeY, QuickMenuWatchChromeSm, true);
+            QuickMenuPlaceChrome(QuickMenuWatchChromeHand, chromeX + chromeStep * 4f, chromeY, QuickMenuWatchChromeSm, true);
+            QuickMenuPlaceChrome(QuickMenuWatchChromeHelp, 0f, 0f, QuickMenuWatchChromeSm, false);
+        }
+
+        private void QuickMenuLayoutWatchExpanded()
+        {
+            float cellH = m_WatchCfgLabels ? QuickMenuWatchBtn + QuickMenuWatchLabelH : QuickMenuWatchBtn;
+            float gridW = QuickMenuWatchBtn * 2f + QuickMenuWatchGap;
+            float chromeW = 3f * QuickMenuWatchChrome + 2f * QuickMenuWatchChromeGap;
+            float innerW = gridW > chromeW ? gridW : chromeW;
+            float stackH = cellH * 4f + QuickMenuWatchGap * 3f;
+            float bezelW = QuickMenuWatchPad + QuickMenuWatchBtn + QuickMenuWatchRailGap + innerW
+                + QuickMenuWatchRailGap + QuickMenuWatchBtn + QuickMenuWatchPad;
+            float bezelH = QuickMenuWatchPad + QuickMenuWatchStatusH + QuickMenuWatchStatusGap + stackH + QuickMenuWatchPad;
+
+            m_WatchCanvasRT.sizeDelta = new Vector2(bezelW, bezelH);
+            if (m_WatchDotGo != null && m_WatchDotGo.activeSelf) m_WatchDotGo.SetActive(false);
+
+            float yTop = bezelH * 0.5f - QuickMenuWatchPad;
+            QuickMenuLayoutWatchStatus(bezelW, yTop - QuickMenuWatchStatusH * 0.5f, true);
+
+            float stackTop = yTop - QuickMenuWatchStatusH - QuickMenuWatchStatusGap;
+            float rowStep = cellH + QuickMenuWatchGap;
+            float leftX = -(innerW * 0.5f + QuickMenuWatchRailGap + QuickMenuWatchBtn * 0.5f);
+            float rightX = -leftX;
+            float centerStep = QuickMenuWatchBtn + QuickMenuWatchGap;
+            float chromeStep = QuickMenuWatchChrome + QuickMenuWatchChromeGap;
+            float chromeX0 = -(chromeW * 0.5f) + QuickMenuWatchChrome * 0.5f;
+
+            for (int row = 0; row < 4; row++)
+            {
+                float yRow = stackTop - cellH * 0.5f - row * rowStep;
+                QuickMenuPlaceWatchSlot(m_WatchAssignRts[row], m_WatchAssignIconRts[row], m_WatchAssignLabels[row], leftX, yRow, cellH);
+                QuickMenuSetGoActive(m_WatchAssignGos[row], true);
+                QuickMenuPlaceWatchSlot(m_WatchAssignRts[row + 4], m_WatchAssignIconRts[row + 4], m_WatchAssignLabels[row + 4], rightX, yRow, cellH);
+                QuickMenuSetGoActive(m_WatchAssignGos[row + 4], true);
+
+                if (row == 0 || row == 1)
+                {
+                    int hud0 = row * 2;
+                    QuickMenuPlaceWatchSlot(m_WatchSlotRts[hud0], m_WatchSlotIconRts[hud0], m_WatchSlotLabels[hud0], -centerStep * 0.5f, yRow, cellH);
+                    QuickMenuPlaceWatchSlot(m_WatchSlotRts[hud0 + 1], m_WatchSlotIconRts[hud0 + 1], m_WatchSlotLabels[hud0 + 1], centerStep * 0.5f, yRow, cellH);
+                }
+                else if (row == 2)
+                {
+                    QuickMenuPlaceChrome(QuickMenuWatchChromeCollapse, chromeX0, yRow, QuickMenuWatchChrome, true);
+                    QuickMenuPlaceChrome(QuickMenuWatchChromeHand, chromeX0 + chromeStep, yRow, QuickMenuWatchChrome, true);
+                    QuickMenuPlaceChrome(QuickMenuWatchChromePin, chromeX0 + chromeStep * 2f, yRow, QuickMenuWatchChrome, true);
+                }
+                else
+                {
+                    QuickMenuPlaceChrome(QuickMenuWatchChromeEdit, chromeX0, yRow, QuickMenuWatchChrome, true);
+                    QuickMenuPlaceChrome(QuickMenuWatchChromeExpand, chromeX0 + chromeStep, yRow, QuickMenuWatchChrome, true);
+                    QuickMenuPlaceChrome(QuickMenuWatchChromeHelp, chromeX0 + chromeStep * 2f, yRow, QuickMenuWatchChrome, true);
+                }
+            }
+        }
+
+        private void QuickMenuLayoutWatchStatus(float bezelW, float y, bool pager)
+        {
+            if (m_WatchStatusText != null && !m_WatchStatusText.gameObject.activeSelf)
+                m_WatchStatusText.gameObject.SetActive(true);
+
+            float rowW = bezelW - QuickMenuWatchPad * 2f;
+            float textW = pager ? rowW - 2f * (QuickMenuWatchPagerBtn + QuickMenuWatchPagerGap) : rowW;
+            if (m_WatchStatusRt != null)
+            {
+                m_WatchStatusRt.sizeDelta = new Vector2(textW, QuickMenuWatchStatusH);
+                m_WatchStatusRt.anchoredPosition = new Vector2(0f, y);
+            }
+
+            QuickMenuSetGoActive(m_WatchPagerPrevGo, pager);
+            QuickMenuSetGoActive(m_WatchPagerNextGo, pager);
+            if (!pager) return;
+
+            float x = rowW * 0.5f - QuickMenuWatchPagerBtn * 0.5f;
+            if (m_WatchPagerPrevRt != null) m_WatchPagerPrevRt.anchoredPosition = new Vector2(-x, y);
+            if (m_WatchPagerNextRt != null) m_WatchPagerNextRt.anchoredPosition = new Vector2(x, y);
+        }
+
+        private void QuickMenuPlaceWatchSlot(RectTransform rt, RectTransform iconRt, Text label, float x, float y, float cellH)
+        {
+            if (rt == null) return;
+            rt.sizeDelta = new Vector2(QuickMenuWatchBtn, cellH);
+            rt.anchoredPosition = new Vector2(x, y);
+
+            bool labels = m_WatchCfgLabels;
+            if (iconRt != null)
+            {
+                iconRt.anchorMin = new Vector2(0.5f, 1f);
+                iconRt.anchorMax = new Vector2(0.5f, 1f);
+                iconRt.pivot = new Vector2(0.5f, 1f);
+                iconRt.sizeDelta = new Vector2(QuickMenuWatchBtn - 8f, QuickMenuWatchBtn - 8f);
+                iconRt.anchoredPosition = new Vector2(0f, -4f);
+            }
+            if (label != null)
+            {
+                if (label.gameObject.activeSelf != labels) label.gameObject.SetActive(labels);
+                if (labels)
+                {
+                    RectTransform lrt = label.rectTransform;
+                    lrt.anchorMin = new Vector2(0.5f, 0f);
+                    lrt.anchorMax = new Vector2(0.5f, 0f);
+                    lrt.pivot = new Vector2(0.5f, 0f);
+                    lrt.sizeDelta = new Vector2(QuickMenuWatchBtn + 10f, QuickMenuWatchLabelH);
+                    lrt.anchoredPosition = Vector2.zero;
+                }
+            }
+        }
+
+        private void QuickMenuPlaceChrome(int idx, float x, float y, float size, bool active)
+        {
+            if (m_WatchChromeGos == null || idx < 0 || idx >= m_WatchChromeGos.Length) return;
+            QuickMenuSetGoActive(m_WatchChromeGos[idx], active);
+            if (!active) return;
+            RectTransform rt = m_WatchChromeRts[idx];
+            if (rt == null) return;
+            rt.sizeDelta = new Vector2(size, size);
+            rt.anchoredPosition = new Vector2(x, y);
+        }
+
+        private void QuickMenuSetWatchWidgetsActive(bool hud, bool assign, bool chrome, bool pager)
+        {
+            if (m_WatchSlotGos != null)
+                for (int i = 0; i < m_WatchSlotGos.Length; i++) QuickMenuSetGoActive(m_WatchSlotGos[i], hud);
+            if (m_WatchAssignGos != null)
+                for (int i = 0; i < m_WatchAssignGos.Length; i++) QuickMenuSetGoActive(m_WatchAssignGos[i], assign);
+            if (m_WatchChromeGos != null)
+                for (int i = 0; i < m_WatchChromeGos.Length; i++) QuickMenuSetGoActive(m_WatchChromeGos[i], chrome);
+            QuickMenuSetGoActive(m_WatchPagerPrevGo, pager);
+            QuickMenuSetGoActive(m_WatchPagerNextGo, pager);
+        }
+
+        private static void QuickMenuSetGoActive(GameObject go, bool active)
+        {
+            if (go != null && go.activeSelf != active) go.SetActive(active);
+        }
+
+        private void QuickMenuPlaceWatchCue()
+        {
+            if (m_WatchCanvasRT == null) return;
+            float bezelH = m_WatchCanvasRT.sizeDelta.y;
+            if (m_WatchCueRt != null)
+            {
+                m_WatchCueRt.sizeDelta = new Vector2(QuickMenuWatchTipW, 56f);
+                m_WatchCueRt.anchoredPosition = new Vector2(0f, bezelH * 0.5f + QuickMenuWatchTipGap + 28f);
+            }
+            if (m_WatchTipRt != null)
+                m_WatchTipRt.anchoredPosition = new Vector2(0f, -(bezelH * 0.5f + QuickMenuWatchTipGap));
+        }
+
+        private void QuickMenuSyncWatchExpandIcon()
+        {
+            if (m_WatchChromeIcons == null) return;
+            Image icon = m_WatchChromeIcons[QuickMenuWatchChromeExpand];
+            if (icon == null) return;
+            Sprite want = m_WatchFaceMode == QuickMenuWatchFaceMode.Expanded ? m_WatchIconCompact : m_WatchIconExpand;
+            if (want != null && icon.sprite != want) icon.sprite = want;
         }
 
         internal string QuickMenuWatchHoverLabel(int hudIdx)
         {
+            if (m_QuickMenuEditMode)
+                return VPBTranslation.T("hook.watch.status.hud_edit", "HUD edit mode — core row locked");
             return QuickMenuGetActionTooltip(QuickMenuGetSlotAction(hudIdx), -1);
         }
 
@@ -1031,6 +1748,7 @@ namespace VPB
         {
             if (m_QuickMenuEditMode) return;
             var act = QuickMenuGetSlotAction(hudIdx);
+            if (!QuickMenuWatchConsumeClick(act)) return;
             if (act == QuickMenuAssignableAction.Save) m_QuickMenuSavePopupTargetIdx = hudIdx;
             QuickMenuExecuteAssignment(act);
         }
@@ -1050,7 +1768,12 @@ namespace VPB
             }
 
             var act = QuickMenuGetWatchSlotAction(slotIdx);
-            if (act == QuickMenuAssignableAction.None) return;
+            if (act == QuickMenuAssignableAction.None)
+            {
+                QuickMenuSetWatchHoverStatus(VPBTranslation.T("hook.watch.status.empty_slot", "Empty — use Assign"));
+                return;
+            }
+            if (!QuickMenuWatchConsumeClick(act)) return;
             if (act == QuickMenuAssignableAction.PageNext)
             {
                 QuickMenuWatchChangePage(+1);
@@ -1074,14 +1797,95 @@ namespace VPB
         {
             if (m_WatchEditMode)
                 return VPBTranslation.T("hook.watch.tip.assign_slot", "Assign this watch slot");
-            return QuickMenuGetActionTooltip(QuickMenuGetWatchSlotAction(slotIdx), -1);
+            var act = QuickMenuGetWatchSlotAction(slotIdx);
+            if (act == QuickMenuAssignableAction.None)
+                return VPBTranslation.T("hook.watch.status.empty_slot", "Empty — use Assign");
+            if (QuickMenuWatchIsDestructive(act) && m_WatchCfgHoldConfirm)
+                return QuickMenuGetActionTooltip(act, -1) + " · " +
+                       VPBTranslation.T("hook.watch.status.hold", "hold");
+            return QuickMenuGetActionTooltip(act, -1);
+        }
+
+        private static bool QuickMenuWatchIsDestructive(QuickMenuAssignableAction a)
+        {
+            return a == QuickMenuAssignableAction.RemoveAllClothing ||
+                   a == QuickMenuAssignableAction.RemoveAllHair ||
+                   a == QuickMenuAssignableAction.CloseAll;
+        }
+
+        private bool QuickMenuWatchConsumeClick(QuickMenuAssignableAction act)
+        {
+            if (!m_WatchCfgHoldConfirm || !QuickMenuWatchIsDestructive(act)) return true;
+            bool fired = m_WatchHoldFired;
+            m_WatchHoldFired = false;
+            if (!fired)
+                QuickMenuSetWatchHoverStatus(VPBTranslation.T("hook.watch.status.hold_confirm", "Hold to confirm"));
+            return false;
+        }
+
+        internal void QuickMenuWatchBeginPress(int kind, int idx)
+        {
+            m_WatchHoldFired = false;
+            m_WatchPressKind = kind;
+            m_WatchPressIdx = -1;
+            if (!m_WatchCfgHoldConfirm || m_WatchEditMode) return;
+
+            QuickMenuAssignableAction act = kind == 0
+                ? (m_QuickMenuEditMode ? QuickMenuAssignableAction.None : QuickMenuGetSlotAction(idx))
+                : QuickMenuGetWatchSlotAction(idx);
+            if (!QuickMenuWatchIsDestructive(act)) return;
+
+            m_WatchPressIdx = idx;
+            m_WatchPressAction = act;
+            m_WatchPressStart = Time.unscaledTime;
+            QuickMenuSetWatchHoverStatus(VPBTranslation.T("hook.watch.status.hold_confirm", "Hold to confirm"));
+        }
+
+        internal void QuickMenuWatchEndPress()
+        {
+            if (m_WatchPressIdx < 0) return;
+            int kind = m_WatchPressKind;
+            int idx = m_WatchPressIdx;
+            m_WatchPressIdx = -1;
+            QuickMenuClearWatchHoverStatus(0);
+            if (kind == 0) QuickMenuSyncWatchSlot(idx);
+            else QuickMenuSyncWatchAssignSlot(idx);
+        }
+
+        private void QuickMenuTickWatchHold(float now)
+        {
+            if (m_WatchPressIdx < 0) return;
+            if (!m_WatchVisibleNow)
+            {
+                m_WatchPressIdx = -1;
+                return;
+            }
+            if (now - m_WatchPressStart < QuickMenuWatchHoldConfirmSec) return;
+
+            int kind = m_WatchPressKind;
+            int idx = m_WatchPressIdx;
+            QuickMenuAssignableAction act = m_WatchPressAction;
+            m_WatchPressIdx = -1;
+            m_WatchHoldFired = true;
+            QuickMenuClearWatchHoverStatus(0);
+            if (kind == 0)
+            {
+                if (act == QuickMenuAssignableAction.Save) m_QuickMenuSavePopupTargetIdx = idx;
+                QuickMenuSyncWatchSlot(idx);
+            }
+            else QuickMenuSyncWatchAssignSlot(idx);
+            try { QuickMenuExecuteAssignment(act); } catch { }
         }
 
         private string QuickMenuWatchPinTipText()
         {
-            return m_WatchPinned
-                ? VPBTranslation.T("hook.watch.tip.unpin", "Unpin watch")
-                : VPBTranslation.T("hook.watch.tip.pin", "Pin watch");
+            if (m_WatchWorldLocked)
+                return m_WatchCfgGripPin
+                    ? VPBTranslation.T("hook.watch.tip.unlock_grip", "Reattach to wrist — or squeeze that hand's grip")
+                    : VPBTranslation.T("hook.watch.tip.unlock", "Reattach to wrist");
+            return m_WatchCfgGripPin
+                ? VPBTranslation.T("hook.watch.tip.lock_grip", "Leave in place — or squeeze the watch hand's grip. Drag bezel to move")
+                : VPBTranslation.T("hook.watch.tip.lock", "Lock in place — drag bezel to move");
         }
 
         private string QuickMenuWatchEditTipText()
@@ -1089,6 +1893,22 @@ namespace VPB
             return m_WatchEditMode
                 ? VPBTranslation.T("hook.watch.tip.edit_done", "Done assigning")
                 : VPBTranslation.T("hook.watch.tip.edit", "Assign watch buttons");
+        }
+
+        private string QuickMenuWatchExpandTipText()
+        {
+            return m_WatchFaceMode == QuickMenuWatchFaceMode.Expanded
+                ? VPBTranslation.T("hook.watch.tip.compact", "Compact face")
+                : VPBTranslation.T("hook.watch.tip.expand", "Full face");
+        }
+
+        private string QuickMenuWatchCueTextValue()
+        {
+            if (m_WatchCfgGripPin)
+                return VPBTranslation.T("hook.watch.cue_grip",
+                    "Turn your inner wrist toward you to show the watch. Squeeze that hand's grip to take it off and leave it hanging; squeeze again to put it back on.");
+            return VPBTranslation.T("hook.watch.cue",
+                "Turn your inner wrist toward you to show the watch. Lock pins it in place so you can drop your arm.");
         }
 
         private void QuickMenuEnsureWatchAssignments()
@@ -1107,6 +1927,7 @@ namespace VPB
             var cfg = VPBConfig.Instance;
             if (cfg == null) return;
             cfg.EnsureWatchButtonPages();
+            if (cfg.QuickMenuVrWatchButtonsPages == null) return;
             int loadPages = Mathf.Min(cfg.QuickMenuVrWatchButtonsPages.Length, pages);
             for (int p = 0; p < loadPages; p++)
             {
@@ -1130,8 +1951,10 @@ namespace VPB
             if (m_WatchPageAssignments == null) return QuickMenuAssignableAction.None;
             if (slotIdx < 0 || slotIdx >= QuickMenuWatchAssignSlotCount) return QuickMenuAssignableAction.None;
             int p = m_WatchCurrentPage;
-            if (p < 0 || p >= QuickMenuPageCount) p = 0;
-            return m_WatchPageAssignments[p][slotIdx];
+            if (p < 0 || p >= m_WatchPageAssignments.Length) p = 0;
+            var row = m_WatchPageAssignments[p];
+            if (row == null || slotIdx >= row.Length) return QuickMenuAssignableAction.None;
+            return row[slotIdx];
         }
 
         private void QuickMenuSetWatchSlotAction(int slotIdx, QuickMenuAssignableAction action)
@@ -1140,8 +1963,10 @@ namespace VPB
             if (m_WatchPageAssignments == null) return;
             if (slotIdx < 0 || slotIdx >= QuickMenuWatchAssignSlotCount) return;
             if (m_WatchCurrentPage < 0) m_WatchCurrentPage = 0;
-            if (m_WatchCurrentPage >= QuickMenuPageCount) m_WatchCurrentPage = 0;
-            m_WatchPageAssignments[m_WatchCurrentPage][slotIdx] = action;
+            if (m_WatchCurrentPage >= m_WatchPageAssignments.Length) m_WatchCurrentPage = 0;
+            var row = m_WatchPageAssignments[m_WatchCurrentPage];
+            if (row == null || slotIdx >= row.Length) return;
+            row[slotIdx] = action;
             QuickMenuPersistWatchAssignments();
             QuickMenuSyncWatchAssignSlot(slotIdx);
         }
@@ -1151,11 +1976,20 @@ namespace VPB
             var cfg = VPBConfig.Instance;
             if (cfg == null) return;
             cfg.EnsureWatchButtonPages();
+            var dstPages = cfg.QuickMenuVrWatchButtonsPages;
+            if (dstPages == null || m_WatchPageAssignments == null) return;
             cfg.QuickMenuVrWatchCurrentPage = Mathf.Clamp(m_WatchCurrentPage, 0, QuickMenuPageCount - 1);
-            for (int p = 0; p < QuickMenuPageCount; p++)
+            // QuickMenuPageCount and VPBConfig.QuickMenuVrWatchPageCount are declared apart; clamp
+            // rather than trust them to stay equal.
+            int pages = Mathf.Min(dstPages.Length, m_WatchPageAssignments.Length);
+            for (int p = 0; p < pages; p++)
             {
-                for (int s = 0; s < QuickMenuWatchAssignSlotCount; s++)
-                    cfg.QuickMenuVrWatchButtonsPages[p][s] = QuickMenuActionToId(m_WatchPageAssignments[p][s]);
+                string[] dst = dstPages[p];
+                QuickMenuAssignableAction[] src = m_WatchPageAssignments[p];
+                if (dst == null || src == null) continue;
+                int slots = Mathf.Min(dst.Length, src.Length);
+                for (int s = 0; s < slots; s++)
+                    dst[s] = QuickMenuActionToId(src[s]);
             }
             try { cfg.Save(false, true); } catch { }
         }
@@ -1170,8 +2004,6 @@ namespace VPB
             m_WatchCurrentPage = p;
             QuickMenuPersistWatchAssignments();
             QuickMenuSyncWatchAssignAll();
-            m_WatchPageShown = -1;
-            QuickMenuSyncWatchPageLabel();
             m_WatchStatusNeedRebuild = true;
             QuickMenuRefreshWatchStatus();
             if (m_WatchAssignTargetIdx >= 0) QuickMenuSyncWatchAssignSlot(m_WatchAssignTargetIdx);
@@ -1180,13 +2012,97 @@ namespace VPB
         private void QuickMenuToggleWatchEdit()
         {
             m_WatchEditMode = !m_WatchEditMode;
-            if (!m_WatchEditMode) QuickMenuSetWatchAssignTarget(-1);
-            else if (m_WatchAssignSheet != null && !m_WatchAssignSheet.activeSelf)
-                QuickMenuSetWatchAssignTarget(m_WatchAssignTargetIdx >= 0 ? m_WatchAssignTargetIdx : 0);
+            if (m_WatchEditMode)
+            {
+                m_WatchWorldLockBeforeEdit = m_WatchWorldLocked;
+                QuickMenuSetWatchWorldLocked(true);
+                QuickMenuSetWatchAssignTarget(QuickMenuClampWatchAssignTarget(m_WatchAssignTargetIdx));
+            }
+            else
+            {
+                QuickMenuSetWatchAssignTarget(-1);
+                QuickMenuSetWatchWorldLocked(m_WatchWorldLockBeforeEdit);
+            }
+
             m_WatchStatusNeedRebuild = true;
+            QuickMenuApplyWatchLayout();
             QuickMenuRefreshWatchChromeColors();
             QuickMenuSyncWatchAssignAll();
             QuickMenuRefreshWatchStatus();
+        }
+
+        private void QuickMenuToggleWatchExpanded()
+        {
+            QuickMenuSetWatchExpanded(m_WatchFaceMode != QuickMenuWatchFaceMode.Expanded);
+        }
+
+        private void QuickMenuSetWatchExpanded(bool expanded)
+        {
+            var c = VPBConfig.Instance;
+            if (c == null) return;
+            c.QuickMenuVrWatchExpanded = expanded;
+            c.QuickMenuVrWatchCollapsed = false;
+            try { c.Save(false, true); } catch { }
+            m_WatchFaceMode = expanded ? QuickMenuWatchFaceMode.Expanded : QuickMenuWatchFaceMode.Compact;
+            if (m_WatchEditMode)
+            {
+                int clamped = QuickMenuClampWatchAssignTarget(m_WatchAssignTargetIdx);
+                if (clamped != m_WatchAssignTargetIdx) QuickMenuSetWatchAssignTarget(clamped);
+            }
+            QuickMenuApplyWatchLayout();
+            QuickMenuRefreshWatchChromeTips();
+        }
+
+        private int QuickMenuWatchVisibleAssignSlotCount()
+        {
+            return m_WatchFaceMode == QuickMenuWatchFaceMode.Expanded
+                ? QuickMenuWatchAssignSlotCount
+                : QuickMenuWatchCompactSlotCount;
+        }
+
+        private int QuickMenuClampWatchAssignTarget(int idx)
+        {
+            int max = QuickMenuWatchVisibleAssignSlotCount();
+            if (idx < 0 || idx >= max) return 0;
+            return idx;
+        }
+
+        private void QuickMenuSetWatchCollapsed(bool collapsed)
+        {
+            var c = VPBConfig.Instance;
+            if (c == null) return;
+            if (collapsed && m_WatchEditMode) QuickMenuToggleWatchEdit();
+            c.QuickMenuVrWatchCollapsed = collapsed;
+            try { c.Save(false, true); } catch { }
+            m_WatchFaceMode = collapsed
+                ? QuickMenuWatchFaceMode.Collapsed
+                : (c.QuickMenuVrWatchExpanded ? QuickMenuWatchFaceMode.Expanded : QuickMenuWatchFaceMode.Compact);
+            if (collapsed) m_WatchGlanced = true;
+            QuickMenuApplyWatchLayout();
+        }
+
+        private void QuickMenuReplayWatchCue()
+        {
+            m_WatchTutorialUntil = Time.unscaledTime + QuickMenuWatchTutorialSec;
+        }
+
+        private void QuickMenuToggleWatchWorldLock()
+        {
+            bool want = !m_WatchWorldLocked;
+            // Edit mode force-locks and restores the pre-edit value on exit; an explicit pin
+            // press while editing must not be thrown away by that restore.
+            if (m_WatchEditMode) m_WatchWorldLockBeforeEdit = want;
+            QuickMenuSetWatchWorldLocked(want);
+        }
+
+        private void QuickMenuSetWatchWorldLocked(bool locked)
+        {
+            if (locked == m_WatchWorldLocked) return;
+            m_WatchWorldLocked = locked;
+            m_WatchFrozen = false;
+            QuickMenuEnsureWatchParent();
+            m_WatchStatusNeedRebuild = true;
+            QuickMenuRefreshWatchChromeColors();
         }
 
         private void QuickMenuSetWatchAssignTarget(int slotIdx)
@@ -1207,10 +2123,22 @@ namespace VPB
         {
             int n = QuickMenuWatchAssignCatalog.Length;
             int cols = QuickMenuWatchAssignSheetCols;
-            int rows = (n + cols - 1) / cols;
-            float cell = QuickMenuWatchAssignCell + QuickMenuWatchAssignGap;
-            float sheetW = cols * QuickMenuWatchAssignCell + (cols - 1) * QuickMenuWatchAssignGap + 8f;
-            float sheetH = rows * QuickMenuWatchAssignCell + (rows - 1) * QuickMenuWatchAssignGap + 8f;
+            int sections = QuickMenuWatchAssignSectionStarts.Length;
+
+            float cellStepX = QuickMenuWatchAssignCellW + QuickMenuWatchAssignGap;
+            float cellStepY = QuickMenuWatchAssignCellH + QuickMenuWatchAssignGap;
+            float sheetW = cols * QuickMenuWatchAssignCellW + (cols - 1) * QuickMenuWatchAssignGap
+                + QuickMenuWatchAssignPad * 2f;
+
+            float sheetH = QuickMenuWatchAssignPad * 2f;
+            for (int s = 0; s < sections; s++)
+            {
+                int start = QuickMenuWatchAssignSectionStarts[s];
+                int end = (s + 1 < sections) ? QuickMenuWatchAssignSectionStarts[s + 1] : n;
+                int rows = (end - start + cols - 1) / cols;
+                sheetH += QuickMenuWatchAssignHeaderH + QuickMenuWatchAssignGap + rows * cellStepY;
+                if (s + 1 < sections) sheetH += QuickMenuWatchAssignSectionGap;
+            }
             m_WatchAssignSheetW = sheetW;
 
             GameObject sheet = new GameObject("WatchAssignSheet");
@@ -1224,63 +2152,170 @@ namespace VPB
             m_WatchAssignSheetBg = AddQuickMenuRoundedBg(sheet, QuickMenuWatchBezelColor, true);
             QuickMenuApplyWatchBezelRadius(UI.ResolveGalleryElementCornerRadiusFraction());
 
-            float originX = -sheetW * 0.5f + 4f + QuickMenuWatchAssignCell * 0.5f;
-            float originY = sheetH * 0.5f - 4f - QuickMenuWatchAssignCell * 0.5f;
-            for (int i = 0; i < n; i++)
+            m_WatchAssignPickBgs = new Image[n];
+            float originX = -sheetW * 0.5f + QuickMenuWatchAssignPad + QuickMenuWatchAssignCellW * 0.5f;
+            float cursorY = sheetH * 0.5f - QuickMenuWatchAssignPad;
+
+            for (int s = 0; s < sections; s++)
             {
-                int col = i % cols;
-                int row = i / cols;
-                var act = QuickMenuWatchAssignCatalog[i];
-                GameObject go = new GameObject("WatchAssignPick_" + i);
-                go.transform.SetParent(sheet.transform, false);
-                RectTransform rt = go.AddComponent<RectTransform>();
-                rt.anchorMin = new Vector2(0.5f, 0.5f);
-                rt.anchorMax = new Vector2(0.5f, 0.5f);
-                rt.pivot = new Vector2(0.5f, 0.5f);
-                rt.sizeDelta = new Vector2(QuickMenuWatchAssignCell, QuickMenuWatchAssignCell);
-                rt.anchoredPosition = new Vector2(originX + col * cell, originY - row * cell);
+                int start = QuickMenuWatchAssignSectionStarts[s];
+                int end = (s + 1 < sections) ? QuickMenuWatchAssignSectionStarts[s + 1] : n;
 
-                Color nb = QmBackdropAssignedOpaque;
-                Image img = AddQuickMenuRoundedBg(go, nb);
-                Button btn = go.AddComponent<Button>();
-                btn.transition = Selectable.Transition.None;
-                btn.navigation = new Navigation { mode = Navigation.Mode.None };
-                btn.targetGraphic = img;
-                string tip = QuickMenuGetActionTooltip(act, -1);
-                QuickMenuAttachWatchHover(go, img, nb, QmBackdropAssignedHoverOpaque, tip);
+                Text header = UI.CreateLabel(sheet, QuickMenuWatchSectionTitle(s), QuickMenuWatchSheetHeaderFont,
+                    GalleryUiColorTokens.TextMuted, TextAnchor.MiddleLeft,
+                    HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate, false, false,
+                    AnchorPresets.middleCenter,
+                    new Vector2(sheetW - QuickMenuWatchAssignPad * 2f, QuickMenuWatchAssignHeaderH),
+                    new Vector2(0f, cursorY - QuickMenuWatchAssignHeaderH * 0.5f), "SectionHeader_" + s);
+                if (header != null) header.resizeTextForBestFit = false;
+                cursorY -= QuickMenuWatchAssignHeaderH + QuickMenuWatchAssignGap;
 
-                Sprite spr = QuickMenuGetAssignPopupIcon(act);
-                if (spr != null)
+                for (int i = start; i < end; i++)
                 {
-                    GameObject iconGO = new GameObject("Icon");
-                    iconGO.transform.SetParent(go.transform, false);
-                    Image icon = iconGO.AddComponent<Image>();
-                    icon.sprite = spr;
-                    icon.color = Color.white;
-                    icon.preserveAspect = true;
-                    icon.raycastTarget = false;
-                    RectTransform irt = iconGO.GetComponent<RectTransform>();
-                    irt.anchorMin = Vector2.zero;
-                    irt.anchorMax = Vector2.one;
-                    irt.sizeDelta = new Vector2(-6f, -6f);
-                    irt.anchoredPosition = Vector2.zero;
+                    int rel = i - start;
+                    int col = rel % cols;
+                    int row = rel / cols;
+                    QuickMenuBuildWatchAssignPick(sheet, i,
+                        originX + col * cellStepX,
+                        cursorY - QuickMenuWatchAssignCellH * 0.5f - row * cellStepY);
                 }
 
-                int iCopy = i;
-                btn.onClick.AddListener(() =>
-                {
-                    try
-                    {
-                        int target = m_WatchAssignTargetIdx;
-                        if (target < 0 || target >= QuickMenuWatchAssignSlotCount) return;
-                        QuickMenuSetWatchSlotAction(target, QuickMenuWatchAssignCatalog[iCopy]);
-                    }
-                    catch { }
-                });
+                int usedRows = (end - start + cols - 1) / cols;
+                cursorY -= usedRows * cellStepY;
+                if (s + 1 < sections) cursorY -= QuickMenuWatchAssignSectionGap;
             }
 
             sheet.SetActive(false);
             QuickMenuPlaceWatchAssignSheet();
+        }
+
+        private void QuickMenuBuildWatchAssignPick(GameObject sheet, int catalogIdx, float x, float y)
+        {
+            var act = QuickMenuWatchAssignCatalog[catalogIdx];
+            GameObject go = new GameObject("WatchAssignPick_" + catalogIdx);
+            go.transform.SetParent(sheet.transform, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(QuickMenuWatchAssignCellW, QuickMenuWatchAssignCellH);
+            rt.anchoredPosition = new Vector2(x, y);
+
+            Color nb = QmBackdropAssignedOpaque;
+            Image img = AddQuickMenuRoundedBg(go, nb);
+            m_WatchAssignPickBgs[catalogIdx] = img;
+            Button btn = go.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            btn.targetGraphic = img;
+            QuickMenuAttachWatchHover(go, img, nb, QmBackdropAssignedHoverOpaque, QuickMenuGetActionTooltip(act, -1));
+
+            Sprite spr = QuickMenuGetAssignPopupIcon(act);
+            if (spr != null)
+            {
+                GameObject iconGO = new GameObject("Icon");
+                iconGO.transform.SetParent(go.transform, false);
+                Image icon = iconGO.AddComponent<Image>();
+                icon.sprite = spr;
+                icon.color = Color.white;
+                icon.preserveAspect = true;
+                icon.raycastTarget = false;
+                RectTransform irt = iconGO.GetComponent<RectTransform>();
+                irt.anchorMin = new Vector2(0.5f, 1f);
+                irt.anchorMax = new Vector2(0.5f, 1f);
+                irt.pivot = new Vector2(0.5f, 1f);
+                irt.sizeDelta = new Vector2(QuickMenuWatchAssignIcon, QuickMenuWatchAssignIcon);
+                irt.anchoredPosition = new Vector2(0f, -2f);
+            }
+
+            Text label = UI.CreateLabel(go, QuickMenuGetActionShortLabel(act), QuickMenuWatchSheetLabelFont,
+                QuickMenuWatchLabelColor, TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate, false, false,
+                AnchorPresets.middleCenter, new Vector2(QuickMenuWatchAssignCellW + 6f, 14f),
+                new Vector2(0f, -(QuickMenuWatchAssignCellH * 0.5f) + 8f), "PickLabel");
+            if (label != null) label.resizeTextForBestFit = false;
+
+            int iCopy = catalogIdx;
+            btn.onClick.AddListener(() =>
+            {
+                try
+                {
+                    int target = m_WatchAssignTargetIdx;
+                    if (target < 0 || target >= QuickMenuWatchAssignSlotCount) return;
+                    QuickMenuSetWatchSlotAction(target, QuickMenuWatchAssignCatalog[iCopy]);
+                }
+                catch { }
+            });
+        }
+
+        private static string QuickMenuWatchSectionTitle(int section)
+        {
+            switch (section)
+            {
+                case 0: return VPBTranslation.T("hook.watch.section.core", "Core");
+                case 1: return VPBTranslation.T("hook.watch.section.scene", "Scene");
+                case 2: return VPBTranslation.T("hook.watch.section.toggles", "Toggles");
+                case 3: return VPBTranslation.T("hook.watch.section.items", "Items");
+                case 4: return VPBTranslation.T("hook.watch.section.perf", "Performance");
+                case 5: return VPBTranslation.T("hook.watch.section.random", "Random");
+                default: return VPBTranslation.T("hook.watch.section.open", "Open category");
+            }
+        }
+
+        private static string QuickMenuGetActionShortLabel(QuickMenuAssignableAction a)
+        {
+            switch (a)
+            {
+                case QuickMenuAssignableAction.None: return VPBTranslation.T("hook.watch.lbl.none", "Empty");
+                case QuickMenuAssignableAction.CoreSettingsButton: return VPBTranslation.T("hook.watch.lbl.settings", "Settings");
+                case QuickMenuAssignableAction.CorePageButton: return VPBTranslation.T("hook.watch.lbl.page", "Page");
+                case QuickMenuAssignableAction.CreateGallery: return VPBTranslation.T("hook.watch.lbl.gallery", "Gallery");
+                case QuickMenuAssignableAction.ShowHide: return VPBTranslation.T("hook.watch.lbl.show", "Show");
+                case QuickMenuAssignableAction.BringFront: return VPBTranslation.T("hook.watch.lbl.front", "Front");
+                case QuickMenuAssignableAction.CloseAll: return VPBTranslation.T("hook.watch.lbl.close", "Close");
+                case QuickMenuAssignableAction.Save: return VPBTranslation.T("hook.watch.lbl.save", "Save");
+                case QuickMenuAssignableAction.Undo: return VPBTranslation.T("hook.watch.lbl.undo", "Undo");
+                case QuickMenuAssignableAction.Redo: return VPBTranslation.T("hook.watch.lbl.redo", "Redo");
+                case QuickMenuAssignableAction.Hub: return VPBTranslation.T("hook.watch.lbl.hub", "Hub");
+                case QuickMenuAssignableAction.Cleanup: return VPBTranslation.T("hook.watch.lbl.cleanup", "Cleanup");
+                case QuickMenuAssignableAction.CreatorMode: return VPBTranslation.T("hook.watch.lbl.tools", "Tools");
+                case QuickMenuAssignableAction.TargetAtom: return VPBTranslation.T("hook.watch.lbl.target", "Target");
+                case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.watch.lbl.replace", "Replace");
+                case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.watch.lbl.autohide", "AutoHide");
+                case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.watch.lbl.hidden", "Hidden");
+                case QuickMenuAssignableAction.FpsCounter: return VPBTranslation.T("hook.watch.lbl.fps", "FPS");
+                case QuickMenuAssignableAction.History: return VPBTranslation.T("hook.watch.lbl.history", "History");
+                case QuickMenuAssignableAction.PerfMode: return VPBTranslation.T("hook.watch.lbl.perf", "Perf");
+                case QuickMenuAssignableAction.ToggleImportSidebar: return VPBTranslation.T("hook.watch.lbl.import", "Import");
+                case QuickMenuAssignableAction.RemoveAllClothing: return VPBTranslation.T("hook.watch.lbl.noclothes", "Strip");
+                case QuickMenuAssignableAction.RemoveAllHair: return VPBTranslation.T("hook.watch.lbl.nohair", "No hair");
+                case QuickMenuAssignableAction.StarFilter: return VPBTranslation.T("hook.watch.lbl.stars", "Stars");
+                case QuickMenuAssignableAction.CompressCache: return VPBTranslation.T("hook.watch.lbl.compress", "Compress");
+                case QuickMenuAssignableAction.PerfStepUp: return VPBTranslation.T("hook.watch.lbl.perfup", "Perf +");
+                case QuickMenuAssignableAction.PerfStepDown: return VPBTranslation.T("hook.watch.lbl.perfdown", "Perf -");
+                case QuickMenuAssignableAction.Random: return VPBTranslation.T("hook.watch.lbl.random", "Random");
+                case QuickMenuAssignableAction.RandomScenes: return VPBTranslation.T("hook.watch.lbl.rscene", "R Scene");
+                case QuickMenuAssignableAction.RandomSubScenes: return VPBTranslation.T("hook.watch.lbl.rsub", "R Sub");
+                case QuickMenuAssignableAction.RandomClothing: return VPBTranslation.T("hook.watch.lbl.rcloth", "R Cloth");
+                case QuickMenuAssignableAction.RandomHair: return VPBTranslation.T("hook.watch.lbl.rhair", "R Hair");
+                case QuickMenuAssignableAction.RandomPose: return VPBTranslation.T("hook.watch.lbl.rpose", "R Pose");
+                case QuickMenuAssignableAction.RandomAppearance: return VPBTranslation.T("hook.watch.lbl.rlook", "R Look");
+                case QuickMenuAssignableAction.RandomSkin: return VPBTranslation.T("hook.watch.lbl.rskin", "R Skin");
+                case QuickMenuAssignableAction.RandomSceneImport: return VPBTranslation.T("hook.watch.lbl.rimport", "R Import");
+                case QuickMenuAssignableAction.OpenCategoryScenes: return VPBTranslation.T("hook.watch.lbl.scenes", "Scenes");
+                case QuickMenuAssignableAction.OpenCategorySubScenes: return VPBTranslation.T("hook.watch.lbl.subscenes", "SubScene");
+                case QuickMenuAssignableAction.OpenCategoryClothing: return VPBTranslation.T("hook.watch.lbl.clothing", "Clothing");
+                case QuickMenuAssignableAction.OpenCategoryHair: return VPBTranslation.T("hook.watch.lbl.hair", "Hair");
+                case QuickMenuAssignableAction.OpenCategoryPose: return VPBTranslation.T("hook.watch.lbl.pose", "Pose");
+                case QuickMenuAssignableAction.OpenCategoryAppearance: return VPBTranslation.T("hook.watch.lbl.looks", "Looks");
+                case QuickMenuAssignableAction.OpenCategoryPlugins: return VPBTranslation.T("hook.watch.lbl.plugins", "Plugins");
+                case QuickMenuAssignableAction.OpenCategorySkin: return VPBTranslation.T("hook.watch.lbl.skin", "Skin");
+                case QuickMenuAssignableAction.OpenCategoryAll: return VPBTranslation.T("hook.watch.lbl.all", "All");
+                case QuickMenuAssignableAction.PageNext: return VPBTranslation.T("hook.watch.lbl.next", "Next");
+                case QuickMenuAssignableAction.PagePrev: return VPBTranslation.T("hook.watch.lbl.prev", "Prev");
+                case QuickMenuAssignableAction.SwitchWatchHand: return VPBTranslation.T("hook.watch.lbl.hand", "Hand");
+                default: return "";
+            }
         }
 
         private void QuickMenuPlaceWatchAssignSheet()
@@ -1289,7 +2324,7 @@ namespace VPB
             float bezelW = m_WatchCanvasRT.sizeDelta.x;
             float side = m_WatchIsLeft ? 1f : -1f;
             m_WatchAssignSheetRt.anchoredPosition = new Vector2(
-                side * (bezelW * 0.5f + 8f + m_WatchAssignSheetW * 0.5f), 0f);
+                side * (bezelW * 0.5f + 12f + m_WatchAssignSheetW * 0.5f), 0f);
         }
 
         private void QuickMenuSyncWatchAssignAll()
@@ -1298,18 +2333,18 @@ namespace VPB
                 QuickMenuSyncWatchAssignSlot(i);
         }
 
+        /// <summary>
+        /// Per-frame. PerfMode is the only assignable whose icon resolves differently as state
+        /// changes, and a collapsed face shows no slots at all — do nothing in every other case.
+        /// </summary>
         private void QuickMenuSyncWatchAssignLiveIcons()
         {
-            if (m_WatchAssignGos == null || !m_WatchVisibleNow) return;
-            for (int i = 0; i < QuickMenuWatchAssignSlotCount; i++)
+            if (m_WatchAssignGos == null || !m_WatchActive) return;
+            if (m_WatchFaceMode == QuickMenuWatchFaceMode.Collapsed) return;
+            int n = QuickMenuWatchVisibleAssignSlotCount();
+            for (int i = 0; i < n; i++)
             {
-                var act = QuickMenuGetWatchSlotAction(i);
-                if (act == QuickMenuAssignableAction.ShowHide ||
-                    act == QuickMenuAssignableAction.ReplaceAddToggle ||
-                    act == QuickMenuAssignableAction.AutoHideGallery ||
-                    act == QuickMenuAssignableAction.ShowHiddenPackages ||
-                    act == QuickMenuAssignableAction.FpsCounter ||
-                    act == QuickMenuAssignableAction.PerfMode)
+                if (QuickMenuGetWatchSlotAction(i) == QuickMenuAssignableAction.PerfMode)
                     QuickMenuSyncWatchAssignSlot(i);
             }
         }
@@ -1321,78 +2356,57 @@ namespace VPB
             if (go == null) return;
 
             var act = QuickMenuGetWatchSlotAction(slotIdx);
-            Sprite icon = QuickMenuGetAssignPopupIcon(act);
-            if (act == QuickMenuAssignableAction.None && m_WatchEditMode)
-                icon = m_QmIconAssignEmpty ?? icon;
+            bool assigned = act != QuickMenuAssignableAction.None;
+            Sprite icon = assigned ? QuickMenuGetAssignPopupIcon(act) : m_QmIconAssignEmpty;
 
             Image slotIcon = m_WatchAssignIcons[slotIdx];
-            if (slotIcon == null)
-            {
-                Transform existing = go.transform.Find("Icon");
-                if (existing != null) slotIcon = existing.GetComponent<Image>();
-                if (slotIcon == null && icon != null)
-                {
-                    GameObject iconGO = new GameObject("Icon");
-                    iconGO.transform.SetParent(go.transform, false);
-                    slotIcon = iconGO.AddComponent<Image>();
-                    slotIcon.color = Color.white;
-                    slotIcon.preserveAspect = true;
-                    slotIcon.raycastTarget = false;
-                    RectTransform irt = iconGO.GetComponent<RectTransform>();
-                    irt.anchorMin = Vector2.zero;
-                    irt.anchorMax = Vector2.one;
-                    irt.sizeDelta = new Vector2(-8f, -8f);
-                    irt.anchoredPosition = Vector2.zero;
-                }
-                m_WatchAssignIcons[slotIdx] = slotIcon;
-            }
             if (slotIcon != null)
             {
-                if (icon == null)
+                if (slotIcon.sprite != icon) slotIcon.sprite = icon;
+                bool on = icon != null;
+                if (slotIcon.enabled != on) slotIcon.enabled = on;
+                if (on)
                 {
-                    if (slotIcon.gameObject.activeSelf) slotIcon.gameObject.SetActive(false);
+                    Color want = assigned ? Color.white : QuickMenuWatchEmptyIconTint;
+                    if (slotIcon.color != want) slotIcon.color = want;
                 }
-                else
-                {
-                    if (!slotIcon.gameObject.activeSelf) slotIcon.gameObject.SetActive(true);
-                    if (slotIcon.sprite != icon) slotIcon.sprite = icon;
-                }
+            }
+
+            Text label = m_WatchAssignLabels[slotIdx];
+            if (label != null && m_WatchCfgLabels)
+            {
+                string s = assigned ? QuickMenuGetActionShortLabel(act) : "";
+                if (!string.Equals(label.text, s, System.StringComparison.Ordinal)) label.text = s;
             }
 
             Image bg = m_WatchAssignBackdrops[slotIdx];
-            if (bg != null)
-            {
-                bool selected = m_WatchEditMode && slotIdx == m_WatchAssignTargetIdx;
-                bool assigned = act != QuickMenuAssignableAction.None;
-                Color normal;
-                Color hover;
-                if (selected)
-                {
-                    normal = QmBackdropEditOnOpaque;
-                    hover = QmBackdropEditOnHoverOpaque;
-                }
-                else if (assigned)
-                {
-                    normal = QmBackdropAssignedOpaque;
-                    hover = QmBackdropAssignedHoverOpaque;
-                }
-                else
-                {
-                    normal = QmBackdropEmptyOpaque;
-                    hover = QmBackdropEmptyHoverOpaque;
-                }
-                QuickMenuApplyBackdropColors(bg, normal, hover);
-            }
-        }
+            if (bg == null) return;
 
-        private void QuickMenuSyncWatchPageLabel()
-        {
-            if (m_WatchPageText == null) return;
-            int p = m_WatchCurrentPage;
-            if (p < 0) p = 0;
-            if (p == m_WatchPageShown && m_WatchPageText.text != null && m_WatchPageText.text.Length > 0) return;
-            m_WatchPageShown = p;
-            m_WatchPageText.text = (p + 1).ToString() + "/" + QuickMenuPageCount.ToString();
+            bool pressing = m_WatchPressIdx == slotIdx && m_WatchPressKind == 1;
+            bool selected = m_WatchEditMode && slotIdx == m_WatchAssignTargetIdx;
+            Color normal;
+            Color hover;
+            if (pressing)
+            {
+                normal = QuickMenuWatchChromeDanger;
+                hover = QuickMenuWatchChromeDangerHover;
+            }
+            else if (selected)
+            {
+                normal = QmBackdropEditOnOpaque;
+                hover = QmBackdropEditOnHoverOpaque;
+            }
+            else if (assigned)
+            {
+                normal = QmBackdropAssignedOpaque;
+                hover = QmBackdropAssignedHoverOpaque;
+            }
+            else
+            {
+                normal = QmBackdropEmptyOpaque;
+                hover = QmBackdropEmptyHoverOpaque;
+            }
+            QuickMenuApplyBackdropColors(bg, normal, hover);
         }
 
         internal void QuickMenuSyncWatchSlot(int hudIdx)
@@ -1400,6 +2414,7 @@ namespace VPB
             if (m_WatchSlotGos == null || hudIdx < 0 || hudIdx >= QuickMenuWatchHudSlotCount) return;
             GameObject watchGo = m_WatchSlotGos[hudIdx];
             if (watchGo == null) return;
+            if (m_WatchFaceMode != QuickMenuWatchFaceMode.Expanded) return;
 
             GameObject hudGo = null;
             if (m_QuickMenuGridButtons != null && hudIdx < m_QuickMenuGridButtons.Length)
@@ -1409,6 +2424,7 @@ namespace VPB
             if (watchGo.activeSelf != hudOn) watchGo.SetActive(hudOn);
             if (!hudOn) return;
 
+            var act = QuickMenuGetSlotAction(hudIdx);
             Sprite icon = null;
             if (hudGo != null)
             {
@@ -1419,81 +2435,105 @@ namespace VPB
                     if (hudIcon != null) icon = hudIcon.sprite;
                 }
             }
-            if (icon == null) icon = QuickMenuGetAssignPopupIcon(QuickMenuGetSlotAction(hudIdx));
+            if (icon == null) icon = QuickMenuGetAssignPopupIcon(act);
 
             Image slotIcon = m_WatchSlotIcons[hudIdx];
-            if (slotIcon == null)
+            if (slotIcon != null)
             {
-                Transform existing = watchGo.transform.Find("Icon");
-                if (existing != null) slotIcon = existing.GetComponent<Image>();
-                if (slotIcon == null && icon != null)
-                {
-                    GameObject iconGO = new GameObject("Icon");
-                    iconGO.transform.SetParent(watchGo.transform, false);
-                    slotIcon = iconGO.AddComponent<Image>();
-                    slotIcon.color = Color.white;
-                    slotIcon.preserveAspect = true;
-                    slotIcon.raycastTarget = false;
-                    RectTransform irt = iconGO.GetComponent<RectTransform>();
-                    irt.anchorMin = Vector2.zero;
-                    irt.anchorMax = Vector2.one;
-                    irt.sizeDelta = new Vector2(-8f, -8f);
-                    irt.anchoredPosition = Vector2.zero;
-                }
-                m_WatchSlotIcons[hudIdx] = slotIcon;
+                if (slotIcon.sprite != icon) slotIcon.sprite = icon;
+                bool on = icon != null;
+                if (slotIcon.enabled != on) slotIcon.enabled = on;
             }
-            if (slotIcon != null && slotIcon.sprite != icon) slotIcon.sprite = icon;
 
-            bool assigned = QuickMenuGetSlotAction(hudIdx) != QuickMenuAssignableAction.None;
-            Image bg = m_WatchSlotBackdrops[hudIdx];
-            if (bg != null)
+            Text label = m_WatchSlotLabels[hudIdx];
+            if (label != null && m_WatchCfgLabels)
             {
-                Color normal = assigned ? QmBackdropAssignedOpaque : QmBackdropEmptyOpaque;
-                Color hover = assigned ? QmBackdropAssignedHoverOpaque : QmBackdropEmptyHoverOpaque;
-                QuickMenuApplyBackdropColors(bg, normal, hover);
+                string s = QuickMenuGetActionShortLabel(act);
+                if (!string.Equals(label.text, s, System.StringComparison.Ordinal)) label.text = s;
             }
+
+            Image bg = m_WatchSlotBackdrops[hudIdx];
+            if (bg == null) return;
+
+            bool assigned = act != QuickMenuAssignableAction.None;
+            bool pressing = m_WatchPressIdx == hudIdx && m_WatchPressKind == 0;
+            Color normal;
+            Color hover;
+            if (m_QuickMenuEditMode)
+            {
+                normal = QuickMenuWatchSlotDisabled;
+                hover = QuickMenuWatchSlotDisabled;
+            }
+            else if (pressing)
+            {
+                normal = QuickMenuWatchChromeDanger;
+                hover = QuickMenuWatchChromeDangerHover;
+            }
+            else
+            {
+                normal = assigned ? QmBackdropAssignedOpaque : QmBackdropEmptyOpaque;
+                hover = assigned ? QmBackdropAssignedHoverOpaque : QmBackdropEmptyHoverOpaque;
+            }
+            QuickMenuApplyBackdropColors(bg, normal, hover);
+
+            if (slotIcon != null)
+            {
+                Color want = m_QuickMenuEditMode ? QuickMenuWatchEmptyIconTint : Color.white;
+                if (slotIcon.color != want) slotIcon.color = want;
+            }
+        }
+
+        private void QuickMenuSyncWatchHudEditState()
+        {
+            if (m_WatchHudEditShown == m_QuickMenuEditMode) return;
+            m_WatchHudEditShown = m_QuickMenuEditMode;
+            m_WatchStatusNeedRebuild = true;
+            for (int i = 0; i < QuickMenuWatchHudSlotCount; i++) QuickMenuSyncWatchSlot(i);
         }
 
         private void QuickMenuRefreshWatchStatus()
         {
             if (m_WatchStatusText == null) return;
-            if (m_WatchHoverStatus != null)
-            {
-                if (!string.Equals(m_WatchStatusShown, m_WatchHoverStatus, System.StringComparison.Ordinal))
-                {
-                    m_WatchStatusText.text = m_WatchHoverStatus;
-                    m_WatchStatusShown = m_WatchHoverStatus;
-                }
-                return;
-            }
+            QuickMenuSyncWatchTip();
 
             if (!m_WatchStatusNeedRebuild && m_WatchStatusShown.Length > 0) return;
             m_WatchStatusNeedRebuild = false;
 
-            string hand = m_WatchIsLeft
+            m_WatchStatusSb.Length = 0;
+            m_WatchStatusSb.Append(m_WatchIsLeft
                 ? VPBTranslation.T("hook.watch.hand.left", "L")
-                : VPBTranslation.T("hook.watch.hand.right", "R");
-            string mode;
-            if (m_WatchEditMode)
-                mode = VPBTranslation.T("hook.watch.status.edit", "EDIT");
-            else if (m_WatchPinned)
-                mode = VPBTranslation.T("hook.watch.status.pinned", "pinned");
+                : VPBTranslation.T("hook.watch.hand.right", "R"));
+
+            if (m_WatchFaceMode == QuickMenuWatchFaceMode.Expanded)
+            {
+                m_WatchStatusSb.Append(" · ").Append(m_WatchCurrentPage + 1).Append('/').Append(QuickMenuPageCount);
+                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.pagesuffix", " sides"));
+            }
+
+            m_WatchStatusSb.Append(" · ");
+            if (m_QuickMenuEditMode)
+                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.hud_edit_short", "HUD EDIT"));
+            else if (m_WatchEditMode)
+                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.edit", "EDIT"));
+            else if (m_WatchWorldLocked)
+                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.locked", "locked"));
             else
             {
                 switch (m_WatchCfgShowWhen)
                 {
                     case QuickMenuVrWatchShowWhen.Always:
-                        mode = VPBTranslation.T("hook.watch.status.always", "always");
+                        m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.always", "always"));
                         break;
                     case QuickMenuVrWatchShowWhen.Menu:
-                        mode = VPBTranslation.T("hook.watch.status.menu", "menu");
+                        m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.menu", "menu"));
                         break;
                     default:
-                        mode = VPBTranslation.T("hook.watch.status.glance", "glance");
+                        m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.glance", "glance"));
                         break;
                 }
             }
-            string s = hand + " · " + mode;
+
+            string s = m_WatchStatusSb.ToString();
             if (!string.Equals(m_WatchStatusShown, s, System.StringComparison.Ordinal))
             {
                 m_WatchStatusText.text = s;
@@ -1501,33 +2541,81 @@ namespace VPB
             }
         }
 
+        private void QuickMenuSyncWatchTip()
+        {
+            if (m_WatchTipGo == null || m_WatchTipText == null) return;
+
+            string src = m_WatchHoverStatus;
+            bool show = !string.IsNullOrEmpty(src);
+            if (m_WatchTipGo.activeSelf != show) m_WatchTipGo.SetActive(show);
+            if (!show)
+            {
+                m_WatchTipSrc = null;
+                return;
+            }
+
+            if (!string.Equals(src, m_WatchTipSrc, System.StringComparison.Ordinal))
+            {
+                m_WatchTipSrc = src;
+                m_WatchTipFlat = src.IndexOf('\n') >= 0 ? src.Replace("\n", "  ·  ") : src;
+            }
+            if (!string.Equals(m_WatchTipShown, m_WatchTipFlat, System.StringComparison.Ordinal))
+            {
+                m_WatchTipText.text = m_WatchTipFlat;
+                m_WatchTipShown = m_WatchTipFlat;
+            }
+        }
+
         private void QuickMenuRefreshWatchChromeColors()
         {
-            if (m_WatchPinBg != null)
+            if (m_WatchChromeBgs == null) return;
+            QuickMenuSetChromeState(QuickMenuWatchChromePin, m_WatchWorldLocked);
+            QuickMenuSetChromeState(QuickMenuWatchChromeEdit, m_WatchEditMode);
+            QuickMenuSetChromeState(QuickMenuWatchChromeCollapse, false);
+            QuickMenuSetChromeState(QuickMenuWatchChromeHand, false);
+            QuickMenuSetChromeState(QuickMenuWatchChromeExpand, m_WatchFaceMode == QuickMenuWatchFaceMode.Expanded);
+            QuickMenuSetChromeState(QuickMenuWatchChromeHelp, false);
+
+            Image pinIcon = m_WatchChromeIcons[QuickMenuWatchChromePin];
+            if (pinIcon != null)
             {
-                bool on = m_WatchPinned || m_WatchCfgShowWhen == QuickMenuVrWatchShowWhen.Always;
-                Color normal = on ? QuickMenuWatchChromeOn : QuickMenuWatchChromeIdle;
-                Color hover = on ? QuickMenuWatchChromeOnHover : QuickMenuWatchChromeIdleHover;
-                m_WatchPinBg.color = normal;
-                if (m_WatchPinHover != null)
-                {
-                    m_WatchPinHover.normal = normal;
-                    m_WatchPinHover.hover = hover;
-                }
-                if (m_WatchPinTip != null) m_WatchPinTip.tip = QuickMenuWatchPinTipText();
+                Sprite want = m_WatchWorldLocked ? m_WatchIconPinOn : m_WatchIconPinOff;
+                if (want != null && pinIcon.sprite != want) pinIcon.sprite = want;
             }
-            if (m_WatchEditBg != null)
+            QuickMenuSyncWatchExpandIcon();
+            QuickMenuRefreshWatchChromeTips();
+        }
+
+        private void QuickMenuSetChromeState(int idx, bool on)
+        {
+            Image bg = m_WatchChromeBgs[idx];
+            if (bg == null) return;
+            Color normal = on ? QuickMenuWatchChromeOn : QuickMenuWatchChromeIdle;
+            Color hover = on ? QuickMenuWatchChromeOnHover : QuickMenuWatchChromeIdleHover;
+            bg.color = normal;
+            var h = m_WatchChromeHovers[idx];
+            if (h != null)
             {
-                Color normal = m_WatchEditMode ? QuickMenuWatchChromeOn : QuickMenuWatchChromeIdle;
-                Color hover = m_WatchEditMode ? QuickMenuWatchChromeOnHover : QuickMenuWatchChromeIdleHover;
-                m_WatchEditBg.color = normal;
-                if (m_WatchEditHover != null)
-                {
-                    m_WatchEditHover.normal = normal;
-                    m_WatchEditHover.hover = hover;
-                }
-                if (m_WatchEditTip != null) m_WatchEditTip.tip = QuickMenuWatchEditTipText();
+                h.normal = normal;
+                h.hover = hover;
             }
+        }
+
+        private void QuickMenuRefreshWatchChromeTips()
+        {
+            if (m_WatchChromeTips == null) return;
+            QuickMenuSetChromeTip(QuickMenuWatchChromePin, QuickMenuWatchPinTipText());
+            QuickMenuSetChromeTip(QuickMenuWatchChromeEdit, QuickMenuWatchEditTipText());
+            QuickMenuSetChromeTip(QuickMenuWatchChromeExpand, QuickMenuWatchExpandTipText());
+            QuickMenuSetChromeTip(QuickMenuWatchChromeCollapse, VPBTranslation.T("hook.watch.tip.collapse", "Minimise to dot"));
+            QuickMenuSetChromeTip(QuickMenuWatchChromeHand, VPBTranslation.T("hook.watch.tip.hand", "Switch watch hand"));
+            QuickMenuSetChromeTip(QuickMenuWatchChromeHelp, VPBTranslation.T("hook.watch.tip.help", "Replay watch tips"));
+        }
+
+        private void QuickMenuSetChromeTip(int idx, string tip)
+        {
+            var t = m_WatchChromeTips[idx];
+            if (t != null) t.tip = tip;
         }
 
         private void QuickMenuApplyWatchPose()
@@ -1535,42 +2623,82 @@ namespace VPB
             Transform t = m_WatchTf;
             if (t == null || m_WatchHand == null) return;
 
-            Vector3 offset = m_WatchCfgOffset;
-            if (!m_WatchIsLeft) offset.x = -offset.x;
-            t.localPosition = offset;
-            t.localRotation = QuickMenuWatchWristLocalRot;
-
-            float lossy = m_WatchHand.lossyScale.x;
+            Transform parent = t.parent;
+            float lossy = parent != null ? parent.lossyScale.x : 1f;
             if (lossy < 1e-5f) lossy = 1f;
             float metersPerPx = VpbWorldSpaceUiScale.MetersPerUiPixel * m_WatchCfgScaleMul;
             if (metersPerPx < 1e-5f) metersPerPx = VpbWorldSpaceUiScale.MetersPerUiPixel;
-            float local = metersPerPx / lossy;
-            if (Mathf.Abs(local - m_WatchLastLocalScale) > 1e-6f)
+            float fadeScale = Mathf.Lerp(QuickMenuWatchFadeScaleFrom, 1f, m_WatchFade);
+            float local = metersPerPx * fadeScale / lossy;
+            if (Mathf.Abs(local - m_WatchLastAppliedScale) > 1e-7f)
             {
-                m_WatchLastLocalScale = local;
+                m_WatchLastAppliedScale = local;
                 t.localScale = new Vector3(local, local, local);
             }
 
-            Transform cam = QuickMenuGetPlayerCamera();
-            if (cam != null && m_WatchCfgToward != 0f)
+            if (m_WatchWorldLocked || m_WatchFrozen)
             {
-                Vector3 worldPos = t.position;
-                Vector3 toCam = cam.position - worldPos;
-                float d2 = toCam.sqrMagnitude;
-                if (d2 > 1e-8f)
-                {
-                    float d = Mathf.Sqrt(d2);
-                    worldPos += (toCam / d) * Mathf.Min(m_WatchCfgToward, d * 0.9f);
-                    t.position = worldPos;
-                }
+                QuickMenuTickWatchFreeze(t);
+                return;
             }
 
+            Vector3 offset = m_WatchCfgOffset;
+            if (!m_WatchIsLeft) offset.x = -offset.x;
+            if (m_WatchCfgToward != 0f)
+                offset += (QuickMenuWatchWristLocalRot * Vector3.forward) * m_WatchCfgToward;
+            t.localPosition = offset;
+            t.localRotation = QuickMenuWatchWristLocalRot;
+
+            Transform cam = QuickMenuGetPlayerCamera();
             if (m_WatchCfgFaceUser && cam != null)
             {
-                Vector3 dir = t.position - cam.position;
+                Vector3 from = cam.position;
+                if (m_WatchCfgShoulderBlend > 0f)
+                    from += (cam.right * (m_WatchIsLeft ? QuickMenuWatchShoulderOutM : -QuickMenuWatchShoulderOutM)
+                          - cam.up * QuickMenuWatchShoulderDownM) * m_WatchCfgShoulderBlend;
+                Vector3 dir = t.position - from;
                 if (dir.sqrMagnitude > 1e-6f)
                     t.rotation = Quaternion.LookRotation(dir, cam.up);
             }
+
+            QuickMenuTickWatchFreeze(t);
+        }
+
+        /// <summary>Where the face would sit on the wrist right now — valid even while frozen.</summary>
+        private Vector3 QuickMenuWatchWristAnchorWorld()
+        {
+            Transform h = m_WatchHand;
+            if (h == null) return m_WatchTf != null ? m_WatchTf.position : Vector3.zero;
+            Vector3 offset = m_WatchCfgOffset;
+            if (!m_WatchIsLeft) offset.x = -offset.x;
+            if (m_WatchCfgToward != 0f)
+                offset += (QuickMenuWatchWristLocalRot * Vector3.forward) * m_WatchCfgToward;
+            return h.TransformPoint(offset);
+        }
+
+        private void QuickMenuTickWatchFreeze(Transform t)
+        {
+            if (m_WatchWorldLocked || !m_WatchCfgFreeze || m_WatchOtherHand == null || m_WatchHand == null)
+            {
+                m_WatchFrozen = false;
+                return;
+            }
+
+            // Measure against the live wrist anchor, not the transform: once frozen the transform
+            // stops tracking, so it is a stale reference for its own hysteresis.
+            Vector3 anchor = QuickMenuWatchWristAnchorWorld();
+            float d2 = (m_WatchOtherHand.position - anchor).sqrMagnitude;
+            if (m_WatchFrozen)
+            {
+                // Release when the reaching hand leaves, and also when the wrist itself has walked
+                // away — otherwise dropping the watch arm leaves the face hanging in mid-air,
+                // indistinguishable from pin mode.
+                if (d2 > QuickMenuWatchFreezeExitSqr ||
+                    (anchor - t.position).sqrMagnitude > QuickMenuWatchFreezeBreakSqr)
+                    m_WatchFrozen = false;
+                return;
+            }
+            if (d2 <= QuickMenuWatchFreezeEnterSqr) m_WatchFrozen = true;
         }
 
         private static QuickMenuVrWatchMode QuickMenuParseWatchMode(string s)
@@ -1599,9 +2727,10 @@ namespace VPB
         private void QuickMenuSwitchWatchHand()
         {
             var sc = SuperController.singleton;
-            Transform left;
-            Transform right;
-            GetVamVrHandTransforms(sc, out left, out right);
+            Transform left = m_WatchHandLeft;
+            Transform right = m_WatchHandRight;
+            if (left == null && right == null) GetVamVrHandTransforms(sc, out left, out right);
+
             bool currentlyLeft = QuickMenuIsLeftWatchHand(sc, m_WatchHand);
             if (m_WatchHand == null)
                 currentlyLeft = m_WatchCfgHand == QuickMenuVrWatchMode.LeftOnly;
@@ -1611,6 +2740,7 @@ namespace VPB
             m_WatchLatchedHand = wantLeft ? left : right;
             m_WatchLatchPending = false;
             m_WatchStatusNeedRebuild = true;
+            m_WatchFrozen = false;
 
             if (m_WatchCfgRememberHand)
             {
@@ -1623,54 +2753,35 @@ namespace VPB
             }
         }
 
-        private void QuickMenuToggleWatchPin()
-        {
-            m_WatchPinned = !m_WatchPinned;
-            m_WatchStatusNeedRebuild = true;
-            QuickMenuRefreshWatchChromeColors();
-        }
-
-        private void QuickMenuSetWatchVisibleFromWatch(bool on)
-        {
-            var c = VPBConfig.Instance;
-            if (c == null) return;
-            c.QuickMenuVrWatchVisible = on;
-            try { c.Save(); } catch { }
-            try
-            {
-                var g = Gallery.singleton;
-                if (g != null && g.Panels != null)
-                {
-                    for (int i = 0; i < g.Panels.Count; i++)
-                    {
-                        var p = g.Panels[i];
-                        if (p != null) p.NotifyFooterVrWatchState();
-                    }
-                }
-            }
-            catch { }
-        }
-
-        internal void QuickMenuSetWatchHoverStatus(string msg)
+        // Hover text drives the tip panel only; it never feeds the status line, so no status
+        // rebuild (and no StringBuilder.ToString) is owed per pointer enter/exit.
+        internal int QuickMenuSetWatchHoverStatus(string msg)
         {
             m_WatchHoverStatus = msg;
-            m_WatchStatusNeedRebuild = true;
+            unchecked { m_WatchHoverToken++; }
+            if (m_WatchHoverToken == 0) m_WatchHoverToken = 1;
+            return m_WatchHoverToken;
         }
 
-        internal void QuickMenuClearWatchHoverStatus(string expected)
+        internal void QuickMenuClearWatchHoverStatus(int token)
         {
-            if (expected != null && m_WatchHoverStatus != expected) return;
+            if (token != 0 && token != m_WatchHoverToken) return;
             m_WatchHoverStatus = null;
-            m_WatchStatusNeedRebuild = true;
         }
 
         internal void QuickMenuBeginWatchCalibrate()
         {
             m_WatchCalibrating = true;
+            m_WatchFrozen = false;
         }
 
         internal void QuickMenuDragWatchOffset(Vector3 worldDelta)
         {
+            if (m_WatchWorldLocked)
+            {
+                if (m_WatchTf != null) m_WatchTf.position += worldDelta;
+                return;
+            }
             if (m_WatchHand == null) return;
             Vector3 local = m_WatchHand.InverseTransformVector(worldDelta);
             if (!m_WatchIsLeft) local.x = -local.x;
@@ -1687,6 +2798,7 @@ namespace VPB
         internal void QuickMenuEndWatchCalibrate()
         {
             m_WatchCalibrating = false;
+            if (m_WatchWorldLocked) return;
             try
             {
                 var c = VPBConfig.Instance;
@@ -1756,21 +2868,52 @@ namespace VPB
         }
     }
 
+    /// <summary>
+    /// Bezel reposition drag.
+    ///
+    /// Measuring against the live bezel rect made this feel like a bow string: on the wrist the
+    /// face re-aims at the user every frame, so the reference plane rotated under the drag and fed
+    /// its own motion back in; and because a laser drag is angular, the further out and the more
+    /// oblique the ray, the more world travel a small wrist rotation produced — including along the
+    /// face normal, which is why the watch kept changing distance.
+    ///
+    /// Fix is three parts: freeze the reference plane at grab time, keep every step in that plane
+    /// so the distance you set stays set, and gear the motion down with smoothing and a per-frame
+    /// cap so it can be nudged instead of flung.
+    /// </summary>
     internal sealed class VrWatchBezelDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
+        private const float DragGain = 0.3f;
+        private const float DragSmoothing = 0.3f;
+        private const float DragDeadZoneSqr = 1e-8f;
+        private const float DragMaxStepM = 0.04f;
+
         public VamHookPlugin owner;
         private Vector3 m_LastWorld;
+        private Vector3 m_Smoothed;
         private bool m_Active;
         private Camera m_Cam;
+        private Plane m_Plane;
+        private Vector3 m_PlaneNormal;
+        private bool m_HasPlane;
 
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (owner == null || eventData == null) return;
             if (!UIFloatPanelDrag.AcceptPointerButton(eventData)) return;
+            RectTransform rt = transform as RectTransform;
+            if (rt == null) return;
+
             m_Cam = eventData.pressEventCamera;
+            if (m_Cam == null) m_Cam = eventData.enterEventCamera;
             if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(
-                    transform as RectTransform, eventData.position, m_Cam, out m_LastWorld))
+                    rt, eventData.position, m_Cam, out m_LastWorld))
                 return;
+
+            m_PlaneNormal = rt.forward;
+            m_Plane = new Plane(m_PlaneNormal, m_LastWorld);
+            m_HasPlane = m_Cam != null;
+            m_Smoothed = Vector3.zero;
             m_Active = true;
             owner.QuickMenuBeginWatchCalibrate();
         }
@@ -1778,18 +2921,49 @@ namespace VPB
         public void OnDrag(PointerEventData eventData)
         {
             if (!m_Active || owner == null || eventData == null) return;
+
             Vector3 world;
-            if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(
-                    transform as RectTransform, eventData.position, m_Cam, out world))
-                return;
-            owner.QuickMenuDragWatchOffset(world - m_LastWorld);
+            if (!TryGetDragWorld(eventData, out world)) return;
+
+            Vector3 raw = world - m_LastWorld;
             m_LastWorld = world;
+
+            // Belt and braces: plane hits are already in-plane, but the no-camera fallback is not.
+            raw -= m_PlaneNormal * Vector3.Dot(raw, m_PlaneNormal);
+            if (raw.sqrMagnitude < DragDeadZoneSqr) return;
+
+            m_Smoothed = Vector3.Lerp(m_Smoothed, raw, DragSmoothing);
+            Vector3 step = m_Smoothed * DragGain;
+            float m2 = step.sqrMagnitude;
+            if (m2 > DragMaxStepM * DragMaxStepM) step *= DragMaxStepM / Mathf.Sqrt(m2);
+            owner.QuickMenuDragWatchOffset(step);
+        }
+
+        /// <summary>Pointer ray against the frozen grab plane; the live rect only as a last resort.</summary>
+        private bool TryGetDragWorld(PointerEventData eventData, out Vector3 world)
+        {
+            world = Vector3.zero;
+            if (m_HasPlane && m_Cam != null)
+            {
+                Ray ray = m_Cam.ScreenPointToRay(eventData.position);
+                float enter;
+                // Ray swung behind the plane: hold position rather than let the hit jump.
+                if (!m_Plane.Raycast(ray, out enter) || enter <= 0f) return false;
+                world = ray.GetPoint(enter);
+                return true;
+            }
+            RectTransform rt = transform as RectTransform;
+            if (rt == null) return false;
+            return RectTransformUtility.ScreenPointToWorldPointInRectangle(
+                rt, eventData.position, m_Cam, out world);
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
             if (!m_Active) return;
             m_Active = false;
+            m_HasPlane = false;
+            m_Smoothed = Vector3.zero;
             if (owner != null) owner.QuickMenuEndWatchCalibrate();
         }
 
@@ -1797,44 +2971,88 @@ namespace VPB
         {
             if (m_Active && owner != null) owner.QuickMenuEndWatchCalibrate();
             m_Active = false;
+            m_HasPlane = false;
+            m_Smoothed = Vector3.zero;
         }
     }
 
-    internal sealed class VrWatchSlotHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    internal sealed class VrWatchSlotHover : MonoBehaviour,
+        IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
     {
         public VamHookPlugin owner;
         public int hudSlotIdx;
+        private int m_Token;
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (owner == null) return;
-            string tip = owner.QuickMenuWatchHoverLabel(hudSlotIdx);
-            owner.QuickMenuSetWatchHoverStatus(tip);
+            m_Token = owner.QuickMenuSetWatchHoverStatus(owner.QuickMenuWatchHoverLabel(hudSlotIdx));
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             if (owner == null) return;
-            owner.QuickMenuClearWatchHoverStatus(owner.QuickMenuWatchHoverLabel(hudSlotIdx));
+            owner.QuickMenuWatchEndPress();
+            if (m_Token == 0) return;
+            owner.QuickMenuClearWatchHoverStatus(m_Token);
+            m_Token = 0;
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (owner == null) return;
+            owner.QuickMenuWatchBeginPress(0, hudSlotIdx);
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (owner != null) owner.QuickMenuWatchEndPress();
+        }
+
+        private void OnDisable()
+        {
+            if (owner != null && m_Token != 0) owner.QuickMenuClearWatchHoverStatus(m_Token);
+            m_Token = 0;
         }
     }
 
-    internal sealed class VrWatchAssignHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    internal sealed class VrWatchAssignHover : MonoBehaviour,
+        IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
     {
         public VamHookPlugin owner;
         public int slotIdx;
+        private int m_Token;
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (owner == null) return;
-            string tip = owner.QuickMenuWatchAssignHoverLabel(slotIdx);
-            owner.QuickMenuSetWatchHoverStatus(tip);
+            m_Token = owner.QuickMenuSetWatchHoverStatus(owner.QuickMenuWatchAssignHoverLabel(slotIdx));
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             if (owner == null) return;
-            owner.QuickMenuClearWatchHoverStatus(owner.QuickMenuWatchAssignHoverLabel(slotIdx));
+            owner.QuickMenuWatchEndPress();
+            if (m_Token == 0) return;
+            owner.QuickMenuClearWatchHoverStatus(m_Token);
+            m_Token = 0;
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (owner == null) return;
+            owner.QuickMenuWatchBeginPress(1, slotIdx);
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (owner != null) owner.QuickMenuWatchEndPress();
+        }
+
+        private void OnDisable()
+        {
+            if (owner != null && m_Token != 0) owner.QuickMenuClearWatchHoverStatus(m_Token);
+            m_Token = 0;
         }
     }
 
@@ -1842,17 +3060,28 @@ namespace VPB
     {
         public VamHookPlugin owner;
         public string tip;
+        private int m_Token;
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (owner == null || string.IsNullOrEmpty(tip)) return;
-            owner.QuickMenuSetWatchHoverStatus(tip);
+            if (owner == null) return;
+            if (string.IsNullOrEmpty(tip)) return;
+            m_Token = owner.QuickMenuSetWatchHoverStatus(tip);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (owner == null) return;
-            owner.QuickMenuClearWatchHoverStatus(tip);
+            // Token 0 means we never showed a tip (empty text, or enter went elsewhere); passing
+            // it on would force-clear whichever widget owns the tip right now.
+            if (owner == null || m_Token == 0) return;
+            owner.QuickMenuClearWatchHoverStatus(m_Token);
+            m_Token = 0;
+        }
+
+        private void OnDisable()
+        {
+            if (owner != null && m_Token != 0) owner.QuickMenuClearWatchHoverStatus(m_Token);
+            m_Token = 0;
         }
     }
 }

@@ -629,6 +629,12 @@ namespace VPB
         public static readonly Vector3 QuickMenuVrWatchOffsetDefault = new Vector3(0.045f, -0.012f, 0.03f);
         public const float QuickMenuVrWatchTowardDefault = 0.04f;
         public const float QuickMenuVrWatchScaleMulDefault = 0.75f;
+        /// <summary>Floor that keeps a 40px watch button at or above the 22mm / 3-degree VR target minimum.</summary>
+        public const float QuickMenuVrWatchScaleMulMin = 0.55f;
+        public const float QuickMenuVrWatchScaleMulMax = 3f;
+        public const float QuickMenuVrWatchGlanceDwellDefault = 0.18f;
+        public const float QuickMenuVrWatchGlanceDwellMax = 1f;
+        public const float QuickMenuVrWatchShoulderBlendDefault = 0f;
         public const int QuickMenuVrWatchExtraSlotCount = 4;
         public const int QuickMenuVrWatchAssignSlotCount = 8;
         public const int QuickMenuVrWatchPageCount = 10;
@@ -665,6 +671,22 @@ namespace VPB
         public bool QuickMenuVrWatchButtonsMigrated;
         /// <summary>True after one-time migrate of old 1.0 default scale to <see cref="QuickMenuVrWatchScaleMulDefault"/>.</summary>
         public bool QuickMenuVrWatchScaleMulV2;
+        /// <summary>Hold the watch world pose while the opposite controller reaches for it.</summary>
+        public bool QuickMenuVrWatchFreezeOnApproach = true;
+        /// <summary>Squeeze the grip on the watch hand to pin the face in place / return it to the wrist.</summary>
+        public bool QuickMenuVrWatchGripPin = true;
+        /// <summary>0 = face the eye, 1 = face the opposite shoulder.</summary>
+        public float QuickMenuVrWatchShoulderBlend = QuickMenuVrWatchShoulderBlendDefault;
+        /// <summary>Draw a short text label under each watch button icon.</summary>
+        public bool QuickMenuVrWatchLabels = false;
+        /// <summary>Full face (HUD mirror row, side rails, pager) instead of the compact 6-button face.</summary>
+        public bool QuickMenuVrWatchExpanded = false;
+        /// <summary>Face is minimised to a single restore dot.</summary>
+        public bool QuickMenuVrWatchCollapsed = false;
+        /// <summary>Destructive watch actions require a press-and-hold.</summary>
+        public bool QuickMenuVrWatchHoldConfirm = true;
+        /// <summary>Seconds the glance pose must hold before the face appears.</summary>
+        public float QuickMenuVrWatchGlanceDwell = QuickMenuVrWatchGlanceDwellDefault;
 
         public void ResetVrWatchPose()
         {
@@ -673,6 +695,8 @@ namespace VPB
             QuickMenuVrWatchScaleMul = QuickMenuVrWatchScaleMulDefault;
             QuickMenuVrWatchScale = VpbWorldSpaceUiScale.MetersPerUiPixel * QuickMenuVrWatchScaleMulDefault;
             QuickMenuVrWatchFaceUser = true;
+            QuickMenuVrWatchShoulderBlend = QuickMenuVrWatchShoulderBlendDefault;
+            QuickMenuVrWatchGlanceDwell = QuickMenuVrWatchGlanceDwellDefault;
         }
 
         private void MigrateVrWatchSettings(JSONNode node)
@@ -699,7 +723,8 @@ namespace VPB
                 if (Mathf.Abs(old - 0.0005f) < 1e-6f)
                     QuickMenuVrWatchScaleMul = QuickMenuVrWatchScaleMulDefault;
                 else
-                    QuickMenuVrWatchScaleMul = Mathf.Clamp(old / VpbWorldSpaceUiScale.MetersPerUiPixel, 0.4f, 3f);
+                    QuickMenuVrWatchScaleMul = Mathf.Clamp(old / VpbWorldSpaceUiScale.MetersPerUiPixel,
+                        QuickMenuVrWatchScaleMulMin, QuickMenuVrWatchScaleMulMax);
             }
 
             if (node["QuickMenuVrWatchTowardUserDist"] != null &&
@@ -1935,7 +1960,18 @@ namespace VPB
                         if (node["QuickMenuVrWatchRememberHand"] != null) QuickMenuVrWatchRememberHand = node["QuickMenuVrWatchRememberHand"].AsBool;
                         if (node["QuickMenuVrWatchFaceUser"] != null) QuickMenuVrWatchFaceUser = node["QuickMenuVrWatchFaceUser"].AsBool;
                         if (node["QuickMenuVrWatchScaleMul"] != null)
-                            QuickMenuVrWatchScaleMul = Mathf.Clamp(node["QuickMenuVrWatchScaleMul"].AsFloat, 0.4f, 3f);
+                            QuickMenuVrWatchScaleMul = Mathf.Clamp(node["QuickMenuVrWatchScaleMul"].AsFloat,
+                                QuickMenuVrWatchScaleMulMin, QuickMenuVrWatchScaleMulMax);
+                        if (node["QuickMenuVrWatchFreezeOnApproach"] != null) QuickMenuVrWatchFreezeOnApproach = node["QuickMenuVrWatchFreezeOnApproach"].AsBool;
+                        if (node["QuickMenuVrWatchGripPin"] != null) QuickMenuVrWatchGripPin = node["QuickMenuVrWatchGripPin"].AsBool;
+                        if (node["QuickMenuVrWatchShoulderBlend"] != null)
+                            QuickMenuVrWatchShoulderBlend = Mathf.Clamp01(node["QuickMenuVrWatchShoulderBlend"].AsFloat);
+                        if (node["QuickMenuVrWatchLabels"] != null) QuickMenuVrWatchLabels = node["QuickMenuVrWatchLabels"].AsBool;
+                        if (node["QuickMenuVrWatchExpanded"] != null) QuickMenuVrWatchExpanded = node["QuickMenuVrWatchExpanded"].AsBool;
+                        if (node["QuickMenuVrWatchCollapsed"] != null) QuickMenuVrWatchCollapsed = node["QuickMenuVrWatchCollapsed"].AsBool;
+                        if (node["QuickMenuVrWatchHoldConfirm"] != null) QuickMenuVrWatchHoldConfirm = node["QuickMenuVrWatchHoldConfirm"].AsBool;
+                        if (node["QuickMenuVrWatchGlanceDwell"] != null)
+                            QuickMenuVrWatchGlanceDwell = Mathf.Clamp(node["QuickMenuVrWatchGlanceDwell"].AsFloat, 0f, QuickMenuVrWatchGlanceDwellMax);
                         if (node["QuickMenuVrWatchScale"] != null) QuickMenuVrWatchScale = node["QuickMenuVrWatchScale"].AsFloat;
                         if (node["QuickMenuVrWatchTowardUserDist"] != null) QuickMenuVrWatchTowardUserDist = Mathf.Clamp(node["QuickMenuVrWatchTowardUserDist"].AsFloat, -0.5f, 0.5f);
                         if (node["QuickMenuVrWatchOffset"] != null)
@@ -2425,6 +2461,14 @@ namespace VPB
                 node["QuickMenuVrWatchOffset"] = w;
                 node["QuickMenuVrWatchOnboardingSeen"].AsBool = QuickMenuVrWatchOnboardingSeen;
                 node["QuickMenuVrWatchScaleMulV2"].AsBool = QuickMenuVrWatchScaleMulV2;
+                node["QuickMenuVrWatchFreezeOnApproach"].AsBool = QuickMenuVrWatchFreezeOnApproach;
+                node["QuickMenuVrWatchGripPin"].AsBool = QuickMenuVrWatchGripPin;
+                node["QuickMenuVrWatchShoulderBlend"].AsFloat = QuickMenuVrWatchShoulderBlend;
+                node["QuickMenuVrWatchLabels"].AsBool = QuickMenuVrWatchLabels;
+                node["QuickMenuVrWatchExpanded"].AsBool = QuickMenuVrWatchExpanded;
+                node["QuickMenuVrWatchCollapsed"].AsBool = QuickMenuVrWatchCollapsed;
+                node["QuickMenuVrWatchHoldConfirm"].AsBool = QuickMenuVrWatchHoldConfirm;
+                node["QuickMenuVrWatchGlanceDwell"].AsFloat = QuickMenuVrWatchGlanceDwell;
                 {
                     EnsureWatchExtraActions();
                     JSONArray extras = new JSONArray();

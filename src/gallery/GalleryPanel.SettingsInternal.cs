@@ -1532,7 +1532,58 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.vr.watch_scale", "Size of the watch face. Default 0.75. 1.0 = same meters-per-pixel as HUD (world-scale compensated)."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchScaleMul,
                 SetFloat = v => { VPBConfig.Instance.QuickMenuVrWatchScaleMul = v; VPBConfig.Instance.TriggerChange(); },
-                Min = 0.5f, Max = 2.0f, Step = 0.05f, Decimals = 2,
+                Min = VPBConfig.QuickMenuVrWatchScaleMulMin, Max = 2.0f, Step = 0.05f, Decimals = 2,
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchExpanded", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_expanded", "Full watch face"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_expanded", "Off (default): compact face — 6 assignable buttons and a small chrome row, about half the angular size. On: full face — HUD core row in the centre, 8 side-rail buttons and the page pager. The chevron button on the watch toggles this too."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchExpanded,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchExpanded = v; VPBConfig.Instance.QuickMenuVrWatchCollapsed = false; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchLabels", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_labels", "Button labels"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_labels", "Draw a short text label under each watch icon so actions can be read without hovering. Makes the face taller."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchLabels,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchLabels = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchFreeze", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_freeze", "Hold still when reaching"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_freeze", "Freezes the face in place once the other controller comes within 14cm, so buttons stop moving while you aim at them. Releases at 20cm, or when you move the watch arm away."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchFreezeOnApproach,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchFreezeOnApproach = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchGripPin", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_grip_pin", "Grip to pin / unpin"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_grip_pin", "Squeeze and hold the grip on the hand wearing the watch to take it off and leave it hanging in place; squeeze again to put it back on. Pinning only triggers while the face is turned toward you, so it will not fire when you grab something else."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchGripPin,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchGripPin = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchHoldConfirm", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_hold_confirm", "Hold to confirm"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_hold_confirm", "Remove All Clothing, Remove All Hair and Close All need a 0.4s press-and-hold instead of a single tap."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchHoldConfirm,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchHoldConfirm = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchShoulder", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_shoulder", "Angle toward reaching hand"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_shoulder", "0 (default) faces the face squarely at your eyes. Raising it tilts the face toward the opposite shoulder so the pressing controller meets it straight on — at 1.0 it looks angled away from you."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchShoulderBlend,
+                SetFloat = v => { VPBConfig.Instance.QuickMenuVrWatchShoulderBlend = v; VPBConfig.Instance.TriggerChange(); },
+                Min = 0f, Max = 1f, Step = 0.05f, Decimals = 2,
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible && VPBConfig.Instance.QuickMenuVrWatchFaceUser
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchGlanceDwell", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_glance_dwell", "Glance dwell"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_glance_dwell", "Seconds the wrist must stay turned toward you before the face appears. Raise it if the watch pops up while you gesture; 0 shows instantly."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchGlanceDwell,
+                SetFloat = v => { VPBConfig.Instance.QuickMenuVrWatchGlanceDwell = v; VPBConfig.Instance.TriggerChange(); },
+                Min = 0f, Max = VPBConfig.QuickMenuVrWatchGlanceDwellMax, Step = 0.02f, Decimals = 2,
                 RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
             });
             defs.Add(new InternalSettingDefinition {

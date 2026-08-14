@@ -2455,14 +2455,6 @@ namespace VPB
                 innerPaneScaleActions.Add(s => { if (sRT != null) sRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.FooterInfoRowHeightRef * s); });
             }
 
-            // Pointer Dot
-            pointerDotGO = new GameObject("PointerDot");
-            pointerDotGO.transform.SetParent(canvasGO.transform, false);
-            Image dotImg = UI.AddImage(pointerDotGO, new Color(1, 1, 1, 0.5f));
-            // We use a dot texture if available, otherwise just a small circle/square
-            pointerDotGO.GetComponent<RectTransform>().sizeDelta = new Vector2(8, 8);
-            pointerDotGO.SetActive(false);
-
             CreateResizeHandles();
 
             // Minimize button (title bar icon row)
