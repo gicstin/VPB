@@ -591,6 +591,7 @@ namespace VPB
             UIScrollWheelHandler wheel = go.GetComponent<UIScrollWheelHandler>();
             if (wheel == null) wheel = go.AddComponent<UIScrollWheelHandler>();
             wheel.Sensitivity = 1f;
+            wheel.StepPerNotch = true;
             float step = 36f * (s > 0.01f ? s : 1f);
             wheel.OnScrollValue = dy => CommandPaletteWheelStep(dy, step);
         }

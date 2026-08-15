@@ -748,11 +748,25 @@ namespace VPB
         public Action<float> OnScrollValue;
         public float Sensitivity = 0.1f;
 
+        public bool StepPerNotch;
+
+        private float _notchAccum;
+
         public void OnScroll(PointerEventData eventData)
         {
-            if (Mathf.Abs(eventData.scrollDelta.y) > 0.01f)
+            if (eventData == null) return;
+            float dy = eventData.scrollDelta.y;
+
+            if (StepPerNotch)
             {
-                OnScrollValue?.Invoke(eventData.scrollDelta.y * Sensitivity);
+                int notches = VpbScrollTuning.TakeNotches(ref _notchAccum, dy);
+                if (notches != 0) OnScrollValue?.Invoke(notches * Sensitivity);
+                return;
+            }
+
+            if (Mathf.Abs(dy) > 0.01f)
+            {
+                OnScrollValue?.Invoke(dy * Sensitivity);
             }
         }
     }
@@ -806,12 +820,16 @@ namespace VPB
     /// <summary>Mouse wheel on gallery footer quality toggle steps level up/down.</summary>
     public sealed class FooterPerfToggleScroll : MonoBehaviour, IScrollHandler
     {
+        private float _notchAccum;
+
         public void OnScroll(PointerEventData data)
         {
-            if (data == null || Mathf.Abs(data.scrollDelta.y) <= 0.01f) return;
+            if (data == null) return;
             if (!VpbPerfController.IsPerfModeWanted) return;
 
-            int delta = data.scrollDelta.y > 0f ? 1 : -1;
+            int notches = VpbScrollTuning.TakeNotches(ref _notchAccum, data.scrollDelta.y);
+            if (notches == 0) return;
+            int delta = notches > 0 ? 1 : -1;
             try { VpbPerfController.StepBy(delta, true, false); } catch { }
         }
     }

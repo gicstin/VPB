@@ -829,6 +829,7 @@ namespace VPB
 
             UIScrollWheelHandler thumbScroll = thumbCol.AddComponent<UIScrollWheelHandler>();
             thumbScroll.Sensitivity = 1f;
+            thumbScroll.StepPerNotch = true;
             thumbScroll.OnScrollValue = DetailStripOnThumbScroll;
             DetailStripEnsureThumbNavOverlay(thumbCol);
             DetailStripSyncThumbInteractions();
@@ -1150,7 +1151,7 @@ namespace VPB
             sr.horizontal = false;
             sr.vertical = true;
             sr.movementType = ScrollRect.MovementType.Clamped;
-            sr.scrollSensitivity = 40f * s;
+            sr.scrollSensitivity = VpbScrollTuning.Sensitivity(40f * s, s);
             sr.verticalScrollbar = null;
             _detailStripSideDescScrollRect = sr;
 
@@ -1185,7 +1186,7 @@ namespace VPB
             if (content == null || viewport == null) return;
             float overflow = content.rect.height - viewport.rect.height;
             if (overflow <= 1f) return;
-            float step = (dy * Mathf.Max(48f, sr.scrollSensitivity)) / overflow;
+            float step = (dy * Mathf.Max(VpbScrollTuning.Sensitivity(48f, 1f), sr.scrollSensitivity)) / overflow;
             sr.verticalNormalizedPosition = Mathf.Clamp01(sr.verticalNormalizedPosition + step);
         }
 
@@ -1764,6 +1765,7 @@ namespace VPB
 
             UIScrollWheelHandler wheel = _detailStripExpandBtnGO.AddComponent<UIScrollWheelHandler>();
             wheel.Sensitivity = 1f;
+            wheel.StepPerNotch = true;
             wheel.OnScrollValue = DetailStripOnThumbScroll;
 
             _detailStripExpandBtnGO.SetActive(false);
@@ -2163,6 +2165,7 @@ namespace VPB
             UIScrollWheelHandler wheel = go.GetComponent<UIScrollWheelHandler>();
             if (wheel == null) wheel = go.AddComponent<UIScrollWheelHandler>();
             wheel.Sensitivity = 1f;
+            wheel.StepPerNotch = true;
             wheel.OnScrollValue = DetailStripOnThumbScroll;
         }
 
@@ -2624,7 +2627,7 @@ namespace VPB
             DetailStripApplyFont(_detailStripSideNativeTags, s);
             DetailStripSyncSideBlockChrome(_detailStripSideNativeTags, null, s, lineH, wrapBlock: true);
             if (_detailStripSideDescScrollRect != null)
-                _detailStripSideDescScrollRect.scrollSensitivity = 40f * s;
+                _detailStripSideDescScrollRect.scrollSensitivity = VpbScrollTuning.Sensitivity(40f * s, s);
             if (_detailStripSideDescScrollGO != null)
             {
                 Transform vpTr = _detailStripSideDescScrollGO.transform.Find("Viewport");
@@ -5302,7 +5305,7 @@ namespace VPB
                     _detailStripSideDescScrollGO.SetActive(true);
                     if (_detailStripSideDescScrollRect != null)
                     {
-                        _detailStripSideDescScrollRect.scrollSensitivity = 40f * s;
+                        _detailStripSideDescScrollRect.scrollSensitivity = VpbScrollTuning.Sensitivity(40f * s, s);
                         _detailStripSideDescScrollRect.verticalNormalizedPosition = 1f;
                     }
                 }

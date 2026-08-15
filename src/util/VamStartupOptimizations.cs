@@ -71,7 +71,8 @@ namespace VPB
         public static void InvalidateVamXAbsentCacheIfVamXPackageTouched(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return;
-            if (uid.StartsWith("vamX", StringComparison.OrdinalIgnoreCase))
+            // Only the core plugin (vamX.1), not VamXFan / vamX.Diner_* / VAMXOXO content packs.
+            if (IsVamXCorePackageLookup(uid))
                 InvalidateVamXAbsentCache();
         }
 
@@ -356,11 +357,64 @@ namespace VPB
             s_VamXKnownAbsent = true;
         }
 
-        /// <summary>When vamX was confirmed absent, skip repeated VPB GetPackage lookups (VaM polls every frame).</summary>
+        /// <summary>
+        /// When core vamX plugin was confirmed absent, skip repeated VPB GetPackage lookups.
+        /// VaM polls <c>vamX.1.latest</c> every frame. Must not match other creators whose names
+        /// start with "vamX" (VamXFan, VAMXOXO) or other vamX.* content packs.
+        /// Allocation-free: this is a GetPackage hot path.
+        /// </summary>
         public static bool TryShortCircuitAbsentVamXGetPackage(string packageUidOrPath)
         {
             if (!s_VamXKnownAbsent || string.IsNullOrEmpty(packageUidOrPath)) return false;
-            return packageUidOrPath.StartsWith("vamX", StringComparison.OrdinalIgnoreCase);
+            return IsVamXCorePackageLookup(packageUidOrPath);
+        }
+
+        /// <summary>
+        /// True for the core plugin group <c>vamX.1</c> only:
+        /// <c>vamX.1</c>, <c>vamX.1.latest</c>, <c>vamX.1.minN</c>, <c>vamX.1.N</c>,
+        /// plus path / <c>.var</c> / <c>:/entry</c> wrappers. False for <c>vamX.Diner_Environment.1</c>
+        /// and <c>VamXFan.*</c>.
+        /// </summary>
+        internal static bool IsVamXCorePackageLookup(string packageUidOrPath)
+        {
+            if (string.IsNullOrEmpty(packageUidOrPath)) return false;
+
+            int start = 0;
+            int len = packageUidOrPath.Length;
+            for (int i = 0; i < len; i++)
+            {
+                char ch = packageUidOrPath[i];
+                if (ch == '/' || ch == '\\') start = i + 1;
+            }
+            if (start >= len) return false;
+
+            int end = len;
+            for (int i = start; i < len; i++)
+            {
+                if (packageUidOrPath[i] == ':')
+                {
+                    end = i;
+                    break;
+                }
+            }
+
+            if (end - start >= 4)
+            {
+                int extAt = end - 4;
+                if (string.Compare(packageUidOrPath, extAt, ".var", 0, 4, StringComparison.OrdinalIgnoreCase) == 0
+                    || string.Compare(packageUidOrPath, extAt, ".zip", 0, 4, StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    end = extAt;
+                }
+            }
+
+            const int coreLen = 6; // "vamX.1"
+            int segLen = end - start;
+            if (segLen < coreLen) return false;
+            if (string.Compare(packageUidOrPath, start, "vamX.1", 0, coreLen, StringComparison.OrdinalIgnoreCase) != 0)
+                return false;
+            if (segLen == coreLen) return true;
+            return packageUidOrPath[start + coreLen] == '.';
         }
 
         /// <summary>Suppress noisy GetPackage-not-found logs for basename/icon/scene probes that are not var UIDs.</summary>

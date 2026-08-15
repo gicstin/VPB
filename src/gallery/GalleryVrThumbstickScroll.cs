@@ -12,7 +12,9 @@ namespace VPB
     public static class GalleryVrThumbstickScroll
     {
         private const float StickDeadzone = 0.12f;
-        private const float MaxViewportHeightsPerSecond = 2.25f;
+
+        private const float MaxViewportHeightsPerSecond = 0.9f;
+        private const float StickResponsePower = 2f;
 
         private static int _lastTickFrame = -1;
 
@@ -151,6 +153,7 @@ namespace VPB
             if (viewportH <= 0.5f) viewportH = 800f;
 
             float mag = Mathf.Clamp01((Mathf.Abs(stickForward) - StickDeadzone) / Mathf.Max(0.0001f, 1f - StickDeadzone));
+            mag = Mathf.Pow(mag, StickResponsePower);
             float sign = Mathf.Sign(stickForward);
             float speedPx = sign * mag * MaxViewportHeightsPerSecond * viewportH;
             float deltaNorm = (speedPx * Time.unscaledDeltaTime) / scrollablePx;

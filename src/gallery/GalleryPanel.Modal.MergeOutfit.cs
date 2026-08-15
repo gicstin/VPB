@@ -247,7 +247,7 @@ namespace VPB
             sr.horizontal = false;
             sr.vertical = true;
             sr.movementType = ScrollRect.MovementType.Clamped;
-            sr.scrollSensitivity = 24f * s;
+            sr.scrollSensitivity = VpbScrollTuning.Sensitivity(24f * s, s);
 
             RebuildMergeOutfitRows();
             RefreshMergeOutfitCategoryButtons();

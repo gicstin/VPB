@@ -367,7 +367,7 @@ namespace VPB
             if (sc == null) yield break;
 
             string uid = null;
-            try { uid = "Person_" + Guid.NewGuid().ToString("N").Substring(0, 8); } catch { uid = "Person_" + UnityEngine.Random.Range(100000, 999999).ToString(); }
+            try { uid = "Person_" + Guid.NewGuid().ToString("N").Substring(0, 8); } catch { uid = "Person_" + VpbRandom.Next(100000, 1000000).ToString(); }
             Vector3 hiddenSpawnPos = new Vector3(position.x, position.y - 1000f, position.z);
 
             Atom prevSelected = null;

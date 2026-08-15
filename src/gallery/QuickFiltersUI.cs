@@ -463,7 +463,7 @@ namespace VPB
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
-            scrollRect.scrollSensitivity = 25f;
+            scrollRect.scrollSensitivity = VpbScrollTuning.Sensitivity(25f, 1f);
             scrollRect.verticalScrollbar = null;
 
             viewportGO = UI.CreateChildRT(scrollHostGO, "Viewport", AnchorPresets.stretchAll);

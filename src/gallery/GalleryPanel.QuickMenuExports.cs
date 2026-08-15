@@ -31,15 +31,31 @@ namespace VPB
 
         internal void QuickMenu_LoadRandom()
         {
-            try { LoadRandom(); } catch { }
+            QuickMenu_LoadRandom(null);
+        }
+
+        /// <param name="preselected">Hover-preview pick to launch verbatim; null = pick now.</param>
+        internal void QuickMenu_LoadRandom(FileEntry preselected)
+        {
+            try
+            {
+                if (preselected != null && ApplyPickedRandomEntry(preselected)) return;
+                LoadRandom();
+            }
+            catch { }
         }
 
         internal void QuickMenu_RandomSceneImport()
         {
-            try { StartCoroutine(RandomSceneImportRoutine()); } catch { }
+            QuickMenu_RandomSceneImport(null);
         }
 
-        private IEnumerator RandomSceneImportRoutine()
+        internal void QuickMenu_RandomSceneImport(FileEntry preselected)
+        {
+            try { StartCoroutine(RandomSceneImportRoutine(preselected)); } catch { }
+        }
+
+        private IEnumerator RandomSceneImportRoutine(FileEntry preselected)
         {
             // Capture current view state.
             string prevTitle = null;
@@ -52,7 +68,8 @@ namespace VPB
             bool navigated = false;
 
             // Navigate to Scenes category when not already there so we get a scene file pool.
-            if (!string.Equals(prevTitle, "Scenes", StringComparison.Ordinal))
+            // A hover-preview pick already names the scene, so the pool trip is only owed without one.
+            if (preselected == null && !string.Equals(prevTitle, "Scenes", StringComparison.Ordinal))
             {
                 Gallery.Category cat = default(Gallery.Category);
                 bool catFound = false;
@@ -81,19 +98,34 @@ namespace VPB
                 }
             }
 
-            // Pick from the current scene file pool.
-            var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
-                ? currentFilteredFiles : lastFilteredFiles;
-
-            if (pool == null || pool.Count == 0)
+            FileEntry sceneFile = preselected;
+            if (sceneFile == null)
             {
-                LogUtil.LogWarning("[VPB] Random Scene Import: no scenes in pool.");
-                if (navigated && !string.IsNullOrEmpty(prevTitle))
-                    try { Show(prevTitle, prevExt, prevPath); } catch { }
-                yield break;
-            }
+                // Pick from the current scene file pool.
+                var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+                    ? currentFilteredFiles : lastFilteredFiles;
 
-            FileEntry sceneFile = pool[UnityEngine.Random.Range(0, pool.Count)];
+                if (pool == null || pool.Count == 0)
+                {
+                    LogUtil.LogWarning("[VPB] Random Scene Import: no scenes in pool.");
+                    if (navigated && !string.IsNullOrEmpty(prevTitle))
+                        try { Show(prevTitle, prevExt, prevPath); } catch { }
+                    yield break;
+                }
+
+                sceneFile = VpbRandomHistory.Pick(GetRandomHistoryScope(), pool, selectedPath, true);
+                if (sceneFile == null)
+                {
+                    LogUtil.LogWarning("[VPB] Random Scene Import: no usable scene in pool.");
+                    if (navigated && !string.IsNullOrEmpty(prevTitle))
+                        try { Show(prevTitle, prevExt, prevPath); } catch { }
+                    yield break;
+                }
+            }
+            else
+            {
+                try { VpbRandomHistory.Note(GetRandomHistoryScope(), sceneFile); } catch { }
+            }
 
             // LoadSourceScene is async for full JSON; wait so person ids + scene JSON are ready.
             try { LoadSourceScene(sceneFile); }
@@ -220,12 +252,13 @@ namespace VPB
             try
             {
                 if (string.IsNullOrEmpty(categoryName)) return;
-                StartCoroutine(QuickMenu_LoadRandomFromCategoryRoutine(categoryName, preserveUi, preserveTarget));
+                StartCoroutine(QuickMenu_LoadRandomFromCategoryRoutine(categoryName, preserveUi, preserveTarget, null));
             }
             catch { }
         }
 
-        private System.Collections.IEnumerator QuickMenu_LoadRandomFromCategoryRoutine(string categoryName, bool preserveUi, bool preserveTarget)
+        /// <param name="preselected">Hover-preview pick applied instead of a fresh draw; null = pick after refresh.</param>
+        private System.Collections.IEnumerator QuickMenu_LoadRandomFromCategoryRoutine(string categoryName, bool preserveUi, bool preserveTarget, FileEntry preselected)
         {
             // Wait for category refresh before calling LoadRandom, otherwise we may pick from old list.
             if (string.IsNullOrEmpty(categoryName)) yield break;
@@ -310,7 +343,10 @@ namespace VPB
                 try { QuickMenu_SetSelectedTargetPersonUid(targetUid); } catch { }
             }
 
-            try { LoadRandom(); } catch { }
+            if (preselected == null || !ApplyPickedRandomEntry(preselected))
+            {
+                try { LoadRandom(); } catch { }
+            }
 
             if (preserveUi && !string.IsNullOrEmpty(prevTitle))
             {

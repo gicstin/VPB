@@ -343,7 +343,7 @@ namespace VPB
                 string varPath = CleanFilePath(rawPath);
                 diff.PathHashSet.Add(varPath);
 
-                string candidateUid = packagePathToUid(varPath).Trim();
+                string candidateUid = CanonicalizeUidSegments(packagePathToUid(varPath));
                 if (VpbPackageIndexDiagnostics.ShouldTrace(candidateUid))
                 {
                     bool dupUid = existingUids != null && existingUids.Contains(candidateUid);
@@ -739,6 +739,57 @@ namespace VPB
             return Regex.Replace(input, ".*/", string.Empty);
         }
 
+        static bool UidHasWhitespace(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (char.IsWhiteSpace(s[i])) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Trim whitespace on each <c>Creator.Name.Version</c> segment.
+        /// Hub ids never include the space in names like <c>verytoxic.Lingerie[A] .2.var</c>.
+        /// </summary>
+        internal static string CanonicalizeUidSegments(string uid)
+        {
+            if (string.IsNullOrEmpty(uid) || !UidHasWhitespace(uid)) return uid;
+
+            string[] parts = uid.Split('.');
+            bool changed = false;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string trimmed = parts[i].Trim();
+                if (!string.Equals(trimmed, parts[i], StringComparison.Ordinal))
+                {
+                    parts[i] = trimmed;
+                    changed = true;
+                }
+            }
+            if (!changed) return uid;
+            return string.Join(".", parts);
+        }
+
+        static string StripAllWhitespace(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            int keep = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (!char.IsWhiteSpace(s[i])) keep++;
+            }
+            if (keep == s.Length) return s;
+            char[] buf = new char[keep];
+            int n = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (!char.IsWhiteSpace(s[i])) buf[n++] = s[i];
+            }
+            return new string(buf);
+        }
+
         /// <summary>
         /// Parses the final <c>&lt;version&gt;</c> segment: digits only, or digits plus Windows copy suffix
         /// <c>(n)</c> / <c> (n)</c> (e.g. <c>2(1)</c> → version <c>2</c>). Rejects digit-stripping junk like <c>1_1</c>.
@@ -779,7 +830,7 @@ namespace VPB
             canonicalUid = null;
             if (string.IsNullOrEmpty(vpath)) return false;
             string cleanPath = CleanFilePath(vpath);
-            string text = packagePathToUid(cleanPath).Trim();
+            string text = CanonicalizeUidSegments(packagePathToUid(cleanPath));
             string[] array = text.Split('.');
             if (array.Length != 3) return false;
             string creator = array[0];
@@ -922,6 +973,10 @@ namespace VPB
                     if (pkg != null) pkg.MissingDepsCount = -1;
                 }
             }
+            lock (s_MissingDependenciesCacheLock)
+            {
+                s_MissingDependenciesCache = null;
+            }
         }
 
         protected static VarPackage RegisterPackage(string vpath, bool clean = false)
@@ -931,7 +986,7 @@ namespace VPB
                 LogUtil.Log("RegisterPackage " + vpath);
             }
             string cleanPath = CleanFilePath(vpath);
-            string text = packagePathToUid(cleanPath).Trim();
+            string text = CanonicalizeUidSegments(packagePathToUid(cleanPath));
             string[] array = text.Split('.');
 
             bool isDuplicated = false;
@@ -975,6 +1030,8 @@ namespace VPB
                             packagesByPath.Add(varPackage.Path, varPackage);
                         }
                         value.AddPackage(varPackage);
+
+                        try { VamStartupOptimizations.InvalidateVamXAbsentCacheIfVamXPackageTouched(canonicalUid); } catch { }
 
                         VpbPackageIndexDiagnostics.Log(canonicalUid, "registerOk", "path='" + cleanPath + "'");
 
@@ -2893,28 +2950,34 @@ namespace VPB
             }
 
             HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (packagesByUid != null)
+            HashSet<string> uidKeys;
+            HashSet<string> groupKeys;
+            VarPackage[] snapshot;
+            lock (packagesLock)
             {
-                foreach (var item in packagesByUid)
-                {
-                    VarPackage vp = item.Value;
-                    if (vp != null && vp.RecursivePackageDependencies != null)
-                    {
-                        foreach (var key in vp.RecursivePackageDependencies)
-                        {
-                            string normalized = NormalizeForHub(key);
+                uidKeys = packagesByUid != null
+                    ? new HashSet<string>(packagesByUid.Keys, StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                groupKeys = packageGroups != null
+                    ? new HashSet<string>(packageGroups.Keys, StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                snapshot = packagesByUid != null ? packagesByUid.Values.ToArray() : new VarPackage[0];
+            }
 
-                            // Important: IsPackage only checks exact UID/path; it does not treat ".latest" as an alias.
-                            // Use GetPackage so ".latest"/".minN" resolve to an installed package when present.
-                            if (string.IsNullOrEmpty(normalized)) continue;
-                            VarPackage resolved = null;
-                            try { resolved = GetPackage(normalized, ensureInstalled: false); } catch { }
-                            if (resolved == null)
-                            {
-                                hashSet.Add(normalized);
-                            }
-                        }
-                    }
+            for (int i = 0; i < snapshot.Length; i++)
+            {
+                VarPackage vp = snapshot[i];
+                if (vp == null || vp.RecursivePackageDependencies == null) continue;
+                List<string> deps = vp.RecursivePackageDependencies;
+                for (int d = 0; d < deps.Count; d++)
+                {
+                    string key = deps[d];
+                    if (string.IsNullOrEmpty(key)) continue;
+                    if (IsLocalDependencyPresentForHubMissingScan(key, uidKeys, groupKeys)) continue;
+
+                    string normalized = NormalizeForHub(CanonicalizeUidSegments(key));
+                    if (string.IsNullOrEmpty(normalized)) continue;
+                    hashSet.Add(normalized);
                 }
             }
 
@@ -2929,6 +2992,24 @@ namespace VPB
                 LogUtil.Log("GetMissingDependenciesNames " + list.Count);
             }
             return new List<string>(list);
+		}
+
+		/// <summary>
+		/// Hub missing-scan presence: package is in VPB registry (AddonPackages or AllPackages).
+		/// Uses group / exact UID maps — not GetPackage — so vamX-absent short-circuit cannot
+		/// false-flag VamXFan / vamX.* content packs that are already on disk.
+		/// </summary>
+		static bool IsLocalDependencyPresentForHubMissingScan(string depId, HashSet<string> uidKeys, HashSet<string> groupKeys)
+		{
+			if (string.IsNullOrEmpty(depId)) return false;
+			if (uidKeys != null && uidKeys.Contains(depId)) return true;
+			string canonical = CanonicalizeUidSegments(depId);
+			if (uidKeys != null
+				&& !string.Equals(canonical, depId, StringComparison.Ordinal)
+				&& uidKeys.Contains(canonical))
+				return true;
+			string group = PackageIDToPackageGroupID(canonical);
+			return !string.IsNullOrEmpty(group) && groupKeys != null && groupKeys.Contains(group);
 		}
 
 		public static bool IsSecureReadPath(string path)
@@ -3514,7 +3595,7 @@ namespace VPB
 				catch { }
 			}
 			if (!string.IsNullOrEmpty(fromPath))
-				return fromPath;
+				return CanonicalizeUidSegments(fromPath);
 
 			if (string.IsNullOrEmpty(storedPackageUid))
 				return null;
@@ -3535,7 +3616,7 @@ namespace VPB
 			else if (s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
 				s = s.Substring(0, s.Length - 4);
 
-			return string.IsNullOrEmpty(s) ? null : s;
+			return string.IsNullOrEmpty(s) ? null : CanonicalizeUidSegments(s);
 		}
 
 		/// <summary>
@@ -3631,21 +3712,29 @@ namespace VPB
 			}
 
 			VarPackage value = TryResolve(packageUidOrPath);
-			if (value == null && !string.IsNullOrEmpty(packageUidOrPath) && Regex.IsMatch(packageUidOrPath, "\\s"))
+			if (value == null && !string.IsNullOrEmpty(packageUidOrPath) && UidHasWhitespace(packageUidOrPath))
 			{
-				string normalized = Regex.Replace(packageUidOrPath, "\\s+", string.Empty);
-				if (!string.Equals(normalized, packageUidOrPath, StringComparison.Ordinal))
+				string segmented = CanonicalizeUidSegments(packageUidOrPath);
+				if (!string.Equals(segmented, packageUidOrPath, StringComparison.Ordinal))
+					value = TryResolve(segmented);
+				if (value == null)
 				{
-					value = TryResolve(normalized);
-					try
+					string stripped = StripAllWhitespace(packageUidOrPath);
+					if (!string.Equals(stripped, packageUidOrPath, StringComparison.Ordinal)
+						&& !string.Equals(stripped, segmented, StringComparison.Ordinal))
 					{
-						if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
-						{
-							LogUtil.Log("GetPackage normalize whitespace | raw=" + packageUidOrPath + " | normalized=" + normalized + " | found=" + (value != null));
-						}
+						value = TryResolve(stripped);
 					}
-					catch { }
 				}
+				try
+				{
+					if (value != null
+						&& Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+					{
+						LogUtil.Log("GetPackage normalize whitespace | raw=" + packageUidOrPath + " | found=" + (value != null));
+					}
+				}
+				catch { }
 			}
 
 			if (value == null)

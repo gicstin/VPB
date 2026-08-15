@@ -48,7 +48,7 @@ namespace VPB
             sr.horizontal = true;
             sr.vertical = false;
             sr.movementType = ScrollRect.MovementType.Clamped;
-            sr.scrollSensitivity = 20f;
+            sr.scrollSensitivity = VpbScrollTuning.Sensitivity(20f, 1f);
             sr.horizontalScrollbar = null;
             sr.verticalScrollbar = null;
 

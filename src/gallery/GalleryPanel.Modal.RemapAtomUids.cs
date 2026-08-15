@@ -1025,7 +1025,7 @@ namespace VPB
             sr.horizontal = false;
             sr.vertical = true;
             sr.movementType = ScrollRect.MovementType.Clamped;
-            sr.scrollSensitivity = 25f;
+            sr.scrollSensitivity = VpbScrollTuning.Sensitivity(25f, s);
             sr.verticalScrollbar = null;
 
             GameObject viewport = UI.CreateChildRT(scrollHost, "Viewport", AnchorPresets.stretchAll);

@@ -15,9 +15,21 @@ namespace VPB
 
         private const int MaxEntries = 48;
 
+        private static int s_Epoch;
+
+        /// <summary>
+        /// Bumped whenever the cached lists are dropped (package library changed). Consumers that keep
+        /// their own derived snapshots — quick-menu random preview reels — compare it to detect staleness.
+        /// </summary>
+        public static int Epoch { get { return s_Epoch; } }
+
         public static void Clear()
         {
-            lock (s_Lock) { s_ByKey.Clear(); }
+            lock (s_Lock)
+            {
+                s_ByKey.Clear();
+                unchecked { s_Epoch++; }
+            }
         }
 
         public static bool TryGet(string key, out List<FileEntry> list)

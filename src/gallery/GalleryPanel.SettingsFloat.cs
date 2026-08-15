@@ -456,7 +456,8 @@ namespace VPB
             _settingsFloatScrollRect.horizontal = false;
             _settingsFloatScrollRect.vertical = true;
             _settingsFloatScrollRect.movementType = ScrollRect.MovementType.Clamped;
-            _settingsFloatScrollRect.scrollSensitivity = GalleryUiDesignTokens.SettingsFloatScrollSensitivityRef;
+            _settingsFloatScrollRect.scrollSensitivity =
+                VpbScrollTuning.Sensitivity(GalleryUiDesignTokens.SettingsFloatScrollSensitivityRef, 1f);
             _settingsFloatScrollRect.verticalScrollbar = null;
 
             GameObject viewport = UI.CreateChildRT(_settingsFloatScrollHost, "Viewport", AnchorPresets.stretchAll);

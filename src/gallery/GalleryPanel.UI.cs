@@ -2250,12 +2250,12 @@ namespace VPB
         {
             if (!hoverPreviewDummyActive || eventData == null || VPBConfig.Instance == null) return;
             hoverPreviewSuppressSettingsClick = true;
-            float dy = eventData.scrollDelta.y;
-            if (Mathf.Abs(dy) < 0.01f) return;
+            int notches = VpbScrollTuning.TakeNotches(ref hoverPreviewScrollNotchAccum, eventData.scrollDelta.y);
+            if (notches == 0) return;
 
             const float step = 10f;
             float size = VPBConfig.Instance.GalleryListHoverPreviewSize;
-            size = Mathf.Clamp(size + (dy > 0f ? step : -step), VPBConfig.GalleryHoverPreviewSizeMin, VPBConfig.GalleryHoverPreviewSizeMax);
+            size = Mathf.Clamp(size + (notches > 0 ? step : -step), VPBConfig.GalleryHoverPreviewSizeMin, VPBConfig.GalleryHoverPreviewSizeMax);
             if (Mathf.Abs(size - VPBConfig.Instance.GalleryListHoverPreviewSize) < 0.01f) return;
             VPBConfig.Instance.GalleryListHoverPreviewSize = size;
             if (hoverPreviewRT != null)

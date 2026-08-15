@@ -271,18 +271,11 @@ namespace VPB
             }
         }
 
-        /// <summary>Fisher–Yates shuffle; safe on worker threads (uses <see cref="System.Random"/>).</summary>
+        /// <summary>Fisher–Yates shuffle over <see cref="VpbRandom"/>; safe on worker threads.</summary>
         public static void ShuffleFiles(List<FileEntry> files)
         {
             if (files == null || files.Count < 2) return;
-            var rng = new System.Random();
-            for (int i = files.Count - 1; i > 0; i--)
-            {
-                int j = rng.Next(i + 1);
-                FileEntry tmp = files[i];
-                files[i] = files[j];
-                files[j] = tmp;
-            }
+            VpbRandom.Shuffle(files);
         }
 
         /// <summary>Triple-check logging for the new family-aware sorts. Flip to false to silence.</summary>

@@ -581,7 +581,7 @@ namespace VPB
             sr.vertical = true;
             sr.movementType = ScrollRect.MovementType.Clamped;
             // Low step + inertia — avoid wheel jumping 0↔1 extremes (Unity Game Optimization: ScrollRect).
-            sr.scrollSensitivity = 12f * s;
+            sr.scrollSensitivity = VpbScrollTuning.Sensitivity(12f * s, s);
             sr.inertia = true;
             sr.decelerationRate = 0.135f;
             sr.verticalScrollbar = null;

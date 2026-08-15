@@ -185,7 +185,7 @@ namespace VPB
             scroll.horizontal = true;
             scroll.vertical = false;
             scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = 28f;
+            scroll.scrollSensitivity = VpbScrollTuning.Sensitivity(28f, 1f);
             scroll.viewport = viewportRT;
 
             GameObject contentGO = new GameObject("Chips");

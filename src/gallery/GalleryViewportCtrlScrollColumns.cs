@@ -12,6 +12,7 @@ namespace VPB
     {
         private GalleryPanel _panel;
         private ScrollRect _scrollRect;
+        private float _zoomNotchAccum;
 
         public static void TryAttach(GalleryPanel panel, ScrollRect scrollRect)
         {
@@ -33,8 +34,9 @@ namespace VPB
             if (mod && _panel != null)
             {
                 // Same mapping as footer zoom buttons: wheel up → fewer columns (zoom in); wheel down → more columns (zoom out).
-                int delta = eventData.scrollDelta.y > 0 ? -1 : 1;
-                _panel.ApplyCtrlScrollToGridColumns(delta);
+                int notches = VpbScrollTuning.TakeNotches(ref _zoomNotchAccum, eventData.scrollDelta.y);
+                if (notches == 0) return;
+                _panel.ApplyCtrlScrollToGridColumns(notches > 0 ? -1 : 1);
                 return;
             }
 

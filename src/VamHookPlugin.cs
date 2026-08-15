@@ -637,6 +637,7 @@ namespace VPB
         void OnDestroy()
         {
             try { VpbProgressService.ShutdownForQuit(); } catch { }
+            try { VpbRandomHistory.Flush(); } catch { }
             try { VpbPerfController.Shutdown(); } catch { }
             try { DAZClothingHook.ResetTransientState(); } catch { }
             try
@@ -677,6 +678,7 @@ namespace VPB
         {
             // Runs before OnDestroy during player quit — kill Win32 pump + zstd writers early.
             try { VpbProgressService.ShutdownForQuit(); } catch { }
+            try { VpbRandomHistory.Flush(); } catch { }
         }
         // Called on (hard) restart as well.
         IEnumerator ApplyLateStartupProfilerPatchesCo()
@@ -1151,6 +1153,9 @@ namespace VPB
 
             // Assignable-button tip hide grace (instant show; deferred clear only).
             try { QuickMenuAdvanceTooltipHide(); } catch { }
+
+            // Random hover preview: only does work when a cold category pool trip is owed.
+            try { QuickMenuAdvanceRandomPreview(); } catch { }
         }
 
 

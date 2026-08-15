@@ -279,6 +279,9 @@
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\util\VPBLogger.cs" />
     <Compile Include="src\util\XrUtils.cs" />
+    <Compile Include="src\util\VpbScrollTuning.cs" />
+    <Compile Include="src\util\VpbRandom.cs" />
+    <Compile Include="src\util\VpbRandomHistory.cs" />
     <Compile Include="src\util\AtomGenderUtils.cs" />
     <Compile Include="src\util\AppearancePresetSuppress.cs" />
     <Compile Include="src\util\AppearanceApplyProbe.cs" />
@@ -395,6 +398,7 @@
     <Compile Include="src\VamHookPlugin.I18n.cs" />
     <Compile Include="src\VamHookPlugin.Settings.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuRandomPreview.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuVrWatch.cs" />
     <Compile Include="src\ContextMenuPanel.cs" />
     <Compile Include="src\gallery\Gallery.cs" />
@@ -549,6 +553,7 @@
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Atoms.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Options.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickMenuExports.cs" />
+    <Compile Include="src\gallery\GalleryPanel.RandomPreview.cs" />
     <Compile Include="src\util\JSONExtensions.cs" />
     <Compile Include="src\util\JsonSerializationUtil.cs" />
     <Compile Include="src\util\CUAConverter.cs" />

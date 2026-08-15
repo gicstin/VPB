@@ -46,6 +46,7 @@ namespace VPB
             SyncQuickMenuPopupRoundedBg(m_QuickMenuAssignRandomPopupRoot, frac);
             RoundedRect tooltipRounded = m_QmTooltipBackdrop as RoundedRect;
             if (tooltipRounded != null) tooltipRounded.cornerRadiusFraction = frac;
+            QuickMenuSyncRandomPreviewCornerRadius(frac);
             try { QuickMenuSyncWatchCornerRadius(frac); } catch { }
             if (m_QuickMenuGridButtons != null)
             {
@@ -351,6 +352,7 @@ namespace VPB
                 m_QmTooltipRT.anchoredPosition = new Vector2(centerX, topEdge + 8f);
                 var sd = m_QmTooltipRT.sizeDelta;
                 m_QmTooltipRT.sizeDelta = new Vector2(QuickMenuGridCell * 4f - QuickMenuGridGap, sd.y);
+                QuickMenuPositionDeskPreview();
             }
         }
 
@@ -408,6 +410,7 @@ namespace VPB
 
                 var sd0 = m_QmTooltipRT.sizeDelta;
                 m_QmTooltipRT.sizeDelta = new Vector2(sd0.x, 0f);
+                QuickMenuPositionDeskPreview();
                 return;
             }
 
@@ -434,6 +437,7 @@ namespace VPB
 
             var sd = m_QmTooltipRT.sizeDelta;
             m_QmTooltipRT.sizeDelta = new Vector2(sd.x, h);
+            QuickMenuPositionDeskPreview();
         }
 
         private void QuickMenuSetTooltip(string msg)
@@ -742,6 +746,16 @@ namespace VPB
             }
         }
 
+        /// <summary>Action this grid slot would run on click — None for the core edit / page slots, whose
+        /// clicks never reach <see cref="QuickMenuExecuteAssignment"/>.</summary>
+        private QuickMenuAssignableAction QuickMenuGridSlotPreviewAction(int slotIdx)
+        {
+            if (m_QuickMenuEditMode) return QuickMenuAssignableAction.None;
+            if (slotIdx == m_QuickMenuEditSlotIdx || slotIdx == m_QuickMenuPageToggleSlotIdx)
+                return QuickMenuAssignableAction.None;
+            return QuickMenuGetSlotAction(slotIdx);
+        }
+
         private QuickMenuAssignableAction QuickMenuGetSlotAction(int slotIdx)
         {
             EnsureQuickMenuGridArrays();
@@ -909,6 +923,7 @@ namespace VPB
                     owner.m_QmTooltipHoverSlotIdx = slotIdx;
                     _msg = owner.QuickMenuGetTooltipForSlot(slotIdx);
                     if (!string.IsNullOrEmpty(_msg)) owner.QuickMenuSetTooltip(_msg);
+                    owner.QuickMenuBeginRandomPreview(owner.QuickMenuGridSlotPreviewAction(slotIdx), false);
                 }
                 catch { }
             }
@@ -920,8 +935,17 @@ namespace VPB
                 {
                     if (owner.m_QmTooltipHoverSlotIdx == slotIdx) owner.m_QmTooltipHoverSlotIdx = -1;
                     owner.QuickMenuClearTooltip(_msg);
+                    owner.QuickMenuEndRandomPreview();
                 }
                 catch { }
+            }
+
+            // Deactivating the quick menu swallows OnPointerExit; a surviving pinned pick would then be
+            // launched by the next click on that button without ever being previewed.
+            private void OnDisable()
+            {
+                if (owner == null) return;
+                try { owner.QuickMenuEndRandomPreview(); } catch { }
             }
         }
 
@@ -1570,20 +1594,20 @@ namespace VPB
                 case QuickMenuAssignableAction.Random:
                 {
                     var p = QuickMenuGetTargetPanel();
-                    if (p != null) p.QuickMenu_LoadRandom();
+                    if (p != null) p.QuickMenu_LoadRandom(QuickMenuConsumeRandomPreviewPick(action));
                     break;
                 }
-                case QuickMenuAssignableAction.RandomScenes: QuickMenuExecuteRandomInCategory("Scenes", preservePersonTarget: false, preserveUi: false); break;
-                case QuickMenuAssignableAction.RandomSubScenes: QuickMenuExecuteRandomInCategory("SubScenes", preservePersonTarget: false, preserveUi: false); break;
-                case QuickMenuAssignableAction.RandomClothing: QuickMenuExecuteRandomInCategory("Clothing", preservePersonTarget: true, preserveUi: true); break;
-                case QuickMenuAssignableAction.RandomHair: QuickMenuExecuteRandomInCategory("Hair", preservePersonTarget: true, preserveUi: true); break;
-                case QuickMenuAssignableAction.RandomPose: QuickMenuExecuteRandomInCategory("Pose", preservePersonTarget: true, preserveUi: true); break;
-                case QuickMenuAssignableAction.RandomAppearance: QuickMenuExecuteRandomInCategory("Appearance", preservePersonTarget: true, preserveUi: true); break;
-                case QuickMenuAssignableAction.RandomSkin: QuickMenuExecuteRandomInCategory("Skin", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomScenes: QuickMenuExecuteRandomInCategory(action, "Scenes", preservePersonTarget: false, preserveUi: false); break;
+                case QuickMenuAssignableAction.RandomSubScenes: QuickMenuExecuteRandomInCategory(action, "SubScenes", preservePersonTarget: false, preserveUi: false); break;
+                case QuickMenuAssignableAction.RandomClothing: QuickMenuExecuteRandomInCategory(action, "Clothing", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomHair: QuickMenuExecuteRandomInCategory(action, "Hair", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomPose: QuickMenuExecuteRandomInCategory(action, "Pose", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomAppearance: QuickMenuExecuteRandomInCategory(action, "Appearance", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomSkin: QuickMenuExecuteRandomInCategory(action, "Skin", preservePersonTarget: true, preserveUi: true); break;
                 case QuickMenuAssignableAction.RandomSceneImport:
                 {
                     var p = QuickMenuGetTargetPanel();
-                    if (p != null) p.QuickMenu_RandomSceneImport();
+                    if (p != null) p.QuickMenu_RandomSceneImport(QuickMenuConsumeRandomPreviewPick(action));
                     break;
                 }
                 case QuickMenuAssignableAction.Undo:
@@ -1818,12 +1842,14 @@ namespace VPB
             catch { }
         }
 
-        private void QuickMenuExecuteRandomInCategory(string categoryName, bool preservePersonTarget, bool preserveUi)
+        private void QuickMenuExecuteRandomInCategory(QuickMenuAssignableAction action, string categoryName, bool preservePersonTarget, bool preserveUi)
         {
             if (string.IsNullOrEmpty(categoryName)) return;
             var p = QuickMenuGetTargetPanel();
             if (p == null) return;
-            p.QuickMenu_LoadRandomFromCategory(categoryName, preserveUi: preserveUi, preserveTarget: preservePersonTarget);
+            // Hover preview pins the item the user saw; without one this falls back to a fresh draw.
+            p.QuickMenu_LoadPickedFromCategory(categoryName, QuickMenuConsumeRandomPreviewPick(action),
+                preserveUi: preserveUi, preserveTarget: preservePersonTarget);
         }
 
         private void QuickMenuOpenCompressCache()

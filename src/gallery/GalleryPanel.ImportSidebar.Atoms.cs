@@ -615,7 +615,12 @@ namespace VPB
                 LogUtil.LogWarning("[VPB import] Random Scene: no scenes in pool.");
                 return;
             }
-            FileEntry pick = pool[UnityEngine.Random.Range(0, pool.Count)];
+            FileEntry pick = VpbRandomHistory.Pick(GetRandomHistoryScope(), pool, selectedPath, true);
+            if (pick == null)
+            {
+                LogUtil.LogWarning("[VPB import] Random Scene: no usable scene in pool.");
+                return;
+            }
             StartCoroutine(ImportSidebarRandomSceneAndApplyRoutine(pick));
         }
 

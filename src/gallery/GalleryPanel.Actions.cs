@@ -364,19 +364,51 @@ namespace VPB
         }
 
         /// <summary>
+        /// Category gates used by <see cref="FilterRandomPoolForCurrentCategory"/>. Split out so the
+        /// quick-menu hover preview can sample the pool by rejection instead of copying it.
+        /// </summary>
+        internal bool ComputeRandomPoolCategoryGates(out bool appearanceCat, out bool subSceneCat, out bool sceneCat)
+        {
+            string cat = currentCategoryTitle ?? "";
+            appearanceCat = cat.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
+            subSceneCat = cat.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+            sceneCat = !subSceneCat && (
+                string.Equals(cat, "Scenes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(cat, "Scene", StringComparison.OrdinalIgnoreCase));
+            return appearanceCat || subSceneCat || sceneCat;
+        }
+
+        internal static bool IsRandomPoolEntryAllowedForGates(FileEntry f, bool appearanceCat, bool subSceneCat, bool sceneCat)
+        {
+            if (f == null) return false;
+            string path = f.Path ?? f.Uid ?? "";
+            string pl = path.Replace('\\', '/');
+
+            if (appearanceCat)
+                return !IsForbiddenInAppearanceCategory(pl) && IsAppearanceLookInternalPath(pl);
+
+            if (subSceneCat)
+                return pl.IndexOf("/SubScene/", StringComparison.OrdinalIgnoreCase) >= 0
+                    || pl.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (sceneCat)
+            {
+                string lower = pl.ToLowerInvariant();
+                return (lower.Contains("/scene/") || lower.Contains("saves/scene"))
+                    && !lower.Contains("/subscene/");
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Drop rows that cannot belong to the current category (defense if refresh polluted the list).
         /// </summary>
         private List<FileEntry> FilterRandomPoolForCurrentCategory(List<FileEntry> pool)
         {
             if (pool == null || pool.Count == 0) return pool;
             string cat = currentCategoryTitle ?? "";
-            bool appearanceCat = cat.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool subSceneCat = cat.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool sceneCat = !subSceneCat && (
-                string.Equals(cat, "Scenes", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(cat, "Scene", StringComparison.OrdinalIgnoreCase));
-
-            if (!appearanceCat && !subSceneCat && !sceneCat)
+            bool appearanceCat, subSceneCat, sceneCat;
+            if (!ComputeRandomPoolCategoryGates(out appearanceCat, out subSceneCat, out sceneCat))
                 return pool;
 
             var filtered = new List<FileEntry>(pool.Count);
@@ -385,35 +417,10 @@ namespace VPB
             {
                 FileEntry f = pool[i];
                 if (f == null) continue;
-                string path = f.Path ?? f.Uid ?? "";
-                string pl = path.Replace('\\', '/');
-
-                if (appearanceCat)
+                if (!IsRandomPoolEntryAllowedForGates(f, appearanceCat, subSceneCat, sceneCat))
                 {
-                    if (IsForbiddenInAppearanceCategory(pl) || !IsAppearanceLookInternalPath(pl))
-                    {
-                        dropped++;
-                        continue;
-                    }
-                }
-                else if (subSceneCat)
-                {
-                    if (pl.IndexOf("/SubScene/", StringComparison.OrdinalIgnoreCase) < 0
-                        && pl.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) < 0)
-                    {
-                        dropped++;
-                        continue;
-                    }
-                }
-                else if (sceneCat)
-                {
-                    string lower = pl.ToLowerInvariant();
-                    if (!(lower.Contains("/scene/") || lower.Contains("saves/scene"))
-                        || lower.Contains("/subscene/"))
-                    {
-                        dropped++;
-                        continue;
-                    }
+                    dropped++;
+                    continue;
                 }
                 filtered.Add(f);
             }
@@ -491,6 +498,31 @@ namespace VPB
                     return;
                 }
 
+                ApplyPickedRandomEntry(file);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Load Random exception: " + ex);
+            }
+            finally
+            {
+                if (overrideHeld)
+                    EndDragDropReplaceOverride(replaceOverrideToken);
+            }
+        }
+
+        /// <summary>
+        /// Select + auto-apply one already-picked entry (same rules as a grid click). Shared by
+        /// <see cref="LoadRandom(string,bool?,int)"/> and the quick-menu hover preview, which pins the
+        /// item at hover time and launches exactly that one.
+        /// </summary>
+        internal bool ApplyPickedRandomEntry(FileEntry file)
+        {
+            if (file == null) return false;
+            try
+            {
+                try { VpbRandomHistory.Note(GetRandomHistoryScope(), file); } catch { }
+
                 LogUtil.Log("[VPB] Load Random: pick cat='" + (currentCategoryTitle ?? "")
                     + "' path=" + (file.Path ?? file.Uid ?? "?"));
 
@@ -517,57 +549,46 @@ namespace VPB
                 if (isScene)
                 {
                     UI.LoadSceneFile(file, this);
-                    return;
+                    return true;
                 }
 
                 if (!ExecuteAutoActionForFile(file))
                 {
                     LogUtil.LogWarning("[VPB] Load Random: no auto action available for this item.");
+                    return false;
                 }
+                return true;
             }
             catch (Exception ex)
             {
-                LogUtil.LogError("[VPB] Load Random exception: " + ex);
-            }
-            finally
-            {
-                if (overrideHeld)
-                    EndDragDropReplaceOverride(replaceOverrideToken);
+                LogUtil.LogError("[VPB] Apply picked random entry failed: " + ex);
+                return false;
             }
         }
 
         /// <summary>
-        /// Pick random pool entry. When <paramref name="excludeIdentityKey"/> set and pool has 2+
-        /// candidates, never return that identity (retry then linear scan). Single-item pool may return it.
+        /// Recency scope every random operation drawing from this panel's view shares, so the quick-menu,
+        /// wrist watch, filter dice and grid button cannot hand out what another just served.
+        /// </summary>
+        internal string GetRandomHistoryScope()
+        {
+            string cat = null;
+            try { cat = currentCategoryTitle; } catch { cat = null; }
+            if (string.IsNullOrEmpty(cat)) cat = VpbRandomHistory.ViewScope;
+            bool historyBrowse = false;
+            try { historyBrowse = activeContentType == ContentType.History; } catch { }
+            return historyBrowse ? "hist:" + cat : cat;
+        }
+
+        /// <summary>
+        /// Pick a pool entry that is neither <paramref name="excludeIdentityKey"/> nor inside the scope's
+        /// recency window. Relaxes the window in halves before it ever repeats, so a non-empty pool always
+        /// yields something.
         /// </summary>
         private FileEntry PickRandomFileEntry(List<FileEntry> pool, string excludeIdentityKey, bool historyBrowse)
         {
             if (pool == null || pool.Count == 0) return null;
-
-            if (pool.Count == 1 || string.IsNullOrEmpty(excludeIdentityKey))
-                return pool[UnityEngine.Random.Range(0, pool.Count)];
-
-            int attempts = Mathf.Min(pool.Count * 2, 32);
-            for (int a = 0; a < attempts; a++)
-            {
-                FileEntry cand = pool[UnityEngine.Random.Range(0, pool.Count)];
-                if (cand == null) continue;
-                string key = GetSelectionIdentityKey(cand, historyBrowse);
-                if (!string.Equals(key, excludeIdentityKey, StringComparison.OrdinalIgnoreCase))
-                    return cand;
-            }
-
-            for (int i = 0; i < pool.Count; i++)
-            {
-                FileEntry cand = pool[i];
-                if (cand == null) continue;
-                string key = GetSelectionIdentityKey(cand, historyBrowse);
-                if (!string.Equals(key, excludeIdentityKey, StringComparison.OrdinalIgnoreCase))
-                    return cand;
-            }
-
-            // Only matching identity in pool — unavoidable.
-            return pool[UnityEngine.Random.Range(0, pool.Count)];
+            return VpbRandomHistory.Pick(GetRandomHistoryScope(), pool, excludeIdentityKey, false);
         }
 
         /// <summary>

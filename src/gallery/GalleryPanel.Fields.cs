@@ -1237,6 +1237,7 @@ namespace VPB
         private bool hoverPreviewDragging;
         /// <summary>Swallow the click that ends a placeholder drag so it cannot step a settings row underneath.</summary>
         private bool hoverPreviewSuppressSettingsClick;
+        private float hoverPreviewScrollNotchAccum;
         private GameObject gridSizeMinusBtn;
         private GameObject gridSizePlusBtn;
         private GameObject footerScrollTopBtn;

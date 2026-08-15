@@ -159,7 +159,7 @@ namespace VPB
 
         private static readonly int[] QuickMenuWatchAssignSectionStarts = { 0, 7, 14, 21, 25, 27, 36 };
 
-        private static readonly Quaternion QuickMenuWatchWristLocalRot = Quaternion.Euler(90f, 180f, 0f);
+        private static readonly Quaternion QuickMenuWatchWristLocalRot = Quaternion.Euler(90f, 0f, 0f);
         private static readonly Color QuickMenuWatchBezelColor = new Color(0.10f, 0.10f, 0.10f, 0.92f);
         private static readonly Color QuickMenuWatchChromeIdle = new Color(0.22f, 0.22f, 0.22f, 0.95f);
         private static readonly Color QuickMenuWatchChromeIdleHover = new Color(0.34f, 0.34f, 0.34f, 0.95f);
@@ -250,6 +250,9 @@ namespace VPB
         private string m_WatchHoverStatus;
         private int m_WatchHoverToken;
         private bool m_WatchAddedToSc;
+        // Set when the retina read-back caught the face inverted; negates the up hint from then on.
+        private bool m_WatchFaceAimFlip;
+        private bool m_WatchFaceFlipLogged;
         private float m_WatchLastAppliedScale = -1f;
         private QuickMenuWatchFaceMode m_WatchFaceMode = QuickMenuWatchFaceMode.Compact;
         private QuickMenuWatchFaceMode m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
@@ -282,6 +285,9 @@ namespace VPB
         private float m_WatchCfgScaleMul = 1f;
         private float m_WatchCfgToward = 0.04f;
         private Vector3 m_WatchCfgOffset = VPBConfig.QuickMenuVrWatchOffsetDefault;
+        private Vector3 m_WatchCfgFaceRotEuler;
+        private Quaternion m_WatchCfgFaceRot = Quaternion.identity;
+        private bool m_WatchCfgFaceRotActive;
         private string m_WatchCfgHandRaw;
         private string m_WatchCfgShowRaw;
         private bool m_WatchAssignmentsLoaded;
@@ -319,6 +325,7 @@ namespace VPB
             m_WatchTipGo = null;
             m_WatchTipRt = null;
             m_WatchTipText = null;
+            QuickMenuClearWatchRandomPreviewRefs();
             m_WatchTipSrc = null;
             m_WatchTipShown = "";
             m_WatchHoverStatus = null;
@@ -367,6 +374,8 @@ namespace VPB
             m_WatchPressIdx = -1;
             m_WatchHoldFired = false;
             m_WatchAddedToSc = false;
+            // Rebuilt canvas may land under a different hand/basis — re-derive the flip from scratch.
+            m_WatchFaceAimFlip = false;
             m_WatchLastAppliedScale = -1f;
             m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
             m_WatchFailLogged = false;
@@ -728,6 +737,15 @@ namespace VPB
             m_WatchCfgToward = c.QuickMenuVrWatchTowardUserDist;
             m_WatchCfgOffset = c.QuickMenuVrWatchOffset;
 
+            // Euler -> quaternion once per edit, not once per frame: this runs every Update.
+            Vector3 faceRot = c.QuickMenuVrWatchFaceRotation;
+            if (faceRot != m_WatchCfgFaceRotEuler)
+            {
+                m_WatchCfgFaceRotEuler = faceRot;
+                m_WatchCfgFaceRotActive = faceRot.sqrMagnitude > 1e-6f;
+                m_WatchCfgFaceRot = m_WatchCfgFaceRotActive ? Quaternion.Euler(faceRot) : Quaternion.identity;
+            }
+
             bool labels = c.QuickMenuVrWatchLabels;
             if (labels != m_WatchCfgLabels)
             {
@@ -987,6 +1005,7 @@ namespace VPB
             m_WatchGlanceCandidateSince = -1f;
             m_WatchHoverStatus = null;
             if (m_WatchTipGo != null && m_WatchTipGo.activeSelf) m_WatchTipGo.SetActive(false);
+            if (m_QmPreviewOnWatch) QuickMenuEndRandomPreview();
             if (m_WatchCanvasGroup != null)
             {
                 m_WatchCanvasGroup.alpha = 0f;
@@ -1012,6 +1031,7 @@ namespace VPB
                 m_WatchPressIdx = -1;
                 m_WatchHoldFired = false;
                 m_WatchHoverStatus = null;
+                if (m_QmPreviewOnWatch) QuickMenuEndRandomPreview();
                 return;
             }
 
@@ -1207,6 +1227,7 @@ namespace VPB
             QuickMenuBuildWatchDot(root);
             QuickMenuBuildWatchAssignSheet(root);
             QuickMenuBuildWatchTip(root);
+            QuickMenuBuildWatchRandomPreview(root);
             QuickMenuBuildWatchCue(root);
 
             root.SetActive(false);
@@ -1724,8 +1745,11 @@ namespace VPB
                 m_WatchCueRt.sizeDelta = new Vector2(QuickMenuWatchTipW, 56f);
                 m_WatchCueRt.anchoredPosition = new Vector2(0f, bezelH * 0.5f + QuickMenuWatchTipGap + 28f);
             }
+            float tipTop = -(bezelH * 0.5f + QuickMenuWatchTipGap);
             if (m_WatchTipRt != null)
-                m_WatchTipRt.anchoredPosition = new Vector2(0f, -(bezelH * 0.5f + QuickMenuWatchTipGap));
+                m_WatchTipRt.anchoredPosition = new Vector2(0f, tipTop);
+            if (m_QmPreviewWatchRt != null)
+                m_QmPreviewWatchRt.anchoredPosition = new Vector2(0f, tipTop - QuickMenuWatchTipH - QuickMenuWatchTipGap);
         }
 
         private void QuickMenuSyncWatchExpandIcon()
@@ -1735,6 +1759,19 @@ namespace VPB
             if (icon == null) return;
             Sprite want = m_WatchFaceMode == QuickMenuWatchFaceMode.Expanded ? m_WatchIconCompact : m_WatchIconExpand;
             if (want != null && icon.sprite != want) icon.sprite = want;
+        }
+
+        /// <summary>Action a watch HUD slot would run right now (None while an edit mode owns the click).</summary>
+        private QuickMenuAssignableAction QuickMenuWatchHudSlotAction(int hudIdx)
+        {
+            if (m_QuickMenuEditMode || m_WatchEditMode) return QuickMenuAssignableAction.None;
+            return QuickMenuGetSlotAction(hudIdx);
+        }
+
+        private QuickMenuAssignableAction QuickMenuWatchAssignSlotAction(int slotIdx)
+        {
+            if (m_QuickMenuEditMode || m_WatchEditMode) return QuickMenuAssignableAction.None;
+            return QuickMenuGetWatchSlotAction(slotIdx);
         }
 
         internal string QuickMenuWatchHoverLabel(int hudIdx)
@@ -2647,7 +2684,13 @@ namespace VPB
             if (m_WatchCfgToward != 0f)
                 offset += (QuickMenuWatchWristLocalRot * Vector3.forward) * m_WatchCfgToward;
             t.localPosition = offset;
-            t.localRotation = QuickMenuWatchWristLocalRot;
+            // Trim rides on the wrist rotation only: with face-user on, the billboard aim below
+            // replaces this rotation outright, so the trim is dead weight and the settings row hides.
+            // Not mirrored on the right hand — unlike the position offset, an explicitly dialled tilt
+            // should not invert when the watch changes hands.
+            t.localRotation = m_WatchCfgFaceRotActive
+                ? QuickMenuWatchWristLocalRot * m_WatchCfgFaceRot
+                : QuickMenuWatchWristLocalRot;
 
             Transform cam = QuickMenuGetPlayerCamera();
             if (m_WatchCfgFaceUser && cam != null)
@@ -2657,11 +2700,93 @@ namespace VPB
                     from += (cam.right * (m_WatchIsLeft ? QuickMenuWatchShoulderOutM : -QuickMenuWatchShoulderOutM)
                           - cam.up * QuickMenuWatchShoulderDownM) * m_WatchCfgShoulderBlend;
                 Vector3 dir = t.position - from;
-                if (dir.sqrMagnitude > 1e-6f)
-                    t.rotation = Quaternion.LookRotation(dir, cam.up);
+                if (dir.sqrMagnitude > 1e-6f) QuickMenuAimWatchFaceAtEye(t, dir, cam);
             }
 
             QuickMenuTickWatchFreeze(t);
+        }
+
+        /// <summary>
+        /// Turn the face toward the eye and keep it upright <em>on the player's retina</em>.
+        ///
+        /// Two things make this different from the gallery pane's billboard
+        /// (<c>LookRotation(pos - camPos, Vector3.up)</c>), and both caused the upside-down face:
+        ///
+        /// 1. The pane lives under <c>mainHUDAttachPoint</c> — outside <c>worldScaleTransform</c>, scale ~1.
+        ///    The watch is parented to a live VR controller, i.e. inside VaM's world-scale chain (that is
+        ///    why the scale math above divides by <c>parent.lossyScale.x</c> at all). Assigning
+        ///    <c>Transform.rotation</c> there round-trips the value through the parent's *extracted*
+        ///    rotation, which is not well defined for a scaled/mirrored basis and can land the face a
+        ///    half turn over. So convert the aim into parent space with the parent's inverse MATRIX
+        ///    and assign a local rotation instead.
+        /// 2. Any fixed up-hint (world up, <c>cam.up</c>, or the wrist's own up) bakes in an assumption
+        ///    about VaM's controller basis. Rather than assume one, read the result back off the live
+        ///    world matrix and flip the hint when the face's own up came out pointing down the player's
+        ///    view. The read-back is ground truth, so no rig convention can leave the face inverted.
+        /// </summary>
+        private void QuickMenuAimWatchFaceAtEye(Transform t, Vector3 dirWorld, Transform cam)
+        {
+            Vector3 fwd = dirWorld.normalized;
+            Vector3 camUp = cam.up;
+
+            // Eye-relative up, not world up: tilting your head down at your own wrist keeps cam.up
+            // square to the view axis, where world up would be nearly parallel to it and collapse.
+            Vector3 up = camUp;
+            float par = up.x * fwd.x + up.y * fwd.y + up.z * fwd.z;
+            if (par > 0.999f || par < -0.999f) up = cam.forward;
+            if (m_WatchFaceAimFlip) up = -up;
+
+            QuickMenuSetWatchAimLocal(t, fwd, up);
+
+            // Ground truth is the world MATRIX, not t.up: Transform.up/right/forward are defined as
+            // rotation * axis, so they report the same extracted rotation this method is working
+            // around and would happily agree with a wrong result.
+            Vector3 faceUp = t.localToWorldMatrix.MultiplyVector(Vector3.up);
+            float len2 = faceUp.sqrMagnitude;
+            if (len2 < 1e-12f) return;
+            float inv = 1f / Mathf.Sqrt(len2);
+            float onRetina = (faceUp.x * camUp.x + faceUp.y * camUp.y + faceUp.z * camUp.z) * inv;
+            // Band, not a sign test: a face seen edge-on sits near zero and must not chatter.
+            if (onRetina >= -0.15f) return;
+            m_WatchFaceAimFlip = !m_WatchFaceAimFlip;
+            QuickMenuLogWatchAimFlipOnce(t);
+        }
+
+        /// <summary>
+        /// Aim <paramref name="t"/> without ever assigning a world rotation — see
+        /// <see cref="QuickMenuAimWatchFaceAtEye"/> for why the parent's extracted rotation is not usable.
+        /// <c>MultiplyVector</c> on the parent's inverse matrix is the exact world-to-parent direction
+        /// map (rotation and scale, no translation); <c>InverseTransformDirection</c> is not — it is
+        /// <c>Quaternion.Inverse(parent.rotation) * v</c>, the same extraction being avoided.
+        /// </summary>
+        private static void QuickMenuSetWatchAimLocal(Transform t, Vector3 fwd, Vector3 up)
+        {
+            Transform parent = t.parent;
+            if (parent == null)
+            {
+                t.rotation = Quaternion.LookRotation(fwd, up);
+                return;
+            }
+            Matrix4x4 toParent = parent.worldToLocalMatrix;
+            Vector3 fwdLocal = toParent.MultiplyVector(fwd);
+            Vector3 upLocal = toParent.MultiplyVector(up);
+            if (fwdLocal.sqrMagnitude < 1e-10f || upLocal.sqrMagnitude < 1e-10f) return;
+            t.localRotation = Quaternion.LookRotation(fwdLocal, upLocal);
+        }
+
+        private void QuickMenuLogWatchAimFlipOnce(Transform t)
+        {
+            if (m_WatchFaceFlipLogged) return;
+            m_WatchFaceFlipLogged = true;
+            try
+            {
+                Transform p = t.parent;
+                Vector3 ls = p != null ? p.lossyScale : Vector3.one;
+                LogUtil.Log("[VPB] VR wrist watch face aim inverted by parent basis — corrected."
+                    + " parent=" + (p != null ? p.name : "null")
+                    + " lossyScale=" + ls.x.ToString("F3") + "," + ls.y.ToString("F3") + "," + ls.z.ToString("F3"));
+            }
+            catch { }
         }
 
         /// <summary>Where the face would sit on the wrist right now — valid even while frozen.</summary>
@@ -2987,12 +3112,14 @@ namespace VPB
         {
             if (owner == null) return;
             m_Token = owner.QuickMenuSetWatchHoverStatus(owner.QuickMenuWatchHoverLabel(hudSlotIdx));
+            owner.QuickMenuBeginWatchHudRandomPreview(hudSlotIdx);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             if (owner == null) return;
             owner.QuickMenuWatchEndPress();
+            owner.QuickMenuEndRandomPreview();
             if (m_Token == 0) return;
             owner.QuickMenuClearWatchHoverStatus(m_Token);
             m_Token = 0;
@@ -3011,7 +3138,11 @@ namespace VPB
 
         private void OnDisable()
         {
-            if (owner != null && m_Token != 0) owner.QuickMenuClearWatchHoverStatus(m_Token);
+            if (owner != null)
+            {
+                owner.QuickMenuEndRandomPreview();
+                if (m_Token != 0) owner.QuickMenuClearWatchHoverStatus(m_Token);
+            }
             m_Token = 0;
         }
     }
@@ -3027,12 +3158,14 @@ namespace VPB
         {
             if (owner == null) return;
             m_Token = owner.QuickMenuSetWatchHoverStatus(owner.QuickMenuWatchAssignHoverLabel(slotIdx));
+            owner.QuickMenuBeginWatchAssignRandomPreview(slotIdx);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             if (owner == null) return;
             owner.QuickMenuWatchEndPress();
+            owner.QuickMenuEndRandomPreview();
             if (m_Token == 0) return;
             owner.QuickMenuClearWatchHoverStatus(m_Token);
             m_Token = 0;
@@ -3051,7 +3184,11 @@ namespace VPB
 
         private void OnDisable()
         {
-            if (owner != null && m_Token != 0) owner.QuickMenuClearWatchHoverStatus(m_Token);
+            if (owner != null)
+            {
+                owner.QuickMenuEndRandomPreview();
+                if (m_Token != 0) owner.QuickMenuClearWatchHoverStatus(m_Token);
+            }
             m_Token = 0;
         }
     }

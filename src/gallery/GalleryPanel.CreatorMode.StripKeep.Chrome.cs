@@ -266,7 +266,7 @@ namespace VPB
             scroll.horizontal = true;
             scroll.vertical = false;
             scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = 24f * s;
+            scroll.scrollSensitivity = VpbScrollTuning.Sensitivity(24f * s, s);
             return content.transform;
         }
 
