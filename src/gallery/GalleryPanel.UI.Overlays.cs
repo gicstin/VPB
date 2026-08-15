@@ -258,8 +258,9 @@ namespace VPB
         }
 
         /// <summary>
-        /// Modal confirm. Esc → cancel (or onCancel), Enter → confirm.
+        /// Modal confirm. Esc → cancel (or onCancel), Enter → confirm (unless hideConfirm).
         /// Custom button labels optional (e.g. Keep / Revert). Scaled with ChromeScale.
+        /// Optional alt button is never Enter (secondary / extra-risk path).
         /// </summary>
         public void DisplayConfirm(
             string title,
@@ -267,16 +268,22 @@ namespace VPB
             UnityAction onConfirm,
             UnityAction onCancel,
             string confirmLabel,
-            string cancelLabel)
+            string cancelLabel,
+            UnityAction onAlt = null,
+            string altLabel = null,
+            bool hideConfirm = false)
         {
             try { CloseConfirmOverlay(invokeCancel: false); } catch { }
 
             _confirmOnConfirm = onConfirm;
             _confirmOnCancel = onCancel;
+            _confirmOnAlt = onAlt;
             _confirmTitle = title ?? "";
             _confirmMessage = message ?? "";
             _confirmConfirmLabel = confirmLabel;
             _confirmCancelLabel = cancelLabel;
+            _confirmAltLabel = altLabel;
+            _confirmHideConfirm = hideConfirm;
 
             BuildConfirmOverlayUi();
         }
@@ -295,8 +302,11 @@ namespace VPB
             if (s <= 0f) s = 1f;
             GalleryModalTypography type = new GalleryModalTypography(s);
 
-            // Galitz dialog: content-sized shell (no empty cavern); title → body → actions.
-            const float panelWRef = 460f;
+            // Galitz dialog: content-sized shell (no empty cavern); title → body → copy → actions.
+            bool hasAlt = !_confirmHideConfirm && !string.IsNullOrEmpty(_confirmAltLabel) && _confirmOnAlt != null;
+            bool reportMode = !_confirmHideConfirm;
+            float panelWRef = reportMode ? 600f : 460f;
+            if (hasAlt && panelWRef < 600f) panelWRef = 600f;
             float panelW = panelWRef * s;
             GameObject panelGO;
             GameObject overlayGO = UI.CreateModalChrome(
@@ -342,39 +352,32 @@ namespace VPB
             if (titleTxt != null)
                 UI.AddLE(titleTxt.gameObject, preferredHeight: 32f * s, minHeight: 28f * s, flexibleHeight: 0f);
 
-            // Truncate (not Overflow): clamped height must not paint over Cancel/Confirm (Galitz layout).
-            Text msgText = UI.CreateLabel(
-                panelGO,
-                _confirmMessage ?? "",
-                type.Body,
-                GalleryUiColorTokens.TextMuted,
-                TextAnchor.UpperLeft,
-                HorizontalWrapMode.Wrap,
-                VerticalWrapMode.Truncate,
-                raycastTarget: false,
-                name: "Message");
-            float msgH = 48f * s;
-            if (msgText != null)
+            if (reportMode)
             {
-                msgText.horizontalOverflow = HorizontalWrapMode.Wrap;
-                msgText.verticalOverflow = VerticalWrapMode.Truncate;
-                ConfirmPrepLayoutRow(msgText.rectTransform, 48f * s);
-                // Preferred height from content; clamp so long lists stay scannable.
-                float innerW = Mathf.Max(40f, panelW - pad * 2f);
-                float pref = msgText.preferredHeight;
-                try
+                float minReportH = 80f * s;
+                float maxReportH = 440f * s;
+                float reportH;
+                GameObject reportHost = BuildConfirmReportField(panelGO, panelW, pad, type, s, minReportH, maxReportH, out reportH);
+                ConfirmPrepLayoutRow(reportHost.GetComponent<RectTransform>(), reportH);
+                UI.AddLE(reportHost, preferredHeight: reportH, minHeight: minReportH, flexibleHeight: 0f);
+            }
+            else
+            {
+                Text msgText = UI.CreateLabel(
+                    panelGO,
+                    _confirmMessage ?? "",
+                    type.Body,
+                    GalleryUiColorTokens.TextMuted,
+                    TextAnchor.UpperLeft,
+                    HorizontalWrapMode.Wrap,
+                    VerticalWrapMode.Overflow,
+                    raycastTarget: false,
+                    name: "Message");
+                if (msgText != null)
                 {
-                    TextGenerator tg = msgText.cachedTextGeneratorForLayout;
-                    if (tg != null)
-                    {
-                        TextGenerationSettings settings = msgText.GetGenerationSettings(new Vector2(innerW, 0f));
-                        pref = tg.GetPreferredHeight(msgText.text, settings) / msgText.pixelsPerUnit;
-                    }
+                    ConfirmPrepLayoutRow(msgText.rectTransform, 48f * s);
+                    UI.AddLE(msgText.gameObject, preferredHeight: 48f * s, minHeight: 40f * s, flexibleHeight: 0f);
                 }
-                catch { pref = msgText.preferredHeight; }
-                float maxMsg = 220f * s;
-                msgH = Mathf.Clamp(pref + 4f * s, 40f * s, maxMsg);
-                UI.AddLE(msgText.gameObject, preferredHeight: msgH, minHeight: 40f * s, flexibleHeight: 0f);
             }
 
             GameObject btnRow = new GameObject("Buttons");
@@ -383,7 +386,7 @@ namespace VPB
             HorizontalLayoutGroup brh = btnRow.AddComponent<HorizontalLayoutGroup>();
             brh.spacing = 12f * s;
             brh.padding = new RectOffset(0, 0, 0, 0);
-            brh.childAlignment = TextAnchor.MiddleCenter;
+            brh.childAlignment = reportMode ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
             brh.childForceExpandWidth = false;
             brh.childControlWidth = true;
             brh.childForceExpandHeight = true;
@@ -399,16 +402,218 @@ namespace VPB
                 : _confirmConfirmLabel;
 
             float btnH = GalleryUiDesignTokens.ButtonSizeRef * s;
-            float btnW = 132f * s;
+            float btnW = hasAlt ? 0f : 132f * s;
+            if (reportMode)
+            {
+                GameObject copyBtn = UI.CreateFloatChromeIconButton(
+                    btnRow.transform,
+                    btnH,
+                    "vpb_icons/clipboard_list.png",
+                    GalleryUiColorTokens.SurfaceMid,
+                    ConfirmOverlayCopy);
+                if (copyBtn != null)
+                {
+                    copyBtn.name = "ConfirmCopy";
+                    AddTooltip(copyBtn, "gallery.confirm.copy_tip", "Copy report to clipboard (Ctrl+C)");
+                }
+                GameObject spacer = new GameObject("BtnSpacer");
+                spacer.transform.SetParent(btnRow.transform, false);
+                UI.AddLE(spacer, minWidth: 8f * s, flexibleWidth: 1f, minHeight: 1f, preferredHeight: 1f);
+            }
             UI.CreateChromeLayoutButton(
                 btnRow.transform, btnW, btnH, cancelText, type.Body,
                 GalleryUiColorTokens.SurfaceMid, ConfirmOverlayCancel);
-            UI.CreateChromeLayoutButton(
-                btnRow.transform, btnW, btnH, confirmText, type.Body,
-                new Color(0.48f, 0.22f, 0.22f, 1f), ConfirmOverlayConfirm);
+            if (hasAlt)
+            {
+                UI.CreateChromeLayoutButton(
+                    btnRow.transform, btnW, btnH, _confirmAltLabel, type.Body,
+                    GalleryUiColorTokens.ActiveWarnHeader, ConfirmOverlayAlt);
+            }
+            if (!_confirmHideConfirm)
+            {
+                UI.CreateChromeLayoutButton(
+                    btnRow.transform, btnW, btnH, confirmText, type.Body,
+                    new Color(0.48f, 0.22f, 0.22f, 1f), ConfirmOverlayConfirm);
+            }
 
             try { LayoutRebuilder.ForceRebuildLayoutImmediate(panelGO.GetComponent<RectTransform>()); } catch { }
             SetLayerRecursive(overlayGO, backgroundBoxGO.layer);
+        }
+
+        /// <summary>
+        /// Unity UI Text ~16k verts/mesh; keep chunks under that so long delete lists still layout.
+        /// </summary>
+        private const int ConfirmReportChunkChars = 3500;
+
+        private GameObject BuildConfirmReportField(
+            GameObject panelGO,
+            float panelW,
+            int pad,
+            GalleryModalTypography type,
+            float s,
+            float minReportH,
+            float maxReportH,
+            out float reportH)
+        {
+            reportH = minReportH;
+            GameObject host = new GameObject("ReportHost");
+            host.transform.SetParent(panelGO.transform, false);
+            Image hostBg = UI.AddImage(host, GalleryUiColorTokens.SurfaceDarker);
+            if (hostBg != null) hostBg.raycastTarget = true;
+
+            float sbW = GalleryUiDesignTokens.QuickFiltersScrollBarWidthRef * s;
+            float inset = 8f * s;
+            ScrollRect sr = host.AddComponent<ScrollRect>();
+            sr.horizontal = false;
+            sr.vertical = true;
+            sr.movementType = ScrollRect.MovementType.Clamped;
+            sr.scrollSensitivity = VpbScrollTuning.Sensitivity(25f, 1f);
+
+            GameObject viewport = new GameObject("Viewport");
+            viewport.transform.SetParent(host.transform, false);
+            RectTransform vpRt = viewport.AddComponent<RectTransform>();
+            vpRt.anchorMin = Vector2.zero;
+            vpRt.anchorMax = Vector2.one;
+            vpRt.offsetMin = new Vector2(inset, inset);
+            vpRt.offsetMax = new Vector2(-(inset + sbW), -inset);
+            viewport.AddComponent<RectMask2D>();
+            Image vpHit = viewport.AddComponent<Image>();
+            vpHit.color = new Color(1f, 1f, 1f, 0.004f);
+            vpHit.raycastTarget = true;
+            sr.viewport = vpRt;
+
+            GameObject content = new GameObject("Content");
+            content.transform.SetParent(viewport.transform, false);
+            RectTransform contentRt = content.AddComponent<RectTransform>();
+            contentRt.anchorMin = new Vector2(0f, 1f);
+            contentRt.anchorMax = new Vector2(1f, 1f);
+            contentRt.pivot = new Vector2(0.5f, 1f);
+            contentRt.anchoredPosition = Vector2.zero;
+
+            VerticalLayoutGroup cv = content.AddComponent<VerticalLayoutGroup>();
+            int contentPad = Mathf.RoundToInt(4f * s);
+            cv.padding = new RectOffset(contentPad, contentPad, contentPad, contentPad);
+            cv.spacing = 0f;
+            cv.childAlignment = TextAnchor.UpperLeft;
+            cv.childControlWidth = true;
+            cv.childForceExpandWidth = true;
+            cv.childControlHeight = true;
+            cv.childForceExpandHeight = false;
+
+            float innerW = Mathf.Max(40f, panelW - pad * 2f - inset * 2f - sbW - contentPad * 2f);
+            List<string> chunks = ConfirmSplitReportChunks(_confirmMessage ?? "");
+            float totalH = contentPad * 2f;
+            for (int i = 0; i < chunks.Count; i++)
+            {
+                Text text = UI.CreateLabel(
+                    content,
+                    chunks[i],
+                    type.Body,
+                    GalleryUiColorTokens.TextPrimary,
+                    TextAnchor.UpperLeft,
+                    HorizontalWrapMode.Wrap,
+                    VerticalWrapMode.Overflow,
+                    raycastTarget: true,
+                    richText: false,
+                    anchorPreset: AnchorPresets.hStretchTop,
+                    name: "Text" + i);
+                if (text == null) continue;
+                text.supportRichText = false;
+                text.lineSpacing = 1.15f;
+                float h = ConfirmMeasureTextHeight(text, chunks[i], innerW);
+                UI.AddLE(text.gameObject, minHeight: h, preferredHeight: h, flexibleWidth: 1f, flexibleHeight: 0f);
+                totalH += h;
+            }
+
+            contentRt.sizeDelta = new Vector2(0f, Mathf.Max(minReportH, totalH));
+            sr.content = contentRt;
+            reportH = Mathf.Clamp(totalH + inset * 2f, minReportH, maxReportH);
+
+            GameObject scrollbarGO = UI.CreateScrollBar(host, sbW, reportH, Scrollbar.Direction.BottomToTop);
+            RectTransform sbRT = scrollbarGO.GetComponent<RectTransform>();
+            if (sbRT != null)
+            {
+                sbRT.anchorMin = new Vector2(1f, 0f);
+                sbRT.anchorMax = new Vector2(1f, 1f);
+                sbRT.pivot = new Vector2(1f, 1f);
+                sbRT.sizeDelta = new Vector2(sbW, 0f);
+                sbRT.anchoredPosition = Vector2.zero;
+            }
+            Scrollbar sb = scrollbarGO.GetComponent<Scrollbar>();
+            sr.verticalScrollbar = sb;
+            sr.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+            var minHandle = scrollbarGO.AddComponent<ScrollbarMinHandleHeight>();
+            minHandle.minHandlePixels = 24f * s;
+            sr.verticalNormalizedPosition = 1f;
+            return host;
+        }
+
+        private static List<string> ConfirmSplitReportChunks(string message)
+        {
+            var chunks = new List<string>(4);
+            if (string.IsNullOrEmpty(message))
+            {
+                chunks.Add("");
+                return chunks;
+            }
+            int start = 0;
+            int n = message.Length;
+            while (start < n)
+            {
+                int remaining = n - start;
+                if (remaining <= ConfirmReportChunkChars)
+                {
+                    chunks.Add(message.Substring(start));
+                    break;
+                }
+                int take = ConfirmReportChunkChars;
+                int nl = message.LastIndexOf('\n', start + take - 1, take);
+                if (nl >= start)
+                    take = nl - start + 1;
+                if (take <= 0) take = ConfirmReportChunkChars;
+                chunks.Add(message.Substring(start, take));
+                start += take;
+            }
+            return chunks;
+        }
+
+        private static float ConfirmMeasureTextHeight(Text text, string str, float width)
+        {
+            if (text == null) return 0f;
+            float lineH = Mathf.Max(12f, text.fontSize * Mathf.Max(1f, text.lineSpacing) * 1.2f);
+            if (string.IsNullOrEmpty(str)) return lineH;
+            if (width < 8f) width = 8f;
+            try
+            {
+                TextGenerationSettings settings = text.GetGenerationSettings(new Vector2(width, 0f));
+                settings.horizontalOverflow = HorizontalWrapMode.Wrap;
+                settings.verticalOverflow = VerticalWrapMode.Overflow;
+                settings.generateOutOfBounds = true;
+                settings.updateBounds = true;
+                TextGenerator tg = text.cachedTextGeneratorForLayout;
+                if (tg != null)
+                {
+                    float h = tg.GetPreferredHeight(str, settings) / Mathf.Max(0.01f, text.pixelsPerUnit);
+                    if (h > 1f) return h;
+                }
+            }
+            catch { }
+            int lines = 1;
+            for (int i = 0; i < str.Length; i++)
+            {
+                if (str[i] == '\n') lines++;
+            }
+            return lines * lineH;
+        }
+
+        private void ConfirmOverlayCopy()
+        {
+            try
+            {
+                GUIUtility.systemCopyBuffer = _confirmMessage ?? "";
+                ShowTemporaryStatus(VPBTranslation.T("gallery.confirm.copied", "Copied report"), 1.5f);
+            }
+            catch { }
         }
 
         /// <summary>
@@ -453,8 +658,14 @@ namespace VPB
                 ConfirmOverlayCancel();
                 return true;
             }
+            if (!_confirmHideConfirm && IsCtrlHeld() && Input.GetKeyDown(KeyCode.C))
+            {
+                ConfirmOverlayCopy();
+                return true;
+            }
             if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
             {
+                if (_confirmHideConfirm) return true;
                 ConfirmOverlayConfirm();
                 return true;
             }
@@ -463,12 +674,24 @@ namespace VPB
 
         private void ConfirmOverlayConfirm()
         {
+            if (_confirmHideConfirm) return;
             _confirmEscIsDismiss = false;
             UnityAction act = _confirmOnConfirm;
             CloseConfirmOverlay(invokeCancel: false);
             if (act != null)
             {
                 try { act.Invoke(); } catch (Exception ex) { LogUtil.LogError("[VPB] ConfirmOverlayConfirm: " + ex); }
+            }
+        }
+
+        private void ConfirmOverlayAlt()
+        {
+            _confirmEscIsDismiss = false;
+            UnityAction act = _confirmOnAlt;
+            CloseConfirmOverlay(invokeCancel: false);
+            if (act != null)
+            {
+                try { act.Invoke(); } catch (Exception ex) { LogUtil.LogError("[VPB] ConfirmOverlayAlt: " + ex); }
             }
         }
 
@@ -490,18 +713,22 @@ namespace VPB
                 UnityAction act = _confirmOnCancel;
                 _confirmOnCancel = null;
                 _confirmOnConfirm = null;
+                _confirmOnAlt = null;
                 try { act.Invoke(); } catch { }
             }
             else
             {
                 _confirmOnConfirm = null;
                 _confirmOnCancel = null;
+                _confirmOnAlt = null;
             }
 
             _confirmTitle = null;
             _confirmMessage = null;
             _confirmConfirmLabel = null;
             _confirmCancelLabel = null;
+            _confirmAltLabel = null;
+            _confirmHideConfirm = false;
 
             if (_confirmOverlayGO != null)
             {

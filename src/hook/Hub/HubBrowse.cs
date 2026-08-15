@@ -231,6 +231,10 @@ namespace VPB
         protected UIDynamicToggle hideMissingNotOnHubToggleUI;
         protected UIDynamicButton copyMissingFromHubButtonUI;
         protected Color? copyMissingFromHubButtonDefaultColor;
+        protected GameObject missingPackagesScanHourglassGO;
+        protected RectTransform missingPackagesScanHourglassRt;
+        protected JSONStorableBool missingPackagesScanningJSON;
+        protected Coroutine missingScanHourglassSpinRoutine;
 
         private void PositionHideNotOnHubToggle(MVR.Hub.HubBrowseUI ui, RectTransform toggleRt)
         {
@@ -255,6 +259,94 @@ namespace VPB
 
             const float gap = 20f;
             toggleRt.anchoredPosition = closeRt.anchoredPosition + new Vector2(closeRt.rect.width + gap, 0f);
+            AlignHideNotOnHubCheckbox(toggleRt.GetComponent<UIDynamicToggle>());
+        }
+
+        /// <summary>
+        /// configurableTogglePrefab checkbox sits on a fixed Y; footer height + bottom pivot
+        /// leaves the box high vs the stretched label. Re-anchor box to vertical center.
+        /// </summary>
+        private static void AlignHideNotOnHubCheckbox(UIDynamicToggle dyn)
+        {
+            if (dyn == null) return;
+
+            LayoutGroup lg = dyn.GetComponent<LayoutGroup>();
+            HorizontalLayoutGroup hlg = lg as HorizontalLayoutGroup;
+            if (hlg != null)
+            {
+                hlg.childAlignment = TextAnchor.MiddleLeft;
+                hlg.childForceExpandHeight = true;
+            }
+            VerticalLayoutGroup vlg = lg as VerticalLayoutGroup;
+            if (vlg != null)
+            {
+                vlg.childAlignment = TextAnchor.MiddleLeft;
+                vlg.childForceExpandHeight = true;
+            }
+
+            Toggle toggle = dyn.toggle;
+            if (toggle == null) toggle = dyn.GetComponent<Toggle>();
+            if (toggle == null) toggle = dyn.GetComponentInChildren<Toggle>(true);
+
+            RectTransform dynRt = dyn.transform as RectTransform;
+
+            // Layout group owns child Y; only smash anchors when none present.
+            if (lg == null && toggle != null)
+            {
+                RectTransform toggleRt = toggle.transform as RectTransform;
+                if (toggleRt != null && toggleRt != dynRt && !IsVerticallyStretched(toggleRt))
+                    CenterRectVertically(toggleRt);
+
+                Graphic box = toggle.targetGraphic;
+                if (box != null && box != dyn.backgroundImage)
+                {
+                    RectTransform boxRt = box.rectTransform;
+                    if (boxRt != dynRt && !IsVerticallyStretched(boxRt))
+                        CenterRectVertically(boxRt);
+                }
+
+                if (toggle.graphic != null)
+                {
+                    RectTransform checkRt = toggle.graphic.rectTransform;
+                    if (checkRt != null && checkRt.parent != null && checkRt.parent != dyn.transform)
+                    {
+                        RectTransform parentRt = checkRt.parent as RectTransform;
+                        if (parentRt != null && parentRt != dynRt && !IsVerticallyStretched(parentRt))
+                            CenterRectVertically(parentRt);
+                    }
+                }
+            }
+
+            Text[] texts = dyn.GetComponentsInChildren<Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                Text label = texts[i];
+                if (label == null) continue;
+                label.alignment = TextAnchor.MiddleLeft;
+                RectTransform lrt = label.rectTransform;
+                if (lrt == null) continue;
+                lrt.anchorMin = new Vector2(lrt.anchorMin.x, 0f);
+                lrt.anchorMax = new Vector2(lrt.anchorMax.x, 1f);
+                lrt.offsetMin = new Vector2(lrt.offsetMin.x, 0f);
+                lrt.offsetMax = new Vector2(lrt.offsetMax.x, 0f);
+            }
+        }
+
+        private static bool IsVerticallyStretched(RectTransform rt)
+        {
+            if (rt == null) return true;
+            return rt.anchorMin.y <= 0.01f && rt.anchorMax.y >= 0.99f;
+        }
+
+        private static void CenterRectVertically(RectTransform rt)
+        {
+            if (rt == null) return;
+            rt.anchorMin = new Vector2(rt.anchorMin.x, 0.5f);
+            rt.anchorMax = new Vector2(rt.anchorMax.x, 0.5f);
+            rt.pivot = new Vector2(rt.pivot.x, 0.5f);
+            Vector2 ap = rt.anchoredPosition;
+            ap.y = 0f;
+            rt.anchoredPosition = ap;
         }
 
         private void PositionCopyMissingFromHubButton(MVR.Hub.HubBrowseUI ui, RectTransform btnRt)
@@ -281,6 +373,202 @@ namespace VPB
             const float gap = 20f;
             float toggleW = toggleRt.rect.width > 1f ? toggleRt.rect.width : toggleRt.sizeDelta.x;
             btnRt.anchoredPosition = closeRt.anchoredPosition + new Vector2(closeRt.rect.width + gap + toggleW + gap, 0f);
+        }
+
+        private void PositionMissingPackagesScanHourglass(MVR.Hub.HubBrowseUI ui)
+        {
+            if (ui == null || missingPackagesScanHourglassGO == null) return;
+            RectTransform hourRt = missingPackagesScanHourglassGO.transform as RectTransform;
+            if (hourRt == null) return;
+            RectTransform closeRt = ui.closeMissingPackagesPanelButton != null ? (ui.closeMissingPackagesPanelButton.transform as RectTransform) : null;
+            if (closeRt == null) return;
+
+            RectTransform copyRt = copyMissingFromHubButtonUI != null ? (copyMissingFromHubButtonUI.transform as RectTransform) : null;
+            RectTransform toggleRt = hideMissingNotOnHubToggleUI != null ? (hideMissingNotOnHubToggleUI.transform as RectTransform) : null;
+            RectTransform afterRt = copyRt != null ? copyRt : (toggleRt != null ? toggleRt : closeRt);
+
+            if (hourRt.parent != closeRt.parent)
+            {
+                hourRt.SetParent(closeRt.parent, worldPositionStays: false);
+            }
+
+            hourRt.anchorMin = closeRt.anchorMin;
+            hourRt.anchorMax = closeRt.anchorMax;
+            hourRt.pivot = new Vector2(0f, 0f);
+
+            float h = closeRt.rect.height > 1f ? closeRt.rect.height : 60f;
+            hourRt.sizeDelta = new Vector2(h, h);
+
+            const float gap = 20f;
+            float afterW = afterRt.rect.width > 1f ? afterRt.rect.width : afterRt.sizeDelta.x;
+            hourRt.anchoredPosition = afterRt.anchoredPosition + new Vector2(afterW + gap, 0f);
+
+            if (missingPackagesScanHourglassRt != null)
+            {
+                float icon = Mathf.Max(16f, h - 16f);
+                missingPackagesScanHourglassRt.anchorMin = new Vector2(0.5f, 0.5f);
+                missingPackagesScanHourglassRt.anchorMax = new Vector2(0.5f, 0.5f);
+                missingPackagesScanHourglassRt.pivot = new Vector2(0.5f, 0.5f);
+                missingPackagesScanHourglassRt.sizeDelta = new Vector2(icon, icon);
+                missingPackagesScanHourglassRt.anchoredPosition = Vector2.zero;
+            }
+        }
+
+        private static GameObject TryGetHubHourglassTemplate(MVR.Hub.HubBrowseUI ui)
+        {
+            try
+            {
+                SuperController sc = SuperController.singleton;
+                if (sc != null && sc.loadingIcon != null)
+                    return sc.loadingIcon.gameObject;
+            }
+            catch { }
+            if (ui != null)
+            {
+                if (ui.isDownloadingIndicator != null) return ui.isDownloadingIndicator;
+                if (ui.refreshIndicator != null) return ui.refreshIndicator;
+                if (ui.isWebLoadingIndicator != null) return ui.isWebLoadingIndicator;
+            }
+            return null;
+        }
+
+        private static Sprite TryCopySprite(GameObject go)
+        {
+            if (go == null) return null;
+            Image[] images = go.GetComponentsInChildren<Image>(true);
+            Sprite best = null;
+            float bestScore = 0f;
+            for (int i = 0; i < images.Length; i++)
+            {
+                Image img = images[i];
+                if (img == null || img.sprite == null) continue;
+                Rect r = img.sprite.rect;
+                float w = r.width;
+                float h = r.height;
+                if (w < 4f || h < 4f) continue;
+                float aspect = w > h ? h / w : w / h;
+                float score = aspect * Mathf.Min(w * h, 4096f);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = img.sprite;
+                }
+            }
+            if (best != null) return best;
+            SpriteRenderer sr = go.GetComponent<SpriteRenderer>();
+            if (sr == null) sr = go.GetComponentInChildren<SpriteRenderer>(true);
+            if (sr != null && sr.sprite != null) return sr.sprite;
+            return null;
+        }
+
+        private void EnsureMissingPackagesScanHourglass(MVR.Hub.HubBrowseUI ui, Transform parent)
+        {
+            if (missingPackagesScanHourglassGO != null || parent == null) return;
+
+            Transform chromeParent = parent;
+            MVRPluginManager manager = null;
+            try
+            {
+                Transform pm = SuperController.singleton != null
+                    ? SuperController.singleton.transform.Find("ScenePluginManager")
+                    : null;
+                if (pm != null) manager = pm.GetComponent<MVRPluginManager>();
+            }
+            catch { }
+
+            if (manager != null && manager.configurableButtonPrefab != null)
+            {
+                RectTransform chromeRt = UnityEngine.Object.Instantiate(manager.configurableButtonPrefab, parent) as RectTransform;
+                if (chromeRt != null)
+                {
+                    chromeRt.gameObject.name = "MissingPackagesScanHourglass";
+                    chromeRt.gameObject.SetActive(false);
+                    UIDynamicButton chromeBtn = chromeRt.GetComponent<UIDynamicButton>();
+                    if (chromeBtn != null)
+                    {
+                        chromeBtn.label = string.Empty;
+                        if (chromeBtn.button != null)
+                        {
+                            chromeBtn.button.interactable = false;
+                            if (chromeBtn.button.targetGraphic != null)
+                                chromeBtn.button.targetGraphic.raycastTarget = false;
+                        }
+                    }
+                    Text chromeText = chromeRt.GetComponentInChildren<Text>(true);
+                    if (chromeText != null) chromeText.enabled = false;
+                    missingPackagesScanHourglassGO = chromeRt.gameObject;
+                    chromeParent = chromeRt;
+                }
+            }
+
+            if (missingPackagesScanHourglassGO == null)
+            {
+                missingPackagesScanHourglassGO = new GameObject("MissingPackagesScanHourglass");
+                missingPackagesScanHourglassGO.layer = parent.gameObject.layer;
+                missingPackagesScanHourglassGO.transform.SetParent(parent, false);
+                missingPackagesScanHourglassGO.AddComponent<RectTransform>();
+                missingPackagesScanHourglassGO.SetActive(false);
+                chromeParent = missingPackagesScanHourglassGO.transform;
+            }
+
+            GameObject iconGo = new GameObject("HourglassIcon");
+            iconGo.layer = missingPackagesScanHourglassGO.layer;
+            iconGo.transform.SetParent(chromeParent, false);
+            missingPackagesScanHourglassRt = iconGo.AddComponent<RectTransform>();
+            missingPackagesScanHourglassRt.anchorMin = new Vector2(0.5f, 0.5f);
+            missingPackagesScanHourglassRt.anchorMax = new Vector2(0.5f, 0.5f);
+            missingPackagesScanHourglassRt.pivot = new Vector2(0.5f, 0.5f);
+            missingPackagesScanHourglassRt.sizeDelta = new Vector2(44f, 44f);
+            missingPackagesScanHourglassRt.anchoredPosition = Vector2.zero;
+            Image img = iconGo.AddComponent<Image>();
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            Sprite sp = TryCopySprite(TryGetHubHourglassTemplate(ui));
+            if (sp != null)
+            {
+                img.sprite = sp;
+                img.color = Color.white;
+            }
+            else
+            {
+                img.color = new Color32(255, 210, 70, 255);
+            }
+
+            missingPackagesScanningJSON = new JSONStorableBool("Scanning Missing From Hub", false);
+            missingPackagesScanningJSON.RegisterIndicator(missingPackagesScanHourglassGO, false);
+            missingPackagesScanHourglassGO.SetActive(false);
+        }
+
+        private void SetMissingPackagesScanning(bool scanning)
+        {
+            if (missingPackagesScanningJSON != null)
+                missingPackagesScanningJSON.val = scanning;
+            else if (missingPackagesScanHourglassGO != null)
+                missingPackagesScanHourglassGO.SetActive(scanning);
+
+            if (scanning)
+            {
+                if (missingScanHourglassSpinRoutine == null && missingPackagesScanHourglassRt != null)
+                    missingScanHourglassSpinRoutine = StartCoroutine(SpinMissingScanHourglass());
+            }
+            else if (missingScanHourglassSpinRoutine != null)
+            {
+                try { StopCoroutine(missingScanHourglassSpinRoutine); } catch { }
+                missingScanHourglassSpinRoutine = null;
+                if (missingPackagesScanHourglassRt != null)
+                    missingPackagesScanHourglassRt.localRotation = Quaternion.identity;
+            }
+        }
+
+        private IEnumerator SpinMissingScanHourglass()
+        {
+            RectTransform rt = missingPackagesScanHourglassRt;
+            while (missingPackagesRequestInFlight && rt != null)
+            {
+                rt.Rotate(0f, 0f, -240f * Time.unscaledDeltaTime);
+                yield return null;
+            }
+            missingScanHourglassSpinRoutine = null;
         }
 
         private void CopyMissingFromHubListToClipboard()
@@ -1868,6 +2156,7 @@ namespace VPB
                 missingPackagesCoroutine = null;
             }
             missingPackagesRequestInFlight = false;
+            SetMissingPackagesScanning(false);
             if (missingPackagesPanel != null)
             {
                 missingPackagesPanel.SetActive(false);
@@ -1877,6 +2166,7 @@ namespace VPB
         private IEnumerator FindMissingPackagesBatched(List<string> missingPackageNames)
         {
             missingPackagesRequestInFlight = true;
+            SetMissingPackagesScanning(true);
             try
             {
                 // Avoid huge payloads that can yield empty/invalid JSON responses from the hub.
@@ -1980,6 +2270,7 @@ namespace VPB
             {
                 missingPackagesRequestInFlight = false;
                 missingPackagesCoroutine = null;
+                SetMissingPackagesScanning(false);
                 // After a full run, add a small cooldown to prevent immediate re-entry spam.
                 nextMissingPackagesRequestAllowedRealtime = Time.realtimeSinceStartup + 1.0f;
             }
@@ -3457,6 +3748,7 @@ namespace VPB
                                 hideMissingNotOnHubToggleUI.label = hideMissingNotOnHubJSON.name;
                                 hideMissingNotOnHubJSON.toggle = hideMissingNotOnHubToggleUI.toggle;
                                 hideMissingNotOnHubToggleUI.backgroundImage.color = new Color32(255, 170, 110, 255);
+                                AlignHideNotOnHubCheckbox(hideMissingNotOnHubToggleUI);
                             }
                             // Apply immediately so the initial ON state takes effect without user interaction.
                             ApplyMissingPackagesNotOnHubVisibility();
@@ -3481,6 +3773,9 @@ namespace VPB
                                 }
                                 PositionCopyMissingFromHubButton(componentInChildren, btnRt);
                             }
+
+                            EnsureMissingPackagesScanHourglass(componentInChildren, toggleParent);
+                            PositionMissingPackagesScanHourglass(componentInChildren);
                         }
                     }
                 }
@@ -3490,6 +3785,12 @@ namespace VPB
                     PositionHideNotOnHubToggle(componentInChildren, hideMissingNotOnHubToggleUI.transform as RectTransform);
                     if (copyMissingFromHubButtonUI != null)
                         PositionCopyMissingFromHubButton(componentInChildren, copyMissingFromHubButtonUI.transform as RectTransform);
+                    if (missingPackagesScanHourglassGO == null)
+                    {
+                        Transform hourParent = hideMissingNotOnHubToggleUI.transform.parent;
+                        EnsureMissingPackagesScanHourglass(componentInChildren, hourParent);
+                    }
+                    PositionMissingPackagesScanHourglass(componentInChildren);
                 }
             }
             

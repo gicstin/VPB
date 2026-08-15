@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
+using System.Threading;
 using UnityEngine;
+using UnityEngine.Events;
 using SimpleJSON;
 
 namespace VPB
@@ -42,7 +44,8 @@ namespace VPB
             HashSet<string> runningSceneDeps,
             List<string> blocked,
             List<string> warned,
-            List<string> toDelete)
+            List<string> toDelete,
+            bool warnDependents = true)
         {
             if (uids == null || uids.Count == 0) return;
             try { DependencyGraph.EnsureForUids(uids); } catch { }
@@ -81,12 +84,15 @@ namespace VPB
                     warned.Add($"{uid}.var (referenced by running scene)");
                 }
 
-                // Dependents warning
-                int depCount = 0;
-                try { depCount = GetDependentCount(uid); } catch { depCount = 0; }
-                if (depCount > 0)
+                // Dependents warning (skip for exclusive-dep pass — those dependents are the packages we are already deleting).
+                if (warnDependents)
                 {
-                    warned.Add($"{uid}.var ({depCount} dependents)");
+                    int depCount = 0;
+                    try { depCount = GetDependentCount(uid); } catch { depCount = 0; }
+                    if (depCount > 0)
+                    {
+                        warned.Add($"{uid}.var ({depCount} dependents)");
+                    }
                 }
 
                 // Critical: must be resolvable to a file on disk
@@ -308,52 +314,339 @@ namespace VPB
                 }
                 if (toDelete.Count > 0)
                 {
-                    summaryLines.Add($"Move {toDelete.Count} package(s) into '{DeletedPackagesFolderName}':");
-                    AppendCappedUidBullets(summaryLines, toDelete, maxShown: 8);
+                    AppendSectionTitle(summaryLines, string.Format(
+                        VPBTranslation.T("gallery.delete.section_packages", "Move {0} package(s) to DeletedPackages"),
+                        toDelete.Count));
+                    AppendUidVarLines(summaryLines, toDelete);
                 }
                 if (localScenes.Count > 0)
-                    summaryLines.Add($"Move {localScenes.Count} local scene(s) (JSON and preview image if present) into '{DeletedLocalScenesFolderName}'.");
+                    summaryLines.Add(string.Format(
+                        VPBTranslation.T("gallery.delete.section_local_scenes", "Move {0} local scene(s) (JSON and preview if present) to DeletedScenes."),
+                        localScenes.Count));
                 if (localPresets.Count > 0)
-                    summaryLines.Add($"Move {localPresets.Count} local preset(s) into '{LocalPresetDeleteSupport.DeletedLocalPresetsFolderName}'.");
+                    summaryLines.Add(string.Format(
+                        VPBTranslation.T("gallery.delete.section_local_presets", "Move {0} local preset(s) to DeletedPresets."),
+                        localPresets.Count));
+
+                if (toDelete.Count > 0)
+                {
+                    summaryLines.Add("");
+                    summaryLines.Add(VPBTranslation.T(
+                        "gallery.delete.unused_deps_hint",
+                        "Unused deps… scans for dependencies no other package uses, then asks again."));
+                }
 
                 string msg =
                     string.Join("\n", summaryLines.ToArray()) + "\n\n" +
                     (string.IsNullOrEmpty(relatedBlock) ? "" : (relatedBlock + "\n\n")) +
-                    (warned.Count > 0 ? ("Warnings:\n- " + string.Join("\n- ", warned.Distinct().Take(12).ToArray()) + (warned.Count > 12 ? "\n- ..." : "") + "\n\n") : "") +
-                    (blocked.Count > 0 ? ("Blocked packages (will NOT be deleted):\n- " + string.Join("\n- ", blocked.Distinct().Take(12).ToArray()) + (blocked.Count > 12 ? "\n- ..." : "") + "\n\n") : "") +
-                    "Proceed?";
+                    FormatDeleteWarnBlockedBlocks(warned, blocked);
 
-                DisplayConfirm("Delete", msg, () =>
+                UnityAction onDelete = () =>
+                    ExecuteTboxDeleteMoves(toDelete, localScenes, localPresets, deletedPkgDir, deletedSceneDir, deletedPresetDir);
+
+                if (toDelete.Count > 0)
                 {
-                    // Select next survivor before moves so purge does not empty selection
-                    // (empty selection closes detail strip).
-                    try { SelectNextBeforeTboxDelete(toDelete, localScenes, localPresets); }
-                    catch (Exception ex) { LogSuppressed("DeletePackages.SelectNextBeforeTboxDelete", ex); }
-
-                    int pm = 0, pf = 0, sm = 0, sf = 0, prm = 0, prf = 0;
-                    var undoPairs = new List<FileMoveUndoPair>();
-                    if (toDelete.Count > 0)
-                        PerformDeleteMove(toDelete, deletedPkgDir, out pm, out pf, undoPairs);
-                    if (localScenes.Count > 0)
-                        PerformLocalScenesDeleteMove(localScenes, deletedSceneDir, out sm, out sf, undoPairs);
-                    if (localPresets.Count > 0)
-                        PerformLocalPresetsDeleteMove(localPresets, deletedPresetDir, out prm, out prf, undoPairs);
-                    try
-                    {
-                        PushFileMoveUndo(
-                            undoPairs,
-                            VPBTranslation.T("gallery.undo.delete", "Delete"),
-                            "tbox_undo_delete");
-                    }
-                    catch { }
-                    ShowCombinedDeleteStatus(pm, pf, sm, sf, prm, prf);
-                });
+                    DisplayConfirm(
+                        VPBTranslation.T("gallery.delete.title", "Delete"),
+                        msg,
+                        onDelete,
+                        null,
+                        VPBTranslation.T("gallery.delete.btn_delete", "Delete"),
+                        VPBTranslation.T("hook.cancel", "Cancel"),
+                        () => TboxBeginExclusiveDepScan(
+                            toDelete, localScenes, localPresets, blocked, warned, relatedBlock,
+                            deletingLoadedScene, currentScenePkg, runningSceneDeps,
+                            deletedPkgDir, deletedSceneDir, deletedPresetDir),
+                        VPBTranslation.T("gallery.delete.btn_unused_deps", "Unused deps…"));
+                }
+                else
+                {
+                    DisplayConfirm(VPBTranslation.T("gallery.delete.title", "Delete"), msg, onDelete);
+                }
             }
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB] TboxDeleteSelectedPackages error: " + ex);
                 ShowTemporaryStatus("Delete failed. See log.", 2f);
             }
+        }
+
+        private static string FormatDeleteWarnBlockedBlocks(List<string> warned, List<string> blocked)
+        {
+            var lines = new List<string>();
+            AppendDistinctNamedSection(lines, warned, "gallery.delete.section_warnings", "Warnings ({0})");
+            AppendDistinctNamedSection(lines, blocked, "gallery.delete.section_blocked", "Blocked — will not be deleted ({0})");
+            if (lines.Count == 0) return "";
+            return string.Join("\n", lines.ToArray()) + "\n\n";
+        }
+
+        private void ExecuteTboxDeleteMoves(
+            List<string> packageUids,
+            List<LocalSceneDeleteItem> localScenes,
+            List<LocalPresetDeleteItem> localPresets,
+            string deletedPkgDir,
+            string deletedSceneDir,
+            string deletedPresetDir)
+        {
+            try { SelectNextBeforeTboxDelete(packageUids, localScenes, localPresets); }
+            catch (Exception ex) { LogSuppressed("DeletePackages.SelectNextBeforeTboxDelete", ex); }
+
+            int pm = 0, pf = 0, sm = 0, sf = 0, prm = 0, prf = 0;
+            var undoPairs = new List<FileMoveUndoPair>();
+            if (packageUids != null && packageUids.Count > 0)
+                PerformDeleteMove(packageUids, deletedPkgDir, out pm, out pf, undoPairs);
+            if (localScenes != null && localScenes.Count > 0)
+                PerformLocalScenesDeleteMove(localScenes, deletedSceneDir, out sm, out sf, undoPairs);
+            if (localPresets != null && localPresets.Count > 0)
+                PerformLocalPresetsDeleteMove(localPresets, deletedPresetDir, out prm, out prf, undoPairs);
+            try
+            {
+                PushFileMoveUndo(
+                    undoPairs,
+                    VPBTranslation.T("gallery.undo.delete", "Delete"),
+                    "tbox_undo_delete");
+            }
+            catch { }
+            ShowCombinedDeleteStatus(pm, pf, sm, sf, prm, prf);
+        }
+
+        private void TboxBeginExclusiveDepScan(
+            List<string> toDelete,
+            List<LocalSceneDeleteItem> localScenes,
+            List<LocalPresetDeleteItem> localPresets,
+            List<string> blocked,
+            List<string> warned,
+            string relatedBlock,
+            bool deletingLoadedScene,
+            string currentScenePkg,
+            HashSet<string> runningSceneDeps,
+            string deletedPkgDir,
+            string deletedSceneDir,
+            string deletedPresetDir)
+        {
+            if (_tboxExclusiveDepScanCo != null)
+            {
+                try { StopCoroutine(_tboxExclusiveDepScanCo); } catch { }
+                _tboxExclusiveDepScanCo = null;
+            }
+            _tboxExclusiveDepScanSerial++;
+            _tboxExclusiveDepScanCo = StartCoroutine(TboxScanExclusiveDepsThenConfirm(
+                toDelete, localScenes, localPresets, blocked, warned, relatedBlock,
+                deletingLoadedScene, currentScenePkg, runningSceneDeps,
+                deletedPkgDir, deletedSceneDir, deletedPresetDir,
+                _tboxExclusiveDepScanSerial));
+        }
+
+        private IEnumerator TboxScanExclusiveDepsThenConfirm(
+            List<string> toDelete,
+            List<LocalSceneDeleteItem> localScenes,
+            List<LocalPresetDeleteItem> localPresets,
+            List<string> blocked,
+            List<string> warned,
+            string relatedBlock,
+            bool deletingLoadedScene,
+            string currentScenePkg,
+            HashSet<string> runningSceneDeps,
+            string deletedPkgDir,
+            string deletedSceneDir,
+            string deletedPresetDir,
+            int serial)
+        {
+            var abort = new int[1];
+            DisplayConfirm(
+                VPBTranslation.T("gallery.delete.scan_unused_title", "Unused dependencies"),
+                VPBTranslation.T("gallery.delete.scan_unused_msg", "Scanning for dependencies no other package uses…"),
+                null,
+                () => { abort[0] = 1; },
+                null,
+                VPBTranslation.T("hook.cancel", "Cancel"),
+                hideConfirm: true);
+
+            ExclusiveDependencyFinder.ScanInput snap = null;
+            try { snap = ExclusiveDependencyFinder.CaptureInstalledSnapshot(toDelete); }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.CaptureInstalledSnapshot", ex);
+            }
+
+            var done = new int[1];
+            ExclusiveDependencyFinder.ScanResult scanResult = null;
+            Exception workerEx = null;
+            ExclusiveDependencyFinder.ScanInput snapCapture = snap;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    scanResult = ExclusiveDependencyFinder.Find(snapCapture, () => abort[0] != 0);
+                }
+                catch (Exception ex)
+                {
+                    workerEx = ex;
+                    scanResult = new ExclusiveDependencyFinder.ScanResult();
+                }
+                finally
+                {
+                    done[0] = 1;
+                }
+            });
+
+            while (done[0] == 0)
+                yield return null;
+
+            _tboxExclusiveDepScanCo = null;
+            if (serial != _tboxExclusiveDepScanSerial || abort[0] != 0)
+                yield break;
+
+            try { CloseConfirmOverlay(invokeCancel: false); } catch { }
+
+            if (workerEx != null)
+            {
+                LogUtil.LogWarning("[VPB] Exclusive dep scan failed: " + workerEx.Message);
+                ShowTemporaryStatus("Unused-dep scan failed. See log.", 2.5f);
+                yield break;
+            }
+
+            if (scanResult == null) scanResult = new ExclusiveDependencyFinder.ScanResult();
+            try
+            {
+                LogUtil.Log("[VPB] Exclusive deps scan selected=" + toDelete.Count
+                    + " seedUids=" + scanResult.SeedCount
+                    + " forwardSrc=" + scanResult.ForwardSources
+                    + " seedTokens=" + scanResult.SeedTokens
+                    + " candidates=" + scanResult.Candidates
+                    + " exclusive=" + (scanResult.ExclusiveUids != null ? scanResult.ExclusiveUids.Count : 0)
+                    + " varsScanned=" + scanResult.VarsScanned
+                    + " resolveMiss=" + scanResult.ResolveMisses);
+            }
+            catch { }
+
+            TboxShowDeleteWithExclusiveDepsConfirm(
+                toDelete,
+                scanResult,
+                localScenes,
+                localPresets,
+                blocked,
+                warned,
+                relatedBlock,
+                deletingLoadedScene,
+                currentScenePkg,
+                runningSceneDeps,
+                deletedPkgDir,
+                deletedSceneDir,
+                deletedPresetDir);
+        }
+
+        private void TboxShowDeleteWithExclusiveDepsConfirm(
+            List<string> toDelete,
+            ExclusiveDependencyFinder.ScanResult scanResult,
+            List<LocalSceneDeleteItem> localScenes,
+            List<LocalPresetDeleteItem> localPresets,
+            List<string> blocked,
+            List<string> warned,
+            string relatedBlock,
+            bool deletingLoadedScene,
+            string currentScenePkg,
+            HashSet<string> runningSceneDeps,
+            string deletedPkgDir,
+            string deletedSceneDir,
+            string deletedPresetDir)
+        {
+            var seedSet = new HashSet<string>(toDelete, StringComparer.OrdinalIgnoreCase);
+            var exclusiveSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> exclusiveRaw = scanResult != null ? scanResult.ExclusiveUids : null;
+            if (exclusiveRaw != null)
+            {
+                for (int i = 0; i < exclusiveRaw.Count; i++)
+                {
+                    string u = exclusiveRaw[i];
+                    if (!string.IsNullOrEmpty(u) && !seedSet.Contains(u))
+                        exclusiveSet.Add(u);
+                }
+            }
+
+            var exclusiveBlocked = new List<string>();
+            var exclusiveWarned = new List<string>();
+            var exclusiveOk = new List<string>();
+            if (exclusiveSet.Count > 0)
+                ClassifyUidsForTboxDelete(exclusiveSet, currentScenePkg, runningSceneDeps, exclusiveBlocked, exclusiveWarned, exclusiveOk, warnDependents: false);
+
+            var combined = new List<string>(toDelete.Count + exclusiveOk.Count);
+            for (int i = 0; i < toDelete.Count; i++)
+                combined.Add(toDelete[i]);
+            for (int i = 0; i < exclusiveOk.Count; i++)
+            {
+                if (!seedSet.Contains(exclusiveOk[i]))
+                    combined.Add(exclusiveOk[i]);
+            }
+
+            var warnAll = new List<string>();
+            if (warned != null) warnAll.AddRange(warned);
+            warnAll.AddRange(exclusiveWarned);
+            var blockAll = new List<string>();
+            if (blocked != null) blockAll.AddRange(blocked);
+            blockAll.AddRange(exclusiveBlocked);
+
+            bool loaded = deletingLoadedScene
+                || SelectionDeletesCurrentlyLoadedScene(combined, currentScenePkg, localScenes);
+
+            var summaryLines = new List<string>();
+            if (loaded)
+            {
+                summaryLines.Add(VPBTranslation.T(
+                    "gallery.delete.warn_current_scene",
+                    "Includes the currently loaded scene. Files move to DeletedPackages/DeletedScenes; scene stays in memory until you load another. Ctrl+Z undoes the move."));
+                summaryLines.Add("");
+            }
+
+            if (toDelete.Count > 0)
+            {
+                AppendSectionTitle(summaryLines, string.Format(
+                    VPBTranslation.T("gallery.delete.section_packages", "Move {0} package(s) to DeletedPackages"),
+                    toDelete.Count));
+                AppendUidVarLines(summaryLines, toDelete);
+            }
+            if (exclusiveOk.Count > 0)
+            {
+                AppendSectionTitle(summaryLines, string.Format(
+                    VPBTranslation.T("gallery.delete.unused_deps_found", "Unused dependencies ({0}, no other package references these):"),
+                    exclusiveOk.Count));
+                AppendUidVarLines(summaryLines, exclusiveOk);
+            }
+            else
+            {
+                AppendSectionTitle(summaryLines, VPBTranslation.T(
+                    "gallery.delete.unused_deps_none",
+                    "No unused dependencies. Delete selected packages only?"));
+            }
+            if (exclusiveBlocked.Count > 0)
+            {
+                AppendSectionTitle(summaryLines, VPBTranslation.T("gallery.delete.unused_deps_skipped", "Skipped unused deps:"));
+                for (int i = 0; i < exclusiveBlocked.Count; i++)
+                    summaryLines.Add(exclusiveBlocked[i]);
+            }
+            if (localScenes != null && localScenes.Count > 0)
+                summaryLines.Add(string.Format(
+                    VPBTranslation.T("gallery.delete.section_local_scenes", "Move {0} local scene(s) (JSON and preview if present) to DeletedScenes."),
+                    localScenes.Count));
+            if (localPresets != null && localPresets.Count > 0)
+                summaryLines.Add(string.Format(
+                    VPBTranslation.T("gallery.delete.section_local_presets", "Move {0} local preset(s) to DeletedPresets."),
+                    localPresets.Count));
+
+            string msg =
+                string.Join("\n", summaryLines.ToArray()) + "\n\n" +
+                (string.IsNullOrEmpty(relatedBlock) ? "" : (relatedBlock + "\n\n")) +
+                FormatDeleteWarnBlockedBlocks(warnAll, blockAll);
+
+            DisplayConfirm(
+                VPBTranslation.T("gallery.delete.title", "Delete"),
+                msg,
+                () => ExecuteTboxDeleteMoves(combined, localScenes, localPresets, deletedPkgDir, deletedSceneDir, deletedPresetDir),
+                null,
+                exclusiveOk.Count > 0
+                    ? VPBTranslation.T("gallery.delete.confirm_with_deps", "Delete all")
+                    : VPBTranslation.T("gallery.delete.btn_delete", "Delete"),
+                VPBTranslation.T("hook.cancel", "Cancel"));
         }
 
         private void ShowCombinedDeleteStatus(int pkgMoved, int pkgFailed, int sceneMoved, int sceneFailed, int presetMoved, int presetFailed)
@@ -791,25 +1084,41 @@ namespace VPB
             return names;
         }
 
-        /// <summary>
-        /// Append "- uid.var" lines for recognition; truncate with "- ..." after <paramref name="maxShown"/>.
-        /// </summary>
-        private static void AppendCappedUidBullets(List<string> lines, List<string> uids, int maxShown)
+        /// <summary>Section header with blank line before (Gestalt chunking).</summary>
+        private static void AppendSectionTitle(List<string> lines, string title)
         {
-            if (lines == null || uids == null || uids.Count == 0 || maxShown <= 0) return;
-            int shown = 0;
+            if (lines == null || string.IsNullOrEmpty(title)) return;
+            if (lines.Count > 0)
+                lines.Add("");
+            lines.Add(title);
+        }
+
+        private static void AppendUidVarLines(List<string> lines, List<string> uids)
+        {
+            if (lines == null || uids == null) return;
             for (int i = 0; i < uids.Count; i++)
             {
                 string uid = uids[i];
                 if (string.IsNullOrEmpty(uid)) continue;
-                if (shown >= maxShown)
-                {
-                    lines.Add("- ...");
-                    break;
-                }
-                lines.Add("- " + uid + ".var");
-                shown++;
+                lines.Add(uid + ".var");
             }
+        }
+
+        private static void AppendDistinctNamedSection(List<string> lines, List<string> items, string key, string english)
+        {
+            if (lines == null || items == null || items.Count == 0) return;
+            var unique = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < items.Count; i++)
+            {
+                string s = items[i];
+                if (string.IsNullOrEmpty(s) || !seen.Add(s)) continue;
+                unique.Add(s);
+            }
+            if (unique.Count == 0) return;
+            AppendSectionTitle(lines, string.Format(VPBTranslation.T(key, english), unique.Count));
+            for (int i = 0; i < unique.Count; i++)
+                lines.Add(unique[i]);
         }
 
         /// <summary>

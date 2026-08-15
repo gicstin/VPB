@@ -411,6 +411,7 @@
     <Compile Include="src\gallery\CacheCleanupManager.cs" />
     <Compile Include="src\gallery\index\VpbSqlite3.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.ExclusiveDeps.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.HistoryUsage.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PackageManifest.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.VarPathInventory.cs" />
@@ -605,6 +606,7 @@
     <Compile Include="src\AutoLoadPackagesManager.cs" />
     <Compile Include="src\DependencyWhitelistManager.cs" />
     <Compile Include="src\SpawnAtomElement.cs" />
+    <Compile Include="src\hook\FileManagement\ExclusiveDependencyFinder.cs" />
     <Compile Include="src\hook\FileManagement\DependencyExtractor.cs" />
     <Compile Include="src\hook\FileManagement\DependencyGraph.cs" />
     <Compile Include="src\hook\FileManagement\DirectoryEntry.cs" />

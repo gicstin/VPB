@@ -1187,7 +1187,7 @@ namespace VPB
             );
             tboxDeleteBtn.name = "Tbox_Delete";
             TboxConfigureActionButtonFlex(tboxDeleteBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes. Delete / Backspace.");
+            AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes. Confirm also offers Unused deps…. Delete / Backspace.");
             try
             {
                 var delIcon = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);

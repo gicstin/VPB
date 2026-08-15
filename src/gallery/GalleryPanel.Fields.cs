@@ -467,10 +467,15 @@ namespace VPB
         private GameObject _confirmOverlayGO;
         private UnityAction _confirmOnConfirm;
         private UnityAction _confirmOnCancel;
+        private UnityAction _confirmOnAlt;
         private string _confirmTitle;
         private string _confirmMessage;
         private string _confirmConfirmLabel;
         private string _confirmCancelLabel;
+        private string _confirmAltLabel;
+        private bool _confirmHideConfirm;
+        private Coroutine _tboxExclusiveDepScanCo;
+        private int _tboxExclusiveDepScanSerial;
         private GameObject clothingSlotPickerPanelGO;
 
         private GameObject hairSlotPickerOverlayGO;
