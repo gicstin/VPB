@@ -217,6 +217,9 @@ namespace VPB.src.util
             if (string.IsNullOrEmpty(id)) return false;
             if (string.Equals(id, "PosePresets", System.StringComparison.OrdinalIgnoreCase)) return true;
             if (string.Equals(id, "control", System.StringComparison.OrdinalIgnoreCase)) return true;
+            // Clothing/hair WrapControl holds Offset/Thickness — not a pose FreeController.
+            // EndsWith("Control") would strip it from appearance JSON (issue #80).
+            if (id.EndsWith("WrapControl", System.StringComparison.OrdinalIgnoreCase)) return false;
             if (id.EndsWith("Control", System.StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(id, "EyelidControl", System.StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(id, "EyeTargetControl", System.StringComparison.OrdinalIgnoreCase)

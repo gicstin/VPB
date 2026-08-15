@@ -1720,6 +1720,8 @@ namespace VPB
             if (string.IsNullOrEmpty(storableId)) return false;
             if (string.Equals(storableId, "control", StringComparison.OrdinalIgnoreCase)) return true;
             if (string.Equals(storableId, "geometry", StringComparison.OrdinalIgnoreCase)) return true;
+            // WrapControl = clothing Offset/Thickness. Keep snapshots must include it.
+            if (storableId.EndsWith("WrapControl", StringComparison.OrdinalIgnoreCase)) return false;
             if (storableId.EndsWith("Control", StringComparison.OrdinalIgnoreCase)) return true;
             if (storableId.IndexOf("Physics", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (storableId.IndexOf("AutoCollider", StringComparison.OrdinalIgnoreCase) >= 0) return true;
@@ -2298,15 +2300,18 @@ namespace VPB
 
             MaterialOptions[] mos = null;
             try { mos = root.GetComponentsInChildren<MaterialOptions>(true); } catch { }
-            if (mos == null || mos.Length == 0) return;
-
-            for (int i = 0; i < mos.Length; i++)
+            if (mos != null)
             {
-                MaterialOptions mo = mos[i];
-                if (mo == null) continue;
-                ReloadMaterialOptionsCustomTextures(mo);
-                ResyncMaterialOptionsCustomTextureTiles(mo);
+                for (int i = 0; i < mos.Length; i++)
+                {
+                    MaterialOptions mo = mos[i];
+                    if (mo == null) continue;
+                    ReloadMaterialOptionsCustomTextures(mo);
+                    ResyncMaterialOptionsCustomTextureTiles(mo);
+                }
             }
+
+            ResyncWrapOffsetThicknessUnder(root);
         }
 
         internal static void ResyncCustomTextureTilesUnder(Transform root)
@@ -2399,6 +2404,47 @@ namespace VPB
                 catch (Exception ex)
                 {
                     LogUtil.LogWarning("[VPB] custom texture rebind failed for " + name + ": " + ex.Message);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Push WrapControl Offset/Thickness onto DAZSkinWrap after settle.
+        /// PostLoadJSONRestore can run before wrap is assigned; Sync then no-ops and wrap
+        /// keeps asset defaults. Re-fire stored floats once wrap exists (issue #80).
+        /// </summary>
+        internal static void ResyncWrapOffsetThicknessUnder(Transform root)
+        {
+            if (root == null) return;
+
+            DAZSkinWrapControl[] ctrls = null;
+            try { ctrls = root.GetComponentsInChildren<DAZSkinWrapControl>(true); } catch { }
+            if (ctrls == null || ctrls.Length == 0) return;
+
+            for (int i = 0; i < ctrls.Length; i++)
+            {
+                DAZSkinWrapControl ctrl = ctrls[i];
+                if (ctrl == null) continue;
+
+                JSONStorableFloat offset = null;
+                JSONStorableFloat thickness = null;
+                try { offset = ctrl.GetFloatJSONParam("surfaceOffset"); } catch { }
+                try { thickness = ctrl.GetFloatJSONParam("additionalThicknessMultiplier"); } catch { }
+                if (offset != null)
+                {
+                    try { ForceFloatCallback(offset); }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning("[VPB] wrap offset resync failed: " + ex.Message);
+                    }
+                }
+                if (thickness != null)
+                {
+                    try { ForceFloatCallback(thickness); }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning("[VPB] wrap thickness resync failed: " + ex.Message);
+                    }
                 }
             }
         }
