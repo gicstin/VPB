@@ -76,9 +76,9 @@ namespace VPB
         private bool importSidebarSceneAtomSkipDuplicates = true;
         // Scene atoms: off-scene props placed relative to the target person root instead of raw source world coords.
         private bool importSidebarSceneAtomRelativeToPerson = true;
-        // Scene atoms: expert opt-out — when true, Remap Atom UIDs opens only if broken external refs exist.
-        // Default false = always show remap gate (predictable import path).
-        private bool importSidebarRemapUidsOnlyWhenConflicts;
+        // Scene atoms: bypass — when true, Remap Atom UIDs always opens, even when every external ref
+        // already resolves to a live atom. Default false = prompt only for refs that need a human choice.
+        private bool importSidebarAlwaysShowRemapPrompt;
         private string importSidebarSceneAtomSearchFilter = string.Empty;
         // Plugins: when the gate is on, import only the checked subset; selection is per source-atom (the sig
         // tracks scene+atom so switching source resets the checks to none), and is not persisted.
@@ -440,7 +440,9 @@ namespace VPB
             importSidebarPickCUAs                 = PrefBool(p, "pickCUAs", importSidebarPickCUAs);
             importSidebarPickSceneAtoms           = PrefBool(p, "pickSceneAtoms", importSidebarPickSceneAtoms);
             importSidebarSceneAtomSkipDuplicates  = PrefBool(p, "sceneAtomSkipDuplicates", importSidebarSceneAtomSkipDuplicates);
-            importSidebarRemapUidsOnlyWhenConflicts = PrefBool(p, "remapUidsOnlyWhenConflicts", importSidebarRemapUidsOnlyWhenConflicts);
+            // New key: the old "remapUidsOnlyWhenConflicts" meant the inverse, so reading it would flip
+            // the intent of anyone who had set it.
+            importSidebarAlwaysShowRemapPrompt    = PrefBool(p, "alwaysShowRemapPrompt", importSidebarAlwaysShowRemapPrompt);
             importSidebarCUARelativeToPerson      = PrefBool(p, "cuaRelativeToPerson", importSidebarCUARelativeToPerson);
             importSidebarCuaMergeLoad             = PrefBool(p, "cuaMergeLoad", importSidebarCuaMergeLoad);
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
@@ -483,7 +485,7 @@ namespace VPB
             p["pickCUAs"].AsBool = importSidebarPickCUAs;
             p["pickSceneAtoms"].AsBool = importSidebarPickSceneAtoms;
             p["sceneAtomSkipDuplicates"].AsBool = importSidebarSceneAtomSkipDuplicates;
-            p["remapUidsOnlyWhenConflicts"].AsBool = importSidebarRemapUidsOnlyWhenConflicts;
+            p["alwaysShowRemapPrompt"].AsBool = importSidebarAlwaysShowRemapPrompt;
             p["cuaRelativeToPerson"].AsBool = importSidebarCUARelativeToPerson;
             p["cuaMergeLoad"].AsBool = importSidebarCuaMergeLoad;
             p["deleteTargetCUAs"].AsBool = importSidebarDeleteTargetCUAs;

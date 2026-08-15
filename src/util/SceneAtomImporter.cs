@@ -405,6 +405,61 @@ namespace VPB.src.util
         }
 
         /// <summary>
+        /// True when this ref cannot land on its own and a human must choose. Auto-resolvable means the
+        /// donor uid exists live under the same name, nothing wants to point it somewhere else, and every
+        /// plugin receiver it triggers has a unique live match.
+        /// </summary>
+        public static bool UidRefNeedsAttention(BrokenUidRef row)
+        {
+            if (string.IsNullOrEmpty(row.OriginalUid)) return false;
+            // Donor uid missing from the live scene — the whole point of the remap prompt.
+            if (!ExactAtomInScene(row.OriginalUid)) return true;
+            // Exists live, but the suggest wants a different atom (e.g. person-like ref vs the sidebar
+            // target person). Ambiguous → ask rather than silently pick one.
+            if (!string.IsNullOrEmpty(row.SuggestedLiveUid)
+                && !string.Equals(row.SuggestedLiveUid, row.OriginalUid, StringComparison.Ordinal))
+                return true;
+            // Same atom, but a trigger targets a plugin slot we cannot match on it.
+            return CountUnresolvedPluginReceivers(row, row.OriginalUid, null) > 0;
+        }
+
+        /// <summary>
+        /// Subset of <paramref name="rows"/> that <see cref="UidRefNeedsAttention"/> flags. Empty result =
+        /// the import can proceed without showing the Remap Atom UIDs prompt.
+        /// </summary>
+        public static List<BrokenUidRef> FilterUidRefsNeedingAttention(List<BrokenUidRef> rows)
+        {
+            var result = new List<BrokenUidRef>();
+            if (rows == null) return result;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (UidRefNeedsAttention(rows[i]))
+                    result.Add(rows[i]);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Receiver remaps for the silent path: every row keeps its own uid as the destination, so this
+        /// only yields the <c>plugin#N_Class</c> slot moves that auto-matched. Skipping this would make
+        /// "it just works" quietly drop a trigger whose plugin sits at a different slot live.
+        /// </summary>
+        public static Dictionary<string, Dictionary<string, string>> BuildAutoReceiverRemapByUid(
+            List<BrokenUidRef> rows)
+        {
+            if (rows == null || rows.Count == 0)
+                return new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+
+            var identity = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                string uid = rows[i].OriginalUid;
+                if (!string.IsNullOrEmpty(uid)) identity[uid] = uid;
+            }
+            return BuildReceiverRemapByUid(rows, identity, null);
+        }
+
+        /// <summary>
         /// Suggest live destination for an external ref: preferred person → exact uid → unique same-type.
         /// </summary>
         private static string SuggestLiveUidForExternalRef(

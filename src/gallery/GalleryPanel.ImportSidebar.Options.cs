@@ -505,12 +505,12 @@ namespace VPB
                         v => { importSidebarPickSceneAtoms = v; RefreshSceneAtomChecklist(); RebuildImportSidebarContent(); },
                         null,
                         VPBTranslation.T("gallery.import.opt.pick_atoms", "Show a searchable checklist to choose which scene atoms to import instead of importing all of them."));
-                    AddOptionToggle(panel.transform, "Remap UIDs only when conflicts",
-                        () => importSidebarRemapUidsOnlyWhenConflicts,
-                        v => importSidebarRemapUidsOnlyWhenConflicts = v, null,
+                    AddOptionToggle(panel.transform, "Always show remap prompt",
+                        () => importSidebarAlwaysShowRemapPrompt,
+                        v => importSidebarAlwaysShowRemapPrompt = v, null,
                         VPBTranslation.T(
-                            "gallery.import.opt.remap_only_conflicts",
-                            "Expert: skip Remap Atom UIDs when every external ref already resolves. Off (default) = always show remap before import."));
+                            "gallery.import.opt.always_show_remap",
+                            "Open Remap Atom UIDs on every scene atom import. Off (default) = prompt only when a referenced atom is missing live, is ambiguous, or has a plugin slot that cannot be matched."));
                     BuildImportSidebarSceneAtomSearchRow(panel.transform);
                     BuildImportSidebarSceneAtomChecklist(panel.transform);
                     break;
@@ -2445,37 +2445,70 @@ namespace VPB
             if (broken == null)
                 broken = new List<SceneAtomImporter.BrokenUidRef>();
 
-            // Default: always open Remap Atom UIDs (Jakob — predictable gate). Expert opt-out
-            // "only when conflicts" skips empty gate but still cues status (change blindness).
-            if (importSidebarRemapUidsOnlyWhenConflicts && broken.Count == 0)
+            // Refs that land on their own (same uid live, receivers all matched) are not a decision —
+            // only prompt when something genuinely cannot be resolved. "Always show remap prompt"
+            // forces the gate for users who want to inspect every import.
+            List<SceneAtomImporter.BrokenUidRef> needsAttention
+                = SceneAtomImporter.FilterUidRefsNeedingAttention(broken);
+            if (needsAttention.Count == 0 && !importSidebarAlwaysShowRemapPrompt)
             {
-                LogUtil.Log("[VPB][Atoms][import] no broken external UID refs — remap gate skipped (expert).");
+                // Identity destinations need no uid map, but their auto-matched plugin slot moves do.
+                Dictionary<string, Dictionary<string, string>> autoReceiverRemap
+                    = SceneAtomImporter.BuildAutoReceiverRemapByUid(broken);
+                int autoRecv = 0;
+                foreach (KeyValuePair<string, Dictionary<string, string>> kv in autoReceiverRemap)
+                    if (kv.Value != null) autoRecv += kv.Value.Count;
+
+                LogUtil.Log("[VPB][Atoms][import] all " + broken.Count
+                    + " external UID ref(s) resolve as-is — remap prompt skipped, "
+                    + autoRecv + " auto receiver remap(s).");
                 SetStatus(VPBTranslation.T(
                     "gallery.import.remap_uids.skipped_no_conflicts",
-                    "No UID remaps needed — importing"));
-                RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, null);
+                    "All UID refs resolved — importing"));
+                RunImportSelectedSceneAtoms(
+                    scene, sourceHostUid, selectedIds, null,
+                    autoReceiverRemap.Count > 0 ? autoReceiverRemap : null);
                 return;
             }
 
-            LogUtil.Log("[VPB][Atoms][import] " + broken.Count
-                + " broken external UID ref(s) — showing Remap Atom UIDs modal.");
+            LogUtil.Log("[VPB][Atoms][import] " + needsAttention.Count + " of " + broken.Count
+                + " external UID ref(s) need attention — showing Remap Atom UIDs modal"
+                + (importSidebarAlwaysShowRemapPrompt ? " (always-show on)." : "."));
+            // Show every ref, not just the unresolvable ones: the resolved rows arrive pre-filled and give
+            // the user the context to re-point them, and the header states how many actually need a choice.
             ContinueImportSelectedSceneAtomsAfterRemap(
-                scene, sourceHostUid, selectedIds, null, null, broken);
+                scene, sourceHostUid, selectedIds, null, null, broken, null, 1);
         }
+
+        /// <summary>Safety stop for the remap re-scan loop (co-import chains are shallow in practice).</summary>
+        private const int RemapAtomUidsMaxPasses = 8;
 
         /// <summary>
         /// Remap modal loop: Create new co-imports donor atoms into <paramref name="selectedIds"/>;
         /// remaps accumulate. Re-scan after create in case newly added atoms expose more broken refs.
+        /// Only refs the user has NOT yet been shown may reopen the modal — see <paramref name="decidedUids"/>.
         /// </summary>
+        /// <param name="decidedUids">
+        /// Original UIDs already presented in a previous pass. A row the user answered is settled even when
+        /// the answer produced no remap entry (destination identical to the source uid, receiver-only row,
+        /// or a deliberate skip) — without this the re-scan re-collects it and the modal reopens forever,
+        /// which reads to the user as "Import does nothing".
+        /// </param>
+        /// <param name="pass">1-based modal pass, for the header cue and the loop cap.</param>
         private void ContinueImportSelectedSceneAtomsAfterRemap(
             JSONClass scene,
             string sourceHostUid,
             HashSet<string> selectedIds,
             Dictionary<string, string> remapAcc,
             Dictionary<string, Dictionary<string, string>> receiverRemapAcc,
-            List<SceneAtomImporter.BrokenUidRef> broken)
+            List<SceneAtomImporter.BrokenUidRef> broken,
+            HashSet<string> decidedUids,
+            int pass)
         {
-            ShowRemapAtomUidsModal(broken, (remap, createNew, receiverRemap) =>
+            if (decidedUids == null)
+                decidedUids = new HashSet<string>(StringComparer.Ordinal);
+
+            ShowRemapAtomUidsModal(broken, pass, (remap, createNew, receiverRemap) =>
             {
                 if (remap != null)
                 {
@@ -2485,23 +2518,7 @@ namespace VPB
                         remapAcc[kv.Key] = kv.Value;
                 }
 
-                if (receiverRemap != null)
-                {
-                    if (receiverRemapAcc == null)
-                        receiverRemapAcc = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
-                    foreach (KeyValuePair<string, Dictionary<string, string>> kv in receiverRemap)
-                    {
-                        if (kv.Value == null || kv.Value.Count == 0) continue;
-                        Dictionary<string, string> existing;
-                        if (!receiverRemapAcc.TryGetValue(kv.Key, out existing) || existing == null)
-                        {
-                            existing = new Dictionary<string, string>(StringComparer.Ordinal);
-                            receiverRemapAcc[kv.Key] = existing;
-                        }
-                        foreach (KeyValuePair<string, string> rv in kv.Value)
-                            existing[rv.Key] = rv.Value;
-                    }
-                }
+                receiverRemapAcc = MergeReceiverRemapInto(receiverRemapAcc, receiverRemap);
 
                 if (createNew != null)
                 {
@@ -2512,35 +2529,104 @@ namespace VPB
                     }
                 }
 
+                // The user just answered every row in this pass. Mark them settled before re-scanning:
+                // an answer that yields no map entry (dest == source uid, receiver-only row, or a skip)
+                // is still an answer, and re-presenting it is the reopen loop.
+                if (broken != null)
+                {
+                    for (int i = 0; i < broken.Count; i++)
+                    {
+                        string decided = broken[i].OriginalUid;
+                        if (!string.IsNullOrEmpty(decided)) decidedUids.Add(decided);
+                    }
+                }
+
                 List<SceneAtomImporter.BrokenUidRef> more
                     = SceneAtomImporter.CollectBrokenExternalUidRefs(
                         scene, selectedIds,
                         importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : null);
-                if (more != null && more.Count > 0 && remapAcc != null)
+                if (more != null && more.Count > 0)
                 {
-                    // Drop refs already remapped away — JSON still names the old UID until prepare.
+                    // Keep only refs never shown — i.e. ones the co-imported atoms just introduced.
                     var remaining = new List<SceneAtomImporter.BrokenUidRef>(more.Count);
                     for (int i = 0; i < more.Count; i++)
                     {
                         SceneAtomImporter.BrokenUidRef row = more[i];
                         if (string.IsNullOrEmpty(row.OriginalUid)) continue;
-                        if (remapAcc.ContainsKey(row.OriginalUid)) continue;
+                        if (decidedUids.Contains(row.OriginalUid)) continue;
                         remaining.Add(row);
                     }
                     more = remaining;
                 }
 
-                if (more != null && more.Count > 0)
+                // Same rule as the first gate: new refs that land on their own never reopen the prompt,
+                // but their auto receiver remaps still have to be carried into the import.
+                if (more != null && more.Count > 0 && !importSidebarAlwaysShowRemapPrompt
+                    && SceneAtomImporter.FilterUidRefsNeedingAttention(more).Count == 0)
                 {
+                    receiverRemapAcc = MergeReceiverRemapInto(
+                        receiverRemapAcc, SceneAtomImporter.BuildAutoReceiverRemapByUid(more));
                     LogUtil.Log("[VPB][Atoms][import] " + more.Count
-                        + " more broken UID ref(s) after create — remap again.");
-                    ContinueImportSelectedSceneAtomsAfterRemap(
-                        scene, sourceHostUid, selectedIds, remapAcc, receiverRemapAcc, more);
-                    return;
+                        + " new ref(s) from co-imported atoms resolve as-is — no further prompt.");
+                    more = null;
                 }
 
+                if (more != null && more.Count > 0)
+                {
+                    if (pass >= RemapAtomUidsMaxPasses)
+                    {
+                        LogUtil.LogWarning("[VPB][Atoms][import] remap pass cap (" + RemapAtomUidsMaxPasses
+                            + ") reached with " + more.Count + " new ref(s) still unshown — importing as-is.");
+                        SetStatus(string.Format(
+                            VPBTranslation.T(
+                                "gallery.import.remap_uids.pass_cap",
+                                "Remap depth limit — importing with {0} ref(s) left as-is"),
+                            more.Count));
+                    }
+                    else
+                    {
+                        LogUtil.Log("[VPB][Atoms][import] " + more.Count
+                            + " new UID ref(s) from co-imported atoms — remap pass " + (pass + 1) + ".");
+                        ContinueImportSelectedSceneAtomsAfterRemap(
+                            scene, sourceHostUid, selectedIds, remapAcc, receiverRemapAcc,
+                            more, decidedUids, pass + 1);
+                        return;
+                    }
+                }
+
+                SetStatus(string.Format(
+                    VPBTranslation.T(
+                        "gallery.import.remap_uids.importing",
+                        "Importing {0} atom(s)…"),
+                    selectedIds.Count));
                 RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, remapAcc, receiverRemapAcc);
             });
+        }
+
+        /// <summary>
+        /// Per-uid receiver-remap union. Returns the accumulator (created on demand) — the remap loop keeps
+        /// it in a captured local, which cannot be passed by ref.
+        /// </summary>
+        private static Dictionary<string, Dictionary<string, string>> MergeReceiverRemapInto(
+            Dictionary<string, Dictionary<string, string>> acc,
+            Dictionary<string, Dictionary<string, string>> add)
+        {
+            if (add == null || add.Count == 0) return acc;
+            if (acc == null)
+                acc = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, Dictionary<string, string>> kv in add)
+            {
+                if (kv.Value == null || kv.Value.Count == 0) continue;
+                Dictionary<string, string> existing;
+                if (!acc.TryGetValue(kv.Key, out existing) || existing == null)
+                {
+                    existing = new Dictionary<string, string>(StringComparer.Ordinal);
+                    acc[kv.Key] = existing;
+                }
+                foreach (KeyValuePair<string, string> rv in kv.Value)
+                    existing[rv.Key] = rv.Value;
+            }
+            return acc;
         }
 
         private void RunImportSelectedSceneAtoms(

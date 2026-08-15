@@ -25,6 +25,11 @@ namespace VPB
         private static readonly Color RemapTitleEmphasis = new Color(1f, 1f, 1f, 1f);
         private static readonly Color RemapUnresolvedMuted = new Color(0.78f, 0.62f, 0.48f, 1f);
         private static readonly Color RemapAllMappedMuted = new Color(0.45f, 0.62f, 0.52f, 1f);
+        private static readonly Color RemapContextBarBg = new Color(0.09f, 0.11f, 0.15f, 1f);
+        private static readonly Color RemapContextText = new Color(0.70f, 0.74f, 0.80f, 1f);
+        private static readonly Color RemapContextNewPassText = new Color(0.58f, 0.76f, 0.92f, 1f);
+        private static readonly Color RemapRowSkippedBg = new Color(0.12f, 0.12f, 0.13f, 1f);
+        private static readonly Color RemapDestSkippedBg = new Color(0.17f, 0.17f, 0.19f, 1f);
 
         private const float RemapFloatDefaultWRef = 820f;
         private const float RemapFloatDefaultHRef = 460f;
@@ -39,6 +44,7 @@ namespace VPB
         private GameObject _remapAtomUidsModalRoot;
         private RectTransform _remapAtomUidsPanelRT;
         private RectTransform _remapAtomUidsTitleBarRT;
+        private GameObject _remapAtomUidsContextBarGO;
         private GameObject _remapAtomUidsColHeaderGO;
         private GameObject _remapAtomUidsScrollHostGO;
         private GameObject _remapAtomUidsFooterGO;
@@ -75,6 +81,14 @@ namespace VPB
             = new Dictionary<string, Image>(StringComparer.Ordinal);
         private readonly Dictionary<string, Image> _remapAtomUidsChevronIcons
             = new Dictionary<string, Image>(StringComparer.Ordinal);
+        /// <summary>
+        /// Rows the user explicitly chose to leave unmapped. Kept separate from "empty destination" so a
+        /// deliberate skip reads as settled (neutral row, no gap count) instead of an unanswered error.
+        /// </summary>
+        private readonly HashSet<string> _remapAtomUidsSkipped
+            = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>1-based modal pass — >1 means these refs came from atoms co-imported in a prior pass.</summary>
+        private int _remapAtomUidsPass = 1;
         /// <summary>uidRemap, createNew, receiverRemapByOriginalUid.</summary>
         private Action<
             Dictionary<string, string>,
@@ -142,6 +156,7 @@ namespace VPB
         /// </summary>
         private void ShowRemapAtomUidsModal(
             List<SceneAtomImporter.BrokenUidRef> broken,
+            int pass,
             Action<
                 Dictionary<string, string>,
                 HashSet<string>,
@@ -158,6 +173,8 @@ namespace VPB
 
             _remapAtomUidsRows = broken;
             _remapAtomUidsOnConfirm = onConfirm;
+            _remapAtomUidsPass = pass > 0 ? pass : 1;
+            _remapAtomUidsSkipped.Clear();
             _remapAtomUidsChoices.Clear();
             _remapAtomUidsAutoSuggested.Clear();
             _remapAtomUidsReceiverChoices.Clear();
@@ -204,6 +221,7 @@ namespace VPB
             }
             _remapAtomUidsPanelRT = null;
             _remapAtomUidsTitleBarRT = null;
+            _remapAtomUidsContextBarGO = null;
             _remapAtomUidsColHeaderGO = null;
             _remapAtomUidsScrollHostGO = null;
             _remapAtomUidsFooterGO = null;
@@ -235,8 +253,16 @@ namespace VPB
 
         private void CancelRemapAtomUidsModal()
         {
+            bool wasPending = _remapAtomUidsOnConfirm != null;
             _remapAtomUidsOnConfirm = null;
             HideRemapAtomUidsModal();
+            // Cancel aborts the whole import — say so, or the closed window reads as "it imported".
+            if (wasPending)
+            {
+                SetStatus(VPBTranslation.T(
+                    "gallery.import.remap_uids.cancelled",
+                    "Import cancelled — no atoms added"));
+            }
         }
 
         /// <summary>
@@ -389,6 +415,7 @@ namespace VPB
             {
                 string uid = _remapAtomUidsRows[i].OriginalUid;
                 if (string.IsNullOrEmpty(uid)) continue;
+                if (_remapAtomUidsSkipped.Contains(uid)) continue;
                 string choice;
                 if (!_remapAtomUidsChoices.TryGetValue(uid, out choice) || string.IsNullOrEmpty(choice))
                     n++;
@@ -408,6 +435,7 @@ namespace VPB
             {
                 SceneAtomImporter.BrokenUidRef row = _remapAtomUidsRows[i];
                 if (string.IsNullOrEmpty(row.OriginalUid)) continue;
+                if (_remapAtomUidsSkipped.Contains(row.OriginalUid)) continue;
                 string dest;
                 if (!_remapAtomUidsChoices.TryGetValue(row.OriginalUid, out dest))
                     dest = string.Empty;
@@ -480,6 +508,15 @@ namespace VPB
                     }
                     _remapAtomUidsUnresolvedText.color = RemapUnresolvedMuted;
                 }
+                else if (_remapAtomUidsSkipped.Count > 0)
+                {
+                    _remapAtomUidsUnresolvedText.text = string.Format(
+                        VPBTranslation.T(
+                            "gallery.import.remap_uids.all_mapped_skipped",
+                            "All handled · {0} skipped"),
+                        _remapAtomUidsSkipped.Count);
+                    _remapAtomUidsUnresolvedText.color = RemapAllMappedMuted;
+                }
                 else
                 {
                     _remapAtomUidsUnresolvedText.text = VPBTranslation.T(
@@ -519,9 +556,33 @@ namespace VPB
             if (!_remapAtomUidsChoices.TryGetValue(originalUid, out stored))
                 stored = string.Empty;
 
+            bool skipped = _remapAtomUidsSkipped.Contains(originalUid);
             bool empty = string.IsNullOrEmpty(stored);
-            bool suggested = RemapAtomUidsChoiceStillSuggested(originalUid, stored);
+            bool suggested = !skipped && RemapAtomUidsChoiceStillSuggested(originalUid, stored);
             bool expanded = string.Equals(_remapAtomUidsOpenPickerFor, originalUid, StringComparison.Ordinal);
+
+            if (skipped)
+            {
+                Image skipRowBg;
+                if (_remapAtomUidsRowBgs.TryGetValue(originalUid, out skipRowBg) && skipRowBg != null && !expanded)
+                    skipRowBg.color = RemapRowSkippedBg;
+                Image skipDestBg;
+                if (_remapAtomUidsDestBgs.TryGetValue(originalUid, out skipDestBg) && skipDestBg != null)
+                    skipDestBg.color = RemapDestSkippedBg;
+                InputField skipInput;
+                if (_remapAtomUidsInputs.TryGetValue(originalUid, out skipInput)
+                    && skipInput != null && skipInput.placeholder != null)
+                {
+                    Text skipPh = skipInput.placeholder as Text;
+                    if (skipPh != null)
+                    {
+                        skipPh.text = VPBTranslation.T(
+                            "gallery.import.remap_uids.dest_ph_skipped", "Skipped — left as-is");
+                        skipPh.gameObject.SetActive(empty);
+                    }
+                }
+                return;
+            }
 
             string recv;
             if (!_remapAtomUidsReceiverChoices.TryGetValue(originalUid, out recv)) recv = string.Empty;
@@ -546,12 +607,29 @@ namespace VPB
                 else if (suggested) destBg.color = RemapDestSuggestedBg;
                 else destBg.color = RemapDestNormalBg;
             }
+
+            // Restore the normal prompt after an un-skip (placeholder is rewritten by the skip branch).
+            InputField destInput;
+            if (_remapAtomUidsInputs.TryGetValue(originalUid, out destInput)
+                && destInput != null && destInput.placeholder != null)
+            {
+                Text destPh = destInput.placeholder as Text;
+                if (destPh != null)
+                {
+                    destPh.text = suggested
+                        ? VPBTranslation.T("gallery.import.remap_uids.dest_ph_suggested", "Suggested — pick or type…")
+                        : VPBTranslation.T("gallery.import.remap_uids.dest_ph", "Pick or type UID…");
+                    destPh.gameObject.SetActive(empty);
+                }
+            }
         }
 
         private void OnRemapAtomUidsChoiceEdited(string originalUid, string displayOrStored)
         {
             if (string.IsNullOrEmpty(originalUid)) return;
             _remapAtomUidsChoices[originalUid] = RemapAtomUidsDisplayToStored(displayOrStored);
+            // Typing a destination overrides a previous skip.
+            if (!string.IsNullOrEmpty(displayOrStored)) _remapAtomUidsSkipped.Remove(originalUid);
             TryAutoSuggestRemapReceiver(originalUid, force: true);
             SyncRemapAtomUidsReceiverInputVisual(originalUid);
             if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsAllGaps() == 0)
@@ -649,7 +727,7 @@ namespace VPB
             string dest;
             _remapAtomUidsChoices.TryGetValue(originalUid, out dest);
             bool destOk = !string.IsNullOrEmpty(dest) && !RemapAtomUidsIsCreateNewChoice(dest);
-            bool enabled = hasPlugin && destOk;
+            bool enabled = hasPlugin && destOk && !_remapAtomUidsSkipped.Contains(originalUid);
 
             string recv;
             if (!_remapAtomUidsReceiverChoices.TryGetValue(originalUid, out recv)) recv = string.Empty;
@@ -719,6 +797,58 @@ namespace VPB
             if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsAllGaps() == 0)
                 _remapAtomUidsImportForceArmed = false;
             RefreshRemapAtomUidsUnresolvedUi();
+        }
+
+        /// <summary>
+        /// One-line "why am I looking at this" for the context strip. Pass &gt;1 states that these refs came
+        /// from atoms the previous pass co-imported — the only visible difference between passes.
+        /// </summary>
+        private string BuildRemapAtomUidsContextLine()
+        {
+            int rows = _remapAtomUidsRows != null ? _remapAtomUidsRows.Count : 0;
+            if (rows == 0)
+            {
+                return VPBTranslation.T(
+                    "gallery.import.remap_uids.ctx_empty",
+                    "Nothing to remap — Import continues the scene atom import.");
+            }
+            if (_remapAtomUidsPass > 1)
+            {
+                return string.Format(
+                    VPBTranslation.T(
+                        "gallery.import.remap_uids.ctx_pass",
+                        "Pass {0} — {1} new reference(s) came from the atoms you chose to co-import."),
+                    _remapAtomUidsPass, rows);
+            }
+
+            int needsAttention = 0;
+            for (int i = 0; i < _remapAtomUidsRows.Count; i++)
+            {
+                if (SceneAtomImporter.UidRefNeedsAttention(_remapAtomUidsRows[i]))
+                    needsAttention++;
+            }
+            if (needsAttention == 0)
+            {
+                // Only reachable with "Always show remap prompt" on — say why it opened anyway.
+                return string.Format(
+                    VPBTranslation.T(
+                        "gallery.import.remap_uids.ctx_all_resolved",
+                        "All {0} reference(s) already resolve — shown because \"Always show remap prompt\" is on."),
+                    rows);
+            }
+            if (needsAttention < rows)
+            {
+                return string.Format(
+                    VPBTranslation.T(
+                        "gallery.import.remap_uids.ctx_partial",
+                        "{0} of {1} reference(s) need a choice — the rest already resolve and are pre-filled."),
+                    needsAttention, rows);
+            }
+            return string.Format(
+                VPBTranslation.T(
+                    "gallery.import.remap_uids.ctx_first",
+                    "{0} reference(s) point outside this import — map, co-import, or skip each."),
+                rows);
         }
 
         private GameObject ResolveRemapAtomUidsFloatHost()
@@ -855,16 +985,48 @@ namespace VPB
             headerDrag.Target = _remapAtomUidsPanelRT;
             headerDrag.OnMoved = OnRemapAtomUidsFloatMoved;
 
+            // ── Context strip — why this window is open / which pass ──────
+            // Pass 2+ looks identical to pass 1 without this, so a re-open reads as "Import did nothing".
+            float ctxH = Mathf.Max(24f * s, chromeSz * 0.8f);
+            GameObject ctxBar = UI.CreateChildRT(panel, "ContextBar", AnchorPresets.hStretchTop,
+                new Vector2(0f, ctxH), new Vector2(0f, -titleH));
+            _remapAtomUidsContextBarGO = ctxBar;
+            RectTransform ctxRT = ctxBar.GetComponent<RectTransform>();
+            if (ctxRT != null)
+            {
+                ctxRT.pivot = new Vector2(0.5f, 1f);
+                ctxRT.sizeDelta = new Vector2(0f, ctxH);
+                ctxRT.anchoredPosition = new Vector2(0f, -titleH);
+            }
+            UI.AddImage(ctxBar, RemapContextBarBg);
+            UI.AddHLG(
+                ctxBar, spacing: 6f * s, padding: UI.Pad(10, 10, 2, 2, s),
+                childAlignment: TextAnchor.MiddleLeft,
+                childControlWidth: true, childControlHeight: true,
+                childForceExpandWidth: false, childForceExpandHeight: false);
+            if (ctxBar.GetComponent<RectMask2D>() == null)
+                ctxBar.AddComponent<RectMask2D>();
+
+            Text ctxTxt = UI.CreateLabel(
+                ctxBar, BuildRemapAtomUidsContextLine(), font,
+                _remapAtomUidsPass > 1 ? RemapContextNewPassText : RemapContextText,
+                TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                raycastTarget: false, richText: false, name: "ContextText");
+            ctxTxt.fontSize = font;
+            ctxTxt.transform.localScale = Vector3.one;
+            UI.AddLE(ctxTxt.gameObject, flexibleWidth: 1f, minWidth: 80f * s, preferredHeight: ctxH - 4f * s);
+
             // ── Column headers (Source → Destination) ─────────────────────
+            float colHdrY = titleH + ctxH;
             GameObject colHdr = UI.CreateChildRT(panel, "ColHeader", AnchorPresets.hStretchTop,
-                new Vector2(0f, colHdrH), new Vector2(0f, -titleH));
+                new Vector2(0f, colHdrH), new Vector2(0f, -colHdrY));
             _remapAtomUidsColHeaderGO = colHdr;
             RectTransform colRT = colHdr.GetComponent<RectTransform>();
             if (colRT != null)
             {
                 colRT.pivot = new Vector2(0.5f, 1f);
                 colRT.sizeDelta = new Vector2(0f, colHdrH);
-                colRT.anchoredPosition = new Vector2(0f, -titleH);
+                colRT.anchoredPosition = new Vector2(0f, -colHdrY);
             }
             UI.AddImage(colHdr, new Color(0.11f, 0.13f, 0.17f, 1f));
             HorizontalLayoutGroup ch = UI.AddHLG(
@@ -1014,7 +1176,7 @@ namespace VPB
             if (scrollRT != null)
             {
                 scrollRT.offsetMin = new Vector2(0f, footerH);
-                scrollRT.offsetMax = new Vector2(0f, -(titleH + colHdrH));
+                scrollRT.offsetMax = new Vector2(0f, -(colHdrY + colHdrH));
             }
             UI.AddImage(scrollHost, new Color(0.05f, 0.055f, 0.07f, 1f));
             if (scrollHost.GetComponent<RectMask2D>() == null)
@@ -1279,6 +1441,7 @@ namespace VPB
             {
                 if (ph != null) ph.gameObject.SetActive(string.IsNullOrEmpty(val));
                 _remapAtomUidsChoices[capturedOriginal] = RemapAtomUidsDisplayToStored(val);
+                if (!string.IsNullOrEmpty(val)) _remapAtomUidsSkipped.Remove(capturedOriginal);
                 TryAutoSuggestRemapReceiver(capturedOriginal, force: true);
                 SyncRemapAtomUidsReceiverInputVisual(capturedOriginal);
                 if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsAllGaps() == 0)
@@ -1660,6 +1823,23 @@ namespace VPB
                 optionCount++;
             }
 
+            // Explicit escape hatch — otherwise the only way past an unmappable ref is clearing the field
+            // and pressing Import twice, which reads as an error rather than a choice.
+            bool skipMatchesFilter = string.IsNullOrEmpty(filter)
+                || "skip".IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0
+                || filter.IndexOf("skip", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (skipMatchesFilter)
+            {
+                RemapAtomUidsAddExpandOption(
+                    expandHost,
+                    VPBTranslation.T(
+                        "gallery.import.remap_uids.skip_option",
+                        "Skip — leave this reference as-is"),
+                    font, s, rowH, _remapAtomUidsSkipped.Contains(originalUid),
+                    () => ApplyRemapAtomUidsSkip(capturedOrig));
+                optionCount++;
+            }
+
             int sameShown = 0;
             int otherShown = 0;
             int otherCap = string.IsNullOrEmpty(filter) ? 24 : 64;
@@ -1813,10 +1993,33 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Explicit "leave this reference alone" pick. Clears the destination but records the decision so the
+        /// row reads as settled (neutral, not counted as a gap) instead of an unanswered red field.
+        /// </summary>
+        private void ApplyRemapAtomUidsSkip(string originalUid)
+        {
+            if (string.IsNullOrEmpty(originalUid)) return;
+            // Set first: the pick path repaints the row, and an empty destination is only "settled"
+            // once the skip is recorded.
+            _remapAtomUidsSkipped.Add(originalUid);
+            ApplyRemapAtomUidsPick(originalUid, string.Empty);
+            _remapAtomUidsReceiverChoices.Remove(originalUid);
+            SyncRemapAtomUidsRowDestVisual(originalUid);
+            SyncRemapAtomUidsReceiverInputVisual(originalUid);
+            RefreshRemapAtomUidsUnresolvedUi();
+            SetStatus(string.Format(
+                VPBTranslation.T(
+                    "gallery.import.remap_uids.skipped_row",
+                    "'{0}' left as-is — its triggers stay pointed at the original UID"),
+                originalUid));
+        }
+
         private void ApplyRemapAtomUidsPick(string originalUid, string liveUid)
         {
             if (string.IsNullOrEmpty(originalUid)) return;
             _remapAtomUidsChoices[originalUid] = liveUid ?? string.Empty;
+            if (!string.IsNullOrEmpty(liveUid)) _remapAtomUidsSkipped.Remove(originalUid);
             string display = RemapAtomUidsChoiceToDisplay(liveUid);
             InputField input;
             if (_remapAtomUidsInputs.TryGetValue(originalUid, out input) && input != null)
@@ -2038,6 +2241,7 @@ namespace VPB
             }
             _remapAtomUidsPanelRT = null;
             _remapAtomUidsTitleBarRT = null;
+            _remapAtomUidsContextBarGO = null;
             _remapAtomUidsColHeaderGO = null;
             _remapAtomUidsScrollHostGO = null;
             _remapAtomUidsFooterGO = null;
@@ -2186,6 +2390,8 @@ namespace VPB
 
         private void SyncRemapAtomUidsCollapseChrome(float titleH)
         {
+            if (_remapAtomUidsContextBarGO != null)
+                _remapAtomUidsContextBarGO.SetActive(!_remapAtomUidsCollapsed);
             if (_remapAtomUidsColHeaderGO != null)
                 _remapAtomUidsColHeaderGO.SetActive(!_remapAtomUidsCollapsed);
             if (_remapAtomUidsScrollHostGO != null)
