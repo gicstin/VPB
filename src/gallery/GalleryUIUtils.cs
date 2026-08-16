@@ -1592,54 +1592,32 @@ namespace VPB
             float frac = ResolveGalleryElementCornerRadiusFraction();
             try
             {
-                UnityEngine.Object[] all = Resources.FindObjectsOfTypeAll(typeof(RoundedRect));
-                for (int i = 0; i < all.Length; i++)
+                List<RoundedRect> fills = RoundedRect.Live;
+                for (int i = 0; i < fills.Count; i++)
                 {
-                    RoundedRect rr = all[i] as RoundedRect;
-                    if (rr == null || !IsLiveSceneUiComponent(rr)) continue;
+                    RoundedRect rr = fills[i];
+                    if (rr == null || rr.excludeFromGlobalRadiusSync || !IsLiveSceneUiComponent(rr)) continue;
                     rr.cornerRadiusFraction = frac;
                 }
             }
-            catch
-            {
-                try
-                {
-                    RoundedRect[] fills = UnityEngine.Object.FindObjectsOfType<RoundedRect>();
-                    for (int i = 0; i < fills.Length; i++)
-                    {
-                        if (fills[i] != null) fills[i].cornerRadiusFraction = frac;
-                    }
-                }
-                catch { }
-            }
+            catch { }
             try
             {
-                UnityEngine.Object[] all = Resources.FindObjectsOfTypeAll(typeof(RoundedRectOutline));
-                for (int i = 0; i < all.Length; i++)
+                List<RoundedRectOutline> outlines = RoundedRectOutline.Live;
+                for (int i = 0; i < outlines.Count; i++)
                 {
-                    RoundedRectOutline outline = all[i] as RoundedRectOutline;
+                    RoundedRectOutline outline = outlines[i];
                     if (outline == null || !IsLiveSceneUiComponent(outline)) continue;
                     outline.cornerRadiusFraction = frac;
                 }
             }
-            catch
-            {
-                try
-                {
-                    RoundedRectOutline[] outlines = UnityEngine.Object.FindObjectsOfType<RoundedRectOutline>();
-                    for (int i = 0; i < outlines.Length; i++)
-                    {
-                        if (outlines[i] != null) outlines[i].cornerRadiusFraction = frac;
-                    }
-                }
-                catch { }
-            }
+            catch { }
             try
             {
-                UnityEngine.Object[] borders = Resources.FindObjectsOfTypeAll(typeof(UIHoverBorder));
-                for (int i = 0; i < borders.Length; i++)
+                List<UIHoverBorder> borders = UIHoverBorder.Live;
+                for (int i = 0; i < borders.Count; i++)
                 {
-                    UIHoverBorder hb = borders[i] as UIHoverBorder;
+                    UIHoverBorder hb = borders[i];
                     if (hb == null || !IsLiveSceneUiComponent(hb)) continue;
                     try { hb.ApplyBorderSettings(); } catch { }
                 }
@@ -1868,6 +1846,14 @@ namespace VPB
             input.textComponent = tcT;
             input.placeholder = phT;
             input.lineType = InputField.LineType.SingleLine;
+            try { NeutralizeSelectableColorTint(input); } catch { }
+            UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
+            try
+            {
+                hb.inward = true;
+                EnableChromeIdleRim(hb);
+            }
+            catch { }
             return input;
         }
 
@@ -1884,7 +1870,7 @@ namespace VPB
             if (iconTr == null)
             {
                 Sprite spr = null;
-                try { spr = LoadIconSprite("vpb_icons/search.png", GalleryUiColorTokens.SearchIconTint); }
+                try { spr = LoadIconSprite("search", GalleryUiColorTokens.SearchIconTint); }
                 catch { spr = null; }
                 if (spr != null)
                 {
@@ -1893,7 +1879,7 @@ namespace VPB
                     Image iconImg = AddImage(iconGO, GalleryUiColorTokens.SearchIconTint);
                     if (iconImg != null)
                     {
-                        iconImg.sprite = spr;
+                        UI.SetIconSprite(iconImg, spr);
                         iconImg.raycastTarget = false;
                         iconImg.preserveAspect = true;
                     }
@@ -1973,8 +1959,70 @@ namespace VPB
             if (hb == null) hb = go.AddComponent<UIHoverBorder>();
             if (hb.inward != inward)
                 hb.inward = inward;
+            EnableChromeIdleRim(hb);
             try { hb.ApplyBorderSettings(); } catch { }
             return hb;
+        }
+
+        /// <summary>Idle + selected chrome rims. Hover rim always stays. Default on.</summary>
+        public static bool ChromeButtonRimsEnabled()
+        {
+            try
+            {
+                if (VPBConfig.Instance == null) return true;
+                return VPBConfig.Instance.EnableGalleryButtonChromeRims;
+            }
+            catch { return true; }
+        }
+
+        /// <summary>
+        /// Show/hide idle + selected chrome rims on live <see cref="UIHoverBorder"/> (not grid thumbs).
+        /// </summary>
+        public static void ApplyGalleryButtonChromeRimsGlobally()
+        {
+            try
+            {
+                List<UIHoverBorder> borders = UIHoverBorder.Live;
+                for (int i = 0; i < borders.Count; i++)
+                {
+                    UIHoverBorder hb = borders[i];
+                    if (hb == null || hb.hoverBorderGO != null || !IsLiveSceneUiComponent(hb)) continue;
+                    try { hb.SyncIndicatorVisibility(); } catch { }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Faint idle rim on muted chrome buttons so they still look clickable (Norman signifier).
+        /// Skip grid thumbs that use <see cref="UIHoverBorder.hoverBorderGO"/>.
+        /// </summary>
+        public static void EnableChromeIdleRim(UIHoverBorder hb)
+        {
+            if (hb == null || hb.hoverBorderGO != null) return;
+            if (hb.showIdleRim) return;
+            hb.showIdleRim = true;
+            hb.idleRimColor = GalleryUiColorTokens.RimIdle;
+            try { hb.ApplyBorderSettings(); } catch { }
+        }
+
+        /// <summary>
+        /// Persistent selected rim (muted cool), distinct from yellow hover. Fill stays the caller's job.
+        /// Hidden when <see cref="ChromeButtonRimsEnabled"/> is off.
+        /// </summary>
+        public static void SetControlSelectedRim(GameObject go, bool selected)
+        {
+            if (go == null) return;
+            UIHoverBorder hb = go.GetComponent<UIHoverBorder>();
+            if (hb == null) return;
+            hb.selectedRimColor = GalleryUiColorTokens.RimSelected;
+            if (hb.isSelected == selected)
+            {
+                hb.SyncIndicatorVisibility();
+                return;
+            }
+            hb.isSelected = selected;
+            hb.SyncIndicatorVisibility();
         }
 
         /// <summary>
@@ -2009,7 +2057,7 @@ namespace VPB
                 try
                 {
                     Sprite spr = LoadIconSprite(iconRelativePath, GalleryUiColorTokens.TitleWindowIconTint);
-                    if (spr != null) img.sprite = spr;
+                    if (spr != null) UI.SetIconSprite(img, spr);
                 }
                 catch { }
             }
@@ -2110,8 +2158,7 @@ namespace VPB
                     Image iconImg = existing.GetComponent<Image>();
                     if (iconImg != null)
                     {
-                        iconImg.sprite = spr;
-                        iconImg.color = Color.white;
+                        UI.SetIconSprite(iconImg, spr);
                         RectTransform irt = existing as RectTransform;
                         if (irt != null)
                             irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
@@ -2151,7 +2198,7 @@ namespace VPB
         }
 
         /// <summary>
-        /// Tree-row expand affordance: <c>chevron_right</c> collapsed / <c>chevron_down</c> open.
+        /// Tree-row expand affordance: <c>chevron-right</c> collapsed / <c>chevron-down</c> open.
         /// Warm bind path — uses icon sprite cache; no new Icon GO after first apply.
         /// </summary>
         /// <param name="transparentWhenEmpty">
@@ -2190,8 +2237,8 @@ namespace VPB
             }
 
             string path = expanded
-                ? "vpb_icons/chevron_down.png"
-                : "vpb_icons/chevron_right.png";
+                ? "chevron-down"
+                : "chevron-right";
             Sprite spr = null;
             try { spr = LoadIconSprite(path, GalleryUiColorTokens.TreeExpandIconTint); }
             catch { spr = null; }
@@ -2201,8 +2248,7 @@ namespace VPB
             {
                 if (iconImg != null)
                 {
-                    iconImg.sprite = spr;
-                    iconImg.color = Color.white;
+                    UI.SetIconSprite(iconImg, spr);
                     iconImg.gameObject.SetActive(true);
                     RectTransform irt = iconTr as RectTransform;
                     if (irt != null)
@@ -2433,7 +2479,7 @@ namespace VPB
                 GameObject iconGO = new GameObject("RowIcon");
                 iconGO.transform.SetParent(row.transform, false);
                 Image iconImg = AddImage(iconGO, Color.white);
-                iconImg.sprite = icon;
+                UI.SetIconSprite(iconImg, icon);
                 iconImg.preserveAspect = true;
                 iconImg.raycastTarget = false;
                 RectTransform irt = iconGO.GetComponent<RectTransform>();
@@ -2551,7 +2597,8 @@ namespace VPB
             CreateLabel(buttonGO, label, fontSize, TextPrimary, TextAnchor.MiddleCenter, name: "Text");
 
             // Add Hover Border
-            buttonGO.AddComponent<UIHoverBorder>();
+            UIHoverBorder chromeHb = buttonGO.AddComponent<UIHoverBorder>();
+            EnableChromeIdleRim(chromeHb);
 
             return buttonGO;
         }
@@ -2574,6 +2621,7 @@ namespace VPB
             try
             {
                 hb.inward = true;
+                EnableChromeIdleRim(hb);
                 hb.ApplyBorderSettings();
             }
             catch { }
@@ -2654,7 +2702,8 @@ namespace VPB
             ConfigButtonFlat(btn);
             btn.targetGraphic = img;
             if (onClick != null) btn.onClick.AddListener(onClick);
-            go.AddComponent<UIHoverBorder>();
+            UIHoverBorder iconHb = go.AddComponent<UIHoverBorder>();
+            EnableChromeIdleRim(iconHb);
 
             RectTransform rt = go.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -2679,88 +2728,143 @@ namespace VPB
         // Read-only counter for VpbPerfTelemetry.
         public static int IconSpriteCacheCount { get { return _iconSpriteCache != null ? _iconSpriteCache.Count : 0; } }
 
-        /// <summary>
-        /// Pre-loads all PNGs from the vpb_icons/ directory into the sprite cache.
-        /// Call this at plugin startup (e.g. from a coroutine in Start) so the cache is warm
-        /// before the user first opens the gallery panel.
-        /// </summary>
+        private const int IconSpriteCacheLimit = 4096;
+        private static readonly Dictionary<int, Color> _iconSpriteTint = new Dictionary<int, Color>();
+
         public static System.Collections.IEnumerator PrewarmIconCacheCoroutine()
         {
-            string iconsDir = Path.Combine(BepInEx.Paths.PluginPath, "vpb_icons");
-            if (!Directory.Exists(iconsDir)) yield break;
-
-            string[] pngFiles;
-            try { pngFiles = Directory.GetFiles(iconsDir, "*.png"); }
-            catch { yield break; }
-
-            Color stdColor = new Color(0.78f, 0.78f, 0.78f, 1f);
-
-            foreach (string fullPath in pngFiles)
-            {
-                try
-                {
-                    string relPath = "vpb_icons/" + Path.GetFileName(fullPath);
-                    // Load uncolored and standard-colored variants
-                    LoadIconSprite(relPath);
-                    LoadIconSprite(relPath, stdColor);
-                }
-                catch { }
-                yield return null; // Spread across frames to avoid stutter
-            }
+            yield return null;
+            try { GalleryIconAtlas.EnsureLoaded(); }
+            catch { }
+            yield return null;
         }
 
-        public static Sprite LoadIconSprite(string relativePathFromPluginsDir, Color? recolorTo = null)
+        public static Color IconTintOf(Sprite sprite)
+        {
+            if (sprite == null) return Color.white;
+            Color tint;
+            if (_iconSpriteTint.TryGetValue(sprite.GetInstanceID(), out tint)) return tint;
+            return Color.white;
+        }
+
+        public static void SetIconSprite(Image img, Sprite sprite)
+        {
+            if (img == null) return;
+            img.sprite = sprite;
+            img.color = IconTintOf(sprite);
+        }
+
+        public static void ClearIconSpriteCache()
+        {
+            Texture2D atlas = GalleryIconAtlas.Texture;
+            foreach (KeyValuePair<string, Sprite> kv in _iconSpriteCache)
+            {
+                Sprite s = kv.Value;
+                if (s == null) continue;
+                Texture2D owned = s.texture;
+                UnityEngine.Object.Destroy(s);
+                if (owned != null && owned != atlas) UnityEngine.Object.Destroy(owned);
+            }
+            _iconSpriteCache.Clear();
+            _iconSpriteTint.Clear();
+            GalleryIconAtlas.Destroy();
+        }
+
+        /// <summary>Loads a Tabler source id (e.g. <c>shirt-off</c>, <c>filled/star</c>).</summary>
+        public static Sprite LoadIconSprite(string iconRole, Color? recolorTo = null)
         {
             try
             {
+                string role = GalleryIconAtlas.ToAtlasKey(iconRole);
+                if (string.IsNullOrEmpty(role)) return null;
+
+                Color tint = recolorTo.HasValue ? recolorTo.Value : Color.white;
                 string cacheKey = recolorTo.HasValue
-                    ? relativePathFromPluginsDir + "|" + recolorTo.Value.r.ToString("F3") + "," + recolorTo.Value.g.ToString("F3") + "," + recolorTo.Value.b.ToString("F3")
-                    : relativePathFromPluginsDir;
+                    ? role + "|" + tint.r.ToString("F3") + "," + tint.g.ToString("F3") + "," + tint.b.ToString("F3")
+                    : role;
 
                 if (_iconSpriteCache.TryGetValue(cacheKey, out Sprite cached) && cached != null)
                     return cached;
 
-                string fullPath = Path.Combine(BepInEx.Paths.PluginPath, relativePathFromPluginsDir);
-                if (!File.Exists(fullPath)) return null;
-                byte[] bytes = File.ReadAllBytes(fullPath);
-                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                tex.LoadImage(bytes);
-                if (recolorTo.HasValue)
+                if (_iconSpriteCache.Count >= IconSpriteCacheLimit)
                 {
-                    Color c = recolorTo.Value;
-                    Color[] pixels = tex.GetPixels();
-                    for (int i = 0; i < pixels.Length; i++)
-                        if (pixels[i].a > 0.05f)
-                            pixels[i] = new Color(c.r, c.g, c.b, pixels[i].a);
-                    tex.SetPixels(pixels);
-                    tex.Apply();
+                    _iconSpriteCache.Clear();
+                    _iconSpriteTint.Clear();
                 }
-                Sprite sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+
+                Color spriteTint = Color.white;
+                Sprite sprite = CreateLooseIconSprite(GalleryIconAtlas.OverridePathFor(role), recolorTo);
+                if (sprite == null)
+                {
+                    sprite = CreateAtlasIconSprite(role);
+                    if (sprite != null) spriteTint = tint;
+                }
+                if (sprite == null) return null;
+
                 _iconSpriteCache[cacheKey] = sprite;
+                _iconSpriteTint[sprite.GetInstanceID()] = spriteTint;
                 return sprite;
             }
             catch { return null; }
         }
 
-        /// <summary>Standard backdrop applied to every icon button.</summary>
+        private static Sprite CreateAtlasIconSprite(string iconRole)
+        {
+            if (!GalleryIconAtlas.EnsureLoaded()) return null;
+            Rect rect;
+            if (!GalleryIconAtlas.TryGetRect(iconRole, out rect)) return null;
+            return Sprite.Create(GalleryIconAtlas.Texture, rect, new Vector2(0.5f, 0.5f));
+        }
+
+        private static Sprite CreateLooseIconSprite(string relativePathFromPluginsDir, Color? recolorTo)
+        {
+            if (string.IsNullOrEmpty(relativePathFromPluginsDir)) return null;
+            string fullPath = Path.Combine(BepInEx.Paths.PluginPath, relativePathFromPluginsDir);
+            if (!File.Exists(fullPath)) return null;
+            byte[] bytes = File.ReadAllBytes(fullPath);
+            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            tex.LoadImage(bytes);
+            if (recolorTo.HasValue)
+            {
+                Color c = recolorTo.Value;
+                Color32[] pixels = tex.GetPixels32();
+                byte r = (byte)Mathf.Clamp(Mathf.RoundToInt(c.r * 255f), 0, 255);
+                byte g = (byte)Mathf.Clamp(Mathf.RoundToInt(c.g * 255f), 0, 255);
+                byte b = (byte)Mathf.Clamp(Mathf.RoundToInt(c.b * 255f), 0, 255);
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    if (pixels[i].a > 12)
+                    {
+                        pixels[i].r = r;
+                        pixels[i].g = g;
+                        pixels[i].b = b;
+                    }
+                }
+                tex.SetPixels32(pixels);
+                tex.Apply(false, true);
+            }
+            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+        }
+
+        /// <summary>Raised icon well (resize handles, perf-on fill). Idle bar/toolbox chips use ChromeIconWell.</summary>
         public static readonly Color IconButtonBackdrop = GalleryUiColorTokens.SurfaceIconBtn;
 
-        /// <summary>Recolor passed to <see cref="LoadIconSprite"/> for gallery left/right rail icon PNGs (glyph pixels only).</summary>
+        /// <summary>Recolor passed to <see cref="LoadIconSprite"/> for gallery left/right rail icons (glyph pixels only).</summary>
         public static readonly Color SideRailIconGlyphTint = Color.white;
 
-        /// <summary>Neutral glyph tint for top/bottom bar icon PNGs (glyph pixels only).</summary>
+        /// <summary>Neutral glyph tint for top/bottom bar icons (glyph pixels only).</summary>
         public static readonly Color BarIconGlyphTint = Color.white;
 
         /// <summary>
         /// Adds an icon Image child to <paramref name="buttonGO"/>, hides its text label, and sets
-        /// the button's background to <paramref name="backdropOverride"/> (or <see cref="IconButtonBackdrop"/>
-        /// when null). Pass an override only for buttons that have a meaningful accent colour (e.g. Hub).
+        /// the button's background to <paramref name="backdropOverride"/> (or
+        /// <see cref="GalleryUiColorTokens.ChromeIconWell"/> when null). Pass an override for accents
+        /// (confirm / destroy / armed) or a raised well (<see cref="IconButtonBackdrop"/>).
         /// </summary>
         public static void AddIconToButton(GameObject buttonGO, Sprite icon, float padding = 4f, Color? backdropOverride = null)
         {
-            // Apply unified backdrop (or explicit override for special-case buttons)
             Image btnImg = buttonGO.GetComponent<Image>();
-            if (btnImg != null) btnImg.color = backdropOverride ?? IconButtonBackdrop;
+            if (btnImg != null) btnImg.color = backdropOverride ?? GalleryUiColorTokens.ChromeIconWell;
 
             // Hide text — icon replaces it; text remains as fallback when icon is absent
             Text t = buttonGO.GetComponentInChildren<Text>(true);
@@ -2769,7 +2873,7 @@ namespace VPB
             GameObject iconGO = new GameObject("Icon");
             iconGO.transform.SetParent(buttonGO.transform, false);
             Image img = AddImage(iconGO, Color.white);
-            img.sprite = icon;
+            UI.SetIconSprite(img, icon);
             img.preserveAspect = true;
             img.raycastTarget = false;
             RectTransform rt = iconGO.GetComponent<RectTransform>();
@@ -2779,27 +2883,26 @@ namespace VPB
             rt.anchoredPosition = Vector2.zero;
         }
 
-        /// <summary>Updates or creates the Icon child from <paramref name="relativePathFromPluginsDir"/> using bar glyph tint.</summary>
-        public static void RegisterIconButtonPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        /// <summary>Updates or creates the Icon child from atlas role <paramref name="iconRole"/> using bar glyph tint.</summary>
+        public static void RegisterIconButtonPath(GameObject buttonGO, string iconRole, float padding = 4f, Color? backdropOverride = null)
         {
-            ApplyBarIconFromPath(buttonGO, relativePathFromPluginsDir, padding, backdropOverride);
+            ApplyBarIconFromPath(buttonGO, iconRole, padding, backdropOverride);
         }
 
-        public static bool ApplyBarIconFromPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        public static bool ApplyBarIconFromPath(GameObject buttonGO, string iconRole, float padding = 4f, Color? backdropOverride = null)
         {
-            if (buttonGO == null || string.IsNullOrEmpty(relativePathFromPluginsDir)) return false;
-            Sprite s = LoadIconSprite(relativePathFromPluginsDir, BarIconGlyphTint);
+            if (buttonGO == null || string.IsNullOrEmpty(iconRole)) return false;
+            Sprite s = LoadIconSprite(iconRole, BarIconGlyphTint);
             if (s == null) return false;
             Image btnImg = buttonGO.GetComponent<Image>();
-            if (btnImg != null) btnImg.color = backdropOverride ?? IconButtonBackdrop;
+            if (btnImg != null) btnImg.color = backdropOverride ?? GalleryUiColorTokens.ChromeIconWell;
             Transform iconTr = buttonGO.transform.Find("Icon");
             if (iconTr != null)
             {
                 Image img = iconTr.GetComponent<Image>();
                 if (img != null)
                 {
-                    img.sprite = s;
-                    img.color = Color.white;
+                    UI.SetIconSprite(img, s);
                     return true;
                 }
             }
@@ -2808,21 +2911,20 @@ namespace VPB
         }
 
         /// <summary>Like <see cref="ApplyBarIconFromPath"/> but uses <see cref="SideRailIconGlyphTint"/>.</summary>
-        public static bool ApplySideRailIconFromPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        public static bool ApplySideRailIconFromPath(GameObject buttonGO, string iconRole, float padding = 4f, Color? backdropOverride = null)
         {
-            if (buttonGO == null || string.IsNullOrEmpty(relativePathFromPluginsDir)) return false;
-            Sprite s = LoadIconSprite(relativePathFromPluginsDir, SideRailIconGlyphTint);
+            if (buttonGO == null || string.IsNullOrEmpty(iconRole)) return false;
+            Sprite s = LoadIconSprite(iconRole, SideRailIconGlyphTint);
             if (s == null) return false;
             Image btnImg = buttonGO.GetComponent<Image>();
-            if (btnImg != null) btnImg.color = backdropOverride ?? IconButtonBackdrop;
+            if (btnImg != null) btnImg.color = backdropOverride ?? GalleryUiColorTokens.ChromeIconWell;
             Transform iconTr = buttonGO.transform.Find("Icon");
             if (iconTr != null)
             {
                 Image img = iconTr.GetComponent<Image>();
                 if (img != null)
                 {
-                    img.sprite = s;
-                    img.color = Color.white;
+                    UI.SetIconSprite(img, s);
                     return true;
                 }
             }
@@ -2830,12 +2932,11 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Swaps a live button icon after theme change (tint is baked into <paramref name="sprite"/> pixels).</summary>
+        /// <summary>Swaps a live button icon after theme change.</summary>
         public static void SetButtonIconGlyph(Image iconImage, Sprite sprite)
         {
             if (iconImage == null || sprite == null) return;
-            iconImage.sprite = sprite;
-            iconImage.color = Color.white;
+            UI.SetIconSprite(iconImage, sprite);
         }
 
         public static GameObject CreateUIToggle(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<bool> onValueChanged)

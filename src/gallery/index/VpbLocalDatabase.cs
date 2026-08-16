@@ -391,9 +391,11 @@ namespace VPB
         private static long CountPackagesMissingCatMem(VpbSqlite3.Connection conn)
         {
             // Every valid registered VAR has meta.json, which classification keeps in a real category or EVERYTHING.
-            // A package with no cat_mem row was never fully classified.
+            // A package with no cat_mem row was never fully classified. no_cat=1 rows are packages the deep scan
+            // already resolved as permanently unclassifiable (corrupt zip, no meta.json, file gone) — counting those
+            // as "not yet indexed" would clear the ready stamp forever and force a full rebuild every launch.
             return ScalarInt64(conn,
-                "SELECT COUNT(*) FROM pkg WHERE uid NOT IN (SELECT pkg_uid FROM cat_mem);");
+                "SELECT COUNT(*) FROM pkg WHERE COALESCE(no_cat,0)=0 AND uid NOT IN (SELECT pkg_uid FROM cat_mem);");
         }
 
         /// <summary>
@@ -610,6 +612,7 @@ namespace VPB
 
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN first_scanned INTEGER;");
+            TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN no_cat INTEGER;");
 
             // Backfill NULL first_scanned from wtime as a best-effort "when user got this" proxy.
             // wtime is FileInfo.LastWriteTime.ToBinary() (Local kind); convert to UTC binary so
@@ -3539,7 +3542,7 @@ namespace VPB
             long classifyTicks = 0;
             long catMemSqlTicks = 0;
 
-            using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned,family,ver,is_newest,license) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"))
+            using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned,family,ver,is_newest,license,no_cat) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"))
             using (var insDep = conn.Prepare("INSERT OR IGNORE INTO pkg_dep(src_uid,dep_uid) VALUES(?,?)"))
             {
                 long depTicksIgnored = 0;
@@ -4931,6 +4934,19 @@ namespace VPB
             return totalRows;
         }
 
+        /// <summary>
+        /// 1 when the deep scan already settled that this package can never produce cat_mem rows
+        /// (corrupt archive, no meta.json, file moved to InvalidPackages under a stale path cache).
+        /// Only a finished scan may set it: an unscanned package is still "pending", and must keep
+        /// the index incomplete so the post-scan rebuild fills it in.
+        /// </summary>
+        static long ComputeNoCatFlagForInsert(VarPackage pkg)
+        {
+            if (pkg == null) return 0L;
+            try { return pkg.Scaned && pkg.invalid ? 1L : 0L; }
+            catch { return 0L; }
+        }
+
         static void InsertPackageIndexPkgAndDepRows(
             VarPackage pkg,
             Dictionary<string, long> existingFirstScanned,
@@ -4985,6 +5001,7 @@ namespace VPB
             insPkg.BindInt64(12, 0);
             string license = ResolveLicenseForInsert(pkg);
             insPkg.BindText(13, license ?? "");
+            insPkg.BindInt64(14, ComputeNoCatFlagForInsert(pkg));
             insPkg.Step();
             insPkg.Reset();
             nPkgInserted++;
@@ -5317,6 +5334,7 @@ namespace VPB
             int nPkgErrors = 0;
             long pkgRowsAfter = -1;
             long packagesMissingCatMem = -1;
+            long pkgRowsNoCat = -1;
             string dbInvSigAfter = null;
             bool catMemIndexComplete = false;
             bool parallelRebuildCatMem = false;
@@ -5409,7 +5427,7 @@ namespace VPB
                             ? new List<CatMemRow>[rebuildClassifyWorkers]
                             : null;
 
-                        using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned,family,ver,is_newest,license) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"))
+                        using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned,family,ver,is_newest,license,no_cat) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"))
                         using (var insDep = conn.Prepare("INSERT OR IGNORE INTO pkg_dep(src_uid,dep_uid) VALUES(?,?)"))
                         {
                             VpbSqlite3.Statement insMem = null;
@@ -5506,6 +5524,7 @@ namespace VPB
 
                         pkgRowsAfter = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg;");
                         packagesMissingCatMem = CountPackagesMissingCatMem(conn);
+                        pkgRowsNoCat = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg WHERE COALESCE(no_cat,0)=1;");
                         dbInvSigAfter = ComputePackageInventorySignatureFromDatabase(conn);
                         catMemIndexComplete = IsGalleryIndexCoverageComplete(
                             pkgRowsAfter, pkgSnap.Count, packagesMissingCatMem, dbInvSigAfter, invSigForMeta);
@@ -5612,6 +5631,7 @@ namespace VPB
                 sb.Append("pkgErrors=").Append(nPkgErrors);
                 sb.Append(",pkgRowsAfter=").Append(pkgRowsAfter);
                 sb.Append(",packagesMissingCatMem=").Append(packagesMissingCatMem);
+                sb.Append(",pkgNoCat=").Append(pkgRowsNoCat);
                 sb.Append(",uidSetMatch=").Append(string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal) ? "1" : "0");
                 sb.Append(",catMemIncomplete=").Append(catMemIndexComplete ? "0" : "1");
                 sb.Append(" | catMemParallel=").Append(parallelRebuildCatMem ? "1" : "0");

@@ -1801,7 +1801,15 @@ namespace VPB
 				if (!flag)
 				{
 					invalid = true;
-					VpbPackageIndexDiagnostics.Log(this.Uid, "scanInvalid", "reason=no_meta_json path='" + (Path ?? "") + "'");
+					if (!File.Exists(Path))
+					{
+						// Registered from a stale cached path inventory (file moved to InvalidPackages or
+						// deleted since the inventory was saved). Drop the row so it stops resurrecting.
+						VpbLocalDatabase.NoteMissingVarPath(Path);
+						VpbPackageIndexDiagnostics.Log(this.Uid, "scanInvalid", "reason=file_missing path='" + (Path ?? "") + "'");
+					}
+					else
+						VpbPackageIndexDiagnostics.Log(this.Uid, "scanInvalid", "reason=no_meta_json path='" + (Path ?? "") + "'");
 				}
 				else
 				{

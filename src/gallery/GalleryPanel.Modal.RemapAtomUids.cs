@@ -938,7 +938,7 @@ namespace VPB
             UI.ApplyFloatTitleBarMetrics(titleHlg, grip.gameObject, s);
 
             float winIconSz = GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s;
-            UI.CreateFloatTitleWindowIcon(titleBar, "vpb_icons/rename.png", winIconSz);
+            UI.CreateFloatTitleWindowIcon(titleBar, "pencil-check", winIconSz);
 
             Text title = UI.CreateEmphasisTitleLabel(
                 titleBar,
@@ -947,7 +947,7 @@ namespace VPB
             UI.AddLE(title.gameObject, flexibleWidth: 1f, minWidth: 60f * s);
 
             _remapAtomUidsCollapseBtn = RemapAtomUidsSquareIconButton(
-                titleBar.transform, chromeSz, "vpb_icons/chevron_up.png",
+                titleBar.transform, chromeSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, ToggleRemapAtomUidsCollapsed);
             if (_remapAtomUidsCollapseBtn != null)
             {
@@ -968,7 +968,7 @@ namespace VPB
             }
 
             GameObject closeBtn = RemapAtomUidsSquareIconButton(
-                titleBar.transform, chromeSz, "vpb_icons/x.png",
+                titleBar.transform, chromeSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, CancelRemapAtomUidsModal);
             if (closeBtn != null)
             {
@@ -1152,7 +1152,7 @@ namespace VPB
             rhLe.flexibleWidth = 0f;
             try
             {
-                Sprite rhSpr = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
+                Sprite rhSpr = UI.LoadIconSprite("chevrons-down-right", UI.BarIconGlyphTint);
                 if (rhSpr != null)
                     UI.AddIconToButton(resizeHandle, rhSpr, GalleryUiDesignTokens.FloatChromeIconPadRef * s, UI.IconButtonBackdrop);
             }
@@ -1484,7 +1484,7 @@ namespace VPB
 
             float chevronSz = rowH - 10f * s;
             GameObject pickBtn = RemapAtomUidsSquareIconButton(
-                remapHost.transform, chevronSz, "vpb_icons/chevron_down.png",
+                remapHost.transform, chevronSz, "chevron-down",
                 new Color(0.22f, 0.38f, 0.52f, 1f),
                 () => ToggleRemapAtomUidsExpand(capturedOriginal, capturedType, canCreate));
             if (pickBtn != null)
@@ -1588,7 +1588,7 @@ namespace VPB
                 recvEt.triggers.Add(recvEntry);
 
                 GameObject recvPickBtn = RemapAtomUidsSquareIconButton(
-                    recvHost.transform, chevronSz, "vpb_icons/chevron_down.png",
+                    recvHost.transform, chevronSz, "chevron-down",
                     new Color(0.22f, 0.38f, 0.52f, 1f),
                     () =>
                     {
@@ -1956,9 +1956,9 @@ namespace VPB
             {
                 try
                 {
-                    string path = expanded ? "vpb_icons/chevron_up.png" : "vpb_icons/chevron_down.png";
+                    string path = expanded ? "chevron-up" : "chevron-down";
                     Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
-                    if (spr != null) chevron.sprite = spr;
+                    if (spr != null) UI.SetIconSprite(chevron, spr);
                 }
                 catch { }
             }
@@ -2402,13 +2402,12 @@ namespace VPB
             if (_remapAtomUidsCollapseIcon != null)
             {
                 string path = _remapAtomUidsCollapsed
-                    ? "vpb_icons/chevron_down.png"
-                    : "vpb_icons/chevron_up.png";
+                    ? "chevron-down"
+                    : "chevron-up";
                 Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
                 if (spr != null)
                 {
-                    _remapAtomUidsCollapseIcon.sprite = spr;
-                    _remapAtomUidsCollapseIcon.color = Color.white;
+                    UI.SetIconSprite(_remapAtomUidsCollapseIcon, spr);
                 }
             }
 
@@ -2450,11 +2449,11 @@ namespace VPB
             UI.AddLE(go, minWidth: sz, preferredWidth: sz, preferredHeight: sz);
             try
             {
-                Sprite spr = UI.LoadIconSprite("vpb_icons/chevron_right.png", UI.BarIconGlyphTint);
+                Sprite spr = UI.LoadIconSprite("chevron-right", UI.BarIconGlyphTint);
                 if (spr != null)
                 {
                     Image img = UI.AddImage(go, new Color(0.55f, 0.62f, 0.70f, 1f));
-                    img.sprite = spr;
+                    UI.SetIconSprite(img, spr);
                     img.preserveAspect = true;
                     img.raycastTarget = false;
                     img.color = new Color(0.55f, 0.62f, 0.70f, 1f);

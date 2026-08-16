@@ -1587,11 +1587,11 @@ namespace VPB
             Sprite offSpr = ratingStarOffSprite;
             if (onSpr == null)
             {
-                try { onSpr = UI.LoadIconSprite("vpb_icons/star.png", Color.white); } catch { }
+                try { onSpr = UI.LoadIconSprite("filled/star", Color.white); } catch { }
             }
             if (offSpr == null)
             {
-                try { offSpr = UI.LoadIconSprite("vpb_icons/star_off.png", Color.white); } catch { }
+                try { offSpr = UI.LoadIconSprite("star", Color.white); } catch { }
             }
             if (onSpr == null) onSpr = offSpr;
             if (offSpr == null) offSpr = onSpr;
@@ -1605,7 +1605,7 @@ namespace VPB
                 GameObject starGO = UI.CreateChildRT(_detailStripStarsGO, "Star" + starValue, AnchorPresets.middleCenter, new Vector2(starSz, starSz));
                 UI.AddLE(starGO, minWidth: starSz, preferredWidth: starSz, minHeight: starSz, preferredHeight: starSz);
                 Image img = starGO.AddComponent<Image>();
-                img.sprite = offSpr != null ? offSpr : onSpr;
+                UI.SetIconSprite(img, offSpr != null ? offSpr : onSpr);
                 img.color = DetailStripStarOffColor;
                 img.raycastTarget = true;
                 img.preserveAspect = true;
@@ -1647,7 +1647,7 @@ namespace VPB
             try
             {
                 if (_detailStripCollapseSprite == null)
-                    _detailStripCollapseSprite = UI.LoadIconSprite("vpb_icons/chevron_down.png", new Color(0.78f, 0.78f, 0.80f, 1f));
+                    _detailStripCollapseSprite = UI.LoadIconSprite("chevron-down", new Color(0.78f, 0.78f, 0.80f, 1f));
                 if (_detailStripCollapseSprite != null)
                 {
                     UI.AddIconToButton(
@@ -1745,9 +1745,9 @@ namespace VPB
             try
             {
                 if (_detailStripExpandSprite == null)
-                    _detailStripExpandSprite = UI.LoadIconSprite("vpb_icons/chevron_up.png", new Color(0.85f, 0.88f, 0.95f, 1f));
+                    _detailStripExpandSprite = UI.LoadIconSprite("chevron-up", new Color(0.85f, 0.88f, 0.95f, 1f));
                 if (_detailStripExpandSprite != null)
-                    _detailStripExpandIconImage.sprite = _detailStripExpandSprite;
+                    UI.SetIconSprite(_detailStripExpandIconImage, _detailStripExpandSprite);
             }
             catch { }
 
@@ -1992,8 +1992,8 @@ namespace VPB
                 Image img = _detailStripStarImages[i];
                 if (img == null) continue;
                 bool on = i < show;
-                if (on && onSpr != null) img.sprite = onSpr;
-                else if (!on && offSpr != null) img.sprite = offSpr;
+                if (on && onSpr != null) UI.SetIconSprite(img, onSpr);
+                else if (!on && offSpr != null) UI.SetIconSprite(img, offSpr);
                 if (_detailStripStarHover > 0 && on)
                     img.color = DetailStripStarPreviewColor;
                 else
@@ -2223,12 +2223,12 @@ namespace VPB
 
             if (_detailStripThumbNavPrevSprite == null)
             {
-                try { _detailStripThumbNavPrevSprite = UI.LoadIconSprite("vpb_icons/chevron_left.png", UI.BarIconGlyphTint); }
+                try { _detailStripThumbNavPrevSprite = UI.LoadIconSprite("chevron-left", UI.BarIconGlyphTint); }
                 catch { _detailStripThumbNavPrevSprite = null; }
             }
             if (_detailStripThumbNavNextSprite == null)
             {
-                try { _detailStripThumbNavNextSprite = UI.LoadIconSprite("vpb_icons/chevron_right.png", UI.BarIconGlyphTint); }
+                try { _detailStripThumbNavNextSprite = UI.LoadIconSprite("chevron-right", UI.BarIconGlyphTint); }
                 catch { _detailStripThumbNavNextSprite = null; }
             }
 
@@ -7274,7 +7274,7 @@ namespace VPB
                 grip.gameObject, s);
 
             UI.CreateFloatTitleWindowIcon(
-                _detailStripTagMenuHeaderGO, "vpb_icons/tags.png",
+                _detailStripTagMenuHeaderGO, "tags",
                 GalleryUiDesignTokens.FloatTitleWindowIconSizeRef);
 
             _detailStripTagMenuSelText = UI.CreateEmphasisTitleLabel(
@@ -7284,7 +7284,7 @@ namespace VPB
             UI.AddLE(_detailStripTagMenuSelText.gameObject, flexibleWidth: 1f, minWidth: 60f);
 
             _detailStripTagMenuCollapseBtn = SettingsFloatSquareIconButton(
-                _detailStripTagMenuHeaderGO.transform, titleCloseSz, "vpb_icons/chevron_up.png",
+                _detailStripTagMenuHeaderGO.transform, titleCloseSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, DetailStripToggleTagMenuCollapsed);
             if (_detailStripTagMenuCollapseBtn != null)
             {
@@ -7294,7 +7294,7 @@ namespace VPB
             }
 
             _detailStripTagMenuCloseGO = SettingsFloatSquareIconButton(
-                _detailStripTagMenuHeaderGO.transform, titleCloseSz, "vpb_icons/x.png",
+                _detailStripTagMenuHeaderGO.transform, titleCloseSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, DetailStripCloseTagMenu);
             if (_detailStripTagMenuCloseGO != null)
             {
@@ -7390,7 +7390,7 @@ namespace VPB
                     if (clearBg != null) clearBg.color = new Color(0f, 0f, 0f, 0f);
                     try
                     {
-                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
+                        Sprite xSpr = UI.LoadIconSprite("x", GalleryUiColorTokens.SearchClearIconTint);
                         if (xSpr != null)
                             UI.AddIconToButton(_detailStripTagMenuFilterClearGo, xSpr, 6f, new Color(0f, 0f, 0f, 0f));
                     }
@@ -7572,7 +7572,7 @@ namespace VPB
             UI.EnsureFloatChromeHoverBorder(_detailStripTagMenuResizeGO);
             try
             {
-                Sprite rhSpr = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
+                Sprite rhSpr = UI.LoadIconSprite("chevrons-down-right", UI.BarIconGlyphTint);
                 if (rhSpr != null)
                     UI.AddIconToButton(_detailStripTagMenuResizeGO, rhSpr, 5f, UI.IconButtonBackdrop);
             }
@@ -7656,12 +7656,11 @@ namespace VPB
 
             if (_detailStripTagMenuCollapseIcon != null)
             {
-                string path = _detailStripTagMenuCollapsed ? "vpb_icons/chevron_down.png" : "vpb_icons/chevron_up.png";
+                string path = _detailStripTagMenuCollapsed ? "chevron-down" : "chevron-up";
                 Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
                 if (spr != null)
                 {
-                    _detailStripTagMenuCollapseIcon.sprite = spr;
-                    _detailStripTagMenuCollapseIcon.color = Color.white;
+                    UI.SetIconSprite(_detailStripTagMenuCollapseIcon, spr);
                 }
             }
 
@@ -7691,7 +7690,7 @@ namespace VPB
             // Keep ChromeIconWell + inward UIHoverBorder (never destroy hover on rescale).
             if (closeGO == null) return;
             UI.StyleFloatChromeIconButton(
-                closeGO, size, "vpb_icons/x.png", GalleryUiColorTokens.ChromeIconWell);
+                closeGO, size, "x", GalleryUiColorTokens.ChromeIconWell);
         }
 
         private void DetailStripApplyTagMenuPanelChrome()
@@ -7921,7 +7920,7 @@ namespace VPB
             if (spIdx < 0 || spIdx >= sceneSourceSortModeSprites.Length) return;
             Sprite sp = sceneSourceSortModeSprites[spIdx];
             if (sp == null) return;
-            _detailStripTagMenuAvailSortIcon.sprite = sp;
+            UI.SetIconSprite(_detailStripTagMenuAvailSortIcon, sp);
             _detailStripTagMenuAvailSortIcon.enabled = true;
         }
 
@@ -8841,7 +8840,7 @@ namespace VPB
                 if (winIconTr == null)
                 {
                     GameObject winIcon = UI.CreateFloatTitleWindowIcon(
-                        _detailStripTagMenuHeaderGO, "vpb_icons/tags.png",
+                        _detailStripTagMenuHeaderGO, "tags",
                         GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s);
                     if (winIcon != null && gripTr != null)
                         winIcon.transform.SetSiblingIndex(gripTr.GetSiblingIndex() + 1);
@@ -8857,7 +8856,7 @@ namespace VPB
                 {
                     UI.StyleFloatChromeIconButton(
                         _detailStripTagMenuCollapseBtn, chromeSz,
-                        _detailStripTagMenuCollapsed ? "vpb_icons/chevron_down.png" : "vpb_icons/chevron_up.png",
+                        _detailStripTagMenuCollapsed ? "chevron-down" : "chevron-up",
                         GalleryUiColorTokens.ChromeIconWell);
                 }
                 if (_detailStripTagMenuCloseGO != null)
@@ -9037,7 +9036,7 @@ namespace VPB
                 RectTransform rhRT = _detailStripTagMenuResizeGO.GetComponent<RectTransform>();
                 if (rhRT != null)
                     rhRT.sizeDelta = new Vector2(rhSz, rhSz);
-                try { UI.ApplyBarIconFromPath(_detailStripTagMenuResizeGO, "vpb_icons/chevrons_down_right.png"); } catch { }
+                try { UI.ApplyBarIconFromPath(_detailStripTagMenuResizeGO, "chevrons-down-right"); } catch { }
                 if (_detailStripTagMenuSearchRowGO != null
                     && _detailStripTagMenuResizeGO.transform.parent != _detailStripTagMenuSearchRowGO.transform)
                     _detailStripTagMenuResizeGO.transform.SetParent(_detailStripTagMenuSearchRowGO.transform, false);

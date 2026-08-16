@@ -32,3 +32,11 @@ VPB.code-workspace
 .aider*
 /.vscode
 /scripts
+/docs
+
+# Icon tooling output
+scripts/_icon_contact_sheet.png
+
+# Icon tooling cache
+scripts/_tabler_probe_cache.npz
+/assets/tabler-icons-3.46.0

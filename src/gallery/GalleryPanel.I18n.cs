@@ -27,7 +27,9 @@ namespace VPB
             {
                 CloseLanguageMenu();
                 try { CloseFileSortTypeMenu(); } catch { }
+                try { InvalidateInternalSettingsDefsCache(); } catch { }
                 RefreshLocalizedUi();
+                try { RefreshSettingsFloatLocalizedChrome(); } catch { }
                 try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
                 try { quickFiltersUI?.RefreshLocalizedUi(); } catch { }
                 try { ReloadInAppHelpContent(); } catch { }
@@ -116,7 +118,12 @@ namespace VPB
 
             UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
             try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
-            try { HideGlobalSourceFilterDropdownIfOpen(); } catch { }
+            try
+            {
+                if (globalSourceFilterMenuRoot != null && globalSourceFilterMenuRoot.activeSelf)
+                    RebuildGlobalSourceFilterMenuOptions();
+            }
+            catch { }
             try { SyncSceneSourceSortButtonHighlights(); } catch { }
             try { RebuildFileSortTypeMenuOptions(); } catch { }
             try { SyncSidePaneTopSortButtonVisuals(); } catch { }
@@ -225,10 +232,10 @@ namespace VPB
             // Icon
             try
             {
-                var icon = UI.LoadIconSprite("vpb_icons/language.png", new Color(1f, 1f, 1f, 1f));
+                var icon = UI.LoadIconSprite("language", new Color(1f, 1f, 1f, 1f));
                 if (icon != null)
                 {
-                    UI.AddIconToButton(languageSwitcherBtnGO, icon, padding: 6f);
+                    UI.AddIconToButton(languageSwitcherBtnGO, icon, padding: 6f, GalleryUiColorTokens.ChromeIconWell);
                 }
             }
             catch { }

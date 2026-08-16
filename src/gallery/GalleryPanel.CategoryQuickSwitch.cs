@@ -114,10 +114,10 @@ namespace VPB
                 try
                 {
                     string iconPath = compact
-                        ? "vpb_icons/gallery_category.png"
-                        : "vpb_icons/chevron_down.png";
+                        ? "category-2"
+                        : "chevron-down";
                     Sprite sp = UI.LoadIconSprite(iconPath, UI.BarIconGlyphTint);
-                    if (sp != null) _categoryQuickArrowImage.sprite = sp;
+                    if (sp != null) UI.SetIconSprite(_categoryQuickArrowImage, sp);
                 }
                 catch { }
             }
@@ -189,8 +189,8 @@ namespace VPB
                 _categoryQuickArrowImage.preserveAspect = true;
                 try
                 {
-                    Sprite chevron = UI.LoadIconSprite("vpb_icons/chevron_down.png", UI.BarIconGlyphTint);
-                    if (chevron != null) _categoryQuickArrowImage.sprite = chevron;
+                    Sprite chevron = UI.LoadIconSprite("chevron-down", UI.BarIconGlyphTint);
+                    if (chevron != null) UI.SetIconSprite(_categoryQuickArrowImage, chevron);
                 }
                 catch { }
             }

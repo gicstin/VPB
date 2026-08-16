@@ -338,7 +338,7 @@ namespace VPB
                 dismissGO.AddComponent<UIChipDismissClick>();
 
                 float iconPad = GalleryUiDesignTokens.SearchIconButtonPadRef * s;
-                Sprite closeSpr = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
+                Sprite closeSpr = UI.LoadIconSprite("x", Color.white);
                 if (closeSpr != null)
                     UI.AddIconToButton(dismissGO, closeSpr, iconPad, Color.gray);
                 else

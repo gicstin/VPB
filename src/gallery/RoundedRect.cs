@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -18,9 +19,27 @@ namespace VPB
     /// </summary>
     public class RoundedRect : Image
     {
+        private static readonly List<RoundedRect> s_Live = new List<RoundedRect>(256);
+
+        /// <summary>Enabled instances, so global radius sync never has to scan every loaded object.</summary>
+        public static List<RoundedRect> Live { get { return s_Live; } }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            s_Live.Add(this);
+        }
+
+        protected override void OnDisable()
+        {
+            s_Live.Remove(this);
+            base.OnDisable();
+        }
+
         [SerializeField] private float _cornerRadius = 0f;
         [SerializeField] private float _cornerRadiusFraction = 0f;
         [SerializeField] private int _cornerSegments = 6;
+        [SerializeField] private bool _excludeFromGlobalRadiusSync;
 
         /// <summary>Absolute corner radius in local pixels. Used only when <see cref="cornerRadiusFraction"/> is 0.</summary>
         public float cornerRadius
@@ -41,6 +60,16 @@ namespace VPB
         {
             get { return _cornerSegments; }
             set { int v = Mathf.Max(1, value); if (_cornerSegments != v) { _cornerSegments = v; SetVerticesDirty(); } }
+        }
+
+        /// <summary>
+        /// When true, <see cref="UI.ApplyGalleryElementCornerRadiusGlobally"/> leaves this fill alone
+        /// (large preview cards must not inherit the button fraction — it turns them into lozenges).
+        /// </summary>
+        public bool excludeFromGlobalRadiusSync
+        {
+            get { return _excludeFromGlobalRadiusSync; }
+            set { _excludeFromGlobalRadiusSync = value; }
         }
 
         private float EffectiveRadius(Rect r)
@@ -110,6 +139,23 @@ namespace VPB
     /// </summary>
     public class RoundedRectOutline : Image
     {
+        private static readonly List<RoundedRectOutline> s_Live = new List<RoundedRectOutline>(256);
+
+        /// <summary>Enabled instances, so global radius sync never has to scan every loaded object.</summary>
+        public static List<RoundedRectOutline> Live { get { return s_Live; } }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            s_Live.Add(this);
+        }
+
+        protected override void OnDisable()
+        {
+            s_Live.Remove(this);
+            base.OnDisable();
+        }
+
         [SerializeField] private float _cornerRadiusFraction = 0f;
         [SerializeField] private float _borderThickness = 2f;
         [SerializeField] private int _cornerSegments = 6;

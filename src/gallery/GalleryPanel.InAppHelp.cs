@@ -72,7 +72,7 @@ namespace VPB
             helpBtn.GetComponent<Image>().color = new Color(0.12f, 0.28f, 0.42f, 0.92f);
             Text ht = helpBtn.GetComponentInChildren<Text>();
             if (ht != null) ht.color = Color.white;
-            { var s = UI.LoadIconSprite("vpb_icons/book.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(helpBtn, s, 6f, new Color(0.12f, 0.28f, 0.42f, 0.92f)); }
+            { var s = UI.LoadIconSprite("book", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(helpBtn, s, 6f, new Color(0.12f, 0.28f, 0.42f, 0.92f)); }
             _titleBarHelpBtnRT = helpBtn.GetComponent<RectTransform>();
             _titleBarHelpBtnRT.anchorMin = new Vector2(0.5f, 0.5f);
             _titleBarHelpBtnRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -133,7 +133,7 @@ namespace VPB
             }
             Image closeBg = closeBtn.GetComponent<Image>();
             if (closeBg != null) closeBg.color = GalleryUiColorTokens.ChromeIconWell;
-            { var s = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s, 6f, GalleryUiColorTokens.ChromeIconWell); }
+            { var s = UI.LoadIconSprite("x", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s, 6f, GalleryUiColorTokens.ChromeIconWell); }
             UI.EnsureFloatChromeHoverBorder(closeBtn, inward: true);
 
             _inAppHelpSearchInput = CreateSearchInput(_inAppHelpPanelGO, GalleryUiDesignTokens.InAppHelpPanelWidthRef - 24f, _ => OnInAppHelpSearchChanged());
@@ -358,7 +358,7 @@ namespace VPB
                 _inAppHelpIconPreviewBackdrop.color = spec.Backdrop;
             if (_inAppHelpIconPreviewGlyph != null)
             {
-                _inAppHelpIconPreviewGlyph.sprite = spr;
+                UI.SetIconSprite(_inAppHelpIconPreviewGlyph, spr);
                 _inAppHelpIconPreviewGlyph.enabled = spr != null;
             }
             if (_inAppHelpIconPreviewLabel != null)

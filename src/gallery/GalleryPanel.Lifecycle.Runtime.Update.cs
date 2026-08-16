@@ -361,9 +361,9 @@ namespace VPB
                     {
                         _fixedDockHandleIconKey = iconKey;
                         if (showFixedBottomLeft && _resizeHandleFixedBottomGO != null)
-                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_left.png"); } catch { }
+                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomGO, isTopDock ? "chevrons-down" : "chevrons-down-left"); } catch { }
                         if (showFixedBottomRight && _resizeHandleFixedBottomRightGO != null)
-                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomRightGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_right.png"); } catch { }
+                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomRightGO, isTopDock ? "chevrons-down" : "chevrons-down-right"); } catch { }
                     }
 
                     // Floating corner handles are hidden in fixed mode.

@@ -508,7 +508,7 @@ namespace VPB
                 GalleryUiDesignTokens.FontMinRef);
             UI.AddLE(_detailStripTagMenuDbListHintText.gameObject, flexibleWidth: 1f, minWidth: 40f * s);
 
-            Sprite clearSpr = UI.LoadIconSprite("vpb_icons/clear_selection.png", GalleryUiColorTokens.TextMuted);
+            Sprite clearSpr = UI.LoadIconSprite("square-x", GalleryUiColorTokens.TextMuted);
             Color clearSearchBackdrop = GalleryUiColorTokens.ActiveWarnHeader;
             _detailStripTagMenuDbClearBtnGO = UI.CreateSideTabSquareIconButton(
                 _detailStripTagMenuDbListHeaderGO, chromeBtn, clearSpr, UserTagEditorClearFilter, clearSearchBackdrop, iconPadChrome);
@@ -605,14 +605,14 @@ namespace VPB
             Color mergeCol = GalleryUiColorTokens.ActiveUtility;
             Color ioImpCol = GalleryUiColorTokens.ActiveOn;
             Color ioExpCol = GalleryUiColorTokens.ActiveSecondary;
-            Sprite sprPlus = UI.LoadIconSprite("vpb_icons/tag_plus.png", Color.white);
-            Sprite sprMinus = UI.LoadIconSprite("vpb_icons/tag_minus.png", Color.white);
-            Sprite sprMerge = UI.LoadIconSprite("vpb_icons/arrow_merge.png", Color.white);
-            Sprite sprImp = UI.LoadIconSprite("vpb_icons/file_import.png", Color.white);
-            Sprite sprExp = UI.LoadIconSprite("vpb_icons/file_export.png", Color.white);
-            Sprite sprInfo = UI.LoadIconSprite("vpb_icons/info_square.png", Color.white);
-            Sprite sprRename = UI.LoadIconSprite("vpb_icons/rename.png", Color.white);
-            Sprite sprCat = UI.LoadIconSprite("vpb_icons/gallery_category.png", Color.white);
+            Sprite sprPlus = UI.LoadIconSprite("tag-plus", Color.white);
+            Sprite sprMinus = UI.LoadIconSprite("tag-minus", Color.white);
+            Sprite sprMerge = UI.LoadIconSprite("arrow-merge", Color.white);
+            Sprite sprImp = UI.LoadIconSprite("file-import", Color.white);
+            Sprite sprExp = UI.LoadIconSprite("file-export", Color.white);
+            Sprite sprInfo = UI.LoadIconSprite("info-square", Color.white);
+            Sprite sprRename = UI.LoadIconSprite("pencil-check", Color.white);
+            Sprite sprCat = UI.LoadIconSprite("category-2", Color.white);
 
             GameObject createTagsBtn = UI.CreateSideTabSquareIconButton(_detailStripTagMenuDbActionRowGO, actionBtn, sprPlus, UserTagEditorOnCreateTagsClicked, createCol, iconPadAction);
             AddTooltipPlain(createTagsBtn, VPBTranslation.T("gallery.usertags.editor_create_tags_tip", "Create tag rows: one tag per line (newline split). Blank lines skipped; trim line ends."));

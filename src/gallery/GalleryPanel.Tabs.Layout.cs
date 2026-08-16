@@ -30,20 +30,10 @@ namespace VPB
                 : 0.5f;
         }
 
-        private static bool CategoryNeedsSplitView(string title)
-        {
-            if (string.IsNullOrEmpty(title)) return false;
-            return title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
-                || title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
-                || title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
-                || title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0
-                || title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         /// <summary>Split sub-panes that need tag-count cache priming (excludes Scene — uses SceneSource only).</summary>
         private static bool CategoryNeedsTagCountCachePass(string title)
         {
-            if (!CategoryNeedsSplitView(title)) return false;
+            if (!CategoryHasFacetChildren(title)) return false;
             return title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) < 0;
         }
 
@@ -71,22 +61,13 @@ namespace VPB
             try { ApplyInAppHelpPanelLayout(ChromeScale); } catch { }
             UpdateSideContextActions();
 
-            // Lightweight refresh must still keep split sub-pane lists alive (Hair/Clothing tags, SceneSource, etc.).
-            // Otherwise sub-pane can go empty if a lightweight slot is consumed during category navigation.
+            // Lightweight refresh must still keep Hair/Clothing/Scene facets under the selected category.
             try
             {
-                if (leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf && leftActiveContent == ContentType.Category)
-                {
-                    string t = titleText != null ? (titleText.text ?? "") : "";
-                    ContentType subType = InferCategorySubPaneTypeFromTitle(t);
-                    UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
-                }
-                if (rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf && rightActiveContent == ContentType.Category)
-                {
-                    string t2 = titleText != null ? (titleText.text ?? "") : "";
-                    ContentType subType2 = InferCategorySubPaneTypeFromTitle(t2);
-                    UpdateTabs(subType2, rightSubTabContainerGO, rightSubActiveTabButtons, false);
-                }
+                if (leftActiveContent == ContentType.Category)
+                    FillCategoryAccordion(true);
+                if (rightActiveContent == ContentType.Category)
+                    FillCategoryAccordion(false);
             }
             catch { }
             UpdateSideButtonsVisibility();
@@ -166,20 +147,15 @@ namespace VPB
 
             if (leftActiveContent.HasValue)
             {
-                // Split View Logic
+                // Category facets expand in-list (accordion). Only Cleanup stale-buckets keep a split pane.
                 bool splitView = false;
-                if (leftActiveContent == ContentType.Category)
-                {
-                    string title = titleText != null ? titleText.text : "";
-                    splitView = CategoryNeedsSplitView(title);
-                }
-                else if (leftActiveContent == ContentType.CleanupCategories)
+                if (leftActiveContent == ContentType.CleanupCategories)
                 {
                     // Split view when filtering stale cache: show age buckets in the sub-pane.
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if ((splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.CleanupCategories))
+                if (splitView && leftActiveContent == ContentType.CleanupCategories
                     && leftSubTabScrollGO != null)
                 {
                     // Split Layout
@@ -269,6 +245,13 @@ namespace VPB
                             UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                         }
                     }
+                    if (leftActiveContent == ContentType.Category)
+                    {
+                        if (rebuildSubPaneSideTabLists)
+                            FillCategoryAccordion(true);
+                        else if (rebuildSideTabLists)
+                            ClearCategoryAccordionButtons(true);
+                    }
                 }
             }
             else
@@ -281,20 +264,15 @@ namespace VPB
 
             if (rightActiveContent.HasValue)
             {
-                // Right Split View Logic
+                // Right: category facets expand in-list. Only Cleanup stale-buckets keep a split pane.
                 bool splitView = false;
-                if (rightActiveContent == ContentType.Category)
-                {
-                    string title = titleText != null ? titleText.text : "";
-                    splitView = CategoryNeedsSplitView(title);
-                }
-                else if (rightActiveContent == ContentType.CleanupCategories)
+                if (rightActiveContent == ContentType.CleanupCategories)
                 {
                     // Split view when filtering stale cache: show age buckets in the sub-pane.
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if ((splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.CleanupCategories))
+                if (splitView && rightActiveContent == ContentType.CleanupCategories
                     && rightSubTabScrollGO != null)
                 {
                     // Split Layout
@@ -383,6 +361,13 @@ namespace VPB
                             TeardownCategoryCreatorDualBufferOneSide(false);
                             UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                         }
+                    }
+                    if (rightActiveContent == ContentType.Category)
+                    {
+                        if (rebuildSubPaneSideTabLists)
+                            FillCategoryAccordion(false);
+                        else if (rebuildSideTabLists)
+                            ClearCategoryAccordionButtons(false);
                     }
                 }
             }

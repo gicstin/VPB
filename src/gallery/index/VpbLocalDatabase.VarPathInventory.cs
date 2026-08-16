@@ -434,6 +434,94 @@ namespace VPB
             }
         }
 
+        static readonly object s_MissingVarPathLock = new object();
+        static List<string> s_MissingVarPaths;
+
+        /// <summary>
+        /// Records a cached inventory path whose .var file is gone (moved to InvalidPackages / deleted
+        /// after the inventory was saved). Callable from scan worker threads; SQLite work happens in
+        /// <see cref="FlushMissingVarPathPrune"/>. Without this the stale row is restored on every launch,
+        /// registers a ghost package that can never be classified, and keeps the gallery index incomplete.
+        /// </summary>
+        internal static void NoteMissingVarPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            lock (s_MissingVarPathLock)
+            {
+                if (s_MissingVarPaths == null) s_MissingVarPaths = new List<string>(16);
+                s_MissingVarPaths.Add(path);
+            }
+        }
+
+        /// <summary>Deletes noted dead paths from <c>pkg_var_path</c> and resyncs the cached row count. Returns rows removed.</summary>
+        internal static int FlushMissingVarPathPrune()
+        {
+            List<string> pending;
+            lock (s_MissingVarPathLock)
+            {
+                if (s_MissingVarPaths == null || s_MissingVarPaths.Count == 0) return 0;
+                pending = s_MissingVarPaths;
+                s_MissingVarPaths = null;
+            }
+            if (!VpbSqlite3.IsAvailable) return 0;
+
+            int removed = 0;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    EnsureVarPathInventorySchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        // Inventory rows keep the raw enumeration path (backslashes on Windows) while
+                        // VarPackage.Path is cleaned to forward slashes — match both spellings.
+                        using (var del = conn.Prepare("DELETE FROM pkg_var_path WHERE path = ? OR path = ?"))
+                        {
+                            for (int i = 0; i < pending.Count; i++)
+                            {
+                                string p = pending[i];
+                                if (string.IsNullOrEmpty(p)) continue;
+                                del.BindText(1, p.Replace('\\', '/'));
+                                del.BindText(2, p.Replace('/', '\\'));
+                                del.Step();
+                                del.Reset();
+                                removed++;
+                            }
+                        }
+                        int rowCount = (int)Math.Max(ScalarInt64(conn, "SELECT COUNT(*) FROM pkg_var_path;"), 0);
+                        if (rowCount > 0)
+                        {
+                            using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                            {
+                                st.BindText(1, MetaVarPathInventoryCountKey);
+                                st.BindText(2, rowCount.ToString());
+                                st.Step();
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                        try
+                        {
+                            LogUtil.Log("Var path inventory pruned dead paths=" + removed + " rows_left=" + rowCount);
+                        }
+                        catch { }
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] FlushMissingVarPathPrune failed: " + ex.Message); } catch { }
+                return 0;
+            }
+            return removed;
+        }
+
         internal static bool TryRemoveVarPathInventory(string path)
         {
             if (string.IsNullOrEmpty(path) || !VpbSqlite3.IsAvailable) return false;

@@ -19,6 +19,11 @@ namespace VPB.src.util
             public string Type;
             public bool LinksToPerson;
             public bool UidCollision;
+            /// <summary>
+            /// Picker ids contained by this SubScene (uid prefix <c>id/</c> and/or parentAtom chain).
+            /// Null when not a SubScene or when it has no importable children.
+            /// </summary>
+            public string[] SubSceneDescendantIds;
         }
 
         /// <summary>
@@ -129,17 +134,22 @@ namespace VPB.src.util
             if (atoms == null) return result;
 
             Dictionary<string, bool> cuaLinks = null;
+            // parentAtom map includes Person atoms — walk can pass through them.
+            Dictionary<string, string> parentById = new Dictionary<string, string>(atoms.Count, StringComparer.Ordinal);
 
             for (int i = 0; i < atoms.Count; i++)
             {
                 JSONClass a = atoms[i].AsObject;
                 if (a == null) continue;
                 string type = a["type"] != null ? a["type"].Value : string.Empty;
-                if (SceneUtils.IsPersonLikeAtomType(type)) continue;
-
                 string id = (a["id"] != null && !string.IsNullOrEmpty(a["id"].Value))
                     ? a["id"].Value
                     : (type + "_" + i);
+                string parentId = ReadParentAtomId(a);
+                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(parentId))
+                    parentById[id] = parentId;
+
+                if (SceneUtils.IsPersonLikeAtomType(type)) continue;
 
                 bool linksToPerson = false;
                 if (type == "CustomUnityAsset" && !string.IsNullOrEmpty(sourcePersonAtomId))
@@ -163,7 +173,72 @@ namespace VPB.src.util
                     UidCollision = collision
                 });
             }
+
+            AttachSubSceneDescendants(result, parentById);
             return result;
+        }
+
+        private static string ReadParentAtomId(JSONClass a)
+        {
+            if (a == null || !a.HasKey("parentAtom")) return null;
+            JSONNode n = a["parentAtom"];
+            if (n == null) return null;
+            string v = n.Value;
+            if (string.IsNullOrEmpty(v)) return null;
+            if (string.Equals(v, "null", StringComparison.OrdinalIgnoreCase)) return null;
+            if (string.Equals(v, "None", StringComparison.OrdinalIgnoreCase)) return null;
+            return v;
+        }
+
+        /// <summary>
+        /// Fill <see cref="SceneAtomEntry.SubSceneDescendantIds"/> for each SubScene picker row.
+        /// Membership = uid prefix <c>subSceneId/</c> (VaM containingSubScene) or parentAtom chain to that SubScene.
+        /// </summary>
+        private static void AttachSubSceneDescendants(List<SceneAtomEntry> picker, Dictionary<string, string> parentById)
+        {
+            if (picker == null || picker.Count == 0) return;
+            List<string> buf = new List<string>(16);
+            for (int i = 0; i < picker.Count; i++)
+            {
+                SceneAtomEntry e = picker[i];
+                if (!SceneUtils.IsSubSceneAtomType(e.Type) || string.IsNullOrEmpty(e.Id)) continue;
+                buf.Clear();
+                for (int j = 0; j < picker.Count; j++)
+                {
+                    string childId = picker[j].Id;
+                    if (string.IsNullOrEmpty(childId)) continue;
+                    if (string.Equals(childId, e.Id, StringComparison.Ordinal)) continue;
+                    if (IsAtomUnderSubScene(childId, e.Id, parentById))
+                        buf.Add(childId);
+                }
+                if (buf.Count == 0) continue;
+                e.SubSceneDescendantIds = new string[buf.Count];
+                buf.CopyTo(e.SubSceneDescendantIds);
+                picker[i] = e;
+            }
+        }
+
+        private static bool IsAtomUnderSubScene(string atomId, string subSceneId, Dictionary<string, string> parentById)
+        {
+            if (string.IsNullOrEmpty(atomId) || string.IsNullOrEmpty(subSceneId)) return false;
+            if (atomId.StartsWith(subSceneId + "/", StringComparison.Ordinal))
+                return true;
+            if (parentById == null || parentById.Count == 0) return false;
+            string cur = atomId;
+            for (int hop = 0; hop < 32; hop++)
+            {
+                string parent;
+                if (!parentById.TryGetValue(cur, out parent) || string.IsNullOrEmpty(parent))
+                    return false;
+                if (string.Equals(parent, subSceneId, StringComparison.Ordinal))
+                    return true;
+                if (parent.StartsWith(subSceneId + "/", StringComparison.Ordinal))
+                    return true;
+                if (string.Equals(parent, cur, StringComparison.Ordinal))
+                    return false;
+                cur = parent;
+            }
+            return false;
         }
 
         /// <summary>

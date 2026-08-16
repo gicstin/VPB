@@ -493,6 +493,7 @@ namespace VPB
             _hoverPathRevealOwner = null;
 
             try { DestroyPluginsFloatChrome(); } catch { }
+            try { TboxDestroyRandomPreview(); } catch { }
 
             // Re-enable saving on teardown so the cache isn't left permanently paused.
             if (GalleryThumbnailCache.Instance != null)

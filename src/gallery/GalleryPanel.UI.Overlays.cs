@@ -408,7 +408,7 @@ namespace VPB
                 GameObject copyBtn = UI.CreateFloatChromeIconButton(
                     btnRow.transform,
                     btnH,
-                    "vpb_icons/clipboard_list.png",
+                    "clipboard-list",
                     GalleryUiColorTokens.SurfaceMid,
                     ConfirmOverlayCopy);
                 if (copyBtn != null)

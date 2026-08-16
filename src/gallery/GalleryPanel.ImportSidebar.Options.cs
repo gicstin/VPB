@@ -79,7 +79,10 @@ namespace VPB
         }
 
         // Scene atom picker: every non-Person atom in the source scene (Lights, Empty, CUA, SubScene, …).
-        private const int ImportSidebarVisibleSceneAtomRows = 8;
+        // Docked pane is 220px — two-line rows so leaf (unique) stays visible; fewer rows keep the
+        // inner list about the same height as the old 8×32 single-line viewport.
+        private const int ImportSidebarVisibleSceneAtomRows = 6;
+        private const float ImportSidebarSceneAtomRowHeightMul = 1.5f;
         private const int ImportSidebarMaxSceneAtomRows = 256;
         private const int ImportSidebarSceneAtomRowPoolInitial = 32;
         private readonly ImportCUAChecklistHandles importSidebarSceneAtomUi = new ImportCUAChecklistHandles();
@@ -98,6 +101,7 @@ namespace VPB
             public string Type;
             public bool LinksToPerson;
             public bool UidCollision;
+            public string[] SubSceneDescendantIds;
         }
 
         // Appearance conditional rows (visibility driven by the suppress-clothing toggle).
@@ -504,7 +508,7 @@ namespace VPB
                         () => importSidebarPickSceneAtoms,
                         v => { importSidebarPickSceneAtoms = v; RefreshSceneAtomChecklist(); RebuildImportSidebarContent(); },
                         null,
-                        VPBTranslation.T("gallery.import.opt.pick_atoms", "Show a searchable checklist to choose which scene atoms to import instead of importing all of them."));
+                        VPBTranslation.T("gallery.import.opt.pick_atoms", "Show a searchable checklist to choose which scene atoms to import instead of importing all of them. Checking a SubScene also selects its parented atoms; checking a child selects only that atom."));
                     AddOptionToggle(panel.transform, "Always show remap prompt",
                         () => importSidebarAlwaysShowRemapPrompt,
                         v => importSidebarAlwaysShowRemapPrompt = v, null,
@@ -682,6 +686,7 @@ namespace VPB
             btn.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(btn);
             UI.EnsureFloatChromeHoverBorder(row, inward: true);
+            UI.SetControlSelectedRim(row, get());
 
             // labelColor stays an override for the destructive "Delete target linked CUAs" row,
             // which must visibly stand out from neutral toggles.
@@ -694,14 +699,15 @@ namespace VPB
                 bool nv = !get();
                 set(nv);
                 t.text = (nv ? "[x] " : "[ ] ") + label;
-                if (bg != null) bg.color = nv ? ImportSidebarSelectedAccent : ColorInactiveRow;
+                ApplyImportSidebarSelectableChrome(row, nv, nv ? ImportSidebarSelectedAccent : ColorInactiveRow);
                 SaveImportSidebarPrefs();
             });
 
             importSidebarOptionToggleRefreshers.Add(() =>
             {
-                if (t != null) t.text = (get() ? "[x] " : "[ ] ") + label;
-                if (bg != null) bg.color = get() ? ImportSidebarSelectedAccent : ColorInactiveRow;
+                bool on = get();
+                if (t != null) t.text = (on ? "[x] " : "[ ] ") + label;
+                ApplyImportSidebarSelectableChrome(row, on, on ? ImportSidebarSelectedAccent : ColorInactiveRow);
             });
 
             if (!string.IsNullOrEmpty(tooltip)) AddTooltipPlain(row, tooltip);
@@ -828,8 +834,7 @@ namespace VPB
 
             Text t = row.GetComponentInChildren<Text>();
             if (t != null) t.text = text;
-            Image bg = row.GetComponent<Image>();
-            if (bg != null) bg.color = selected ? ImportSidebarSelectedAccent : ColorInactiveRow;
+            ApplyImportSidebarSelectableChrome(row, selected, selected ? ImportSidebarSelectedAccent : ColorInactiveRow);
 
             Button btn = row.GetComponent<Button>();
             if (btn != null)
@@ -901,7 +906,12 @@ namespace VPB
             GameObject row = new GameObject(namePrefix + index);
             row.transform.SetParent(parent, false);
 
-            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            bool sceneAtomRow = !string.IsNullOrEmpty(namePrefix)
+                && namePrefix.StartsWith("SceneAtomRow_", StringComparison.Ordinal);
+            float rowH = sceneAtomRow
+                ? ImportSidebarBaseRowHeight * ImportSidebarSceneAtomRowHeightMul
+                : ImportSidebarBaseRowHeight;
+            LayoutElement le = UI.AddLE(row, preferredHeight: rowH, flexibleWidth: 1f);
 
             Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
@@ -911,14 +921,16 @@ namespace VPB
             UI.EnsureFloatChromeHoverBorder(row, inward: true);
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
-            ConfigureImportSidebarChecklistLabel(label);
+            if (sceneAtomRow) ConfigureSceneAtomChecklistLabel(label);
+            else ConfigureImportSidebarChecklistLabel(label);
             Text tipLabel = label;
             AddDynamicTooltip(row, () => ImportChecklistRowTooltip(tipLabel));
 
             LayoutElement leCaptured = le;
             Text txtCaptured = label;
+            float rowHCaptured = rowH;
             innerPaneScaleActions.Add(s => {
-                if (leCaptured != null) leCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
+                if (leCaptured != null) leCaptured.preferredHeight = rowHCaptured * s;
                 ApplyScaledFont(txtCaptured, ImportSidebarBaseFontSize, s);
             });
             return row;
@@ -997,8 +1009,7 @@ namespace VPB
 
             Text t = row.GetComponentInChildren<Text>();
             if (t != null) t.text = text;
-            Image bg = row.GetComponent<Image>();
-            if (bg != null) bg.color = selected ? ImportSidebarSelectedAccent : ColorInactiveRow;
+            ApplyImportSidebarSelectableChrome(row, selected, selected ? ImportSidebarSelectedAccent : ColorInactiveRow);
 
             Button btn = row.GetComponent<Button>();
             if (btn != null)
@@ -1169,11 +1180,17 @@ namespace VPB
             importSidebarSceneAtomUi.ChecklistRoot.SetActive(false);
         }
 
+        private static float SceneAtomChecklistRowHeight(float s)
+        {
+            if (s <= 0f) s = 1f;
+            return ImportSidebarBaseRowHeight * ImportSidebarSceneAtomRowHeightMul * s;
+        }
+
         private void ApplySceneAtomRowScale(GameObject row, float s)
         {
             if (row == null) return;
             LayoutElement le = row.GetComponent<LayoutElement>();
-            if (le != null) le.preferredHeight = ImportSidebarBaseRowHeight * s;
+            if (le != null) le.preferredHeight = SceneAtomChecklistRowHeight(s);
             Text t = row.GetComponentInChildren<Text>();
             ApplyScaledFont(t, ImportSidebarBaseFontSize, s);
         }
@@ -1216,7 +1233,7 @@ namespace VPB
             int filteredCount = importSidebarSceneAtomFilteredEntries.Count;
             int visibleRows = Mathf.Clamp(filteredCount, 1, ImportSidebarVisibleSceneAtomRows);
             float s = ChromeScale;
-            importSidebarSceneAtomUi.ChecklistLe.preferredHeight = (visibleRows + 1) * (ImportSidebarBaseRowHeight + 2f) * s;
+            importSidebarSceneAtomUi.ChecklistLe.preferredHeight = (visibleRows + 1) * (SceneAtomChecklistRowHeight(1f) + 2f) * s;
         }
 
         private void EnsureSceneAtomRowPool(int needed)
@@ -1257,30 +1274,55 @@ namespace VPB
             }
         }
 
-        private static string FormatSceneAtomDisplayId(string id)
+        /// <summary>
+        /// VaM subscene uids are <c>Parent/Leaf</c>. Docked 220px clips the shared prefix, so the
+        /// row shows leaf first; parent goes on line 2.
+        /// </summary>
+        private static void SplitSceneAtomUid(string id, out string leaf, out string parent)
         {
-            if (string.IsNullOrEmpty(id)) return "?";
-            int slash = id.IndexOf('/');
-            if (slash < 0) return id;
+            parent = null;
+            if (string.IsNullOrEmpty(id))
+            {
+                leaf = "?";
+                return;
+            }
             int lastSlash = id.LastIndexOf('/');
-            string leaf = id.Substring(lastSlash + 1);
-            if (lastSlash <= 0) return leaf;
-            string parent = id.Substring(0, lastSlash);
-            return parent + " \u203a " + leaf;
+            if (lastSlash <= 0 || lastSlash + 1 >= id.Length)
+            {
+                leaf = id;
+                return;
+            }
+            parent = id.Substring(0, lastSlash);
+            leaf = id.Substring(lastSlash + 1);
+        }
+
+        private static string FormatSceneAtomLeaf(string id)
+        {
+            string leaf;
+            string parent;
+            SplitSceneAtomUid(id, out leaf, out parent);
+            return leaf;
         }
 
         private static string FormatSceneAtomRowLabel(ImportSceneAtomEntry e, bool selected, int moreHidden)
         {
+            string leaf;
+            string parent;
+            SplitSceneAtomUid(e.Id, out leaf, out parent);
+
             string mark = selected ? "[x] " : "[ ] ";
-            string idDisplay = FormatSceneAtomDisplayId(e.Id);
-            string text = mark + idDisplay;
+            string line1 = mark + leaf;
             if (!string.IsNullOrEmpty(e.Type) && !string.Equals(e.Type, e.Id, StringComparison.Ordinal)
-                && !string.Equals(e.Type, idDisplay, StringComparison.Ordinal))
-                text += "  " + e.Type;
-            if (e.LinksToPerson) text += "  (on person)";
-            if (e.UidCollision) text += "  (exists)";
-            if (moreHidden > 0) text += "  (+" + moreHidden + " more — narrow search)";
-            return text;
+                && !string.Equals(e.Type, leaf, StringComparison.Ordinal))
+                line1 += "  " + e.Type;
+            if (e.LinksToPerson) line1 += "  (on person)";
+            if (e.UidCollision) line1 += "  (exists)";
+            int parented = e.SubSceneDescendantIds != null ? e.SubSceneDescendantIds.Length : 0;
+            if (parented > 0) line1 += "  (" + parented + " parented)";
+            if (moreHidden > 0) line1 += "  (+" + moreHidden + " more — narrow search)";
+
+            if (string.IsNullOrEmpty(parent)) return line1;
+            return line1 + "\n\u2039 " + parent;
         }
 
         private void ConfigureSceneAtomRow(GameObject row, ImportSceneAtomEntry e, int moreHidden)
@@ -1292,25 +1334,93 @@ namespace VPB
             if (t != null)
             {
                 t.text = text;
-                ConfigureImportSidebarChecklistLabel(t);
+                ConfigureSceneAtomChecklistLabel(t);
             }
             ApplySceneAtomRowScale(row, ChromeScale);
-            Image bg = row.GetComponent<Image>();
-            if (bg != null) bg.color = selected ? ImportSidebarSelectedAccent : ColorInactiveRow;
+            ApplyImportSidebarSelectableChrome(row, selected, selected ? ImportSidebarSelectedAccent : ColorInactiveRow);
 
             Button btn = row.GetComponent<Button>();
+            string id = e.Id;
+            int parented = e.SubSceneDescendantIds != null ? e.SubSceneDescendantIds.Length : 0;
             if (btn != null)
             {
                 btn.onClick.RemoveAllListeners();
-                string id = e.Id;
                 btn.onClick.AddListener(() => ToggleSceneAtomSelected(id));
             }
+            AddDynamicTooltip(row, () => ImportSceneAtomRowTooltip(id, parented));
+        }
+
+        private static void ConfigureSceneAtomChecklistLabel(Text t)
+        {
+            if (t == null) return;
+            t.supportRichText = false;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Truncate;
+            t.alignment = TextAnchor.MiddleLeft;
+        }
+
+        private static string ImportSceneAtomRowTooltip(string id, int parentedCount)
+        {
+            string full = string.IsNullOrEmpty(id) ? "?" : id;
+            if (parentedCount > 0)
+            {
+                return full + "  \u2014  " + string.Format(
+                    VPBTranslation.T(
+                        "gallery.import.subscene_row_tip",
+                        "check to import this SubScene and its {0} parented atom(s); check a child to import only that atom"),
+                    parentedCount);
+            }
+            return full + "  \u2014  " + VPBTranslation.T(
+                "gallery.import.pick_row_tip", "click to include/exclude from import");
+        }
+
+        private ImportSceneAtomEntry FindImportSceneAtomEntry(string id)
+        {
+            if (string.IsNullOrEmpty(id) || importSidebarSceneAtomEntries == null) return null;
+            for (int i = 0; i < importSidebarSceneAtomEntries.Count; i++)
+            {
+                ImportSceneAtomEntry e = importSidebarSceneAtomEntries[i];
+                if (e != null && string.Equals(e.Id, id, StringComparison.Ordinal))
+                    return e;
+            }
+            return null;
         }
 
         private void ToggleSceneAtomSelected(string id)
         {
-            if (importSidebarSelectedSceneAtomKeys.Contains(id)) importSidebarSelectedSceneAtomKeys.Remove(id);
-            else importSidebarSelectedSceneAtomKeys.Add(id);
+            if (importSidebarSelectedSceneAtomKeys.Contains(id))
+            {
+                // Row-only uncheck: Select All then drop SubScene container keeps children.
+                importSidebarSelectedSceneAtomKeys.Remove(id);
+            }
+            else
+            {
+                importSidebarSelectedSceneAtomKeys.Add(id);
+                ImportSceneAtomEntry e = FindImportSceneAtomEntry(id);
+                string[] kids = e != null ? e.SubSceneDescendantIds : null;
+                int added = 0;
+                if (kids != null)
+                {
+                    for (int i = 0; i < kids.Length; i++)
+                    {
+                        if (string.IsNullOrEmpty(kids[i])) continue;
+                        if (importSidebarSelectedSceneAtomKeys.Add(kids[i]))
+                            added++;
+                    }
+                }
+                if (added > 0)
+                {
+                    try
+                    {
+                        ShowTemporaryStatus(string.Format(
+                            VPBTranslation.T(
+                                "gallery.import.subscene_cascade",
+                                "SubScene {0}: also selected {1} parented atom(s). Uncheck a child to drop just that atom."),
+                            FormatSceneAtomLeaf(id), added), 2.5f);
+                    }
+                    catch { }
+                }
+            }
             RenderSceneAtomChecklistRows();
             RefreshApplyButtonEnabled();
         }
@@ -1343,7 +1453,8 @@ namespace VPB
                     Id = e.Id,
                     Type = e.Type,
                     LinksToPerson = e.LinksToPerson,
-                    UidCollision = e.UidCollision
+                    UidCollision = e.UidCollision,
+                    SubSceneDescendantIds = e.SubSceneDescendantIds
                 });
             }
             return result;
@@ -1664,8 +1775,11 @@ namespace VPB
                     ? VPBTranslation.T("gallery.import.accumulate_on", "Accumulate: On")
                     : VPBTranslation.T("gallery.import.accumulate_off", "Accumulate: Off");
             if (importSidebarMultiToggleBg != null)
+            {
                 importSidebarMultiToggleBg.color = importSidebarMultiSelectTypes
                     ? ImportSidebarMultiToggleBg : ImportSidebarMultiToggleOffBg;
+                UI.SetControlSelectedRim(importSidebarMultiToggleBg.gameObject, importSidebarMultiSelectTypes);
+            }
         }
 
         private void OnImportSidebarTypeChosen(VpbResourceType t, bool additive)
@@ -1722,24 +1836,23 @@ namespace VPB
                 bool active = importSidebarMultiSelectedTypes.Contains(kv.Key);
                 bool paused = active && !available;
 
-                Image img = kv.Value.GetComponent<Image>();
-                if (img != null)
-                {
-                    if (paused) img.color = ImportSidebarPausedSelectedRow;
-                    else if (!available) img.color = ImportSidebarUnavailableRow;
-                    else if (active) img.color = ImportSidebarSelectedAccent;
-                    else img.color = ColorInactiveRow;
-                }
-
                 Button btn = kv.Value.GetComponent<Button>();
                 // Allow deselect of paused chips; block selecting empty types.
                 if (btn != null) btn.interactable = available || active;
+
+                Color fill;
+                if (paused) fill = ImportSidebarPausedSelectedRow;
+                else if (!available) fill = ImportSidebarUnavailableRow;
+                else if (active) fill = ImportSidebarSelectedAccent;
+                else fill = ColorInactiveRow;
+                ApplyImportSidebarSelectableChrome(kv.Value, active, fill);
 
                 Text lbl;
                 if (importSidebarTypeRadioLabels.TryGetValue(kv.Key, out lbl) && lbl != null)
                 {
                     lbl.text = TypeChipLabel(kv.Key);
-                    lbl.color = available ? UI.TextPrimary : ImportSidebarUnavailableText;
+                    if (paused) lbl.color = GalleryUiColorTokens.ActiveWarnText;
+                    else lbl.color = available ? UI.TextPrimary : ImportSidebarUnavailableText;
                 }
             }
         }
@@ -1968,6 +2081,8 @@ namespace VPB
                 Image applyBg = importSidebarApplyButton.targetGraphic as Image;
                 if (applyBg != null)
                     applyBg.color = ok ? ImportSidebarApplyBg : GalleryUiColorTokens.SurfaceMid;
+                UIHoverBorder applyHb = importSidebarApplyButton.GetComponent<UIHoverBorder>();
+                if (applyHb != null) applyHb.SyncIndicatorVisibility();
             }
 
             if (importSidebarApplyReasonLabel != null && importSidebarApplyReasonRT != null)

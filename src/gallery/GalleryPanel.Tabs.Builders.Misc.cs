@@ -88,24 +88,20 @@ namespace VPB
         {
             Color groupActive = ColorTitleSearchFilterActive;
             Color groupInactive = ColorInactiveRow;
-            string filterNow = (CanonicalSettingsSideSearchText() ?? "").Trim();
-            bool MatchFilter(string label) =>
-                string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;
             float groupTabScale = ChromeScale;
             void AddGroupRow(string key, string label)
             {
-                if (!string.Equals(key, "all", StringComparison.OrdinalIgnoreCase) && !MatchFilter(label)) return;
                 bool isActive = string.Equals(currentSettingsGroup, key, StringComparison.OrdinalIgnoreCase);
                 CreateTabButton(container.transform, label, isActive ? groupActive : groupInactive, isActive, () =>
                 {
                     currentSettingsGroup = key;
+                    PersistSettingsLastGroup();
                     try { CancelPluginHotkeyCapture(false); } catch { }
                     UpdateTabs();
                     RefreshInternalSettingsListRows(true);
                 }, trackedButtons, null, null, null, TextAnchor.MiddleLeft, 10f * groupTabScale, 8f * groupTabScale);
             }
 
-            AddGroupRow("all", VPBTranslation.T("settings.group.all", "All"));
             foreach (var g in GetSettingsGroupTabs())
                 AddGroupRow(g.Key, g.Label);
         }
@@ -147,10 +143,13 @@ namespace VPB
             string label = VPBTranslation.T("gallery.filter.local_only", "Local only");
             Color btnColor = localOnly ? appearanceColor : ColorInactiveRow;
 
-            CreateTabButton(container.transform, label, btnColor, localOnly, () =>
+            if (AccordionChildPassesListFilter(label) || AccordionChildPassesListFilter("Local"))
             {
-                ToggleGlobalLocalFromCategorySidePane(invalidateTags: true);
-            }, trackedButtons);
+                CreateTabButton(container.transform, label, btnColor, localOnly, () =>
+                {
+                    ToggleGlobalLocalFromCategorySidePane(invalidateTags: true);
+                }, trackedButtons);
+            }
 
             {
                 Color inactive = ColorInactiveRow;
@@ -160,6 +159,7 @@ namespace VPB
                 for (int gi = 0; gi < options.Length; gi++)
                 {
                     string opt = options[gi];
+                    if (!AccordionChildPassesListFilter(opt)) continue;
                     AppearanceSubfilter flag = 0;
                     if (opt == "Male") flag = AppearanceSubfilter.Male;
                     else if (opt == "Female") flag = AppearanceSubfilter.Female;
@@ -308,6 +308,9 @@ namespace VPB
             // Mirrors title-bar Source Local (same control as Appearance Local only).
             string label = VPBTranslation.T("gallery.filter.local_only", "Local only");
             Color btnColor = localOnly ? sceneColor : ColorInactiveRow;
+
+            if (!AccordionChildPassesListFilter(label) && !AccordionChildPassesListFilter("Local"))
+                return;
 
             CreateTabButton(container.transform, label, btnColor, localOnly, () =>
             {

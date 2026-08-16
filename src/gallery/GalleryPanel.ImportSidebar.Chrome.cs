@@ -8,7 +8,7 @@ namespace VPB
         // Match Settings float shell. Role-split accents — not one green on every control.
         private static readonly Color ImportSidebarHeaderBg = GalleryUiColorTokens.SurfaceDark;
         private static readonly Color ImportSidebarStepHeaderBg = GalleryUiColorTokens.SurfaceDarker;
-        /// <summary>Selected type / atom / checklist — quiet ActiveSelected (not Apply green).</summary>
+        /// <summary>Selected type / atom / checklist — ActiveSelected fill + selected rim (not Apply green).</summary>
         internal static readonly Color ImportSidebarSelectedAccent = GalleryUiColorTokens.ActiveSelected;
         // Bulk commands: secondary mid vs destroy.
         private static readonly Color ImportSidebarSelectAllBg = GalleryUiColorTokens.ActiveSecondary;
@@ -20,14 +20,14 @@ namespace VPB
         private static readonly Color ImportSidebarGroupHeaderBg = GalleryUiColorTokens.SurfacePanel;
         private static readonly Color ImportSidebarUnavailableRow = GalleryUiColorTokens.RowZero;
         private static readonly Color ImportSidebarUnavailableText = GalleryUiColorTokens.TextDim;
-        // Selected but empty on source — keep intent without shouting.
-        private static readonly Color ImportSidebarPausedSelectedRow = GalleryUiColorTokens.SurfaceMid;
+        // Selected but empty on source — amber, not grey (must not look idle).
+        private static readonly Color ImportSidebarPausedSelectedRow = GalleryUiColorTokens.ActivePaused;
         private static readonly Color ImportSidebarApplyReasonText = GalleryUiColorTokens.ActiveWarnText;
         private static readonly Color ImportSidebarApplyReasonBg = GalleryUiColorTokens.ActiveWarnSurface;
         private static readonly Color ImportSidebarScenesLockedBanner = GalleryUiColorTokens.ModeApplyStripe;
         private static readonly Color ImportSidebarScenesLockedHeaderBg = GalleryUiColorTokens.ActiveWarnHeader;
-        // Match hint: raised idle row.
-        private static readonly Color ImportSidebarMatchHintColor = GalleryUiColorTokens.PopupRowActive;
+        // Match hint: cool facet, quieter than selected grey + rim.
+        private static readonly Color ImportSidebarMatchHintColor = GalleryUiColorTokens.FacetSource;
         // Primary Apply CTA only — AccentConfirm reserved here.
         private static readonly Color ImportSidebarApplyBg = GalleryUiColorTokens.AccentConfirm;
         // Float shell mirrors SettingsFloat*.
@@ -128,6 +128,15 @@ namespace VPB
                     rt.offsetMax = new Vector2(-padInner, -padV);
                 }
             }
+        }
+
+        /// <summary>Fill + selected rim together so armed rows are not color-only (Johnson).</summary>
+        private static void ApplyImportSidebarSelectableChrome(GameObject row, bool selected, Color fill)
+        {
+            if (row == null) return;
+            Image bg = row.GetComponent<Image>();
+            if (bg != null && bg.color != fill) bg.color = fill;
+            UI.SetControlSelectedRim(row, selected);
         }
     }
 }

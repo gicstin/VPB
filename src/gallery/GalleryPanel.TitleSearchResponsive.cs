@@ -420,7 +420,7 @@ namespace VPB
             crt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef);
             try
             {
-                var sp = UI.LoadIconSprite("vpb_icons/search.png", UI.BarIconGlyphTint);
+                var sp = UI.LoadIconSprite("search", UI.BarIconGlyphTint);
                 if (sp != null) UI.AddIconToButton(_titleSearchCompactGO, sp, padding: 8f, ColorTitleSearchBackdropIdle);
             }
             catch { }

@@ -339,8 +339,8 @@ namespace VPB
             try { EnsureTitleBarOverflowChrome(titleBarGO); } catch { }
             try { EnsureInAppHelpChrome(titleBarGO); } catch { }
 
-            fileSortDirAscSprite = UI.LoadIconSprite("vpb_icons/sort_asc.png", UI.BarIconGlyphTint);
-            fileSortDirDescSprite = UI.LoadIconSprite("vpb_icons/sort_desc.png", UI.BarIconGlyphTint);
+            fileSortDirAscSprite = UI.LoadIconSprite("sort-ascending", UI.BarIconGlyphTint);
+            fileSortDirDescSprite = UI.LoadIconSprite("sort-descending", UI.BarIconGlyphTint);
 
             const float fileSortChip = 40f;
             const float fileSortGap = 8f;
@@ -381,7 +381,7 @@ namespace VPB
                 dirIconGo.transform.SetParent(fileSortDirBtn.transform, false);
                 Sprite initial = fileSortDirAscSprite ?? fileSortDirDescSprite;
                 Image dirImg = UI.AddImage(dirIconGo, Color.white);
-                dirImg.sprite = initial;
+                UI.SetIconSprite(dirImg, initial);
                 dirImg.preserveAspect = true;
                 dirImg.raycastTarget = false;
                 RectTransform dirIrt = dirIconGo.GetComponent<RectTransform>();
@@ -425,16 +425,16 @@ namespace VPB
             try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
 
             ratingSortToggleBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, VPBTranslation.T("gallery.sort.star", "★"), 18, 0, 0, AnchorPresets.middleCenter, null);
-            ratingSortToggleBtn.GetComponent<Image>().color = UI.ChromeDark;
+            ratingSortToggleBtn.GetComponent<Image>().color = GalleryUiColorTokens.ChromeIconWell;
             ratingSortToggleBtnText = ratingSortToggleBtn.GetComponentInChildren<Text>();
             ratingSortToggleBtnText.color = Color.white;
-            ratingStarNormalSprite = UI.LoadIconSprite("vpb_icons/star.png",     UI.BarIconGlyphTint);
-            ratingStarOffSprite    = UI.LoadIconSprite("vpb_icons/star_off.png", UI.BarIconGlyphTint);
+            ratingStarNormalSprite = UI.LoadIconSprite("filled/star",     UI.BarIconGlyphTint);
+            ratingStarOffSprite    = UI.LoadIconSprite("star", UI.BarIconGlyphTint);
             {
                 Sprite initial = ratingStarNormalSprite ?? ratingStarOffSprite;
                 if (initial != null)
                 {
-                    UI.AddIconToButton(ratingSortToggleBtn, initial);
+                    UI.AddIconToButton(ratingSortToggleBtn, initial, 4f, GalleryUiColorTokens.ChromeIconWell);
                     ratingSortIconImage = ratingSortToggleBtn.transform.Find("Icon")?.GetComponent<Image>();
                 }
             }
@@ -453,7 +453,7 @@ namespace VPB
 
             // Refresh Button (to the right of Star) — square icon button
             GameObject refreshBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, VPBTranslation.T("gallery.title.refresh", "Refresh"), 16, 0, 0, AnchorPresets.middleCenter, null);
-            refreshBtn.GetComponent<Image>().color = UI.ChromeDark;
+            refreshBtn.GetComponent<Image>().color = GalleryUiColorTokens.ChromeIconWell;
             refreshBtn.GetComponentInChildren<Text>().color = Color.white;
             RectTransform refreshRT = refreshBtn.GetComponent<RectTransform>();
             refreshRT.anchorMin = new Vector2(0.5f, 0.5f);
@@ -481,7 +481,7 @@ namespace VPB
             titleBarRefreshBtnText = refreshBtn.GetComponentInChildren<Text>();
             VPBUiFont.ApplyTo(titleBarRefreshBtnText);
             AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages (right-click: VaM file list only)");
-            { var s = UI.LoadIconSprite("vpb_icons/refresh.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(refreshBtn, s); }
+            { var s = UI.LoadIconSprite("refresh", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(refreshBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
 
             // Settings (title bar, left of filter presets; side rails no longer host Settings)
             GameObject titleBarSettingsBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, " ", 16, 0, 0, AnchorPresets.middleCenter, () => {
@@ -490,7 +490,7 @@ namespace VPB
             titleBarSettingsBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             titleBarSettingsBtnText = titleBarSettingsBtn.GetComponentInChildren<Text>();
             titleBarSettingsBtnText.color = Color.white;
-            { var s = UI.LoadIconSprite("vpb_icons/settings.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(titleBarSettingsBtn, s); }
+            { var s = UI.LoadIconSprite("settings", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(titleBarSettingsBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
             if (titleBarSettingsBtnText != null && titleBarSettingsBtn.transform.Find("Icon") != null)
                 titleBarSettingsBtnText.text = " ";
             RectTransform titleBarSettingsRT = titleBarSettingsBtn.GetComponent<RectTransform>();
@@ -523,10 +523,10 @@ namespace VPB
             _titleBarQfToggleBtnRT = qfToggleRT;
             VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
             {
-                var s = UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint);
+                var s = UI.LoadIconSprite("filter-search", UI.BarIconGlyphTint);
                 if (s != null)
                 {
-                    UI.AddIconToButton(qfToggleBtn, s);
+                    UI.AddIconToButton(qfToggleBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell);
                     Transform iconT = qfToggleBtn.transform.Find("Icon");
                     quickFiltersToggleBtnIconImage = iconT != null ? iconT.GetComponent<Image>() : null;
                     if (quickFiltersToggleBtnIconImage != null) quickFiltersToggleBtnIconImage.color = UI.BarIconGlyphTint;
@@ -558,10 +558,10 @@ namespace VPB
                     Color iconTint = UI.BarIconGlyphTint;
                     sceneSourceSortModeSprites = new Sprite[]
                     {
-                        UI.LoadIconSprite("vpb_icons/sort_name_asc.png", iconTint),
-                        UI.LoadIconSprite("vpb_icons/sort_name_desc.png", iconTint),
-                        UI.LoadIconSprite("vpb_icons/sort_number_asc.png", iconTint),
-                        UI.LoadIconSprite("vpb_icons/sort_number_desc.png", iconTint),
+                        UI.LoadIconSprite("sort-ascending-letters", iconTint),
+                        UI.LoadIconSprite("sort-descending-letters", iconTint),
+                        UI.LoadIconSprite("sort-ascending-numbers", iconTint),
+                        UI.LoadIconSprite("sort-descending-numbers", iconTint),
                     };
                 }
                 
@@ -1188,28 +1188,32 @@ namespace VPB
 
                 {
                     Color sideTint = UI.SideRailIconGlyphTint;
-                    galleryFloatSprite = UI.LoadIconSprite("vpb_icons/gallery_float.png", sideTint);
-                    galleryFixedSprite = UI.LoadIconSprite("vpb_icons/gallery_fixed.png", sideTint);
-                    galleryFollowOnSprite = UI.LoadIconSprite("vpb_icons/gallery_follow_on.png", sideTint);
-                    galleryFollowOffSprite = UI.LoadIconSprite("vpb_icons/gallery_follow_off.png", sideTint);
-                    galleryCloneSprite = UI.LoadIconSprite("vpb_icons/gallery_clone.png", sideTint);
-                    gallerySaveSprite = UI.LoadIconSprite("vpb_icons/gallery_save.png", sideTint);
-                    galleryCategorySprite = UI.LoadIconSprite("vpb_icons/gallery_category.png", sideTint);
-                    galleryCreatorSprite = UI.LoadIconSprite("vpb_icons/gallery_creator.png", sideTint);
-                    galleryPathSprite = UI.LoadIconSprite("vpb_icons/folder.png", sideTint);
-                    galleryHistorySprite = UI.LoadIconSprite("vpb_icons/history.png", sideTint);
-                    galleryCreatorOffSprite = UI.LoadIconSprite("vpb_icons/gallery_creator_off.png", sideTint);
-                    targetOnSprite  = UI.LoadIconSprite("vpb_icons/target_on.png",  UI.SideRailIconGlyphTint);
-                    targetOffSprite = UI.LoadIconSprite("vpb_icons/target_off.png", UI.SideRailIconGlyphTint);
-                    galleryApplySprite = UI.LoadIconSprite("vpb_icons/gallery_apply.png", sideTint);
-                    galleryApplyOneClickSprite = UI.LoadIconSprite("vpb_icons/gallery_apply_1click.png", sideTint);
-                    galleryApplyTwoClickSprite = UI.LoadIconSprite("vpb_icons/gallery_apply_2click.png", sideTint);
+                    galleryFloatSprite = UI.LoadIconSprite("float-center", sideTint);
+                    galleryFixedSprite = UI.LoadIconSprite("anchor", sideTint);
+                    galleryFollowOnSprite = UI.LoadIconSprite("target", sideTint);
+                    galleryFollowOffSprite = UI.LoadIconSprite("target-off", sideTint);
+                    galleryCloneSprite = UI.LoadIconSprite("copy-plus", sideTint);
+                    gallerySaveSprite = UI.LoadIconSprite("device-floppy", sideTint);
+                    galleryCategorySprite = UI.LoadIconSprite("category-2", sideTint);
+                    galleryCreatorSprite = UI.LoadIconSprite("user", sideTint);
+                    galleryPathSprite = UI.LoadIconSprite("folder-open", sideTint);
+                    galleryHistorySprite = UI.LoadIconSprite("history-toggle", sideTint);
+                    galleryCreatorOffSprite = UI.LoadIconSprite("user-off", sideTint);
+                    targetOnSprite  = UI.LoadIconSprite("crosshair",  UI.SideRailIconGlyphTint);
+                    targetOffSprite = UI.LoadIconSprite("target-off", UI.SideRailIconGlyphTint);
+                    galleryApplySprite = UI.LoadIconSprite("circle-check", sideTint);
+                    galleryApplyOneClickSprite = UI.LoadIconSprite("box-multiple-1", sideTint);
+                    galleryApplyTwoClickSprite = UI.LoadIconSprite("box-multiple-2", sideTint);
                     if (galleryApplyOneClickSprite == null) galleryApplyOneClickSprite = galleryApplySprite;
                     if (galleryApplyTwoClickSprite == null) galleryApplyTwoClickSprite = galleryApplySprite ?? galleryApplyOneClickSprite;
-                    galleryAddSprite = UI.LoadIconSprite("vpb_icons/gallery_add.png", sideTint);
-                    galleryReplaceSprite = UI.LoadIconSprite("vpb_icons/gallery_replace.png", sideTint);
-                    galleryRemoveSprite = UI.LoadIconSprite("vpb_icons/gallery_remove.png", sideTint)
-                        ?? UI.LoadIconSprite("vpb_icons/gallery_remove_atom.png", sideTint);
+                    galleryAddSprite = UI.LoadIconSprite("layout-grid-add", sideTint);
+                    galleryReplaceSprite = UI.LoadIconSprite("replace", sideTint);
+                    galleryRemoveSprite = UI.LoadIconSprite("user-minus", sideTint)
+                        ?? UI.LoadIconSprite("backspace", sideTint);
+                    galleryRemoveClothingSprite = UI.LoadIconSprite("shirt-off", sideTint)
+                        ?? galleryRemoveSprite;
+                    galleryRemoveHairSprite = UI.LoadIconSprite("scissors-off", sideTint)
+                        ?? galleryRemoveSprite;
                 }
 
                 float removeCtxW = galleryRemoveSprite != null ? sideIconBtn : btnWidth;
@@ -1351,7 +1355,7 @@ namespace VPB
                     float impW = sideIconBtn;
                     float impH = sideIconBtn;
                     Sprite impSpr = null;
-                    try { impSpr = UI.LoadIconSprite("vpb_icons/import.png", UI.SideRailIconGlyphTint); } catch { }
+                    try { impSpr = UI.LoadIconSprite("package-import", UI.SideRailIconGlyphTint); } catch { }
                     GameObject rightSceneImportBtn = UI.CreateUIButton(rightSideContainer, impW, impH, " ", 8, 0, startY - spacing * 3 - groupGap * 3, AnchorPresets.centre, () => OpenImportSidebarFromSideButton(false, false));
                     rightSceneImportSideBtn = rightSceneImportBtn;
                     rightSceneImportBtn.SetActive(false);
@@ -1380,7 +1384,7 @@ namespace VPB
                     float utW = sideIconBtn;
                     float utH = sideIconBtn;
                     Sprite utSpr = null;
-                    try { utSpr = UI.LoadIconSprite("vpb_icons/tags.png", UI.SideRailIconGlyphTint); } catch { }
+                    try { utSpr = UI.LoadIconSprite("tags", UI.SideRailIconGlyphTint); } catch { }
                     GameObject rightUserTagsBtn = UI.CreateUIButton(rightSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () =>
                     {
                         ToggleSideFromRailButton(ContentType.UserTags, false, false);
@@ -1500,7 +1504,7 @@ namespace VPB
                     float rmW = sideIconBtn;
                     float rmH = sideIconBtn;
                     Sprite rmSpr = null;
-                    try { rmSpr = UI.LoadIconSprite("vpb_icons/delete.png", UI.SideRailIconGlyphTint); } catch { }
+                    try { rmSpr = UI.LoadIconSprite("trash", UI.SideRailIconGlyphTint); } catch { }
                     GameObject rightRemoveModeBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveMode(false, false));
                     rightRemoveModeSideBtn = rightRemoveModeBtn;
                     Image rmImg = rightRemoveModeBtn.GetComponent<Image>();
@@ -1532,7 +1536,7 @@ namespace VPB
                     float cmW = sideIconBtn;
                     float cmH = sideIconBtn;
                     Sprite cmSpr = null;
-                    try { cmSpr = UI.LoadIconSprite("vpb_icons/creator_mode.png", UI.SideRailIconGlyphTint); } catch { }
+                    try { cmSpr = UI.LoadIconSprite("geometry", UI.SideRailIconGlyphTint); } catch { }
                     GameObject rightCreatorModeBtn = UI.CreateUIButton(rightSideContainer, cmW, cmH, " ", 8, 0, 0, AnchorPresets.centre, () => ToggleCreatorMode(false, false));
                     rightCreatorModeSideBtn = rightCreatorModeBtn;
                     Image cmImg = rightCreatorModeBtn.GetComponent<Image>();
@@ -1679,7 +1683,7 @@ namespace VPB
                     var tx0 = rightRemoveAllClothingBtn.GetComponentInChildren<Text>(true);
                     if (galleryRemoveSprite != null)
                     {
-                        UI.AddIconToButton(rightRemoveAllClothingBtn, galleryRemoveSprite, sideIconPad, UI.AccentRed);
+                        UI.AddIconToButton(rightRemoveAllClothingBtn, galleryRemoveClothingSprite, sideIconPad, UI.AccentRed);
                         rightRemoveAllClothingBtnIconImage = rightRemoveAllClothingBtn.transform.Find("Icon") != null
                             ? rightRemoveAllClothingBtn.transform.Find("Icon").GetComponent<Image>() : null;
                         if (tx0 != null) tx0.gameObject.SetActive(false);
@@ -1729,7 +1733,7 @@ namespace VPB
                     var tx0 = rightRemoveAllHairBtn.GetComponentInChildren<Text>(true);
                     if (galleryRemoveSprite != null)
                     {
-                        UI.AddIconToButton(rightRemoveAllHairBtn, galleryRemoveSprite, sideIconPad, UI.AccentRed);
+                        UI.AddIconToButton(rightRemoveAllHairBtn, galleryRemoveHairSprite, sideIconPad, UI.AccentRed);
                         rightRemoveAllHairBtnIconImage = rightRemoveAllHairBtn.transform.Find("Icon") != null
                             ? rightRemoveAllHairBtn.transform.Find("Icon").GetComponent<Image>() : null;
                         if (tx0 != null) tx0.gameObject.SetActive(false);
@@ -1901,7 +1905,7 @@ namespace VPB
                     float impW = sideIconBtn;
                     float impH = sideIconBtn;
                     Sprite impSprL = null;
-                    try { impSprL = UI.LoadIconSprite("vpb_icons/import.png", UI.SideRailIconGlyphTint); } catch { }
+                    try { impSprL = UI.LoadIconSprite("package-import", UI.SideRailIconGlyphTint); } catch { }
                     GameObject leftSceneImportBtn = UI.CreateUIButton(leftSideContainer, impW, impH, " ", 8, 0, startY - spacing * 3 - groupGap * 3, AnchorPresets.centre, () => OpenImportSidebarFromSideButton(true, false));
                     leftSceneImportSideBtn = leftSceneImportBtn;
                     leftSceneImportBtn.SetActive(false);
@@ -1930,7 +1934,7 @@ namespace VPB
                     float utW = sideIconBtn;
                     float utH = sideIconBtn;
                     Sprite utSprL = null;
-                    try { utSprL = UI.LoadIconSprite("vpb_icons/tags.png", UI.SideRailIconGlyphTint); } catch { }
+                    try { utSprL = UI.LoadIconSprite("tags", UI.SideRailIconGlyphTint); } catch { }
                     GameObject leftUserTagsBtn = UI.CreateUIButton(leftSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleSideFromRailButton(ContentType.UserTags, true, false));
                     leftUserTagsSideBtn = leftUserTagsBtn;
                     Image utImgL = leftUserTagsBtn.GetComponent<Image>();
@@ -2042,7 +2046,7 @@ namespace VPB
                     float rmW = sideIconBtn;
                     float rmH = sideIconBtn;
                     Sprite rmSprL = null;
-                    try { rmSprL = UI.LoadIconSprite("vpb_icons/delete.png", UI.SideRailIconGlyphTint); } catch { }
+                    try { rmSprL = UI.LoadIconSprite("trash", UI.SideRailIconGlyphTint); } catch { }
                     GameObject leftRemoveModeBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveMode(true, false));
                     leftRemoveModeSideBtn = leftRemoveModeBtn;
                     Image rmImgL = leftRemoveModeBtn.GetComponent<Image>();
@@ -2074,7 +2078,7 @@ namespace VPB
                     float cmW = sideIconBtn;
                     float cmH = sideIconBtn;
                     Sprite cmSprL = null;
-                    try { cmSprL = UI.LoadIconSprite("vpb_icons/creator_mode.png", UI.SideRailIconGlyphTint); } catch { }
+                    try { cmSprL = UI.LoadIconSprite("geometry", UI.SideRailIconGlyphTint); } catch { }
                     GameObject leftCreatorModeBtn = UI.CreateUIButton(leftSideContainer, cmW, cmH, " ", 8, 0, 0, AnchorPresets.centre, () => ToggleCreatorMode(true, false));
                     leftCreatorModeSideBtn = leftCreatorModeBtn;
                     Image cmImgL = leftCreatorModeBtn.GetComponent<Image>();
@@ -2216,7 +2220,7 @@ namespace VPB
                     var tx0 = leftRemoveAllClothingBtn.GetComponentInChildren<Text>(true);
                     if (galleryRemoveSprite != null)
                     {
-                        UI.AddIconToButton(leftRemoveAllClothingBtn, galleryRemoveSprite, sideIconPad, UI.AccentRed);
+                        UI.AddIconToButton(leftRemoveAllClothingBtn, galleryRemoveClothingSprite, sideIconPad, UI.AccentRed);
                         leftRemoveAllClothingBtnIconImage = leftRemoveAllClothingBtn.transform.Find("Icon") != null
                             ? leftRemoveAllClothingBtn.transform.Find("Icon").GetComponent<Image>() : null;
                         if (tx0 != null) tx0.gameObject.SetActive(false);
@@ -2265,7 +2269,7 @@ namespace VPB
                     var tx0 = leftRemoveAllHairBtn.GetComponentInChildren<Text>(true);
                     if (galleryRemoveSprite != null)
                     {
-                        UI.AddIconToButton(leftRemoveAllHairBtn, galleryRemoveSprite, sideIconPad, UI.AccentRed);
+                        UI.AddIconToButton(leftRemoveAllHairBtn, galleryRemoveHairSprite, sideIconPad, UI.AccentRed);
                         leftRemoveAllHairBtnIconImage = leftRemoveAllHairBtn.transform.Find("Icon") != null
                             ? leftRemoveAllHairBtn.transform.Find("Icon").GetComponent<Image>() : null;
                         if (tx0 != null) tx0.gameObject.SetActive(false);
@@ -2356,16 +2360,16 @@ namespace VPB
                             ssb.responsePower = 2.0f;
                         }
 
-                        // Icon: scroll.png
+                        // Icon: scroll
                         try
                         {
-                            Sprite icon = UI.LoadIconSprite("vpb_icons/scroll.png", UI.SideRailIconGlyphTint);
+                            Sprite icon = UI.LoadIconSprite("caret-up-down", UI.SideRailIconGlyphTint);
                             if (icon != null)
                             {
                                 GameObject iconGO = new GameObject("Icon");
                                 iconGO.transform.SetParent(springBtn.transform, false);
                                 Image img = UI.AddImage(iconGO, UI.SideRailIconGlyphTint);
-                                img.sprite = icon;
+                                UI.SetIconSprite(img, icon);
                                 img.preserveAspect = true;
                                 img.raycastTarget = false;
 
@@ -2469,7 +2473,7 @@ namespace VPB
             _titleBarMinimizeBtnRT = minRT;
             minimizeBtn.GetComponent<Image>().color = GalleryUiColorTokens.ChromeIconWell;
             AddHoverDelegate(minimizeBtn);
-            { var s = UI.LoadIconSprite("vpb_icons/minimize.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(minimizeBtn, s); }
+            { var s = UI.LoadIconSprite("window-minimize", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(minimizeBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
 
             // Close button (title bar icon row) - rendered last to be on top
             GameObject closeBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, "X", 30, 0, 0, AnchorPresets.middleCenter, () => {
@@ -2483,7 +2487,7 @@ namespace VPB
             _titleBarCloseBtnRT = closeRT;
             closeBtn.GetComponent<Image>().color = GalleryUiColorTokens.ChromeIconWell;
             AddHoverDelegate(closeBtn);
-            { var s = UI.LoadIconSprite("vpb_icons/close.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s); }
+            { var s = UI.LoadIconSprite("door-exit", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
 
             // Register inner pane button scale actions (close/minimize — X anchored by ApplyTitleBarResponsiveLayout)
             { var rt = minRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }

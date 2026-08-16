@@ -459,7 +459,7 @@ namespace VPB
             if (closeImg != null) closeImg.color = GalleryUiColorTokens.ChromeIconWell;
             try
             {
-                Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint);
+                Sprite xSpr = UI.LoadIconSprite("x", UI.BarIconGlyphTint);
                 if (xSpr != null) UI.AddIconToButton(closeBtn, xSpr, padding: 6f * s);
                 else
                 {

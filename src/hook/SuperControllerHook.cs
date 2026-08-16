@@ -1044,6 +1044,21 @@ namespace VPB
 
         public static bool PreFileExists(ref string __0, ref bool __result)
         {
+            if (!VamSceneLoadPhaseProfiler.Active) return PreFileExistsCore(ref __0, ref __result);
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            try
+            {
+                return PreFileExistsCore(ref __0, ref __result);
+            }
+            finally
+            {
+                VamSceneLoadPhaseProfiler.AddHookCost(VamSceneLoadPhaseProfiler.HookBucket.FileExists,
+                    System.Diagnostics.Stopwatch.GetTimestamp() - t0);
+            }
+        }
+
+        static bool PreFileExistsCore(ref string __0, ref bool __result)
+        {
             if (VamStartupOptimizations.ShouldSkipVamXFileExistsWork(__0))
             {
                 __result = false;
@@ -1096,6 +1111,7 @@ namespace VPB
 
         private static void PostFileExistsOnDemand(string path, bool onlySystemFiles, ref bool result)
         {
+            long t0 = VamSceneLoadPhaseProfiler.Active ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             try
             {
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.FileExistsHook++;
@@ -1157,18 +1173,28 @@ namespace VPB
             {
                 LogUtil.LogWarning("[VPB OnDemand] PostFileExistsOnDemand error: " + ex.Message);
             }
+            finally
+            {
+                if (t0 != 0L)
+                    VamSceneLoadPhaseProfiler.AddHookCost(VamSceneLoadPhaseProfiler.HookBucket.FileExists,
+                        System.Diagnostics.Stopwatch.GetTimestamp() - t0);
+            }
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStream", new Type[] { typeof(string), typeof(bool) })]
         public static void PreOpenStream(ref string path)
         {
+            long t0 = VamSceneLoadPhaseProfiler.Active ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             string rewritten = RewriteVdsPathIfNeeded(path);
             if (!string.Equals(rewritten, path, StringComparison.Ordinal))
             {
                 path = rewritten;
             }
             TryRewriteBareCustomPath(ref path);
+            if (t0 != 0L)
+                VamSceneLoadPhaseProfiler.AddHookCost(VamSceneLoadPhaseProfiler.HookBucket.OpenStream,
+                    System.Diagnostics.Stopwatch.GetTimestamp() - t0);
         }
 
         [HarmonyPostfix]
@@ -1970,53 +1996,6 @@ namespace VPB
 
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(DAZMorph), "LoadDeltas")]
-        public static void PostLoadDeltasFromBinaryFile(DAZMorph __instance)
-        {
-            var path = __instance.deltasLoadPath;
-            if (string.IsNullOrEmpty(path)) return;
-            if (__instance.deltasLoaded) return;
-            __instance.deltasLoaded = true;
-
-            if (DAZMorphMgr.singleton.cache.ContainsKey(path))
-            {
-                try
-                {
-                    if (Settings.Instance != null
-                        && Settings.Instance.LogMorphDeltaCacheHits != null
-                        && Settings.Instance.LogMorphDeltaCacheHits.Value)
-                        LogUtil.Log("LoadDeltas use cache:" + path);
-                }
-                catch { }
-                __instance.deltas = DAZMorphMgr.singleton.cache[path];
-                return;
-            }
-
-            using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(path, true))
-            {
-                using (BinaryReader binaryReader = new BinaryReader(fileEntryStream.Stream))
-                {
-                    var numDeltas = binaryReader.ReadInt32();
-                    var deltas = new DAZMorphVertex[numDeltas];
-                    Vector3 delta = default(Vector3);
-                    for (int i = 0; i < numDeltas; i++)
-                    {
-                        DAZMorphVertex dAZMorphVertex = new DAZMorphVertex();
-                        dAZMorphVertex.vertex = binaryReader.ReadInt32();
-                        delta.x = binaryReader.ReadSingle();
-                        delta.y = binaryReader.ReadSingle();
-                        delta.z = binaryReader.ReadSingle();
-                        dAZMorphVertex.delta = delta;
-                        deltas[i] = dAZMorphVertex;
-                    }
-
-                    __instance.deltas = deltas;
-                    DAZMorphMgr.singleton.cache.Add(path, deltas);
-                }
-            }
-        }
-
     }
 
     class PatchAssetLoader
@@ -2131,6 +2110,7 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetVarFileEntry", new Type[] { typeof(string) })]
         public static void PostGetVarFileEntryOnDemand(string path, ref MVR.FileManagement.VarFileEntry __result)
         {
+            long t0 = VamSceneLoadPhaseProfiler.Active ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             try
             {
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHook++;
@@ -2184,6 +2164,12 @@ namespace VPB
             catch (Exception ex)
             {
                 LogUtil.LogWarning("[VPB OnDemand] PostGetVarFileEntryOnDemand error: " + ex.Message);
+            }
+            finally
+            {
+                if (t0 != 0L)
+                    VamSceneLoadPhaseProfiler.AddHookCost(VamSceneLoadPhaseProfiler.HookBucket.GetFileEntry,
+                        System.Diagnostics.Stopwatch.GetTimestamp() - t0);
             }
         }
 

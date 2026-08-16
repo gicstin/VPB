@@ -77,7 +77,7 @@ namespace VPB
             _titleSearchChipClearAllGO.name = "TitleSearchChipClearAll";
             _titleSearchChipClearAllRT = _titleSearchChipClearAllGO.GetComponent<RectTransform>();
             {
-                Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
+                Sprite xSpr = UI.LoadIconSprite("x", Color.white);
                 if (xSpr != null)
                     UI.AddIconToButton(_titleSearchChipClearAllGO, xSpr, 5f, new Color(0.35f, 0.18f, 0.18f, 0.92f));
             }
@@ -855,7 +855,7 @@ namespace VPB
             dismissGO.AddComponent<UIChipDismissClick>();
 
             float iconPad = GalleryUiDesignTokens.SearchIconButtonPadRef * s;
-            Sprite closeSpr = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
+            Sprite closeSpr = UI.LoadIconSprite("x", Color.white);
             if (closeSpr != null)
                 UI.AddIconToButton(dismissGO, closeSpr, iconPad, Color.gray);
             else

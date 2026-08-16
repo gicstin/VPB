@@ -56,13 +56,13 @@ namespace VPB
                 AnchorPresets.middleCenter, FooterPerfStepDown);
             footerPerfMinusBtn.name = "Footer_PerfMinus";
             footerPerfMinusBtnImage = footerPerfMinusBtn.GetComponent<Image>();
-            UI.ApplyBarIconFromPath(footerPerfMinusBtn, "vpb_icons/photo_down.png");
+            UI.ApplyBarIconFromPath(footerPerfMinusBtn, "photo-down");
 
             footerPerfPlusBtn = UI.CreateUIButton(parent, chip, chip, "+", 24, 0, 0,
                 AnchorPresets.middleCenter, FooterPerfStepUp);
             footerPerfPlusBtn.name = "Footer_PerfPlus";
             footerPerfPlusBtnImage = footerPerfPlusBtn.GetComponent<Image>();
-            UI.ApplyBarIconFromPath(footerPerfPlusBtn, "vpb_icons/photo_up.png");
+            UI.ApplyBarIconFromPath(footerPerfPlusBtn, "photo-up");
 
             AddTooltipPlain(footerPerfMinusBtn, VpbPerfController.GetStepTooltip());
             AddTooltipPlain(footerPerfPlusBtn, VpbPerfController.GetStepTooltip());
@@ -105,7 +105,7 @@ namespace VPB
                 int step = VpbPerfController.StepIndex;
                 // Activate icon child if it was previously hidden
                 if (iconTr != null) iconTr.gameObject.SetActive(true);
-                UI.ApplyBarIconFromPath(footerPerfToggleBtn, "vpb_icons/level_" + step + ".png", backdropOverride: backdropColor);
+                UI.ApplyBarIconFromPath(footerPerfToggleBtn, "rosette-number-" + step, backdropOverride: backdropColor);
                 // Restore backdrop (ApplyBarIconFromPath may overwrite it)
                 if (footerPerfToggleBtnImage != null) footerPerfToggleBtnImage.color = backdropColor;
                 // Tint the icon to match the perf state color

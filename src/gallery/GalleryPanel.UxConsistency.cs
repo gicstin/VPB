@@ -348,7 +348,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.apply", "Apply"),
                 KeyCode.A, "A",
-                GridCtxIcon("vpb_icons/gallery_apply_1click.png"),
+                GridCtxIcon("box-multiple-1"),
                 () =>
                 {
                     FileEntry f = _gridCtxMenuFile;
@@ -363,7 +363,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.open_hub", "Open on Hub"),
                 KeyCode.O, "O",
-                GridCtxIcon("vpb_icons/hub.png"),
+                GridCtxIcon("world-search"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -374,7 +374,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.detail.expand", "Details"),
                 KeyCode.I, "I",
-                GridCtxIcon("vpb_icons/expand_up.png"),
+                GridCtxIcon("list-details"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -385,7 +385,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.copy_names", "Copy Names"),
                 KeyCode.C, "C",
-                GridCtxIcon("vpb_icons/clipboard_list.png"),
+                GridCtxIcon("clipboard-list"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -394,7 +394,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.copy_paths", "Copy Paths"),
                 KeyCode.P, "P",
-                GridCtxIcon("vpb_icons/folder.png"),
+                GridCtxIcon("clipboard-copy"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -405,7 +405,7 @@ namespace VPB
                 GridCtxAddAction(
                     VPBTranslation.T("gallery.gridctx.copy_missing_deps", "Copy Missing Deps"),
                     KeyCode.M, "M",
-                    GridCtxIcon("vpb_icons/load_deps.png"),
+                    GridCtxIcon("clipboard-x"),
                     () =>
                     {
                         FileEntry f = _gridCtxMenuFile;
@@ -425,7 +425,7 @@ namespace VPB
                     GridCtxAddAction(
                         VPBTranslation.T("gallery.tbox.hide", "Hide"),
                         KeyCode.H, "H",
-                        GridCtxIcon("vpb_icons/show_hidden.png"),
+                        GridCtxIcon("eye-off"),
                         () =>
                         {
                             CloseGridContextMenu();
@@ -437,7 +437,7 @@ namespace VPB
                     GridCtxAddAction(
                         VPBTranslation.T("gallery.tbox.unhide", "Unhide"),
                         KeyCode.U, "U",
-                        GridCtxIcon("vpb_icons/show_hidden_off.png"),
+                        GridCtxIcon("eye"),
                         () =>
                         {
                             CloseGridContextMenu();
@@ -450,22 +450,22 @@ namespace VPB
             GridCtxAddSubmenu(
                 VPBTranslation.T("gallery.gridctx.rate", "Rate"),
                 KeyCode.R, "R",
-                GridCtxIcon("vpb_icons/star.png"),
+                GridCtxIcon("filled/star"),
                 () => GridCtxShowPage(GridCtxPage.Rate));
             GridCtxAddSubmenu(
                 VPBTranslation.T("gallery.gridctx.tags", "Tags"),
                 KeyCode.G, "G",
-                GridCtxIcon("vpb_icons/tags.png"),
+                GridCtxIcon("tags"),
                 () => GridCtxShowPage(GridCtxPage.Tags));
             GridCtxAddSubmenu(
                 VPBTranslation.T("gallery.gridctx.tools", "Tools"),
                 KeyCode.T, "T",
-                GridCtxIcon("vpb_icons/settings.png"),
+                GridCtxIcon("tools"),
                 () => GridCtxShowPage(GridCtxPage.Tools));
             GridCtxAddSubmenu(
                 VPBTranslation.T("gallery.gridctx.select", "Select"),
                 KeyCode.S, "S",
-                GridCtxIcon("vpb_icons/select_all.png"),
+                GridCtxIcon("select-all"),
                 () => GridCtxShowPage(GridCtxPage.Select));
 
             bool historyBrowse = activeContentType == ContentType.History;
@@ -486,7 +486,7 @@ namespace VPB
                     GridCtxAddAction(
                         VPBTranslation.T("gallery.tbox.remove_history", "Remove History"),
                         KeyCode.D, "D",
-                        GridCtxIcon("vpb_icons/list_remove.png"),
+                        GridCtxIcon("playlist-x"),
                         () =>
                         {
                             CloseGridContextMenu();
@@ -499,7 +499,7 @@ namespace VPB
                     GridCtxAddAction(
                         VPBTranslation.T("gallery.tbox.delete", "Delete"),
                         KeyCode.D, "D",
-                        GridCtxIcon("vpb_icons/delete.png"),
+                        GridCtxIcon("trash"),
                         () =>
                         {
                             CloseGridContextMenu();
@@ -516,14 +516,14 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.back", "◄ Back"),
                 KeyCode.B, "B",
-                null,
+                GridCtxIcon("arrow-left"),
                 () => GridCtxShowPage(GridCtxPage.Root));
             GridCtxAddSeparator();
 
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.load", "Load"),
                 KeyCode.L, "L",
-                GridCtxIcon("vpb_icons/load.png"),
+                GridCtxIcon("player-play"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -532,7 +532,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.load_deps", "Load Deps"),
                 KeyCode.E, "E",
-                GridCtxIcon("vpb_icons/load_deps.png"),
+                GridCtxIcon("player-skip-forward"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -541,7 +541,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.unload", "Unload"),
                 KeyCode.N, "N",
-                GridCtxIcon("vpb_icons/unload.png"),
+                GridCtxIcon("player-eject"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -550,7 +550,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.cache_textures", "Cache Textures"),
                 KeyCode.X, "X",
-                GridCtxIcon("vpb_icons/cache_texture.png"),
+                GridCtxIcon("stack-2"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -561,7 +561,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.autoinstall", "Autoinstall"),
                 KeyCode.A, "A",
-                GridCtxIcon("vpb_icons/auto.png"),
+                GridCtxIcon("robot"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -570,7 +570,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.no_autoinstall", "No autoinstall"),
                 KeyCode.O, "O",
-                GridCtxIcon("vpb_icons/auto_off.png"),
+                GridCtxIcon("robot-off"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -581,7 +581,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.whitelist", "Scan whitelist"),
                 KeyCode.W, "W",
-                GridCtxIcon("vpb_icons/filter.png"),
+                GridCtxIcon("list-check"),
                 () =>
                 {
                     FileEntry f = _gridCtxMenuFile;
@@ -593,7 +593,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.temp_whitelist", "Temp whitelist"),
                 KeyCode.Y, "Y",
-                GridCtxIcon("vpb_icons/temporary.png"),
+                GridCtxIcon("clock-play"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -604,7 +604,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.cleanup", "Cleanup"),
                 KeyCode.K, "K",
-                GridCtxIcon("vpb_icons/cleanup.png"),
+                GridCtxIcon("wash-gentle"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -613,7 +613,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.detail.chip_old_vers", "Older Versions…"),
                 KeyCode.V, "V",
-                GridCtxIcon("vpb_icons/cleanup.png"),
+                GridCtxIcon("versions"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -627,14 +627,14 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.back", "◄ Back"),
                 KeyCode.B, "B",
-                null,
+                GridCtxIcon("arrow-left"),
                 () => GridCtxShowPage(GridCtxPage.Root));
             GridCtxAddSeparator();
 
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.rate_clear", "★ Clear"),
                 KeyCode.Alpha0, "0",
-                GridCtxIcon("vpb_icons/star_off.png"),
+                GridCtxIcon("star"),
                 () => GridCtxRunRating(0));
             // Also accept keypad 0.
             GridCtxRegisterHotkey(KeyCode.Keypad0, () => GridCtxRunRating(0));
@@ -650,7 +650,7 @@ namespace VPB
                 GridCtxAddAction(
                     label,
                     alpha, stars.ToString(),
-                    GridCtxIcon("vpb_icons/star.png"),
+                    GridCtxIcon("filled/star"),
                     () => GridCtxRunRating(stars));
                 GridCtxRegisterHotkey(keypad, () => GridCtxRunRating(stars));
             }
@@ -662,14 +662,14 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.back", "◄ Back"),
                 KeyCode.B, "B",
-                null,
+                GridCtxIcon("arrow-left"),
                 () => GridCtxShowPage(GridCtxPage.Root));
             GridCtxAddSeparator();
 
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.copy_tags", "Copy Tags"),
                 KeyCode.C, "C",
-                GridCtxIcon("vpb_icons/tag_plus.png"),
+                GridCtxIcon("tag-plus"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -680,7 +680,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.paste_tags", "Paste Tags"),
                 KeyCode.V, "V",
-                GridCtxIcon("vpb_icons/tags.png"),
+                GridCtxIcon("tags"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -690,7 +690,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.replace_tags", "Replace Tags"),
                 KeyCode.R, "R",
-                GridCtxIcon("vpb_icons/tag_minus.png"),
+                GridCtxIcon("tag-minus"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -701,7 +701,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.edit_tags", "Edit Tags…"),
                 KeyCode.E, "E",
-                GridCtxIcon("vpb_icons/edit.png"),
+                GridCtxIcon("edit"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -720,14 +720,14 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.back", "◄ Back"),
                 KeyCode.B, "B",
-                null,
+                GridCtxIcon("arrow-left"),
                 () => GridCtxShowPage(GridCtxPage.Root));
             GridCtxAddSeparator();
 
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.select_all", "Select All"),
                 KeyCode.A, "A",
-                GridCtxIcon("vpb_icons/select_all.png"),
+                GridCtxIcon("select-all"),
                 () =>
                 {
                     CloseGridContextMenu();
@@ -736,7 +736,7 @@ namespace VPB
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.clear_selection", "Clear Selection"),
                 KeyCode.C, "C",
-                GridCtxIcon("vpb_icons/clear_selection.png"),
+                GridCtxIcon("square-x"),
                 () =>
                 {
                     CloseGridContextMenu();

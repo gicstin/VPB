@@ -657,7 +657,6 @@ namespace VPB
 
             // Raised inset vs panel — looks like textbox, not section header.
             Color filterBg = GalleryUiColorTokens.SurfaceDarker;
-            Color filterBorder = GalleryUiColorTokens.SurfaceMid;
             _stripKeepFilterInput = UI.CreateChromeLayoutInputField(
                 filterHost.transform, font, btnH, 1f, 8f * s, 4f * s,
                 filterBg, UI.InputFieldPlaceholderColor,
@@ -676,29 +675,6 @@ namespace VPB
                 }
                 LayoutElement inputLe = _stripKeepFilterInput.GetComponent<LayoutElement>();
                 if (inputLe != null) inputLe.ignoreLayout = true;
-
-                // Always-on rim so field reads as input even without focus/hover.
-                try
-                {
-                    GameObject rimGo = UI.CreateChildRT(
-                        _stripKeepFilterInput.gameObject, "FieldBorder", AnchorPresets.stretchAll);
-                    LayoutElement rimLe = rimGo.AddComponent<LayoutElement>();
-                    rimLe.ignoreLayout = true;
-                    RoundedRectOutline rim = rimGo.AddComponent<RoundedRectOutline>();
-                    rim.color = filterBorder;
-                    rim.raycastTarget = false;
-                    rim.borderThickness = Mathf.Max(1f, 1.5f * s);
-                    RoundedRect bgRr = _stripKeepFilterInput.GetComponent<RoundedRect>();
-                    rim.cornerRadiusFraction = bgRr != null ? bgRr.cornerRadiusFraction : 0f;
-                    RectTransform rimRt = rimGo.GetComponent<RectTransform>();
-                    if (rimRt != null)
-                    {
-                        rimRt.offsetMin = Vector2.zero;
-                        rimRt.offsetMax = Vector2.zero;
-                    }
-                    rimGo.transform.SetAsLastSibling();
-                }
-                catch { }
 
                 // Leave room for clear chip on right.
                 Transform textArea = _stripKeepFilterInput.transform.Find("TextArea");
@@ -742,7 +718,7 @@ namespace VPB
                 if (clearImg != null) clearImg.color = new Color(0f, 0f, 0f, 0.01f);
                 try
                 {
-                    Sprite clearSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
+                    Sprite clearSpr = UI.LoadIconSprite("x", GalleryUiColorTokens.SearchClearIconTint);
                     if (clearSpr != null)
                         UI.AddIconToButton(_stripKeepFilterClearGo, clearSpr, GalleryUiDesignTokens.FloatChromeIconPadRef * s, new Color(0f, 0f, 0f, 0f));
                 }

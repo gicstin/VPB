@@ -283,6 +283,7 @@ Clear caches, reduce textures, and load a scene:
 - Visual Studio (the solution targets VS 2019 format)
 - .NET Framework **3.5** (project targets `v3.5`)
 - A local VaM install folder (for reference assemblies)
+- Optional: Python 3 with Pillow + cairosvg (`pip install pillow cairosvg`) — only needed to change UI icons; see [docs/ICONS.md](docs/ICONS.md)
 
 ### Configure VaM path
 

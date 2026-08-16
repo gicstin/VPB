@@ -81,7 +81,9 @@ namespace VPB
                         string target = GetSideFilterTextForContentType(type);
                         SetSideSearchInputTextWithoutNotify(rail.SearchInput, target, rail.SearchOnValueChanged);
                         if (rail.SearchInput.placeholder is Text ph)
-                            ph.text = GetContentTypePlaceholder(type);
+                            ph.text = type == ContentType.Category
+                                ? GetCategorySideSearchPlaceholder()
+                                : GetContentTypePlaceholder(type);
                     }
                 }
 

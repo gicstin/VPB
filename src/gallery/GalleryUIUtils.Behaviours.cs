@@ -465,12 +465,24 @@ namespace VPB
 
     public class UIHoverBorder : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
+        private static readonly System.Collections.Generic.List<UIHoverBorder> s_Live =
+            new System.Collections.Generic.List<UIHoverBorder>(256);
+
+        /// <summary>Enabled instances, so global border re-apply never has to scan every loaded object.</summary>
+        public static System.Collections.Generic.List<UIHoverBorder> Live { get { return s_Live; } }
+
         public Graphic targetGraphic;
         public Color hoverColor = GalleryUiColorTokens.HoverRimDefault; // Bright yellow visible highlight
+        /// <summary>Armed/selected rim when not hovering. Alpha 0 = fall back to <see cref="hoverColor"/> (grid/side-rail).</summary>
+        public Color selectedRimColor;
+        /// <summary>Idle control edge when <see cref="showIdleRim"/>. Muted fill still reads as a button (Norman).</summary>
+        public Color idleRimColor = GalleryUiColorTokens.RimIdle;
         public float borderSize = 2f;
         /// <summary>When true, border effect is rendered inward (negative outline offset).</summary>
         public bool inward = false;
         public bool isSelected = false;
+        /// <summary>Keep a faint rim while idle so muted chrome stays discernible. Off for grid thumbs.</summary>
+        public bool showIdleRim = false;
         /// <summary>List layout: hover uses <see cref="hoverBorderGO"/> only; selection is a separate Graphic.
         /// Exit always hides hover GO (pool reuse never gets PointerExit). Grid inward border keeps GO when selected.</summary>
         public bool hoverIndicatorUsesSeparateSelectionVisual = false;
@@ -529,11 +541,13 @@ namespace VPB
 
         void OnEnable()
         {
+            s_Live.Add(this);
             SyncIndicatorVisibility();
         }
 
         void OnDisable()
         {
+            s_Live.Remove(this);
             if (hoverBorderGO != null) hoverBorderGO.SetActive(false);
             else if (rimRoot != null) rimRoot.SetActive(false);
             hovering = false;
@@ -559,7 +573,7 @@ namespace VPB
             return sel == null || sel.interactable;
         }
 
-        /// <summary>Show/hide rim or <see cref="hoverBorderGO"/> from hover + selection; tint indicator to <see cref="hoverColor"/>.</summary>
+        /// <summary>Show/hide rim or <see cref="hoverBorderGO"/> from hover + selection; tint from hover / selected / idle.</summary>
         public void SyncIndicatorVisibility()
         {
             if (!HoverAllowed())
@@ -596,7 +610,9 @@ namespace VPB
         {
             if (hoverBorderGO != null) return;
             if (rimRoot == null) return;
-            bool show = hovering || isSelected;
+            bool rimsOn = UI.ChromeButtonRimsEnabled();
+            bool showSelected = isSelected && (rimsOn || selectedRimColor.a <= 0.01f);
+            bool show = hovering || showSelected || (rimsOn && showIdleRim && HoverAllowed());
             if (rimRoot.activeSelf != show) rimRoot.SetActive(show);
         }
 
@@ -703,9 +719,23 @@ namespace VPB
             rimBorder.cornerRadiusFraction = targetRounded != null ? targetRounded.cornerRadiusFraction : 0f;
         }
 
+        private Color ResolveRimTint()
+        {
+            if (hovering) return hoverColor;
+            if (isSelected)
+            {
+                if (UI.ChromeButtonRimsEnabled() && selectedRimColor.a > 0.01f)
+                    return selectedRimColor;
+                return hoverColor;
+            }
+            return idleRimColor;
+        }
+
         private void ApplyRimTint()
         {
-            if (rimBorder != null) rimBorder.color = hoverColor;
+            if (rimBorder == null) return;
+            Color c = ResolveRimTint();
+            if (rimBorder.color != c) rimBorder.color = c;
         }
     }
 

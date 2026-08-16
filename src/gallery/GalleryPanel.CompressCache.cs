@@ -18,11 +18,11 @@ namespace VPB
 
         public static Sprite LoadCompressCacheIconSprite(Color tint)
         {
-            Sprite s = UI.LoadIconSprite("vpb_icons/compress_zstd.png", tint);
+            Sprite s = UI.LoadIconSprite("stack-push", tint);
             if (s != null) return s;
-            s = UI.LoadIconSprite("vpb_icons/compress.png", tint);
+            s = UI.LoadIconSprite("stack-2", tint);
             if (s != null) return s;
-            return UI.LoadIconSprite("vpb_icons/cache_texture.png", tint);
+            return UI.LoadIconSprite("stack-2", tint);
         }
 
         public static void GalleryTriggerBulkZstdCompression()

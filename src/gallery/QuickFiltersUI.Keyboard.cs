@@ -279,7 +279,7 @@ namespace VPB
                 });
                 if (btn == null) continue;
                 btn.name = "CollapseDice";
-                StyleChromeIconBtn(btn, sq, "vpb_icons/random.png", new Color(0.18f, 0.32f, 0.28f, 1f));
+                StyleChromeIconBtn(btn, sq, "dice-3", new Color(0.18f, 0.32f, 0.28f, 1f));
                 ScaleChromeIconBtn(btn, sortSq, s);
                 var h = btn.AddComponent<UIHoverDelegate>();
                 h.OnHoverChange += (enter) =>

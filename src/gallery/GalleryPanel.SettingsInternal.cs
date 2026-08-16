@@ -70,6 +70,59 @@ namespace VPB
 
             public Func<Color> GetColor;
             public Action<Color> SetColor;
+
+            /// <summary>True when this row has a factory default and may show Reset.</summary>
+            public bool HasDefault;
+            public bool DefaultBool;
+            public float DefaultFloat;
+            public string DefaultString;
+            public Color DefaultColor;
+
+            internal void SetDefault(bool v)
+            {
+                HasDefault = true;
+                DefaultBool = v;
+            }
+
+            internal void SetDefault(float v)
+            {
+                HasDefault = true;
+                DefaultFloat = v;
+            }
+
+            internal void SetDefault(string v)
+            {
+                HasDefault = true;
+                DefaultString = v ?? "";
+            }
+
+            internal void SetDefault(Color v)
+            {
+                HasDefault = true;
+                DefaultColor = v;
+            }
+
+            internal void ApplyFactoryDefault()
+            {
+                if (!HasDefault) return;
+                switch (ControlType)
+                {
+                    case InternalSettingControlType.Toggle:
+                        if (SetBool != null) SetBool(DefaultBool);
+                        break;
+                    case InternalSettingControlType.Slider:
+                        if (SetFloat != null) SetFloat(DefaultFloat);
+                        break;
+                    case InternalSettingControlType.Cycle:
+                    case InternalSettingControlType.TextArea:
+                    case InternalSettingControlType.Hotkey:
+                        if (SetString != null) SetString(DefaultString ?? "");
+                        break;
+                    case InternalSettingControlType.ColorRgb:
+                        if (SetColor != null) SetColor(DefaultColor);
+                        break;
+                }
+            }
         }
 
         private List<InternalSettingDefinition> _internalSettingsDefsCache;
@@ -114,7 +167,7 @@ namespace VPB
             return _settingsFineToGroup;
         }
 
-        private sealed class SettingsGroupTab { public string Key; public string Label; }
+        private sealed class SettingsGroupTab { public string Key; public string Label; public string Icon; }
 
         private static string SettingsGroupLabel(string key)
         {
@@ -133,6 +186,144 @@ namespace VPB
             }
         }
 
+        /// <summary>Toggle chip label. Canonical ON/OFF stay as stored state; display follows locale.</summary>
+        private static string FormatSettingsToggleLabel(bool on)
+        {
+            return on
+                ? VPBTranslation.T("settings.toggle.on", "ON")
+                : VPBTranslation.T("settings.toggle.off", "OFF");
+        }
+
+        /// <summary>Cycle chip label. Stored option strings stay English; display is translated.
+        /// English keeps compact uppercase chips; other locales use natural script (no forced caps).</summary>
+        private static string FormatSettingsCycleOption(string value)
+        {
+            string display = TranslateSettingsCycleOption(value);
+            if (string.IsNullOrEmpty(display)) return "";
+            if (string.Equals(VPBTranslation.CurrentLocale, "en", StringComparison.OrdinalIgnoreCase))
+                return display.ToUpperInvariant();
+            return display;
+        }
+
+        private static string TranslateSettingsCycleOption(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            if (string.Equals(value, "Off", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.follow.off", "Off");
+            if (string.Equals(value, "Both", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.follow.both", "Both");
+            if (string.Equals(value, "Desktop", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.follow.desktop", "Desktop");
+            if (string.Equals(value, "VR", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.follow.vr", "VR");
+            if (string.Equals(value, "Left", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.side_left", "Left");
+            if (string.Equals(value, "Right", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.side_right", "Right");
+            if (string.Equals(value, "Top", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.side_top", "Top");
+            if (string.Equals(value, "replace", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.appearance.preset_outfit", "Preset look");
+            if (string.Equals(value, "keep", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.appearance.keep_body", "Keep body clothes");
+            if (string.Equals(value, "clothingonly", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.appearance.clothes_only", "Clothes only");
+            if (string.Equals(value, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.appearance.merge_outfit", "Merge outfit");
+            if (string.Equals(value, "Scenes", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.initial_gallery.scenes", "Scenes");
+            if (string.Equals(value, "Clothing", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.initial_gallery.clothing", "Clothing");
+            if (string.Equals(value, "Hair", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.initial_gallery.hair", "Hair");
+            if (string.Equals(value, "Pose", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.initial_gallery.pose", "Pose");
+            if (string.Equals(value, "Appearance", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.initial_gallery.appearance", "Appearance");
+            if (string.Equals(value, "Plugins", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.initial_gallery.plugins", "Plugins");
+            if (string.Equals(value, "LastUsed", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.initial_gallery.last_used", "Last used");
+            if (string.Equals(value, "None", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.none", "None");
+            if (string.Equals(value, "Import", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("gallery.side.scene_import_short", "Import");
+            if (string.Equals(value, "Tags", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("gallery.side.tags", "User Tags");
+            if (string.Equals(value, "Category", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("gallery.side.category", "Categories");
+            if (string.Equals(value, "Creator", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("gallery.side.creator", "Creators");
+            if (string.Equals(value, "Path", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("gallery.side.path", "Path");
+            if (string.Equals(value, "History", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("gallery.history.row.history", "History");
+            if (string.Equals(value, "Filter tags", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.filter_tags", "Filter tags");
+            if (string.Equals(value, "Apply tags", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.apply_tags", "Apply tags");
+            if (string.Equals(value, "Untagged only", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.untagged_only", "Untagged only");
+            if (string.Equals(value, "Compound", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.compound", "Compound");
+            if (string.Equals(value, "Isolate", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.isolate", "Isolate");
+            if (string.Equals(value, "Desktop Only", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.desktop_only", "Desktop Only");
+            if (string.Equals(value, "VR Only", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.vr_only", "VR Only");
+            if (string.Equals(value, "Desktop & VR", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.desktop_and_vr", "Desktop & VR");
+            if (string.Equals(value, "Path + Name", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.path_and_name", "Path + Name");
+            if (string.Equals(value, "Name only", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.name_only", "Name only");
+            if (string.Equals(value, "Name starts with", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.name_starts_with", "Name starts with");
+            if (string.Equals(value, "Independent", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.independent", "Independent");
+            if (string.Equals(value, "Synced", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.synced", "Synced");
+            if (string.Equals(value, "List", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.list", "List");
+            if (string.Equals(value, "Grid", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.grid", "Grid");
+            if (string.Equals(value, "Left only", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.left_only", "Left only");
+            if (string.Equals(value, "Right only", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.right_only", "Right only");
+            if (string.Equals(value, "Opposite to menu", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.opposite_menu", "Opposite to menu");
+            if (string.Equals(value, "Same hand", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.same_hand", "Same hand");
+            if (string.Equals(value, "Glance", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.glance", "Glance");
+            if (string.Equals(value, "Menu", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.menu", "Menu");
+            if (string.Equals(value, "Always", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.always", "Always");
+            return value;
+        }
+
+        /// <summary>Atlas role for settings group chips. Label stays primary; glyph is redundant landmark.</summary>
+        private static string SettingsGroupIcon(string key)
+        {
+            switch (key)
+            {
+                case "all":             return "stack-2";
+                case "appearance":      return "palette";
+                case "grid_highlights": return "grid-scan";
+                case "layout":          return "layout-sidebar";
+                case "vr":              return "device-watch";
+                case "browsing":        return "list-search";
+                case "cat_visibility":  return "eye";
+                case "interaction":     return "hand-finger";
+                case "performance":     return "gauge";
+                case "maintenance":     return "tools";
+                default:                return null;
+            }
+        }
+
         /// <summary>Ordered single-layer settings group tabs. VR chip only when running in VR.</summary>
         private List<SettingsGroupTab> GetSettingsGroupTabs()
         {
@@ -144,7 +335,7 @@ namespace VPB
                 if (row == null || row.Length == 0) continue;
                 if (string.Equals(row[0], "vr", StringComparison.OrdinalIgnoreCase) && !isVr)
                     continue;
-                list.Add(new SettingsGroupTab { Key = row[0], Label = SettingsGroupLabel(row[0]) });
+                list.Add(new SettingsGroupTab { Key = row[0], Label = SettingsGroupLabel(row[0]), Icon = SettingsGroupIcon(row[0]) });
             }
             return list;
         }
@@ -197,37 +388,20 @@ namespace VPB
             }
         }
 
-        /// <summary>Resolve a display group key, a fine key (e.g. "updater", "performance",
-        /// "ba_migration") or "all" into the active settings group tab.</summary>
-        private void SetActiveSettingsGroup(string key)
-        {
-            if (string.IsNullOrEmpty(key)) key = "all";
-            if (string.Equals(key, "all", StringComparison.OrdinalIgnoreCase))
-            {
-                currentSettingsGroup = "all";
-                return;
-            }
-            foreach (var row in SettingsGroupStructure)
-            {
-                if (string.Equals(row[0], key, StringComparison.OrdinalIgnoreCase))
-                {
-                    currentSettingsGroup = row[0];
-                    return;
-                }
-            }
-            string group;
-            if (SettingsFineToGroup().TryGetValue(key, out group))
-            {
-                currentSettingsGroup = group;
-                return;
-            }
-            currentSettingsGroup = "all";
-        }
-
         private int ComputeInternalSettingsDefsCacheSignature()
         {
             int sig = 0;
-            try { if (categories != null) sig = categories.Count; } catch { }
+            try
+            {
+                string loc = VPBTranslation.CurrentLocale;
+                if (!string.IsNullOrEmpty(loc))
+                {
+                    for (int i = 0; i < loc.Length; i++)
+                        sig = unchecked(sig * 31 + loc[i]);
+                }
+            }
+            catch { }
+            try { if (categories != null) sig = unchecked(sig * 31 + categories.Count); } catch { }
             try
             {
                 var hidden = VPBConfig.Instance != null ? VPBConfig.Instance.HiddenCategories : null;
@@ -283,12 +457,14 @@ namespace VPB
         {
             public string RowKey;
             public string GroupKey;
+            public bool IsHeader;
+            public bool IsCategoryHeader;
 
             public InternalSettingRowEntry(string rowKey, string groupKey, string label)
                 : base("[SETTING] " + rowKey)
             {
                 RowKey = rowKey ?? "";
-                GroupKey = groupKey ?? "all";
+                GroupKey = groupKey ?? SettingsDefaultGroupKey;
                 Uid = "[SETTING]:" + RowKey;
                 Name = label ?? RowKey;
                 Path = Uid;
@@ -344,6 +520,7 @@ namespace VPB
             public float InnerPaneScaleDesktop;
             public bool EnableButtonGaps;
             public bool EnableGalleryElementRounding;
+            public bool EnableGalleryButtonChromeRims;
             public float GalleryElementCornerRadiusFraction;
             public string ShowSideButtons;
             public string FollowAngle;
@@ -686,6 +863,18 @@ namespace VPB
                     VPBConfig.Instance.EnableGalleryElementRounding = v;
                     ApplyGalleryElementCornerRadiusFromSettings();
                     if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.buttonChromeRims", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.gallery_button_chrome_rims", "Button edge rims"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_button_chrome_rims", "Shows a quiet outline on idle and selected chrome buttons so muted fills stay readable. Hover highlight still works when off."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.EnableGalleryButtonChromeRims,
+                SetBool = v => {
+                    VPBConfig.Instance.EnableGalleryButtonChromeRims = v;
+                    try { UI.ApplyGalleryButtonChromeRimsGlobally(); } catch { }
+                    try { VPBConfig.Instance.TriggerChange(); } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -1191,10 +1380,20 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "hover.randomButtonPreview", GroupKey = "hover",
-                Label = VPBTranslation.T("settings.hover_random_preview", "Random button preview"),
-                Tooltip = VPBTranslation.T("settings.tip.hover_random_preview", "Pointing at a quick-menu or wrist-watch random button shows the item it would launch, and clicking launches that exact item. Pointing away and back draws a new one. A category the gallery is not showing costs one pool load on first hover."),
+                Label = VPBTranslation.T("settings.hover_random_preview", "Random preview"),
+                Tooltip = VPBTranslation.T("settings.tip.hover_random_preview", "On (default): pointing at a desktop quick-menu random button shows a card above that pane. Gallery toolbox Random greys the grid and shows a centered preview. Wrist-watch random buttons keep the watch card. Click launches the item you saw. Scroll wheel while hovering re-rolls the preview (same as leave and re-enter). Off: random buttons still launch, with no hover card."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuRandomHoverPreview,
-                SetBool = v => { VPBConfig.Instance.QuickMenuRandomHoverPreview = v; VPBConfig.Instance.TriggerChange(); }
+                SetBool = v => {
+                    VPBConfig.Instance.QuickMenuRandomHoverPreview = v;
+                    try { TboxSyncRandomPreviewLiveScale(); } catch { }
+                    try
+                    {
+                        VamHookPlugin p = VamHookPlugin.singleton;
+                        if (p != null) p.QuickMenuOnRandomPreviewEnabledChanged();
+                    }
+                    catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "hover.size", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_size", "Hover preview size"),
@@ -1848,6 +2047,7 @@ namespace VPB
                 ActionEnabled = () => !_sceneAtomCacheCleanupRunning
             });
 
+            BindSettingsRowFactoryDefaults(defs);
             return defs;
         }
 
@@ -1858,13 +2058,17 @@ namespace VPB
             if (updater.HasPendingUpdate)
             {
                 string av = updater.AvailableVersion ?? "?";
-                return "Updating " + PluginVersionInfo.Version + " → " + av + "  (restart VaM)";
+                return string.Format(
+                    VPBTranslation.T("settings.updater.updating", "Updating {0} → {1}  (restart VaM)"),
+                    PluginVersionInfo.Version, av);
             }
             if (updater.Status == VpbUpdateStatus.UpToDate)
                 return updater.StatusMessage ?? VPBTranslation.T("settings.updater.up_to_date", "Up to date");
             if (updater.Status == VpbUpdateStatus.Error)
                 return updater.StatusMessage ?? VPBTranslation.T("settings.updater.error", "Update error");
-            return VPBTranslation.T("settings.updater.check", "Check for Updates (VPB " + PluginVersionInfo.Version + ")");
+            return string.Format(
+                VPBTranslation.T("settings.updater.check", "Check for Updates (VPB {0})"),
+                PluginVersionInfo.Version);
         }
 
         private InternalSettingDefinition GetInternalSettingDefinition(string rowKey)
@@ -1898,6 +2102,7 @@ namespace VPB
                 InnerPaneScaleDesktop = VPBConfig.Instance.InnerPaneScaleDesktop,
                 EnableButtonGaps = VPBConfig.Instance.EnableButtonGaps,
                 EnableGalleryElementRounding = VPBConfig.Instance.EnableGalleryElementRounding,
+                EnableGalleryButtonChromeRims = VPBConfig.Instance.EnableGalleryButtonChromeRims,
                 GalleryElementCornerRadiusFraction = VPBConfig.Instance.GalleryElementCornerRadiusFraction,
                 ShowSideButtons = VPBConfig.Instance.ShowSideButtons,
                 FollowAngle = VPBConfig.Instance.FollowAngle,
@@ -2023,6 +2228,7 @@ namespace VPB
             try { CancelPluginHotkeyCapture(false); } catch { }
             EnsureSettingsFloatBuilt();
             ShowSettingsFloat();
+            ResolveSettingsLastGroupOnOpen();
             EnsureInternalSettingsSession();
             try { SyncSettingsSideSearchInputFromFilter(); } catch { }
             RefreshInternalSettingsListRows(false);
@@ -2032,6 +2238,7 @@ namespace VPB
         /// <summary>Open gallery Settings on a specific category tab (e.g. updater).</summary>
         public void OpenSettingsGroup(string groupKey)
         {
+            _settingsGroupExplicit = true;
             SetActiveSettingsGroup(groupKey);
             try { CancelPluginHotkeyCapture(false); } catch { }
             if (!IsSettingsPanelOpen())
@@ -2144,40 +2351,50 @@ namespace VPB
             float rowH = internalSettingsListRowHeightSession;
 
             try { SyncSettingsSideSearchInputFromFilter(); } catch { }
-            RebuildSettingsFloatGroupTabs(font, s, chromeSz);
+            RebuildSettingsFloatSidebar(font, s, chromeSz);
             RebuildSettingsFloatRows(font, s, rowH, keepScroll);
         }
 
         private List<FileEntry> BuildInternalSettingsRows()
         {
             string f = (CanonicalSettingsSideSearchText() ?? "").Trim();
+            bool searching = !string.IsNullOrEmpty(f);
             var rows = new List<FileEntry>(64);
+            FillSettingsMatchCounts(f);
 
-            bool GroupAllowed(string group) =>
-                string.Equals(currentSettingsGroup, "all", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(currentSettingsGroup, group, StringComparison.OrdinalIgnoreCase);
-            bool FilterAllowed(string label) =>
-                string.IsNullOrEmpty(f) || (label ?? "").IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0;
-            void Add(InternalSettingDefinition def)
+            string lastGroup = null;
+            string lastSection = null;
+            var defs = GetInternalSettingDefinitionsCached();
+            for (int i = 0; i < defs.Count; i++)
             {
-                if (def == null) return;
-                string key = def.Key;
-                string group = def.GroupKey;
-                string label = string.Equals(key, "performance.sceneAtomCache", StringComparison.OrdinalIgnoreCase)
+                InternalSettingDefinition def = defs[i];
+                if (!SettingsDefPassesViewFilters(def, f, searching)) continue;
+
+                string group = def.GroupKey ?? "";
+                string section = SettingsSectionKey(def);
+                string label = string.Equals(def.Key, "performance.sceneAtomCache", StringComparison.OrdinalIgnoreCase)
                     ? GetSceneAtomCacheSettingsLabel()
                     : def.Label;
-                if (!GroupAllowed(group)) return;
-                if (!FilterAllowed(label)) return;
-                try
-                {
-                    if (def.RowVisible != null && !def.RowVisible()) return;
-                }
-                catch { }
-                rows.Add(new InternalSettingRowEntry(key, group, label));
-            }
 
-            var defs = GetInternalSettingDefinitionsCached();
-            for (int i = 0; i < defs.Count; i++) Add(defs[i]);
+                if (searching && !string.Equals(lastGroup, group, StringComparison.OrdinalIgnoreCase))
+                {
+                    rows.Add(MakeSettingsHeaderRow(group, group, SettingsGroupLabel(group), true));
+                    lastGroup = group;
+                    lastSection = null;
+                }
+
+                string sectionLabel = SettingsSubGroupLabel(section);
+                bool showSection = !string.IsNullOrEmpty(sectionLabel)
+                    && !string.Equals(section, group, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(lastSection, section, StringComparison.OrdinalIgnoreCase);
+                if (showSection)
+                {
+                    rows.Add(MakeSettingsHeaderRow(section, group, sectionLabel, false));
+                    lastSection = section;
+                }
+
+                rows.Add(new InternalSettingRowEntry(def.Key, group, label));
+            }
             return rows;
         }
 
@@ -2242,7 +2459,7 @@ namespace VPB
                 return true;
             }
             var row = file as InternalSettingRowEntry;
-            if (row == null) return false;
+            if (row == null || row.IsHeader) return false;
             InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);
             if (def == null) return false;
             if (def.ControlType == InternalSettingControlType.TextArea) return false;
@@ -2342,11 +2559,21 @@ namespace VPB
             return go;
         }
 
-        private void RebuildSettingsRowControls(GameObject btnGO, InternalSettingDefinition def)
+        /// <param name="settleLayout">Force the control row to lay out now. Needed when re-binding a row
+        /// that is already on screen (value changed, recycled row); wasted work on a freshly created row,
+        /// which the next normal layout pass sizes anyway.</param>
+        private void RebuildSettingsRowControls(GameObject btnGO, InternalSettingDefinition def, bool settleLayout = true)
         {
             if (btnGO == null || def == null) return;
 
-            AddTooltipPlain(btnGO, def.Tooltip ?? def.Label ?? "");
+            string rowTip = def.Tooltip ?? def.Label ?? "";
+            if (def.HasDefault)
+            {
+                string dv = FormatSettingsResetDefaultValue(def);
+                if (!string.IsNullOrEmpty(dv))
+                    rowTip = rowTip + "\n" + VPBTranslation.T("settings.row.reset.default", "Default") + ": " + dv;
+            }
+            AddTooltipPlain(btnGO, rowTip);
 
             float rowH = IsSettingsPanelOpen()
                 ? internalSettingsListRowHeightSession
@@ -2369,7 +2596,9 @@ namespace VPB
                 {
                     nameText.resizeTextForBestFit = false;
                     GalleryUiMetrics.ApplyFont(nameText, GalleryUiDesignTokens.SettingsListRowNameFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
-                    nameText.fontStyle = FontStyle.Normal;
+                    bool modified = def.HasDefault && !SettingsRowIsAtDefault(def);
+                    nameText.fontStyle = modified ? FontStyle.Bold : FontStyle.Normal;
+                    nameText.color = modified ? Color.white : GalleryUiColorTokens.TextMuted;
                 }
                 LayoutElement nameLe = nameTr != null ? nameTr.GetComponent<LayoutElement>() : null;
                 if (nameLe != null)
@@ -2392,14 +2621,16 @@ namespace VPB
             HorizontalLayoutGroup hlg = UI.AddHLG(controls, spacing: 6f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             LayoutElement cle = UI.AddLE(controls, minHeight: chipH, flexibleWidth: 1f);
 
+            try
+            {
             if (def.ControlType == InternalSettingControlType.Toggle && def.GetBool != null && def.SetBool != null)
             {
                 bool cur = def.GetBool();
-                CreateMiniButton(controls.transform, "OFF", 58f, cur ? UI.ChromePanel : UI.AccentRed, () => {
+                CreateMiniButton(controls.transform, FormatSettingsToggleLabel(false), 58f, cur ? UI.ChromePanel : UI.AccentRed, () => {
                     def.SetBool(false);
                     RefreshInternalSettingsListRows(true);
                 });
-                CreateMiniButton(controls.transform, "ON", 58f, cur ? UI.AccentGreen : UI.ChromePanel, () => {
+                CreateMiniButton(controls.transform, FormatSettingsToggleLabel(true), 58f, cur ? UI.AccentGreen : UI.ChromePanel, () => {
                     def.SetBool(true);
                     RefreshInternalSettingsListRows(true);
                 });
@@ -2409,7 +2640,7 @@ namespace VPB
             if (def.ControlType == InternalSettingControlType.Cycle && def.GetString != null && def.SetString != null)
             {
                 string cur = def.GetString() ?? "";
-                string display = (cur ?? "").ToUpperInvariant();
+                string display = FormatSettingsCycleOption(cur);
                 GameObject cycleBtn = null;
                 cycleBtn = CreateMiniButton(controls.transform, display, 150f, GalleryUiColorTokens.SurfaceMid, () => {
                     // Read current value at click time (avoid stale captured value when row reuses objects).
@@ -2420,7 +2651,7 @@ namespace VPB
                     {
                         // Update label immediately; pooled list rows can keep old text until rebind.
                         var t = cycleBtn != null ? cycleBtn.GetComponentInChildren<Text>(true) : null;
-                        if (t != null) t.text = (next ?? "").ToUpperInvariant();
+                        if (t != null) t.text = FormatSettingsCycleOption(next);
                     }
                     catch { }
                     if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
@@ -2430,8 +2661,11 @@ namespace VPB
                 try
                 {
                     // Ensure control row sizes settle immediately (prevents clipping when switching cycle values).
-                    LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
-                    LayoutRebuilder.ForceRebuildLayoutImmediate(listRowTr as RectTransform);
+                    if (settleLayout)
+                    {
+                        LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
+                        LayoutRebuilder.ForceRebuildLayoutImmediate(listRowTr as RectTransform);
+                    }
                 }
                 catch { }
                 return;
@@ -2461,8 +2695,11 @@ namespace VPB
                     });
                 try
                 {
-                    LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
-                    LayoutRebuilder.ForceRebuildLayoutImmediate(listRowTr as RectTransform);
+                    if (settleLayout)
+                    {
+                        LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
+                        LayoutRebuilder.ForceRebuildLayoutImmediate(listRowTr as RectTransform);
+                    }
                 }
                 catch { }
                 return;
@@ -2733,12 +2970,18 @@ namespace VPB
                 }
                 return;
             }
+            }
+            finally
+            {
+                if (def.HasDefault)
+                    AppendSettingsRowResetButton(controls.transform, def, uiS);
+            }
         }
 
         internal bool ConfigureInternalSettingsRowUI(GameObject btnGO, FileEntry file)
         {
             var row = file as InternalSettingRowEntry;
-            if (row == null) return false;
+            if (row == null || row.IsHeader) return false;
             InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);
             if (def == null) return false;
             RebuildSettingsRowControls(btnGO, def);
@@ -2763,8 +3006,10 @@ namespace VPB
 
         internal void ExitInternalSettingsMode(bool saveChanges)
         {
-            if (saveChanges) SaveInternalSettingsSession();
-            else CancelInternalSettingsSession();
+            PersistSettingsLastGroup();
+            settingsModifiedOnly = false;
+            // Live property sheet: Close / X / Esc keep current values. Revert is a separate footer action.
+            SaveInternalSettingsSession();
 
             if (leftActiveContent == ContentType.Settings)
                 leftActiveContent = null;
@@ -2781,6 +3026,16 @@ namespace VPB
             try { UpdateLayout(); } catch { }
             try { UpdateTabs(); } catch { }
             try { RefreshTboxConditionalActionButtons(); } catch { }
+        }
+
+        /// <summary>Restore snapshot from window-open, stay open, start a fresh revert baseline.</summary>
+        private void RevertInternalSettingsSession()
+        {
+            if (!internalSettingsSessionActive || internalSettingsBackup == null) return;
+            CancelInternalSettingsSession();
+            EnsureInternalSettingsSession();
+            if (IsSettingsPanelOpen())
+                RefreshInternalSettingsListRows(true);
         }
 
         private void CancelInternalSettingsSession()
@@ -2806,6 +3061,7 @@ namespace VPB
             VPBConfig.Instance.InnerPaneScaleDesktop = b.InnerPaneScaleDesktop;
             VPBConfig.Instance.EnableButtonGaps = b.EnableButtonGaps;
             VPBConfig.Instance.EnableGalleryElementRounding = b.EnableGalleryElementRounding;
+            VPBConfig.Instance.EnableGalleryButtonChromeRims = b.EnableGalleryButtonChromeRims;
             VPBConfig.Instance.GalleryElementCornerRadiusFraction = VPBConfig.ClampGalleryElementCornerRadiusFraction(b.GalleryElementCornerRadiusFraction);
             VPBConfig.Instance.ShowSideButtons = b.ShowSideButtons;
             VPBConfig.Instance.FollowAngle = b.FollowAngle;
@@ -2906,6 +3162,7 @@ namespace VPB
             }
             ApplyGalleryTransparencyToAllPanels();
             try { UI.ApplyGalleryElementCornerRadiusGlobally(); } catch { }
+            try { UI.ApplyGalleryButtonChromeRimsGlobally(); } catch { }
             VPBConfig.Instance.TriggerChange();
             PluginSettingsEndSession();
             internalSettingsSessionActive = false;

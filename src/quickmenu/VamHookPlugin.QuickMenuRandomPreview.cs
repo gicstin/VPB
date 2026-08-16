@@ -6,9 +6,12 @@ using MVR.FileManagement;
 namespace VPB
 {
     /// <summary>
-    /// Hover preview for random buttons (quick-menu grid + VR wrist watch): pointing at a random button
-    /// draws the item it would launch and shows its thumbnail; clicking launches exactly that item; leaving
-    /// and returning draws a new one.
+    /// Hover preview for random buttons (desktop quick-menu grid + VR wrist watch + gallery toolbox):
+    /// pointing at a random button draws the item it would launch and shows its thumbnail; clicking
+    /// launches exactly that item; leaving and returning draws a new one.
+    ///
+    /// Desktop quick-actions card sits above the tooltip bar (grid is bottom-left HUD chrome).
+    /// Toolbox Random greys the file grid and shows a centered card. Empty pool still shows a card.
     ///
     /// Cost control: the current-view pool is sampled by rejection (no copy). A category the gallery is not
     /// showing needs one navigate+refresh, so that runs at most once per category per TTL, only after a
@@ -33,9 +36,8 @@ namespace VPB
         private const float QmPreviewPad = 6f;
         private const float QmPreviewLabelH = 18f;
         private const float QmPreviewSubLabelH = 15f;
-        // Fixed px, same as the watch bezel / tablet chrome. A fraction of a panel this big rounds
-        // the backdrop into a lozenge.
-        private const float QmPreviewCornerPx = 8f;
+        // Fixed px at HUD local scale 1. A fraction of a panel this big rounds the backdrop into a lozenge.
+        private const float QmPreviewCornerPx = 6f;
 
         private static readonly Color QmPreviewBackdrop = new Color(0.06f, 0.06f, 0.07f, 0.94f);
         private static readonly Color QmPreviewLabelColor = new Color(0.78f, 0.78f, 0.82f, 0.95f);
@@ -65,12 +67,14 @@ namespace VPB
 
         private GameObject m_QmPreviewDeskGo;
         private RectTransform m_QmPreviewDeskRt;
+        private Image m_QmPreviewDeskBg;
         private RawImage m_QmPreviewDeskImg;
         private Text m_QmPreviewDeskLabel;
         private Text m_QmPreviewDeskSubLabel;
 
         private GameObject m_QmPreviewWatchGo;
         private RectTransform m_QmPreviewWatchRt;
+        private Image m_QmPreviewWatchBg;
         private RawImage m_QmPreviewWatchImg;
         private Text m_QmPreviewWatchLabel;
         private Text m_QmPreviewWatchSubLabel;
@@ -83,6 +87,12 @@ namespace VPB
                 return c != null && c.QuickMenuRandomHoverPreview;
             }
             catch { return false; }
+        }
+
+        internal void QuickMenuOnRandomPreviewEnabledChanged()
+        {
+            if (!QuickMenuRandomPreviewEnabled())
+                QuickMenuEndRandomPreview();
         }
 
         /// <summary>Random actions and the gallery category their pool comes from (null = current view).</summary>
@@ -207,6 +217,13 @@ namespace VPB
         /// <summary>Per-frame tick. Returns immediately unless a deferred preview draw is owed.</summary>
         private void QuickMenuAdvanceRandomPreview()
         {
+            if (!QuickMenuRandomPreviewEnabled())
+            {
+                if (m_QmPreviewAction != QuickMenuAssignableAction.None
+                    || m_QmPreviewWaiting || m_QmPreviewPick != null)
+                    QuickMenuEndRandomPreview();
+                return;
+            }
             if (m_QmPreviewBuilding)
             {
                 // A panel torn down mid-build would never call back and would wedge every later hover.
@@ -365,7 +382,7 @@ namespace VPB
         // ---------------------------------------------------------------- widgets
 
         private void QuickMenuBuildRandomPreviewWidget(Transform parent, string name, float thumb, int font,
-            out GameObject go, out RectTransform rt, out RawImage img, out Text label, out Text subLabel)
+            out GameObject go, out RectTransform rt, out Image bg, out RawImage img, out Text label, out Text subLabel)
         {
             float captionH = QmPreviewLabelH + QmPreviewSubLabelH;
             float w = thumb + QmPreviewPad * 2f;
@@ -377,7 +394,7 @@ namespace VPB
             rt.anchorMin = new Vector2(0.5f, 0.5f);
             rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(w, h);
-            Image bg = AddQuickMenuRoundedBg(go, QmPreviewBackdrop, false);
+            bg = AddQuickMenuRoundedBg(go, QmPreviewBackdrop, false);
             QuickMenuApplyPreviewCornerRadius(bg, UI.ResolveGalleryElementCornerRadiusFraction());
 
             GameObject thumbGo = new GameObject("Thumb");
@@ -417,6 +434,7 @@ namespace VPB
         {
             RoundedRect rr = img as RoundedRect;
             if (rr == null) return;
+            rr.excludeFromGlobalRadiusSync = true;
             rr.cornerRadiusFraction = 0f;
             rr.cornerRadius = frac <= 0f ? 0f : QmPreviewCornerPx;
         }
@@ -426,10 +444,8 @@ namespace VPB
             if (m_QmPreviewDeskGo != null || m_QuickMenuCanvas == null) return;
             QuickMenuBuildRandomPreviewWidget(m_QuickMenuCanvas.transform, "VPB_QM_RandomPreview",
                 QmPreviewDeskThumb, QmPreviewDeskFont,
-                out m_QmPreviewDeskGo, out m_QmPreviewDeskRt, out m_QmPreviewDeskImg,
+                out m_QmPreviewDeskGo, out m_QmPreviewDeskRt, out m_QmPreviewDeskBg, out m_QmPreviewDeskImg,
                 out m_QmPreviewDeskLabel, out m_QmPreviewDeskSubLabel);
-            // Tooltip bar grows upward from the grid; the preview stacks on top of it.
-            if (m_QmPreviewDeskRt != null) m_QmPreviewDeskRt.pivot = new Vector2(0.5f, 0f);
             QuickMenuPositionDeskPreview();
         }
 
@@ -438,15 +454,20 @@ namespace VPB
             if (root == null) return;
             QuickMenuBuildRandomPreviewWidget(root.transform, "RandomPreview",
                 QmPreviewWatchThumb, QmPreviewWatchFont,
-                out m_QmPreviewWatchGo, out m_QmPreviewWatchRt, out m_QmPreviewWatchImg,
+                out m_QmPreviewWatchGo, out m_QmPreviewWatchRt, out m_QmPreviewWatchBg, out m_QmPreviewWatchImg,
                 out m_QmPreviewWatchLabel, out m_QmPreviewWatchSubLabel);
             // Sits under the tip panel, which itself hangs under the bezel.
             if (m_QmPreviewWatchRt != null) m_QmPreviewWatchRt.pivot = new Vector2(0.5f, 1f);
         }
 
+        /// <summary>
+        /// Desktop quick-actions grid is bottom-left HUD chrome. Park the card above the tooltip
+        /// bar (same X), growing upward — not under the buttons.
+        /// </summary>
         private void QuickMenuPositionDeskPreview()
         {
             if (m_QmPreviewDeskRt == null || m_QmTooltipRT == null) return;
+            m_QmPreviewDeskRt.pivot = new Vector2(0.5f, 0f);
             float tipTop = m_QmTooltipRT.anchoredPosition.y + m_QmTooltipRT.sizeDelta.y;
             m_QmPreviewDeskRt.anchoredPosition = new Vector2(m_QmTooltipRT.anchoredPosition.x, tipTop + QmPreviewDeskGap);
         }
@@ -455,6 +476,7 @@ namespace VPB
         {
             m_QmPreviewWatchGo = null;
             m_QmPreviewWatchRt = null;
+            m_QmPreviewWatchBg = null;
             m_QmPreviewWatchImg = null;
             m_QmPreviewWatchLabel = null;
             m_QmPreviewWatchSubLabel = null;
@@ -463,16 +485,14 @@ namespace VPB
 
         internal void QuickMenuSyncRandomPreviewCornerRadius(float frac)
         {
-            RoundedRect rr = (m_QmPreviewDeskGo != null) ? m_QmPreviewDeskGo.GetComponent<RoundedRect>() : null;
-            QuickMenuApplyPreviewCornerRadius(rr, frac);
-            rr = (m_QmPreviewWatchGo != null) ? m_QmPreviewWatchGo.GetComponent<RoundedRect>() : null;
-            QuickMenuApplyPreviewCornerRadius(rr, frac);
+            QuickMenuApplyPreviewCornerRadius(m_QmPreviewDeskBg, frac);
+            QuickMenuApplyPreviewCornerRadius(m_QmPreviewWatchBg, frac);
         }
 
         private void QuickMenuApplyRandomPreviewVisual()
         {
-            bool show = m_QmPreviewAction != QuickMenuAssignableAction.None
-                        && (m_QmPreviewPick != null || m_QmPreviewWaiting);
+            // Show for any live random-button hover — empty pool must still evaluate (Norman gulf).
+            bool show = m_QmPreviewAction != QuickMenuAssignableAction.None;
 
             bool showDesk = show && !m_QmPreviewOnWatch;
             bool showWatch = show && m_QmPreviewOnWatch;
@@ -490,14 +510,26 @@ namespace VPB
             if (go == null) return;
 
             if (showDesk) QuickMenuPositionDeskPreview();
-            if (!go.activeSelf) go.SetActive(true);
+            if (!go.activeSelf)
+            {
+                go.SetActive(true);
+                if (showDesk) go.transform.SetAsLastSibling();
+            }
 
             var panel = QuickMenuGetTargetPanel();
             if (m_QmPreviewPick == null)
             {
                 if (panel != null && img != null) panel.QuickMenu_ClearPreviewThumbnail(img);
-                QuickMenuSetPreviewLabel(label, VPBTranslation.T("hook.qmpreview.picking", "Picking…"));
-                QuickMenuSetPreviewLabel(subLabel, "");
+                if (m_QmPreviewWaiting)
+                {
+                    QuickMenuSetPreviewLabel(label, VPBTranslation.T("hook.qmpreview.picking", "Picking…"));
+                    QuickMenuSetPreviewLabel(subLabel, "");
+                }
+                else
+                {
+                    QuickMenuSetPreviewLabel(label, VPBTranslation.T("hook.qmpreview.empty", "No items"));
+                    QuickMenuSetPreviewLabel(subLabel, VPBTranslation.T("hook.qmpreview.empty_sub", "Nothing in this pool"));
+                }
                 return;
             }
 

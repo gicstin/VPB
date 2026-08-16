@@ -211,7 +211,7 @@ namespace VPB
                 titleBarGO.GetComponent<HorizontalLayoutGroup>(), grip.gameObject, 1f);
 
             UI.CreateFloatTitleWindowIcon(
-                titleBarGO, "vpb_icons/filter.png", GalleryUiDesignTokens.FloatTitleWindowIconSizeRef);
+                titleBarGO, "filter-cog", GalleryUiDesignTokens.FloatTitleWindowIconSizeRef);
 
             titleBarLabel = UI.CreateLabel(
                 titleBarGO,
@@ -224,7 +224,7 @@ namespace VPB
 
             collapseBtnGO = UI.CreateUIButton(titleBarGO, chromeSz, chromeSz, " ", 16, 0, 0, AnchorPresets.middleCenter, ToggleFloatCollapsed);
             collapseBtnGO.name = "CollapseBtn";
-            StyleChromeIconBtn(collapseBtnGO, chromeSz, "vpb_icons/chevron_up.png", GalleryUiColorTokens.ChromeIconWell);
+            StyleChromeIconBtn(collapseBtnGO, chromeSz, "chevron-up", GalleryUiColorTokens.ChromeIconWell);
             Transform collapseIconTr = collapseBtnGO.transform.Find("Icon");
             collapseBtnIcon = collapseIconTr != null ? collapseIconTr.GetComponent<Image>() : null;
             var collapseHover = collapseBtnGO.AddComponent<UIHoverDelegate>();
@@ -242,7 +242,7 @@ namespace VPB
 
             closeBtnGO = UI.CreateUIButton(titleBarGO, chromeSz, chromeSz, " ", 16, 0, 0, AnchorPresets.middleCenter, HideFloatKeepDetach);
             closeBtnGO.name = "TitleClose";
-            StyleChromeIconBtn(closeBtnGO, chromeSz, "vpb_icons/x.png", GalleryUiColorTokens.ChromeIconWell);
+            StyleChromeIconBtn(closeBtnGO, chromeSz, "x", GalleryUiColorTokens.ChromeIconWell);
             var closeHover = closeBtnGO.AddComponent<UIHoverDelegate>();
             closeHover.OnHoverChange += (enter) =>
             {
@@ -347,7 +347,7 @@ namespace VPB
                     if (clearBg != null) clearBg.color = new Color(0f, 0f, 0f, 0f);
                     try
                     {
-                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
+                        Sprite xSpr = UI.LoadIconSprite("x", GalleryUiColorTokens.SearchClearIconTint);
                         if (xSpr != null)
                             UI.AddIconToButton(clearGo, xSpr, 6f, new Color(0f, 0f, 0f, 0f));
                     }
@@ -433,7 +433,7 @@ namespace VPB
                 sortBtnGO.name = "SortBtn";
                 UI.AddLE(sortBtnGO, preferredWidth: sortSq, preferredHeight: sortSq, flexibleWidth: 0f);
                 Color sortBackdrop = GalleryUiColorTokens.ActiveUtility;
-                Sprite sortSpr = UI.LoadIconSprite("vpb_icons/sort_name_asc.png", UI.BarIconGlyphTint);
+                Sprite sortSpr = UI.LoadIconSprite("sort-ascending-letters", UI.BarIconGlyphTint);
                 if (sortSpr != null)
                     UI.AddIconToButton(sortBtnGO, sortSpr, 4f, sortBackdrop);
                 Transform iconTr = sortBtnGO.transform.Find("Icon");
@@ -536,12 +536,12 @@ namespace VPB
 
             Color footerIconBg = GalleryUiColorTokens.ChromeIconWell;
             floatDockBtnGO = UI.CreateFloatChromeIconButton(
-                footerGO.transform, chromeSz, "vpb_icons/panel_bottom.png", footerIconBg, CloseAndDock);
+                footerGO.transform, chromeSz, "layout-bottombar", footerIconBg, CloseAndDock);
             if (floatDockBtnGO != null)
             {
                 floatDockBtnGO.name = "FloatDock";
                 if (floatDockBtnGO.transform.Find("Icon") == null)
-                    StyleChromeIconBtn(floatDockBtnGO, chromeSz, "vpb_icons/chevron_down.png", footerIconBg);
+                    StyleChromeIconBtn(floatDockBtnGO, chromeSz, "chevron-down", footerIconBg);
             }
             var dockHover = floatDockBtnGO.AddComponent<UIHoverDelegate>();
             dockHover.OnHoverChange += (enter) =>
@@ -554,7 +554,7 @@ namespace VPB
             };
 
             floatUndoBtnGO = UI.CreateFloatChromeIconButton(
-                footerGO.transform, chromeSz, "vpb_icons/undo.png", footerIconBg, () =>
+                footerGO.transform, chromeSz, "arrow-back-up", footerIconBg, () =>
                 {
                     if (panel != null) panel.QuickMenu_Undo();
                 });
@@ -568,7 +568,7 @@ namespace VPB
             };
 
             floatRedoBtnGO = UI.CreateFloatChromeIconButton(
-                footerGO.transform, chromeSz, "vpb_icons/redo.png", footerIconBg, () =>
+                footerGO.transform, chromeSz, "arrow-forward-up", footerIconBg, () =>
                 {
                     if (panel != null) panel.QuickMenu_Redo();
                 });
@@ -583,7 +583,7 @@ namespace VPB
 
             // Scene Remove Item Mode (not preset delete) — gallery_remove glyph to avoid trash collision.
             floatRemoveModeBtnGO = UI.CreateFloatChromeIconButton(
-                footerGO.transform, chromeSz, "vpb_icons/gallery_remove.png",
+                footerGO.transform, chromeSz, "backspace",
                 RemoveModeRailBackdrop, () =>
                 {
                     if (panel != null) panel.ToggleRemoveMode(false, false);
@@ -592,7 +592,7 @@ namespace VPB
             {
                 floatRemoveModeBtnGO.name = "FloatRemoveMode";
                 if (floatRemoveModeBtnGO.transform.Find("Icon") == null)
-                    StyleChromeIconBtn(floatRemoveModeBtnGO, chromeSz, "vpb_icons/list_remove.png", RemoveModeRailBackdrop);
+                    StyleChromeIconBtn(floatRemoveModeBtnGO, chromeSz, "playlist-x", RemoveModeRailBackdrop);
                 Transform rmIconTr = floatRemoveModeBtnGO.transform.Find("Icon");
                 floatRemoveModeBtnIconImage = rmIconTr != null ? rmIconTr.GetComponent<Image>() : null;
                 if (floatRemoveModeBtnGO.GetComponent<UIHoverBorder>() == null)
@@ -613,7 +613,7 @@ namespace VPB
             try { SyncRemoveModeButton(panel != null && panel.IsRemoveModeActive); } catch { }
 
             floatPresetUndoBtnGO = UI.CreateFloatChromeIconButton(
-                footerGO.transform, chromeSz, "vpb_icons/undo.png",
+                footerGO.transform, chromeSz, "arrow-back-up",
                 new Color(0.16f, 0.36f, 0.28f, 1f), TryUndoSoftDelete);
             if (floatPresetUndoBtnGO != null) floatPresetUndoBtnGO.name = "FloatPresetUndo";
             var presetUndoHover = floatPresetUndoBtnGO.AddComponent<UIHoverDelegate>();
@@ -645,7 +645,7 @@ namespace VPB
             Image rhImg = resizeHandleGO.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
             UI.EnsureFloatChromeHoverBorder(resizeHandleGO);
-            StyleChromeIconBtn(resizeHandleGO, rh, "vpb_icons/chevrons_down_right.png", UI.IconButtonBackdrop);
+            StyleChromeIconBtn(resizeHandleGO, rh, "chevrons-down-right", UI.IconButtonBackdrop);
             var resizer = resizeHandleGO.AddComponent<UIFloatPanelResize>();
             resizer.Target = containerRT;
             resizer.GetMinSize = GetFloatMinSizeScaled;
@@ -711,25 +711,24 @@ namespace VPB
         private void SyncSortButtonVisual()
         {
             if (sortBtnGO == null) return;
-            string path = "vpb_icons/sort_name_asc.png";
+            string path = "sort-ascending-letters";
             switch (listSortMode)
             {
                 case ListSortMode.NameDesc:
-                    path = "vpb_icons/sort_name_desc.png";
+                    path = "sort-descending-letters";
                     break;
                 case ListSortMode.PinnedFirst:
-                    path = "vpb_icons/pin_on.png";
+                    path = "pin";
                     break;
                 case ListSortMode.Manual:
-                    path = "vpb_icons/sort_number_asc.png";
+                    path = "sort-ascending-numbers";
                     break;
             }
             Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
             if (spr == null) return;
             if (sortBtnIcon != null)
             {
-                sortBtnIcon.sprite = spr;
-                sortBtnIcon.color = Color.white;
+                UI.SetIconSprite(sortBtnIcon, spr);
             }
             else
             {
@@ -1822,16 +1821,16 @@ namespace VPB
             float sq = GalleryUiDesignTokens.ButtonSizeRef;
             float padR = 4f;
             float gap = 4f;
-            Sprite sprRandom = UI.LoadIconSprite("vpb_icons/random.png", Color.white);
-            Sprite sprMore = UI.LoadIconSprite("vpb_icons/edit.png", Color.white)
-                ?? UI.LoadIconSprite("vpb_icons/clipboard_list.png", Color.white);
-            Sprite sprPinOn = UI.LoadIconSprite("vpb_icons/pin_on.png", Color.white);
-            Sprite sprPinOff = UI.LoadIconSprite("vpb_icons/pin_off.png", Color.white);
-            Sprite sprRename = UI.LoadIconSprite("vpb_icons/rename.png", Color.white);
-            Sprite sprDelete = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
-            Sprite sprCancel = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
-            Sprite sprConfirm = UI.LoadIconSprite("vpb_icons/clipboard_check.png", Color.white)
-                ?? UI.LoadIconSprite("vpb_icons/load.png", Color.white);
+            Sprite sprRandom = UI.LoadIconSprite("dice-3", Color.white);
+            Sprite sprMore = UI.LoadIconSprite("edit", Color.white)
+                ?? UI.LoadIconSprite("clipboard-list", Color.white);
+            Sprite sprPinOn = UI.LoadIconSprite("pin", Color.white);
+            Sprite sprPinOff = UI.LoadIconSprite("pinned-off", Color.white);
+            Sprite sprRename = UI.LoadIconSprite("pencil-check", Color.white);
+            Sprite sprDelete = UI.LoadIconSprite("trash", Color.white);
+            Sprite sprCancel = UI.LoadIconSprite("x", Color.white);
+            Sprite sprConfirm = UI.LoadIconSprite("clipboard-check", Color.white)
+                ?? UI.LoadIconSprite("player-play", Color.white);
 
             void setupSquare(GameObject go, Sprite icon, Color iconTint, float x, Color backdrop)
             {
@@ -2104,7 +2103,7 @@ namespace VPB
             }
             else
             {
-                // Browse: dice + more (edit.png — solid hit target like dice).
+                // Browse: dice + more (edit — solid hit target like dice).
                 GameObject randomBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 GameObject moreBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 if (randomBtn != null) randomBtn.name = "RandomBtn";
@@ -2799,13 +2798,12 @@ namespace VPB
         private void SyncCollapseButtonVisual()
         {
             if (collapseBtnGO == null) return;
-            string path = floatCollapsed ? "vpb_icons/chevron_down.png" : "vpb_icons/chevron_up.png";
+            string path = floatCollapsed ? "chevron-down" : "chevron-up";
             Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
             if (spr == null) return;
             if (collapseBtnIcon != null)
             {
-                collapseBtnIcon.sprite = spr;
-                collapseBtnIcon.color = Color.white;
+                UI.SetIconSprite(collapseBtnIcon, spr);
             }
             else
             {

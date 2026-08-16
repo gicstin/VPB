@@ -1170,6 +1170,8 @@ namespace VPB
                 moveToPath += "(clone)";
             }
             File.Move(vpath, moveToPath);
+            // The cached path inventory would otherwise keep re-registering this path every launch.
+            try { VpbLocalDatabase.NoteMissingVarPath(vpath); } catch { }
         }
 
         public static void UnregisterPackage(VarPackage vp)
@@ -2410,6 +2412,8 @@ namespace VPB
 			{
 				try { VpbProgressService.EndDeepScan(); } catch { }
 				System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 0);
+				// Dead paths the scan just proved gone: prune before the index gate reads coverage.
+				try { VpbLocalDatabase.FlushMissingVarPathPrune(); } catch { }
 				// RebuildCore may have coalesced while bulk scan held caches incomplete.
 				try { VpbLocalDatabase.FlushPendingGalleryIndexAfterDeepScan(); } catch { }
 				// cslist-ref SQL skipped during bulk (no 8-worker SQLite storm). Single-thread fill.

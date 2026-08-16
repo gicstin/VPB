@@ -32,17 +32,10 @@ namespace VPB
                 return;
 
             string title = titleText != null ? titleText.text : "";
-            if (!CategoryNeedsSplitView(title))
+            if (!CategoryHasFacetChildren(title))
                 return;
 
-            GameObject subScroll = isLeft ? leftSubTabScrollGO : rightSubTabScrollGO;
-            GameObject subContainer = isLeft ? leftSubTabContainerGO : rightSubTabContainerGO;
-            if (subScroll == null || subContainer == null)
-                return;
-
-            ContentType subType = InferCategorySubPaneTypeFromTitle(title);
-            List<GameObject> activeButtons = isLeft ? leftSubActiveTabButtons : rightSubActiveTabButtons;
-            UpdateTabs(subType, subContainer, activeButtons, isLeft);
+            FillCategoryAccordion(isLeft);
         }
 
         private void TeardownCategoryCreatorDualBufferOneSide(bool isLeft)
@@ -57,6 +50,8 @@ namespace VPB
                 foreach (var b in catList) ReturnTabButton(b);
                 catList.Clear();
             }
+            ClearCategoryAccordionButtons(isLeft);
+            ClearCategoryAccordionAnchor(isLeft);
             if (crList != null)
             {
                 foreach (var b in crList) ReturnTabButton(b);
@@ -299,6 +294,7 @@ namespace VPB
             SyncRoundedFractionOnTabButtonPool(frac);
             try { ApplyCategoryQuickChromeLayout(ChromeScale); } catch { }
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+            try { TboxSyncRandomPreviewLiveScale(); } catch { }
         }
 
         private static void ConfigureSideTabRowHoverBorder(GameObject btnGO)
@@ -406,6 +402,7 @@ namespace VPB
 
             Image img = btnGO.GetComponent<Image>();
             if (img != null) img.color = btnColor;
+            UI.SetControlSelectedRim(btnGO, isActive);
 
             float s = ChromeScale;
             Text txt = null;
@@ -715,7 +712,7 @@ namespace VPB
             {
                 up = UI.CreateUIButton(sb.gameObject, 40, 40, "▲", 22, 0, 0, AnchorPresets.middleCenter, () => ScrollUserTagPanelStep(isLeft, 1f));
                 up.name = isLeft ? "LeftUserTagScrollStepUp" : "RightUserTagScrollStepUp";
-                { var s = UI.LoadIconSprite("vpb_icons/chevron_up.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(up, s); }
+                { var s = UI.LoadIconSprite("chevron-up", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(up, s); }
                 AddHoverDelegate(up);
                 AddTooltip(up, "gallery.tooltip.usertags_scroll_up", "Scroll tags up");
                 if (isLeft) leftUserTagScrollStepUpBtn = up; else rightUserTagScrollStepUpBtn = up;
@@ -724,7 +721,7 @@ namespace VPB
             {
                 down = UI.CreateUIButton(sb.gameObject, 40, 40, "▼", 22, 0, 0, AnchorPresets.middleCenter, () => ScrollUserTagPanelStep(isLeft, -1f));
                 down.name = isLeft ? "LeftUserTagScrollStepDown" : "RightUserTagScrollStepDown";
-                { var s = UI.LoadIconSprite("vpb_icons/chevron_down.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(down, s); }
+                { var s = UI.LoadIconSprite("chevron-down", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(down, s); }
                 AddHoverDelegate(down);
                 AddTooltip(down, "gallery.tooltip.usertags_scroll_down", "Scroll tags down");
                 if (isLeft) leftUserTagScrollStepDownBtn = down; else rightUserTagScrollStepDownBtn = down;
@@ -1161,7 +1158,7 @@ namespace VPB
 
             if (contentType == ContentType.Category)
             {
-                BuildCategoryTabs(container, trackedButtons);
+                BuildCategoryTabs(container, trackedButtons, isLeft);
             }
             else if (contentType == ContentType.Creator)
             {
@@ -1468,6 +1465,7 @@ namespace VPB
             
             Image img = btnGO.GetComponent<Image>();
             if (img != null) img.color = color;
+            UI.SetControlSelectedRim(btnGO, isActive);
 
             float s = ChromeScale;
             float insetL = Mathf.Max(0f, labelInsetLeft);
@@ -1484,6 +1482,12 @@ namespace VPB
                 if (anchor == TextAnchor.MiddleCenter)
                     anchor = TextAnchor.MiddleLeft;
                 ApplyTabLeftIcon(btnGO, leftIcon, iconLeft, iconSize, leftIconBackdrop);
+            }
+            if (_sideTabAccordionChildInsetPx > 0f)
+            {
+                insetL += _sideTabAccordionChildInsetPx;
+                if (anchor == TextAnchor.MiddleCenter)
+                    anchor = TextAnchor.MiddleLeft;
             }
 
             Text txt = btnGO.GetComponentInChildren<Text>();
@@ -1604,8 +1608,7 @@ namespace VPB
             GameObject glyphGO = new GameObject("Glyph");
             glyphGO.transform.SetParent(rootGO.transform, false);
             Image img = glyphGO.AddComponent<Image>();
-            img.sprite = icon;
-            img.color = Color.white;
+            UI.SetIconSprite(img, icon);
             img.preserveAspect = true;
             img.raycastTarget = false;
             RectTransform rt = glyphGO.GetComponent<RectTransform>();
@@ -1624,9 +1627,9 @@ namespace VPB
             RoundedRect bg = inputGO.AddComponent<RoundedRect>();
             bg.color = UI.InputFieldBg;
             bg.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
-            
-            // Add Hover Border
-            inputGO.AddComponent<UIHoverBorder>();
+
+            UIHoverBorder fieldHb = inputGO.AddComponent<UIHoverBorder>();
+            try { UI.EnableChromeIdleRim(fieldHb); } catch { }
             AddHoverDelegate(inputGO);
 
             InputField input = inputGO.AddComponent<InputField>();
@@ -1645,13 +1648,13 @@ namespace VPB
 
             // Search icon (left side of input)
             {
-                var s = UI.LoadIconSprite("vpb_icons/search.png", new Color(0.5f, 0.5f, 0.5f, 1f));
+                var s = UI.LoadIconSprite("search", new Color(0.5f, 0.5f, 0.5f, 1f));
                 if (s != null)
                 {
                     GameObject iconGO = new GameObject("SearchIcon");
                     iconGO.transform.SetParent(inputGO.transform, false);
                     Image iconImg = UI.AddImage(iconGO, new Color(0.5f, 0.5f, 0.5f, 1f));
-                    iconImg.sprite = s;
+                    UI.SetIconSprite(iconImg, s);
                     RectTransform iconRT = iconGO.GetComponent<RectTransform>();
                     iconRT.anchorMin = new Vector2(0, 0.5f);
                     iconRT.anchorMax = new Vector2(0, 0.5f);
@@ -1683,30 +1686,44 @@ namespace VPB
             input.placeholder = placeholderText;
             input.onValueChanged.AddListener(onValueChanged);
             
-            // Clear button — flush right, full field height so hover rim meets search border.
+            // Clear — flush right, full field height so hover rim meets search border.
+            // Hidden when empty (HIG / own floats). Right inset stays reserved so text does not jump.
             GameObject clearBtn = UI.CreateUIButton(inputGO, GalleryUiDesignTokens.SearchClearBtnSizeRef, GalleryUiDesignTokens.SearchFieldHeightRef, "X", 24, 0, 0, AnchorPresets.middleRight, () => {
                 input.text = "";
                 input.ActivateInputField();
                 input.MoveTextEnd(false);
                 onClear?.Invoke();
             });
-            RectTransform clearRT = clearBtn.GetComponent<RectTransform>();
-            clearRT.anchorMin = new Vector2(1f, 0f);
-            clearRT.anchorMax = new Vector2(1f, 1f);
-            clearRT.pivot = new Vector2(1f, 0.5f);
-            clearRT.anchoredPosition = Vector2.zero;
-            clearRT.sizeDelta = new Vector2(GalleryUiDesignTokens.SearchClearBtnSizeRef, 0f);
-            clearBtn.GetComponent<Image>().color = new Color(0,0,0,0); // Transparent bg
-            { var s = UI.LoadIconSprite("vpb_icons/backspace.png", new Color(0.6f, 0.6f, 0.6f)); if (s != null) UI.AddIconToButton(clearBtn, s, 6f, new Color(0, 0, 0, 0)); }
+            if (clearBtn != null)
+            {
+                clearBtn.name = "FilterClear";
+                RectTransform clearRT = clearBtn.GetComponent<RectTransform>();
+                clearRT.anchorMin = new Vector2(1f, 0f);
+                clearRT.anchorMax = new Vector2(1f, 1f);
+                clearRT.pivot = new Vector2(1f, 0.5f);
+                clearRT.anchoredPosition = Vector2.zero;
+                clearRT.sizeDelta = new Vector2(GalleryUiDesignTokens.SearchClearBtnSizeRef, 0f);
+                Image clearBg = clearBtn.GetComponent<Image>();
+                if (clearBg != null) clearBg.color = new Color(0, 0, 0, 0);
+                try
+                {
+                    Sprite xSpr = UI.LoadIconSprite("x", GalleryUiColorTokens.SearchClearIconTint);
+                    if (xSpr != null)
+                        UI.AddIconToButton(clearBtn, xSpr, 6f, new Color(0, 0, 0, 0));
+                }
+                catch { }
 
-            // Border-only hover (avoid text color fill); inward so rim stays inside search field edge.
-            var clearHoverBorder = clearBtn.AddComponent<UIHoverBorder>();
-            clearHoverBorder.hoverColor = new Color(1f, 0.2f, 0.2f, 1f);
-            clearHoverBorder.borderSize = 2f;
-            clearHoverBorder.inward = true;
+                var clearHoverBorder = clearBtn.AddComponent<UIHoverBorder>();
+                clearHoverBorder.hoverColor = new Color(1f, 0.2f, 0.2f, 1f);
+                clearHoverBorder.borderSize = 2f;
+                clearHoverBorder.inward = true;
+
+                input.onValueChanged.AddListener(val => SyncSearchInputClearVisible(clearBtn, val));
+                SyncSearchInputClearVisible(clearBtn, input.text);
+            }
 
             // ESC: default clears field; title search passes onEscape to blur without wiping chips.
-            Button clearBtnComponent = clearBtn.GetComponent<Button>();
+            Button clearBtnComponent = clearBtn != null ? clearBtn.GetComponent<Button>() : null;
             inputGO.AddComponent<SearchInputESCHandler>().Initialize(input, clearBtnComponent, onEscape);
             // Standard editor shortcut: Ctrl+Backspace deletes previous word
             inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
@@ -1721,6 +1738,14 @@ namespace VPB
             catch { }
 
             return input;
+        }
+
+        private static void SyncSearchInputClearVisible(GameObject clearGo, string text)
+        {
+            if (clearGo == null) return;
+            bool show = !string.IsNullOrEmpty(text);
+            if (clearGo.activeSelf != show)
+                clearGo.SetActive(show);
         }
 
         /// <summary>

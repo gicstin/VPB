@@ -161,7 +161,7 @@ namespace VPB
         private void RefreshCreatorModeChrome()
         {
             // Glyph tint only (white / active rim) — never paint outline with backdrop color
-            // (that hid creator_mode.png line art against blue fill). Backdrop stays on button Image.
+            // (that hid creator_mode line art against blue fill). Backdrop stays on button Image.
             Color glyph = creatorModeActive ? CreatorModeOutlineActive : CreatorModeOutlineIdle;
             try { ApplyCreatorModeRailHoverSelected(leftCreatorModeSideBtn, creatorModeActive, glyph); } catch { }
             try { ApplyCreatorModeRailHoverSelected(rightCreatorModeSideBtn, creatorModeActive, glyph); } catch { }
@@ -204,7 +204,7 @@ namespace VPB
             {
                 try
                 {
-                    tboxCreatorModeBtnImage.color = creatorModeActive ? UI.AccentBlue : UI.ChromeDark;
+                    tboxCreatorModeBtnImage.color = creatorModeActive ? UI.AccentBlue : GalleryUiColorTokens.ChromeIconWell;
                 }
                 catch { }
             }

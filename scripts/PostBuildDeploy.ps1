@@ -137,12 +137,37 @@ if (Test-Path -LiteralPath $turboSrc) {
     }
 }
 
-$assetDirs = @('vpb_translations', 'vpb_fonts', 'vpb_icons', 'vpb_themes', 'vpb_help')
+$assetDirs = @('vpb_translations', 'vpb_fonts', 'vpb_themes', 'vpb_help')
 foreach ($name in $assetDirs) {
     if (-not $vamPathOk) { break }
     $srcDir = Join-Path $patchPlugins $name
     $dstDir = Join-Path $vamPlugins $name
     Copy-DirRecursive $srcDir $dstDir
+}
+
+# Icons ship as a single packed atlas plus the licence notice it obliges us to carry.
+$assetFiles = @('vpb_icons.pack', 'VPB_THIRD_PARTY_NOTICES.txt')
+foreach ($name in $assetFiles) {
+    if (-not $vamPathOk) { break }
+    $srcFile = Join-Path $patchPlugins $name
+    if (Test-Path -LiteralPath $srcFile) {
+        [void](Copy-FileWithRetry $srcFile $vamPlugins)
+    }
+}
+
+# A pre-atlas install leaves 182 loose PNGs behind. The atlas takes precedence over
+# them at runtime, so they are dead weight rather than a hazard - but clear them out.
+# Deliberate glyph overrides belong in vpb_icons_override/, which is never touched.
+if ($vamPathOk) {
+    $staleIcons = Join-Path $vamPlugins 'vpb_icons'
+    if (Test-Path -LiteralPath $staleIcons -PathType Container) {
+        try {
+            Remove-Item -LiteralPath $staleIcons -Recurse -Force -Confirm:$false
+            Write-Host "[PostBuildDeploy] Removed stale loose icon directory: $staleIcons"
+        } catch {
+            Emit-Warning $staleIcons 'PBD008' ("Could not remove stale icon directory: " + $_.Exception.Message)
+        }
+    }
 }
 
 if ($script:WarningCount -gt 0) {

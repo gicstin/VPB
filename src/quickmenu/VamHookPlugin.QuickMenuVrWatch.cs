@@ -1193,34 +1193,34 @@ namespace VPB
             for (int i = 0; i < QuickMenuWatchHudSlotCount; i++) QuickMenuBuildWatchHudSlot(root, i);
             for (int i = 0; i < QuickMenuWatchAssignSlotCount; i++) QuickMenuBuildWatchAssignSlot(root, i);
 
-            m_WatchIconExpand = UI.LoadIconSprite("vpb_icons/chevron_down.png", Color.white);
-            m_WatchIconCompact = UI.LoadIconSprite("vpb_icons/chevron_up.png", Color.white);
-            m_WatchIconPinOn = UI.LoadIconSprite("vpb_icons/pin_on.png", Color.white);
-            m_WatchIconPinOff = UI.LoadIconSprite("vpb_icons/pin_off.png", Color.white);
+            m_WatchIconExpand = UI.LoadIconSprite("chevron-down", Color.white);
+            m_WatchIconCompact = UI.LoadIconSprite("chevron-up", Color.white);
+            m_WatchIconPinOn = UI.LoadIconSprite("pin", Color.white);
+            m_WatchIconPinOff = UI.LoadIconSprite("pinned-off", Color.white);
 
-            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeCollapse, "vpb_icons/minimize.png",
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeCollapse, "window-minimize",
                 () => { try { QuickMenuSetWatchCollapsed(true); } catch { } },
                 VPBTranslation.T("hook.watch.tip.collapse", "Minimise to dot"));
-            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeHand, "vpb_icons/switch_horizontal.png",
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeHand, "switch-horizontal",
                 () => { try { QuickMenuSwitchWatchHand(); } catch { } },
                 VPBTranslation.T("hook.watch.tip.hand", "Switch watch hand"));
-            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromePin, "vpb_icons/pin_off.png",
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromePin, "pinned-off",
                 () => { try { QuickMenuToggleWatchWorldLock(); } catch { } },
                 QuickMenuWatchPinTipText());
-            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeEdit, "vpb_icons/settings_plus.png",
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeEdit, "settings-plus",
                 () => { try { QuickMenuToggleWatchEdit(); } catch { } },
                 QuickMenuWatchEditTipText());
-            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeExpand, "vpb_icons/chevron_down.png",
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeExpand, "chevron-down",
                 () => { try { QuickMenuToggleWatchExpanded(); } catch { } },
                 QuickMenuWatchExpandTipText());
-            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeHelp, "vpb_icons/info_square.png",
+            QuickMenuBuildWatchChromeButton(root, QuickMenuWatchChromeHelp, "help-square-rounded",
                 () => { try { QuickMenuReplayWatchCue(); } catch { } },
                 VPBTranslation.T("hook.watch.tip.help", "Replay watch tips"));
 
-            m_WatchPagerPrevGo = QuickMenuBuildWatchPagerButton(root, "WatchPagerPrev", "vpb_icons/nav_prev.png",
+            m_WatchPagerPrevGo = QuickMenuBuildWatchPagerButton(root, "WatchPagerPrev", "chevron-left",
                 () => { try { QuickMenuWatchChangePage(-1); } catch { } },
                 VPBTranslation.T("hook.watch.tip.page_prev", "Previous watch page"), out m_WatchPagerPrevRt);
-            m_WatchPagerNextGo = QuickMenuBuildWatchPagerButton(root, "WatchPagerNext", "vpb_icons/nav_next.png",
+            m_WatchPagerNextGo = QuickMenuBuildWatchPagerButton(root, "WatchPagerNext", "chevron-right",
                 () => { try { QuickMenuWatchChangePage(+1); } catch { } },
                 VPBTranslation.T("hook.watch.tip.page_next", "Next watch page"), out m_WatchPagerNextRt);
 
@@ -1305,7 +1305,7 @@ namespace VPB
             btn.onClick.AddListener(() => { try { QuickMenuSetWatchCollapsed(false); } catch { } });
             QuickMenuAttachWatchHover(m_WatchDotGo, img, QuickMenuWatchChromeIdle, QuickMenuWatchChromeIdleHover,
                 VPBTranslation.T("hook.watch.tip.restore", "Restore watch face"));
-            QuickMenuAddWatchIcon(m_WatchDotGo, UI.LoadIconSprite("vpb_icons/device_watch.png", Color.white), 6f);
+            QuickMenuAddWatchIcon(m_WatchDotGo, UI.LoadIconSprite("device-watch", Color.white), 6f);
             m_WatchDotGo.SetActive(false);
         }
 
@@ -1315,8 +1315,7 @@ namespace VPB
             GameObject iconGO = new GameObject("Icon");
             iconGO.transform.SetParent(parent.transform, false);
             Image icon = iconGO.AddComponent<Image>();
-            icon.sprite = spr;
-            icon.color = Color.white;
+            UI.SetIconSprite(icon, spr);
             icon.preserveAspect = true;
             icon.raycastTarget = false;
             RectTransform irt = iconGO.GetComponent<RectTransform>();
@@ -1758,7 +1757,7 @@ namespace VPB
             Image icon = m_WatchChromeIcons[QuickMenuWatchChromeExpand];
             if (icon == null) return;
             Sprite want = m_WatchFaceMode == QuickMenuWatchFaceMode.Expanded ? m_WatchIconCompact : m_WatchIconExpand;
-            if (want != null && icon.sprite != want) icon.sprite = want;
+            if (want != null && icon.sprite != want) UI.SetIconSprite(icon, want);
         }
 
         /// <summary>Action a watch HUD slot would run right now (None while an edit mode owns the click).</summary>
@@ -1839,7 +1838,7 @@ namespace VPB
                 return VPBTranslation.T("hook.watch.status.empty_slot", "Empty — use Assign");
             if (QuickMenuWatchIsDestructive(act) && m_WatchCfgHoldConfirm)
                 return QuickMenuGetActionTooltip(act, -1) + " · " +
-                       VPBTranslation.T("hook.watch.status.hold", "hold");
+                       VPBTranslation.T("hook.watch.status.hold", "hand-finger");
             return QuickMenuGetActionTooltip(act, -1);
         }
 
@@ -2253,8 +2252,7 @@ namespace VPB
                 GameObject iconGO = new GameObject("Icon");
                 iconGO.transform.SetParent(go.transform, false);
                 Image icon = iconGO.AddComponent<Image>();
-                icon.sprite = spr;
-                icon.color = Color.white;
+                UI.SetIconSprite(icon, spr);
                 icon.preserveAspect = true;
                 icon.raycastTarget = false;
                 RectTransform irt = iconGO.GetComponent<RectTransform>();
@@ -2399,7 +2397,7 @@ namespace VPB
             Image slotIcon = m_WatchAssignIcons[slotIdx];
             if (slotIcon != null)
             {
-                if (slotIcon.sprite != icon) slotIcon.sprite = icon;
+                if (slotIcon.sprite != icon) UI.SetIconSprite(slotIcon, icon);
                 bool on = icon != null;
                 if (slotIcon.enabled != on) slotIcon.enabled = on;
                 if (on)
@@ -2477,7 +2475,7 @@ namespace VPB
             Image slotIcon = m_WatchSlotIcons[hudIdx];
             if (slotIcon != null)
             {
-                if (slotIcon.sprite != icon) slotIcon.sprite = icon;
+                if (slotIcon.sprite != icon) UI.SetIconSprite(slotIcon, icon);
                 bool on = icon != null;
                 if (slotIcon.enabled != on) slotIcon.enabled = on;
             }
@@ -2617,7 +2615,7 @@ namespace VPB
             if (pinIcon != null)
             {
                 Sprite want = m_WatchWorldLocked ? m_WatchIconPinOn : m_WatchIconPinOff;
-                if (want != null && pinIcon.sprite != want) pinIcon.sprite = want;
+                if (want != null && pinIcon.sprite != want) UI.SetIconSprite(pinIcon, want);
             }
             QuickMenuSyncWatchExpandIcon();
             QuickMenuRefreshWatchChromeTips();

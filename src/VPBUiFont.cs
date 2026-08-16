@@ -20,6 +20,7 @@ namespace VPB
             "NotoSansTC-Regular.ttf",
         };
 
+        private static Font _latinFont;
         private static Font _cachedDynamic;
         private static string _lastLocaleForDynamic;
 
@@ -27,6 +28,18 @@ namespace VPB
         {
             _cachedDynamic = null;
             _lastLocaleForDynamic = null;
+        }
+
+        /// <summary>Cache builtin Arial before any OS CJK font is created. Unity 2018 font manager can pollute later GetBuiltinResource lookups.</summary>
+        private static Font EnsureLatinFont()
+        {
+            if (_latinFont != null) return _latinFont;
+            try
+            {
+                _latinFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+            catch { }
+            return _latinFont;
         }
 
         private static string GetPluginDir()
@@ -61,10 +74,11 @@ namespace VPB
                 || l.StartsWith("ko_", StringComparison.Ordinal);
         }
 
-        /// <summary>Font for Unity UI Text: OS CJK font for CJK locales; else Arial.</summary>
+        /// <summary>Font for Unity UI Text: OS CJK font for CJK locales; else cached builtin Arial.</summary>
         public static Font GetUiFont()
         {
             VPBTranslation.EnsureInitialized();
+            Font latin = EnsureLatinFont();
             string locale = VPBTranslation.CurrentLocale;
 
             // new Font(filePath) does NOT load a TTF from disk in Unity — it looks up an OS font by name.
@@ -82,7 +96,7 @@ namespace VPB
                 if (_cachedDynamic != null) return _cachedDynamic;
             }
 
-            return Resources.GetBuiltinResource<Font>("Arial.ttf");
+            return latin;
         }
 
         private static Font TryCreateOsCjkFont(string locale)
@@ -120,7 +134,25 @@ namespace VPB
             try
             {
                 Font f = GetUiFont();
-                if (f != null) text.font = f;
+                if (f == null) return;
+
+                // CreateDynamicFontFromOSFont can mutate size/style on assign. Snapshot, restore, rebuild.
+                int fontSize = text.fontSize;
+                FontStyle fontStyle = text.fontStyle;
+                bool bestFit = text.resizeTextForBestFit;
+                int minSize = text.resizeTextMinSize;
+                int maxSize = text.resizeTextMaxSize;
+
+                if (text.font != f)
+                    text.font = f;
+
+                if (text.fontSize != fontSize) text.fontSize = fontSize;
+                if (text.fontStyle != fontStyle) text.fontStyle = fontStyle;
+                text.resizeTextForBestFit = bestFit;
+                text.resizeTextMinSize = minSize;
+                text.resizeTextMaxSize = maxSize;
+                text.SetAllDirty();
+                text.FontTextureChanged();
             }
             catch { }
         }

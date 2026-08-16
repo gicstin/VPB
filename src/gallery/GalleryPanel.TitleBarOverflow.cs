@@ -58,14 +58,14 @@ namespace VPB
                 panel,
                 VPBTranslation.T("gallery.title.overflow_language", "Language"),
                 () => { CloseTitleBarOverflowMenu(); ToggleLanguageMenu(); },
-                icon: UI.GetButtonIconSprite(languageSwitcherBtnGO) ?? UI.LoadIconSprite("vpb_icons/language.png", Color.white),
+                icon: UI.GetButtonIconSprite(languageSwitcherBtnGO) ?? UI.LoadIconSprite("language", Color.white),
                 tipKey: "i18n.switcher.tooltip", tipDefault: "Language / 语言 / 言語");
             AddOverflowMenuRow(
                 panel,
                 VPBTranslation.T("gallery.title.filter_presets", "Filter presets"),
                 () => { CloseTitleBarOverflowMenu(); ToggleQuickFilters(); },
                 icon: UI.GetButtonIconSprite(_titleBarQfToggleBtnRT != null ? _titleBarQfToggleBtnRT.gameObject : null)
-                    ?? UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint),
+                    ?? UI.LoadIconSprite("filter-search", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.filter_presets", tipDefault: "Filter Presets");
 
             // Session recent applies (recognition).
@@ -73,7 +73,7 @@ namespace VPB
             {
                 var recent = new System.Collections.Generic.List<QuickFilterEntry>(4);
                 CollectRecentQuickFilters(recent);
-                Sprite applyIcon = UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint);
+                Sprite applyIcon = UI.LoadIconSprite("filter-search", UI.BarIconGlyphTint);
                 for (int i = 0; i < recent.Count; i++)
                 {
                     QuickFilterEntry re = recent[i];
@@ -104,9 +104,9 @@ namespace VPB
             {
                 var pinned = new System.Collections.Generic.List<QuickFilterEntry>(4);
                 QuickFilterSettings.Instance.CollectPinnedFilters(pinned);
-                Sprite rndIcon = UI.LoadIconSprite("vpb_icons/random.png", UI.BarIconGlyphTint);
-                Sprite applyIcon = UI.LoadIconSprite("vpb_icons/filter_on.png", UI.BarIconGlyphTint)
-                    ?? UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint);
+                Sprite rndIcon = UI.LoadIconSprite("dice-3", UI.BarIconGlyphTint);
+                Sprite applyIcon = UI.LoadIconSprite("filter", UI.BarIconGlyphTint)
+                    ?? UI.LoadIconSprite("filter-search", UI.BarIconGlyphTint);
                 for (int i = 0; i < pinned.Count; i++)
                 {
                     QuickFilterEntry pe = pinned[i];
@@ -154,7 +154,7 @@ namespace VPB
                 VPBTranslation.T("gallery.title.creator_filter", "Creator filter"),
                 () => { CloseTitleBarOverflowMenu(); ToggleTitleCreatorDropdown(); },
                 icon: UI.GetButtonIconSprite(titleCreatorBtn)
-                    ?? UI.LoadIconSprite("vpb_icons/gallery_creator.png", UI.BarIconGlyphTint),
+                    ?? UI.LoadIconSprite("user", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.creator_filter",
                 tipDefault: "Multi-select creators → filter grid. Right-click clear.");
             AddOverflowMenuRow(
@@ -164,7 +164,7 @@ namespace VPB
                 HasTitleBarBrowseFilterActive(),
                 icon: UI.GetButtonIconSprite(globalSourceFilterBtn)
                     ?? UI.LoadIconSprite(
-                        HasTitleBarBrowseFilterActive() ? "vpb_icons/filter_on.png" : "vpb_icons/filter_off.png",
+                        HasTitleBarBrowseFilterActive() ? "filter" : "filter-off",
                         UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.browse_filter",
                 tipDefault: "Filter: source, hidden, always loaded, old versions. Click rows to cycle Off → apply → only. Right-click clears.");
@@ -175,7 +175,7 @@ namespace VPB
                 ratingActive,
                 icon: UI.GetButtonIconSprite(ratingSortToggleBtn)
                     ?? (ratingActive ? ratingStarOffSprite : ratingStarNormalSprite)
-                    ?? UI.LoadIconSprite("vpb_icons/star.png", UI.BarIconGlyphTint),
+                    ?? UI.LoadIconSprite("filled/star", UI.BarIconGlyphTint),
                 tipKey: null,
                 tipDefault: BuildRatingPresenceFilterTooltip());
             AddOverflowMenuRow(
@@ -190,7 +190,7 @@ namespace VPB
                 VPBTranslation.T("gallery.title.creator_mode", "Scene Tools"),
                 () => { CloseTitleBarOverflowMenu(); ToggleCreatorMode(); },
                 creatorModeActive,
-                icon: UI.LoadIconSprite("vpb_icons/creator_mode.png", UI.BarIconGlyphTint),
+                icon: UI.LoadIconSprite("geometry", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.creator_mode",
                 tipDefault: "Scene Tools — sticky scene authoring (Strip Scene, …). Not the Creators author list. Ctrl+Shift+K. Esc exits.");
         }

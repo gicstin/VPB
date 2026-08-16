@@ -871,6 +871,8 @@ namespace VPB
                     }
 
                     File.Move(srcPath, dstPath);
+                    // Drop the cached path-inventory row so the gone file is not re-registered next launch.
+                    try { VpbLocalDatabase.NoteMissingVarPath(srcPath); } catch { }
                     moved++;
                     movedUids.Add(uid);
                     if (undoOut != null)

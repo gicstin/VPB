@@ -179,7 +179,7 @@ namespace VPB
             catch { }
             footerPluginInfoBtnImage.color = highlight
                 ? new Color(0.55f, 0.38f, 0.18f, 1f)
-                : UI.IconButtonBackdrop;
+                : GalleryUiColorTokens.ChromeIconWell;
         }
 
         private void FooterPluginInfoUpdateHoverTooltip()

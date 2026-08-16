@@ -23,6 +23,7 @@ namespace VPB
         private void OnImGuiLocaleChanged()
         {
             try { RefreshQuickMenuButtonLabels(); } catch { }
+            try { QuickMenuRefreshAssignFloatLocalizedChrome(); } catch { }
             try { QuickMenuInvalidateWatchStrings(); } catch { }
         }
 

@@ -777,7 +777,7 @@ namespace VPB
                 GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, u, GalleryUiDesignTokens.FontMinRef),
                 new Color(0.88f, 0.88f, 0.92f, 1f), name: "AppliedTitleText");
             LayoutElement titleLe = UI.AddLE(titleTxt.gameObject, minHeight: Mathf.Max(28f * s, delSz * 0.85f), flexibleWidth: 1f);
-            Sprite delSpr = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
+            Sprite delSpr = UI.LoadIconSprite("trash", Color.white);
             GameObject delBtn = UI.CreateSideTabSquareIconButton(titleRow, delSz, delSpr, RemoveFocusedAppliedUserTagFromSelection, new Color(0.5f, 0.22f, 0.22f, 1f), 6f * s);
             delBtn.name = "RemoveAppliedIconBtn";
             AddTooltipPlain(delBtn, VPBTranslation.T("gallery.usertags.remove_applied_tooltip", "Remove selected tag(s) from selection. Select rows below first (Ctrl+click toggle, Shift+click range). Or drag tag row(s) onto this button."));
@@ -1200,10 +1200,9 @@ namespace VPB
             Image img = iconGo.GetComponent<Image>();
             if (img != null)
             {
-                Sprite spr = UI.LoadIconSprite("vpb_icons/filter_on.png", Color.white);
-                if (spr == null) spr = UI.LoadIconSprite("vpb_icons/filter_off.png", Color.white);
-                img.sprite = spr;
-                img.color = Color.white;
+                Sprite spr = UI.LoadIconSprite("filter", Color.white);
+                if (spr == null) spr = UI.LoadIconSprite("filter-off", Color.white);
+                UI.SetIconSprite(img, spr);
             }
 
             RectTransform rt = iconGo.GetComponent<RectTransform>();
@@ -1774,17 +1773,17 @@ namespace VPB
         private void EnsureUserTagPinSprites()
         {
             if (_userTagPinOnSprite == null)
-                _userTagPinOnSprite = UI.LoadIconSprite("vpb_icons/pin_on.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                _userTagPinOnSprite = UI.LoadIconSprite("pin", new Color(0.78f, 0.78f, 0.78f, 1f));
             if (_userTagPinOffSprite == null)
-                _userTagPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                _userTagPinOffSprite = UI.LoadIconSprite("pinned-off", new Color(0.78f, 0.78f, 0.78f, 1f));
         }
 
         private void EnsureUserTagAppliedRemoveSprite()
         {
             if (_userTagAppliedRemoveSprite == null)
-                _userTagAppliedRemoveSprite = UI.LoadIconSprite("vpb_icons/list_remove.png", Color.white);
+                _userTagAppliedRemoveSprite = UI.LoadIconSprite("playlist-x", Color.white);
             if (_userTagAppliedRemoveSprite == null)
-                _userTagAppliedRemoveSprite = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
+                _userTagAppliedRemoveSprite = UI.LoadIconSprite("trash", Color.white);
         }
 
         private bool ShouldShowUserTagRemoveForRow(bool appliedRow, UserTagSelectionState availSelectionState = UserTagSelectionState.Off)
@@ -1855,8 +1854,7 @@ namespace VPB
             }
             if (iconImg != null)
             {
-                if (_userTagAppliedRemoveSprite != null) iconImg.sprite = _userTagAppliedRemoveSprite;
-                iconImg.color = Color.white;
+                if (_userTagAppliedRemoveSprite != null) UI.SetIconSprite(iconImg, _userTagAppliedRemoveSprite);
                 iconImg.raycastTarget = false;
             }
 
@@ -1953,7 +1951,7 @@ namespace VPB
                 UI.AddIconToButton(pinGo, spr, 6f, pinGo.GetComponent<Image>() != null ? pinGo.GetComponent<Image>().color : Color.white);
                 iconImg = pinGo.transform.Find("Icon")?.GetComponent<Image>();
             }
-            if (iconImg != null && spr != null) iconImg.sprite = spr;
+            if (iconImg != null && spr != null) UI.SetIconSprite(iconImg, spr);
 
             float edge = Mathf.Clamp(26f * scale, 20f, 36f);
             RectTransform rt = pinGo.GetComponent<RectTransform>();
@@ -2625,7 +2623,7 @@ namespace VPB
             LayoutElement rowLe = UI.AddLE(btnRow, minHeight: 34f * s, preferredHeight: 36f * s, flexibleWidth: 1f);
 
             float editSq = 36f * s;
-            Sprite editSpr = UI.LoadIconSprite("vpb_icons/edit.png", new Color(0.88f, 0.88f, 0.9f, 1f));
+            Sprite editSpr = UI.LoadIconSprite("edit", new Color(0.88f, 0.88f, 0.9f, 1f));
             Color editBackdrop = new Color(0.38f, 0.26f, 0.52f, 1f);
             GameObject editBtn = UI.CreateSideTabSquareIconButton(btnRow, editSq, editSpr, ShowUserTagListEditor, editBackdrop, 8f * s);
             editBtn.name = "VPB_UserTagEditBtn";
@@ -2833,7 +2831,7 @@ namespace VPB
 
             if (btnRow.Find("VPB_UserTagEditBtn") == null)
             {
-                Sprite editSpr = UI.LoadIconSprite("vpb_icons/edit.png", new Color(0.88f, 0.88f, 0.9f, 1f));
+                Sprite editSpr = UI.LoadIconSprite("edit", new Color(0.88f, 0.88f, 0.9f, 1f));
                 GameObject editGo = UI.CreateSideTabSquareIconButton(btnRow.gameObject, sq, editSpr, ShowUserTagListEditor, new Color(0.38f, 0.26f, 0.52f, 1f), 8f * s);
                 editGo.name = "VPB_UserTagEditBtn";
                 AddTooltipPlain(editGo, VPBTranslation.T("gallery.usertags.btn_edit_tooltip", "Open tag editor (Database mode): create / purge / merge / rename / categories / YAML. Same window as Set Tags."));
@@ -3470,7 +3468,7 @@ namespace VPB
                 Sprite sp = sceneSourceSortModeSprites[idx];
                 if (sp != null)
                 {
-                    _userTagEditorSortIconImage.sprite = sp;
+                    UI.SetIconSprite(_userTagEditorSortIconImage, sp);
                     _userTagEditorSortIconImage.enabled = true;
                 }
             }

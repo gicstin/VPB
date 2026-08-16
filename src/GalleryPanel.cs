@@ -219,7 +219,7 @@ namespace VPB
                 handleGO.AddComponent<UIHoverBorder>();
 
                 {
-                    Sprite chevron = UI.LoadIconSprite("vpb_icons/chevrons_down_left.png", UI.BarIconGlyphTint);
+                    Sprite chevron = UI.LoadIconSprite("chevrons-down-left", UI.BarIconGlyphTint);
                     if (chevron != null)
                         UI.AddIconToButton(handleGO, chevron);
                 }
@@ -275,7 +275,7 @@ namespace VPB
                 handleGO.AddComponent<UIHoverBorder>();
 
                 {
-                    Sprite chevron = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
+                    Sprite chevron = UI.LoadIconSprite("chevrons-down-right", UI.BarIconGlyphTint);
                     if (chevron != null)
                         UI.AddIconToButton(handleGO, chevron);
                 }
@@ -325,10 +325,10 @@ namespace VPB
 
         private static string CornerResizeChevronPath(int anchor)
         {
-            if (anchor == AnchorPresets.bottomRight) return "vpb_icons/chevrons_down_right.png";
-            if (anchor == AnchorPresets.bottomLeft) return "vpb_icons/chevrons_down_left.png";
-            if (anchor == AnchorPresets.topRight) return "vpb_icons/chevrons_up_right.png";
-            return "vpb_icons/chevrons_up_left.png"; // topLeft
+            if (anchor == AnchorPresets.bottomRight) return "chevrons-down-right";
+            if (anchor == AnchorPresets.bottomLeft) return "chevrons-down-left";
+            if (anchor == AnchorPresets.topRight) return "chevrons-up-right";
+            return "chevrons-up-left"; // topLeft
         }
 
         /// <summary>Floating-mode corner handle seated as a footer-bar layout child (inherits bar padding/spacing).</summary>

@@ -122,6 +122,8 @@ namespace VPB
         /// <summary>Sort column + left margin reserved from tab width for main side search (10 + 35).</summary>
         public const float SideTabMainSearchSortReserveRef = 45f;
         public const float SideTabRowSpacingRef = 4f;
+        /// <summary>Left inset for facet rows nested under the selected category (accordion).</summary>
+        public const float SideTabAccordionIndentRef = 16f;
         /// <summary>Gap below sort+search row before tab list; matches collapse-header gap (4px).</summary>
         public const float SideTabFilterRowBottomGapRef = SideTabRowSpacingRef;
         /// <summary>Gap below split seam before lower-pane sort+search row.</summary>
@@ -351,13 +353,19 @@ namespace VPB
         public const float QuickFiltersFooterHeightRef = ButtonSizeRef + 8f;
         /// <summary>Max leaf presets selectable when merging into one multi-random preset.</summary>
         public const int QuickFiltersMergeMaxMembers = 6;
-        /// <summary>Settings floating window defaults / clamps (design px at scale 1).</summary>
-        public const float SettingsFloatDefaultWidthRef = 520f;
+        /// <summary>Settings floating window defaults / clamps (design px at scale 1). Wider default fits category sidebar + rows.</summary>
+        public const float SettingsFloatDefaultWidthRef = 680f;
         public const float SettingsFloatDefaultHeightRef = 640f;
-        public const float SettingsFloatMinWidthRef = 360f;
+        public const float SettingsFloatMinWidthRef = 480f;
         public const float SettingsFloatMinHeightRef = 320f;
-        public const float SettingsFloatMaxWidthRef = 900f;
+        public const float SettingsFloatMaxWidthRef = 1100f;
         public const float SettingsFloatMaxHeightRef = 1200f;
+        /// <summary>Left category list width (property-sheet nav).</summary>
+        public const float SettingsFloatSidebarWidthRef = 168f;
+        /// <summary>Section header rows inside a category (SubGroupKey chunks).</summary>
+        public const float SettingsFloatSectionHeaderHeightRef = 24f;
+        /// <summary>Non-default marker at the left of a setting label.</summary>
+        public const float SettingsFloatModifiedDotSizeRef = 6f;
         /// <summary>Fits <see cref="ButtonSizeRef"/> control chips + row pad (was 80 — too tall for float).</summary>
         public const float SettingsFloatRowHeightRef = 48f;
         /// <summary>Multi-line TextArea rows — host prefers 72 + chrome pad.</summary>
@@ -393,6 +401,14 @@ namespace VPB
         public const float PluginsFloatOptionsRowHeightRef = 30f;
         /// <summary>Min scrollbar handle height so huge lists stay grab-able.</summary>
         public const float PluginsFloatScrollbarMinHandleRef = 32f;
+        /// <summary>Quick-menu assignable-action palette (HUD). Smaller than Settings — sits beside 4×4 grid.</summary>
+        public const float QmAssignFloatDefaultWidthRef = 360f;
+        public const float QmAssignFloatDefaultHeightRef = 480f;
+        public const float QmAssignFloatMinWidthRef = 280f;
+        public const float QmAssignFloatMinHeightRef = 300f;
+        public const float QmAssignFloatMaxWidthRef = 560f;
+        public const float QmAssignFloatMaxHeightRef = 800f;
+        public const float QmAssignFloatRowHeightRef = 36f;
         public const float OverflowMenuPanelWidthRef = 300f;
         public const float FileSortMenuPanelWidthRef = 248f;
         public const float SidePaneSortMenuPanelWidthRef = 228f;

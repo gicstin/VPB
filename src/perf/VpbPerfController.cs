@@ -272,7 +272,7 @@ namespace VPB
 
         public static Color GetToggleBackdropColor()
         {
-            if (Enabled) return UI.IconButtonBackdrop;
+            if (Enabled) return GalleryUiColorTokens.ActiveOn;
             if (IsPerfModeWanted) return new Color(0.18f, 0.22f, 0.20f, 0.65f);
             return new Color(0.12f, 0.12f, 0.14f, 0.55f);
         }
@@ -288,7 +288,7 @@ namespace VPB
         {
             if (!IsPerfModeWanted || !canUse) return new Color(0.12f, 0.12f, 0.14f, 0.35f);
             if (!Enabled) return new Color(0.18f, 0.22f, 0.20f, 0.65f);
-            return UI.IconButtonBackdrop;
+            return GalleryUiColorTokens.ChromeIconWell;
         }
 
         public static string GetToggleLabel()

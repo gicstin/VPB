@@ -31,6 +31,7 @@ namespace VPB
                     for (int gi = 0; gi < options.Length; gi++)
                     {
                         string opt = options[gi];
+                        if (!AccordionChildPassesListFilter(opt)) continue;
                         ClothingSubfilter flag = 0;
                         if (opt == "Real Clothing") flag = ClothingSubfilter.RealClothing;
                         else if (opt == "Presets") flag = ClothingSubfilter.Presets;
@@ -94,6 +95,7 @@ namespace VPB
                     for (int gi = 0; gi < options.Length; gi++)
                     {
                         string opt = options[gi];
+                        if (!AccordionChildPassesListFilter(opt)) continue;
                         HairSubfilter flag = 0;
                         if (opt == "Presets") flag = HairSubfilter.Presets;
                         else if (opt == "Custom") flag = HairSubfilter.Custom;
@@ -150,6 +152,7 @@ namespace VPB
                     for (int gi = 0; gi < options.Length; gi++)
                     {
                         string opt = options[gi];
+                        if (!AccordionChildPassesListFilter(opt)) continue;
                         AppearanceSubfilter flag = 0;
                         if (opt == "Male") flag = AppearanceSubfilter.Male;
                         else if (opt == "Female") flag = AppearanceSubfilter.Female;
@@ -189,19 +192,27 @@ namespace VPB
                         bool isSingleActive = (posePeopleFilter == PosePeopleFilter.Single);
                         bool isDualActive = (posePeopleFilter == PosePeopleFilter.Dual);
 
-                        CreateTabButton(container.transform,
-                            string.Format(VPBTranslation.T("gallery.pose.single_count", "Single ({0})"), posePeopleFacetCountSingle),
-                            isSingleActive ? active : inactive, isSingleActive, () => {
-                                posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Single) ? PosePeopleFilter.All : PosePeopleFilter.Single;
-                                RefreshFilesAndTabs();
-                            }, trackedButtons);
+                        string singleLabel = string.Format(VPBTranslation.T("gallery.pose.single_count", "Single ({0})"), posePeopleFacetCountSingle);
+                        if (AccordionChildPassesListFilter("Single") || AccordionChildPassesListFilter(singleLabel))
+                        {
+                            CreateTabButton(container.transform,
+                                singleLabel,
+                                isSingleActive ? active : inactive, isSingleActive, () => {
+                                    posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Single) ? PosePeopleFilter.All : PosePeopleFilter.Single;
+                                    RefreshFilesAndTabs();
+                                }, trackedButtons);
+                        }
 
-                        CreateTabButton(container.transform,
-                            string.Format(VPBTranslation.T("gallery.pose.dual_count", "Dual ({0})"), posePeopleFacetCountDual),
-                            isDualActive ? active : inactive, isDualActive, () => {
-                                posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Dual) ? PosePeopleFilter.All : PosePeopleFilter.Dual;
-                                RefreshFilesAndTabs();
-                            }, trackedButtons);
+                        string dualLabel = string.Format(VPBTranslation.T("gallery.pose.dual_count", "Dual ({0})"), posePeopleFacetCountDual);
+                        if (AccordionChildPassesListFilter("Dual") || AccordionChildPassesListFilter(dualLabel))
+                        {
+                            CreateTabButton(container.transform,
+                                dualLabel,
+                                isDualActive ? active : inactive, isDualActive, () => {
+                                    posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Dual) ? PosePeopleFilter.All : PosePeopleFilter.Dual;
+                                    RefreshFilesAndTabs();
+                                }, trackedButtons);
+                        }
                     }
                 }
             }
@@ -234,6 +245,7 @@ namespace VPB
 
             foreach (var tag in tagsToShow)
             {
+                if (!AccordionChildPassesListFilter(tag)) continue;
                 int count = 0;
                 if (tagCounts.ContainsKey(tag)) count = tagCounts[tag];
 
@@ -254,12 +266,13 @@ namespace VPB
             }
 
             // Update Clear Button
+            // Split-pane clear lives at footer of old sub-scroller — accordion uses filter chips instead.
             GameObject clearBtn = isLeft ? leftSubClearBtn : rightSubClearBtn;
             Text clearBtnText = isLeft ? leftSubClearBtnText : rightSubClearBtnText;
 
             if (clearBtn != null)
             {
-                if (activeTags.Count > 0)
+                if (!_categoryAccordionFillActive && activeTags.Count > 0)
                 {
                     clearBtn.SetActive(true);
                     if (clearBtnText != null)

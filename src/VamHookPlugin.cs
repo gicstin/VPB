@@ -418,6 +418,7 @@ namespace VPB
             m_Harmony.PatchAll(typeof(MVRPluginManagerHook));
             VamStartupProfilerPatches.ApplySafe(m_Harmony);
             VamStartupOptimizationPatches.Apply(m_Harmony);
+            VamLoadPerfHooks.Apply(m_Harmony);
             m_Harmony.PatchAll(typeof(PatchAssetLoader));
 
             if (VPBConfig.Instance.IsDevMode)
@@ -542,6 +543,7 @@ namespace VPB
             });
 
             AutoLoadALPackages();
+            try { StartCoroutine(UI.PrewarmIconCacheCoroutine()); } catch { }
             try { StartCoroutine(ApplyLateStartupProfilerPatchesCo()); } catch { }
 
             // Undo snapshots land in Saves/ and only delete when undo runs; wipe leftovers from prior sessions.
@@ -639,6 +641,7 @@ namespace VPB
             try { VpbProgressService.ShutdownForQuit(); } catch { }
             try { VpbRandomHistory.Flush(); } catch { }
             try { VpbPerfController.Shutdown(); } catch { }
+            try { UI.ClearIconSpriteCache(); } catch { }
             try { DAZClothingHook.ResetTransientState(); } catch { }
             try
             {
@@ -886,6 +889,7 @@ namespace VPB
             VamStartupProfiler.RefreshCache();
             VamOnDemandLoader.DrainMainThreadQueue();
             VamOnDemandLoader.TickRefreshSimHold();
+            VamLoadPerfHooks.Tick();
             Gallery.DrainPendingSqlIndexUpdate();
             LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();
@@ -899,7 +903,6 @@ namespace VPB
                 if (!LogUtil.IsSceneLoading())
                 {
                     m_PendingGc = false;
-                    DAZMorphMgr.singleton.cache.Clear();
                     ImageLoadingMgr.singleton.ClearCache();
                     GC.Collect();
                     Resources.UnloadUnusedAssets();
@@ -1508,84 +1511,84 @@ namespace VPB
 
                 // Load quick menu icons
                 Color tint = Color.white;
-                m_QmIconCreate   = UI.LoadIconSprite("vpb_icons/gallery_clone.png", tint);
-                m_QmIconEyeOn    = UI.LoadIconSprite("vpb_icons/eye.png", tint);
-                m_QmIconEyeOff   = UI.LoadIconSprite("vpb_icons/eye_off.png", tint);
-                m_QmIconBringFront = UI.LoadIconSprite("vpb_icons/focus_centered.png", tint);
-                m_QmIconCloseAll = UI.LoadIconSprite("vpb_icons/close.png", tint);
-                m_QmIconEditPlus = UI.LoadIconSprite("vpb_icons/settings_plus.png", tint);
-                m_QmIconEditOff  = UI.LoadIconSprite("vpb_icons/settings_off.png", tint);
-                m_QmIconAssignEmpty = UI.LoadIconSprite("vpb_icons/button_placeholder.png", tint);
-                m_QmIconSave   = UI.LoadIconSprite("vpb_icons/gallery_save.png", tint);
-                // Random icon: dice (only action using dice icons).
-                m_QmIconRandom = UI.LoadIconSprite("vpb_icons/dice_1.png", tint) ?? UI.LoadIconSprite("vpb_icons/random.png", tint);
-                m_QmIconHexAppearance = UI.LoadIconSprite("vpb_icons/hexagon_a.png", tint) ?? m_QmIconRandom;
-                m_QmIconHexPose = UI.LoadIconSprite("vpb_icons/hexagon_p.png", tint) ?? m_QmIconRandom;
-                m_QmIconHexScene = UI.LoadIconSprite("vpb_icons/hexagon_s.png", tint) ?? m_QmIconRandom;
-                m_QmIconHexSkin = UI.LoadIconSprite("vpb_icons/hexagon_k.png", tint) ?? m_QmIconRandom;
-                m_QmIconHexSubScene = UI.LoadIconSprite("vpb_icons/hexagon_l.png", tint) ?? m_QmIconRandom;
-                m_QmIconHexHair = UI.LoadIconSprite("vpb_icons/hexagon_h.png", tint) ?? m_QmIconRandom;
-                m_QmIconHexClothing = UI.LoadIconSprite("vpb_icons/hexagon_c.png", tint) ?? m_QmIconRandom;
-                m_QmIconUndo   = UI.LoadIconSprite("vpb_icons/undo.png", tint);
-                m_QmIconRedo   = UI.LoadIconSprite("vpb_icons/redo.png", tint);
-                m_QmIconHub    = UI.LoadIconSprite("vpb_icons/hub.png", tint);
-                m_QmIconCleanup = UI.LoadIconSprite("vpb_icons/cleanup.png", tint);
-                m_QmIconReplace = UI.LoadIconSprite("vpb_icons/gallery_replace.png", tint);
-                m_QmIconAdd     = UI.LoadIconSprite("vpb_icons/gallery_add.png", tint);
-                m_QmIconTargetAtom = UI.LoadIconSprite("vpb_icons/gallery_target.png", tint);
-                m_QmIconNavNext = UI.LoadIconSprite("vpb_icons/nav_next.png", tint);
-                m_QmIconNavPrev = UI.LoadIconSprite("vpb_icons/nav_prev.png", tint);
-                m_QmIconSwitchHand = UI.LoadIconSprite("vpb_icons/switch_horizontal.png", tint);
-                m_QmIconHistory     = UI.LoadIconSprite("vpb_icons/book.png", tint);
-                m_QmIconPerfModeOn  = UI.LoadIconSprite("vpb_icons/auto.png", tint);
-                m_QmIconPerfModeOff = UI.LoadIconSprite("vpb_icons/auto_off.png", tint);
-                m_QmIconRemoveClothing = UI.LoadIconSprite("vpb_icons/remove_clothing.png", tint);
-                m_QmIconRemoveHair     = UI.LoadIconSprite("vpb_icons/remove_hair.png", tint);
-                m_QmIconImportSidebar  = UI.LoadIconSprite("vpb_icons/arrow_merge.png", tint);
-                m_QmIconStarOn  = UI.LoadIconSprite("vpb_icons/star.png", tint);
-                m_QmIconStarOff = UI.LoadIconSprite("vpb_icons/star_off.png", tint);
-                m_QmIconCategorySkin = UI.LoadIconSprite("vpb_icons/c_skin.png", tint);
-                m_QmIconPerfStepUp   = UI.LoadIconSprite("vpb_icons/photo_up.png", tint);
-                m_QmIconPerfStepDown = UI.LoadIconSprite("vpb_icons/photo_down.png", tint);
+                m_QmIconCreate   = UI.LoadIconSprite("copy-plus", tint);
+                m_QmIconEyeOn    = UI.LoadIconSprite("eye", tint);
+                m_QmIconEyeOff   = UI.LoadIconSprite("eye-off", tint);
+                m_QmIconBringFront = UI.LoadIconSprite("focus-centered", tint);
+                m_QmIconCloseAll = UI.LoadIconSprite("door-exit", tint);
+                m_QmIconEditPlus = UI.LoadIconSprite("settings-plus", tint);
+                m_QmIconEditOff  = UI.LoadIconSprite("settings-off", tint);
+                m_QmIconAssignEmpty = UI.LoadIconSprite("square-plus-2", tint);
+                m_QmIconSave   = UI.LoadIconSprite("device-floppy", tint);
+                // Random icon: Tabler dice-3.
+                m_QmIconRandom = UI.LoadIconSprite("dice-3", tint);
+                m_QmIconHexAppearance = UI.LoadIconSprite("hexagon-letter-a", tint) ?? m_QmIconRandom;
+                m_QmIconHexPose = UI.LoadIconSprite("hexagon-letter-p", tint) ?? m_QmIconRandom;
+                m_QmIconHexScene = UI.LoadIconSprite("hexagon-letter-s", tint) ?? m_QmIconRandom;
+                m_QmIconHexSkin = UI.LoadIconSprite("hexagon-letter-k", tint) ?? m_QmIconRandom;
+                m_QmIconHexSubScene = UI.LoadIconSprite("hexagon-letter-l", tint) ?? m_QmIconRandom;
+                m_QmIconHexHair = UI.LoadIconSprite("hexagon-letter-h", tint) ?? m_QmIconRandom;
+                m_QmIconHexClothing = UI.LoadIconSprite("hexagon-letter-c", tint) ?? m_QmIconRandom;
+                m_QmIconUndo   = UI.LoadIconSprite("arrow-back-up", tint);
+                m_QmIconRedo   = UI.LoadIconSprite("arrow-forward-up", tint);
+                m_QmIconHub    = UI.LoadIconSprite("world-search", tint);
+                m_QmIconCleanup = UI.LoadIconSprite("wash-gentle", tint);
+                m_QmIconReplace = UI.LoadIconSprite("replace", tint);
+                m_QmIconAdd     = UI.LoadIconSprite("layout-grid-add", tint);
+                m_QmIconTargetAtom = UI.LoadIconSprite("focus-2", tint);
+                m_QmIconNavNext = UI.LoadIconSprite("player-track-next", tint);
+                m_QmIconNavPrev = UI.LoadIconSprite("player-track-prev", tint);
+                m_QmIconSwitchHand = UI.LoadIconSprite("switch-horizontal", tint);
+                m_QmIconHistory     = UI.LoadIconSprite("book", tint);
+                m_QmIconPerfModeOn  = UI.LoadIconSprite("robot", tint);
+                m_QmIconPerfModeOff = UI.LoadIconSprite("robot-off", tint);
+                m_QmIconRemoveClothing = UI.LoadIconSprite("shirt-off", tint);
+                m_QmIconRemoveHair     = UI.LoadIconSprite("scissors-off", tint);
+                m_QmIconImportSidebar  = UI.LoadIconSprite("arrow-merge", tint);
+                m_QmIconStarOn  = UI.LoadIconSprite("filled/star", tint);
+                m_QmIconStarOff = UI.LoadIconSprite("star", tint);
+                m_QmIconCategorySkin = UI.LoadIconSprite("body-scan", tint);
+                m_QmIconPerfStepUp   = UI.LoadIconSprite("photo-up", tint);
+                m_QmIconPerfStepDown = UI.LoadIconSprite("photo-down", tint);
                 m_QmIconCompressCache = GalleryPanel.LoadCompressCacheIconSprite(tint);
-                m_QmIconAutoHideOff = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", tint);
-                m_QmIconAutoHideOn  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  tint);
-                m_QmIconShowHiddenOff = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", tint);
-                m_QmIconShowHiddenOn  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     tint);
-                m_QmIconOpenCategory = UI.LoadIconSprite("vpb_icons/gallery_category.png", tint);
-                m_QmIconCategoryScenes = UI.LoadIconSprite("vpb_icons/c_scene.png", tint) ?? m_QmIconOpenCategory;
-                m_QmIconCategorySubScenes = UI.LoadIconSprite("vpb_icons/c_subscene.png", tint) ?? m_QmIconOpenCategory;
-                m_QmIconCategoryClothing = UI.LoadIconSprite("vpb_icons/c_clothing.png", tint) ?? m_QmIconOpenCategory;
-                m_QmIconCategoryHair = UI.LoadIconSprite("vpb_icons/c_hair.png", tint) ?? m_QmIconOpenCategory;
-                m_QmIconCategoryPose = UI.LoadIconSprite("vpb_icons/c_pose.png", tint) ?? m_QmIconOpenCategory;
-                m_QmIconCategoryAppearance = UI.LoadIconSprite("vpb_icons/c_appearance.png", tint) ?? m_QmIconOpenCategory;
-                m_QmIconCategoryPlugins = UI.LoadIconSprite("vpb_icons/c_plugins.png", tint) ?? m_QmIconOpenCategory;
-                m_QmIconCategoryAll = UI.LoadIconSprite("vpb_icons/c_all.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconAutoHideOff = UI.LoadIconSprite("layout-sidebar-right-expand", tint);
+                m_QmIconAutoHideOn  = UI.LoadIconSprite("layout-sidebar-right-collapse",  tint);
+                m_QmIconShowHiddenOff = UI.LoadIconSprite("ghost-off", tint);
+                m_QmIconShowHiddenOn  = UI.LoadIconSprite("ghost",     tint);
+                m_QmIconOpenCategory = UI.LoadIconSprite("category-2", tint);
+                m_QmIconCategoryScenes = UI.LoadIconSprite("chair-director", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategorySubScenes = UI.LoadIconSprite("lamp-2", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryClothing = UI.LoadIconSprite("shirt", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryHair = UI.LoadIconSprite("scissors", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryPose = UI.LoadIconSprite("yoga", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryAppearance = UI.LoadIconSprite("masks-theater", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryPlugins = UI.LoadIconSprite("plug-connected", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryAll = UI.LoadIconSprite("apps", tint) ?? m_QmIconOpenCategory;
                 m_QmIconPages = new Sprite[]
                 {
-                    UI.LoadIconSprite("vpb_icons/page_0.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_1.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_2.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_3.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_4.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_5.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_6.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_7.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_8.png", tint),
-                    UI.LoadIconSprite("vpb_icons/page_9.png", tint),
+                    UI.LoadIconSprite("box-multiple-0", tint),
+                    UI.LoadIconSprite("box-multiple-1", tint),
+                    UI.LoadIconSprite("box-multiple-2", tint),
+                    UI.LoadIconSprite("box-multiple-3", tint),
+                    UI.LoadIconSprite("box-multiple-4", tint),
+                    UI.LoadIconSprite("box-multiple-5", tint),
+                    UI.LoadIconSprite("box-multiple-6", tint),
+                    UI.LoadIconSprite("box-multiple-7", tint),
+                    UI.LoadIconSprite("box-multiple-8", tint),
+                    UI.LoadIconSprite("box-multiple-9", tint),
                 };
                 m_QmIconPerfLevels = new Sprite[]
                 {
-                    UI.LoadIconSprite("vpb_icons/level_0.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_1.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_2.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_3.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_4.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_5.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_6.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_7.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_8.png", tint),
-                    UI.LoadIconSprite("vpb_icons/level_9.png", tint),
+                    UI.LoadIconSprite("rosette-number-0", tint),
+                    UI.LoadIconSprite("rosette-number-1", tint),
+                    UI.LoadIconSprite("rosette-number-2", tint),
+                    UI.LoadIconSprite("rosette-number-3", tint),
+                    UI.LoadIconSprite("rosette-number-4", tint),
+                    UI.LoadIconSprite("rosette-number-5", tint),
+                    UI.LoadIconSprite("rosette-number-6", tint),
+                    UI.LoadIconSprite("rosette-number-7", tint),
+                    UI.LoadIconSprite("rosette-number-8", tint),
+                    UI.LoadIconSprite("rosette-number-9", tint),
                 };
 
                 // Anchor center used for layout; positions are kept live in Update().
@@ -1756,46 +1759,10 @@ namespace VPB
                 m_BringFrontButton = null;
                 m_CloseAllButton = null;
 
-                // Assignment popup (simple list)
-                m_QuickMenuAssignPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.85f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero, rounded: true);
-                m_QuickMenuAssignPopupRoot.name = "VPB_QM_AssignPopup";
-                m_QuickMenuAssignPopupRT = m_QuickMenuAssignPopupRoot.GetComponent<RectTransform>();
-                if (m_QuickMenuAssignPopupRT != null)
-                {
-                    m_QuickMenuAssignPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
-                    m_QuickMenuAssignPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
-                    // Pivot at bottom-left so we can grow options upward from the click point.
-                    m_QuickMenuAssignPopupRT.pivot = new Vector2(0f, 0f);
-                }
-                m_QuickMenuAssignPopupRoot.SetActive(false);
+                QuickMenuBuildAssignFloat(canvasObject);
+                QuickMenuBuildSavePopup(canvasObject);
 
-                m_QuickMenuAssignCategoryPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 250f, 220f, Vector2.zero, rounded: true);
-                m_QuickMenuAssignCategoryPopupRoot.name = "VPB_QM_AssignPopup_Category";
-                m_QuickMenuAssignCategoryPopupRT = m_QuickMenuAssignCategoryPopupRoot.GetComponent<RectTransform>();
-                if (m_QuickMenuAssignCategoryPopupRT != null)
-                {
-                    m_QuickMenuAssignCategoryPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
-                    m_QuickMenuAssignCategoryPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
-                    m_QuickMenuAssignCategoryPopupRT.pivot = new Vector2(0f, 0f);
-                }
-                var catHover = m_QuickMenuAssignCategoryPopupRoot.AddComponent<QuickMenuAssignCategoryPopupHoverHandler>();
-                if (catHover != null) catHover.owner = this;
-                m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
-
-                m_QuickMenuAssignRandomPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero, rounded: true);
-                m_QuickMenuAssignRandomPopupRoot.name = "VPB_QM_AssignPopup_Random";
-                m_QuickMenuAssignRandomPopupRT = m_QuickMenuAssignRandomPopupRoot.GetComponent<RectTransform>();
-                if (m_QuickMenuAssignRandomPopupRT != null)
-                {
-                    m_QuickMenuAssignRandomPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
-                    m_QuickMenuAssignRandomPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
-                    m_QuickMenuAssignRandomPopupRT.pivot = new Vector2(0f, 0f);
-                }
-                var rndHover = m_QuickMenuAssignRandomPopupRoot.AddComponent<QuickMenuAssignRandomPopupHoverHandler>();
-                if (rndHover != null) rndHover.owner = this;
-                m_QuickMenuAssignRandomPopupRoot.SetActive(false);
-
-                QuickMenuRebuildAssignPopupButtons();
+                try { QuickMenuEnsureDeskPreviewWidget(); } catch { }
 
                 // Initial visuals (icons / showhide state)
                 for (int i = 0; i < QuickMenuGridSlotCount; i++) QuickMenuRefreshSlotVisual(i);

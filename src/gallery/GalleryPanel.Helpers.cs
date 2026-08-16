@@ -597,7 +597,7 @@ namespace VPB
             }
             if (statusChrome && chromeButtonImage != null)
             {
-                Color bg = UI.IconButtonBackdrop;
+                Color bg = GalleryUiColorTokens.ChromeIconWell;
                 if (rating > 0)
                     bg = Color.Lerp(bg, RatingColors[rating], ChromeBackdropMix);
                 chromeButtonImage.color = bg;

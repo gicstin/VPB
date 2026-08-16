@@ -132,6 +132,8 @@ namespace VPB
         public bool EnableButtonGaps = true;
         /// <summary>When false, gallery buttons and other rounded elements render with square corners.</summary>
         public bool EnableGalleryElementRounding = true;
+        /// <summary>Idle + selected button rims on muted chrome. Off = fill-only (hover rim stays).</summary>
+        public bool EnableGalleryButtonChromeRims = true;
         /// <summary>Corner radius as a fraction (0.05..0.5) of each element's shorter side. Used when <see cref="EnableGalleryElementRounding"/> is true.</summary>
         public float GalleryElementCornerRadiusFraction = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
         /// <summary>When true (default), VR hover dwell shows a local tooltip label on controls.</summary>
@@ -160,12 +162,13 @@ namespace VPB
         public float MovementThreshold = 0.1f;
         /// <summary>When true, all transparency sub-options are overridden (assignable slots, dock strips, gallery pane).</summary>
         public bool DisableGalleryTransparency = true;
-        /// <summary>When true (or <see cref="DisableGalleryTransparency"/>), gallery pane idle translucency is off (fully opaque).</summary>
-        public bool DisableGalleryPaneTransparency = true;
+        /// <summary>When true (or <see cref="DisableGalleryTransparency"/>), gallery pane idle translucency is off (fully opaque).
+        /// Defaults false: the master toggle already supplies the opaque default, so clearing it must reveal transparency.</summary>
+        public bool DisableGalleryPaneTransparency = false;
         /// <summary>When true (or <see cref="DisableGalleryTransparency"/>), quick-menu assignable slot backdrops are fully opaque.</summary>
-        public bool DisableGalleryAssignableButtonsTransparency = true;
+        public bool DisableGalleryAssignableButtonsTransparency = false;
         /// <summary>When true (or <see cref="DisableGalleryTransparency"/>), dock collapse strips are fully opaque when collapsed.</summary>
-        public bool DisableGalleryDockHoverTransparency = true;
+        public bool DisableGalleryDockHoverTransparency = false;
         public bool EnableGalleryFade = true;
         public bool EnableGalleryTranslucency = false;
         /// <summary>When true, package scans do not update the gallery until the user uses Refresh.</summary>
@@ -376,8 +379,9 @@ namespace VPB
         public bool GalleryGridLabelsEnabled = true;
         /// <summary>Font size (pixels) for the always-on grid label strip.</summary>
         public float GalleryGridLabelFontSize = 18f;
-        /// <summary>When true with always-on labels, hide label strip at 11–12 columns (highest grid density).</summary>
-        public bool GalleryGridLabelsAutoHideAtHighDensity = false;
+        /// <summary>When true with always-on labels, hide label strip at 11–12 columns (highest grid density).
+        /// On by default: strips are unreadable at that density and cost text layout on the most crowded grids.</summary>
+        public bool GalleryGridLabelsAutoHideAtHighDensity = true;
         /// <summary>Grid hover: show top-right rating star for quick rate. Other status badges stay on detail strip.</summary>
         public bool GalleryGridHoverBadgesEnabled = true;
         /// <summary>Grid: horizontal spacing between thumbnail cells (pixels).</summary>
@@ -594,8 +598,10 @@ namespace VPB
         public float GallerySettingsFloatPosY = 0f;
         /// <summary>When true, restore last Settings floating size (design px at scale 1).</summary>
         public bool GallerySettingsFloatSizeSaved = false;
-        public float GallerySettingsFloatWidthRef = 520f;
+        public float GallerySettingsFloatWidthRef = 680f;
         public float GallerySettingsFloatHeightRef = 640f;
+        /// <summary>Last Settings category key (appearance, browsing, …). Never "all".</summary>
+        public string GallerySettingsLastGroup = "appearance";
         public bool GalleryPluginsFloatPosSaved = false;
         public float GalleryPluginsFloatPosX = 0f;
         public float GalleryPluginsFloatPosY = 0f;
@@ -603,6 +609,12 @@ namespace VPB
         public bool GalleryPluginsFloatSizeSaved = false;
         public float GalleryPluginsFloatWidthRef = 460f;
         public float GalleryPluginsFloatHeightRef = 560f;
+        public bool QuickMenuAssignFloatPosSaved = false;
+        public float QuickMenuAssignFloatPosX = 0f;
+        public float QuickMenuAssignFloatPosY = 0f;
+        public bool QuickMenuAssignFloatSizeSaved = false;
+        public float QuickMenuAssignFloatWidthRef = 360f;
+        public float QuickMenuAssignFloatHeightRef = 480f;
         /// <summary>Plugins float: show only highest integer version per Author.Name package group.</summary>
         public bool GalleryPluginsFloatLatestOnly = false;
         /// <summary>Plugins float: hide orphan .cs/.dll roots; keep .cslist parents (and their children on expand).</summary>
@@ -866,8 +878,9 @@ namespace VPB
         /// <summary>"Off", "Desktop Only", "VR Only", "Desktop &amp; VR". Default Desktop &amp; VR.</summary>
         public string SpringScrollButtonMode = "Desktop & VR";
         public bool HoldToLaunchEnabled = false;
-        /// <summary>Try-On Mode: apply presets non-destructively with a Keep/Compare/Revert bar.</summary>
-        public bool TryOnModeEnabled = true;
+        /// <summary>Try-On Mode: apply presets non-destructively with a Keep/Compare/Revert bar.
+        /// Opt-in: while active, applying a second item prompts Keep/Revert first, so browsing costs an extra click per item.</summary>
+        public bool TryOnModeEnabled = false;
         /// <summary>When ON, the E/C keys move the navigation rig up/down in world (complements WASD). On by default.</summary>
         public bool VerticalMoveKeysEnabled = true;
         /// <summary>When HoldToLaunch is enabled, drag&drop is forced off; this stores the prior setting for restore.</summary>
@@ -1366,6 +1379,7 @@ namespace VPB
             // Reset to defaults before loading
             EnableButtonGaps = true;
             EnableGalleryElementRounding = true;
+            EnableGalleryButtonChromeRims = true;
             GalleryElementCornerRadiusFraction = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
             VrHoverTooltipEnabled = true;
             ShowSideButtons = "Both";
@@ -1376,9 +1390,9 @@ namespace VPB
             ReorientStartAngle = 20f;
             MovementThreshold = 0.1f;
             DisableGalleryTransparency = true;
-            DisableGalleryPaneTransparency = true;
-            DisableGalleryAssignableButtonsTransparency = true;
-            DisableGalleryDockHoverTransparency = true;
+            DisableGalleryPaneTransparency = false;
+            DisableGalleryAssignableButtonsTransparency = false;
+            DisableGalleryDockHoverTransparency = false;
             EnableGalleryFade = true;
             EnableGalleryTranslucency = false;
             GalleryManualRefreshOnly = true;
@@ -1449,7 +1463,7 @@ namespace VPB
             GalleryConsolidateCreatorNames = true;
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
-            GalleryGridLabelsAutoHideAtHighDensity = false;
+            GalleryGridLabelsAutoHideAtHighDensity = true;
             GalleryGridHoverBadgesEnabled = true;
             GalleryThumbPlaceholderLabelsEnabled = true;
             GalleryThumbPlaceholderSizeScale = 0.7f;
@@ -1537,20 +1551,27 @@ namespace VPB
             GallerySettingsFloatPosX = 0f;
             GallerySettingsFloatPosY = 0f;
             GallerySettingsFloatSizeSaved = false;
-            GallerySettingsFloatWidthRef = 520f;
+            GallerySettingsFloatWidthRef = 680f;
             GallerySettingsFloatHeightRef = 640f;
+            GallerySettingsLastGroup = "appearance";
             GalleryPluginsFloatPosSaved = false;
             GalleryPluginsFloatPosX = 0f;
             GalleryPluginsFloatPosY = 0f;
             GalleryPluginsFloatSizeSaved = false;
             GalleryPluginsFloatWidthRef = 460f;
             GalleryPluginsFloatHeightRef = 560f;
+            QuickMenuAssignFloatPosSaved = false;
+            QuickMenuAssignFloatPosX = 0f;
+            QuickMenuAssignFloatPosY = 0f;
+            QuickMenuAssignFloatSizeSaved = false;
+            QuickMenuAssignFloatWidthRef = 360f;
+            QuickMenuAssignFloatHeightRef = 480f;
             GalleryPluginsFloatLatestOnly = false;
             GalleryPluginsFloatCslistOnly = false;
             UiLocale = "";
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
-            TryOnModeEnabled = true;
+            TryOnModeEnabled = false;
             VerticalMoveKeysEnabled = true;
             HoldToLaunchPrevEnableDragDrop = false;
             HoldToLaunchHoldSeconds = 1f;
@@ -1591,6 +1612,7 @@ namespace VPB
                     {
                         if (node["EnableButtonGaps"] != null) EnableButtonGaps = node["EnableButtonGaps"].AsBool;
                         if (node["EnableGalleryElementRounding"] != null) EnableGalleryElementRounding = node["EnableGalleryElementRounding"].AsBool;
+                        if (node["EnableGalleryButtonChromeRims"] != null) EnableGalleryButtonChromeRims = node["EnableGalleryButtonChromeRims"].AsBool;
                         if (node["GalleryElementCornerRadiusFraction"] != null)
                             GalleryElementCornerRadiusFraction = ClampGalleryElementCornerRadiusFraction(node["GalleryElementCornerRadiusFraction"].AsFloat);
                         if (node["VrHoverTooltipEnabled"] != null) VrHoverTooltipEnabled = node["VrHoverTooltipEnabled"].AsBool;
@@ -1939,6 +1961,8 @@ namespace VPB
                             GallerySettingsFloatWidthRef = Mathf.Max(0f, node["GallerySettingsFloatWidthRef"].AsFloat);
                         if (node["GallerySettingsFloatHeightRef"] != null)
                             GallerySettingsFloatHeightRef = Mathf.Max(0f, node["GallerySettingsFloatHeightRef"].AsFloat);
+                        if (node["GallerySettingsLastGroup"] != null)
+                            GallerySettingsLastGroup = node["GallerySettingsLastGroup"].Value ?? "appearance";
                         if (node["GalleryPluginsFloatPosSaved"] != null)
                             GalleryPluginsFloatPosSaved = node["GalleryPluginsFloatPosSaved"].AsBool;
                         if (node["GalleryPluginsFloatPosX"] != null)
@@ -1951,6 +1975,18 @@ namespace VPB
                             GalleryPluginsFloatWidthRef = Mathf.Max(0f, node["GalleryPluginsFloatWidthRef"].AsFloat);
                         if (node["GalleryPluginsFloatHeightRef"] != null)
                             GalleryPluginsFloatHeightRef = Mathf.Max(0f, node["GalleryPluginsFloatHeightRef"].AsFloat);
+                        if (node["QuickMenuAssignFloatPosSaved"] != null)
+                            QuickMenuAssignFloatPosSaved = node["QuickMenuAssignFloatPosSaved"].AsBool;
+                        if (node["QuickMenuAssignFloatPosX"] != null)
+                            QuickMenuAssignFloatPosX = node["QuickMenuAssignFloatPosX"].AsFloat;
+                        if (node["QuickMenuAssignFloatPosY"] != null)
+                            QuickMenuAssignFloatPosY = node["QuickMenuAssignFloatPosY"].AsFloat;
+                        if (node["QuickMenuAssignFloatSizeSaved"] != null)
+                            QuickMenuAssignFloatSizeSaved = node["QuickMenuAssignFloatSizeSaved"].AsBool;
+                        if (node["QuickMenuAssignFloatWidthRef"] != null)
+                            QuickMenuAssignFloatWidthRef = Mathf.Max(0f, node["QuickMenuAssignFloatWidthRef"].AsFloat);
+                        if (node["QuickMenuAssignFloatHeightRef"] != null)
+                            QuickMenuAssignFloatHeightRef = Mathf.Max(0f, node["QuickMenuAssignFloatHeightRef"].AsFloat);
                         if (node["GalleryPluginsFloatLatestOnly"] != null)
                             GalleryPluginsFloatLatestOnly = node["GalleryPluginsFloatLatestOnly"].AsBool;
                         if (node["GalleryPluginsFloatCslistOnly"] != null)
@@ -2254,6 +2290,7 @@ namespace VPB
                 JSONClass node = new JSONClass();
                 node["EnableButtonGaps"].AsBool = EnableButtonGaps;
                 node["EnableGalleryElementRounding"].AsBool = EnableGalleryElementRounding;
+                node["EnableGalleryButtonChromeRims"].AsBool = EnableGalleryButtonChromeRims;
                 node["GalleryElementCornerRadiusFraction"].AsFloat = ClampGalleryElementCornerRadiusFraction(GalleryElementCornerRadiusFraction);
                 node["VrHoverTooltipEnabled"].AsBool = VrHoverTooltipEnabled;
                 node["ShowSideButtons"] = ShowSideButtons;
@@ -2452,12 +2489,21 @@ namespace VPB
                 node["GallerySettingsFloatSizeSaved"].AsBool = GallerySettingsFloatSizeSaved;
                 node["GallerySettingsFloatWidthRef"].AsFloat = Mathf.Max(0f, GallerySettingsFloatWidthRef);
                 node["GallerySettingsFloatHeightRef"].AsFloat = Mathf.Max(0f, GallerySettingsFloatHeightRef);
+                node["GallerySettingsLastGroup"] = string.IsNullOrEmpty(GallerySettingsLastGroup)
+                    ? "appearance"
+                    : GallerySettingsLastGroup;
                 node["GalleryPluginsFloatPosSaved"].AsBool = GalleryPluginsFloatPosSaved;
                 node["GalleryPluginsFloatPosX"].AsFloat = GalleryPluginsFloatPosX;
                 node["GalleryPluginsFloatPosY"].AsFloat = GalleryPluginsFloatPosY;
                 node["GalleryPluginsFloatSizeSaved"].AsBool = GalleryPluginsFloatSizeSaved;
                 node["GalleryPluginsFloatWidthRef"].AsFloat = Mathf.Max(0f, GalleryPluginsFloatWidthRef);
                 node["GalleryPluginsFloatHeightRef"].AsFloat = Mathf.Max(0f, GalleryPluginsFloatHeightRef);
+                node["QuickMenuAssignFloatPosSaved"].AsBool = QuickMenuAssignFloatPosSaved;
+                node["QuickMenuAssignFloatPosX"].AsFloat = QuickMenuAssignFloatPosX;
+                node["QuickMenuAssignFloatPosY"].AsFloat = QuickMenuAssignFloatPosY;
+                node["QuickMenuAssignFloatSizeSaved"].AsBool = QuickMenuAssignFloatSizeSaved;
+                node["QuickMenuAssignFloatWidthRef"].AsFloat = Mathf.Max(0f, QuickMenuAssignFloatWidthRef);
+                node["QuickMenuAssignFloatHeightRef"].AsFloat = Mathf.Max(0f, QuickMenuAssignFloatHeightRef);
                 node["GalleryPluginsFloatLatestOnly"].AsBool = GalleryPluginsFloatLatestOnly;
                 node["GalleryPluginsFloatCslistOnly"].AsBool = GalleryPluginsFloatCslistOnly;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;

@@ -7,10 +7,13 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        private void BuildCategoryTabs(GameObject container, List<GameObject> trackedButtons)
+        private void BuildCategoryTabs(GameObject container, List<GameObject> trackedButtons, bool isLeft)
         {
             if (categories == null || categories.Count == 0) return;
             if (!categoriesCached) CacheCategoryCounts();
+
+            ClearCategoryAccordionAnchor(isLeft);
+            ClearCategoryAccordionButtons(isLeft);
 
             var displayCategories = new List<Gallery.Category>(categories);
             var sortState = GetSortState("Category");
@@ -18,10 +21,11 @@ namespace VPB
 
             foreach (var cat in displayCategories)
             {
-                if (!string.IsNullOrEmpty(categoryFilter) && cat.name.IndexOf(categoryFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
-
                 var c = cat;
                 bool isActive = (c.path == currentPath && c.extension == currentExtension);
+                // Keep selected row visible so accordion facets have a parent (current location).
+                if (!isActive && !string.IsNullOrEmpty(categoryFilter) && cat.name.IndexOf(categoryFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
                 Color btnColor = isActive ? ColorCategory : ColorInactiveRow;
 
                 int count = 0;
@@ -75,10 +79,16 @@ namespace VPB
                     ClearFiltersForNewCategory();
                     RefreshFilesAndTabs();
                 }, null, null, labelAnchor, 0f, 0f, catIcon, catIconBackdrop);
+                if (isActive && CategoryHasFacetChildren(c.name) && trackedButtons != null && trackedButtons.Count > 0)
+                {
+                    GameObject anchor = trackedButtons[trackedButtons.Count - 1];
+                    if (isLeft) _leftCategoryAccordionAnchor = anchor;
+                    else _rightCategoryAccordionAnchor = anchor;
+                }
             }
         }
 
-        /// <summary>Per-category left icon for side-rail Category mode (c_*.png). Falls back to gallery_category. Null when setting off.</summary>
+        /// <summary>Per-category left icon for side-rail Category mode. Falls back to category-2. Null when setting off.</summary>
         private Sprite GetCategoryTabIcon(string categoryName)
         {
             if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryShowCategoryIcons)
@@ -88,24 +98,24 @@ namespace VPB
             if (!string.IsNullOrEmpty(categoryName))
             {
                 if (string.Equals(categoryName, "Scenes", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_scene.png";
+                    path = "chair-director";
                 else if (string.Equals(categoryName, "SubScenes", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_subscene.png";
+                    path = "lamp-2";
                 else if (string.Equals(categoryName, "Clothing", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_clothing.png";
+                    path = "shirt";
                 else if (string.Equals(categoryName, "Hair", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_hair.png";
+                    path = "scissors";
                 else if (string.Equals(categoryName, "Pose", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_pose.png";
+                    path = "yoga";
                 else if (string.Equals(categoryName, "Appearance", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_appearance.png";
+                    path = "masks-theater";
                 else if (string.Equals(categoryName, "Plugins", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_plugins.png";
+                    path = "plug-connected";
                 else if (string.Equals(categoryName, "Skin", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_skin.png";
+                    path = "body-scan";
                 else if (string.Equals(categoryName, "All", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(categoryName, "ALL VAR", StringComparison.OrdinalIgnoreCase))
-                    path = "vpb_icons/c_all.png";
+                    path = "apps";
             }
 
             if (path != null)

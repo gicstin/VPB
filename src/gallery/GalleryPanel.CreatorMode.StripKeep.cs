@@ -503,7 +503,7 @@ namespace VPB
             UI.ApplyFloatTitleBarMetrics(headerHlg, grip.gameObject, s);
 
             float winIconSz = GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s;
-            UI.CreateFloatTitleWindowIcon(header, "vpb_icons/creator_mode.png", winIconSz);
+            UI.CreateFloatTitleWindowIcon(header, "geometry", winIconSz);
 
             Text title = UI.CreateEmphasisTitleLabel(
                 header,
@@ -517,7 +517,7 @@ namespace VPB
 
             // X / Cancel dismiss Scene Tools — Settings Cancel/X parity (not panel-only hide).
             GameObject closeGo = SettingsFloatSquareIconButton(
-                header.transform, chromeSz, "vpb_icons/x.png",
+                header.transform, chromeSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, () => ExitCreatorMode());
             if (closeGo != null)
             {
@@ -666,7 +666,7 @@ namespace VPB
             UI.EnsureFloatChromeHoverBorder(_stripKeepResizeGO);
             try
             {
-                Sprite rhChevron = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
+                Sprite rhChevron = UI.LoadIconSprite("chevrons-down-right", UI.BarIconGlyphTint);
                 if (rhChevron != null)
                     UI.AddIconToButton(_stripKeepResizeGO, rhChevron, 5f * s, UI.IconButtonBackdrop);
             }
@@ -987,7 +987,7 @@ namespace VPB
                 Color tint = hasRename
                     ? new Color(0.95f, 0.82f, 0.45f, 1f)
                     : new Color(0.78f, 0.80f, 0.86f, 1f);
-                Sprite spr = UI.LoadIconSprite("vpb_icons/rename.png", tint);
+                Sprite spr = UI.LoadIconSprite("pencil-check", tint);
                 if (spr != null)
                 {
                     UI.AddIconToButton(renameBtn, spr, padding: 6f * s);
@@ -1058,7 +1058,7 @@ namespace VPB
             bool canExpand = count > 0;
             bool expanded = canExpand && _stripKeepExpanded.Contains(kind);
 
-            // Expand affordance: chevron_right / chevron_down (shared tree language).
+            // Expand affordance: chevron-right / chevron-down (shared tree language).
             GameObject expandBtn = UI.CreateUIButton(
                 row, expandW, rowH, "", font, 0, 0, AnchorPresets.middleLeft,
                 canExpand ? (UnityAction)(() => ToggleStripKeepExpand(captured)) : null);
@@ -1242,7 +1242,7 @@ namespace VPB
                     Color tint = hasRename
                         ? new Color(0.95f, 0.82f, 0.45f, 1f)
                         : new Color(0.78f, 0.80f, 0.86f, 1f);
-                    Sprite spr = UI.LoadIconSprite("vpb_icons/rename.png", tint);
+                    Sprite spr = UI.LoadIconSprite("pencil-check", tint);
                     if (spr != null)
                     {
                         UI.AddIconToButton(renameBtn, spr, padding: 6f * s);

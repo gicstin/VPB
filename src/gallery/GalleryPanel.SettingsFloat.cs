@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
@@ -21,9 +22,23 @@ namespace VPB
         private static readonly Color SettingsFloatCancelBg = GalleryUiColorTokens.SurfaceMid;
 
         private const float SettingsFloatFooterBtnWRef = 96f;
-        private const float SettingsFloatFooterSaveBtnWRef = 88f;
-        private const float SettingsFloatGroupTabPadRef = 6f;
-        private const float SettingsFloatGroupTabRowGapRef = 4f;
+        private const float SettingsFloatFooterCloseBtnWRef = 88f;
+        private const float SettingsFloatSidebarPadRef = 4f;
+        private const float SettingsFloatSidebarRowGapRef = 2f;
+        private const float SettingsFloatGroupChipIconSizeRef = 16f;
+        private const float SettingsFloatGroupChipIconGapRef = 4f;
+        private const float SettingsFloatGroupChipPadLRef = 6f;
+        private const float SettingsFloatGroupChipPadRRef = 8f;
+        private const float SettingsFloatRowsSpacingRef = 2f;
+        private const float SettingsFloatRowsPadRef = 6f;
+
+        // Row build is windowed: the full list is ~165 definitions and a single row costs ~15 GameObjects
+        // (rounded backgrounds, mini buttons, slider parts, hover borders), so building them all in one
+        // frame is a multi-hundred-ms stall. Only rows covering the viewport are built synchronously;
+        // the rest stand in as exact-height empty placeholders so scroll range and position never shift,
+        // then stream in on a per-frame budget.
+        private const int SettingsFloatDeferredRowBudgetMs = 4;
+        private const int SettingsFloatRowOverscan = 2;
 
         private GameObject _settingsFloatRoot;
         private RectTransform _settingsFloatPanelRT;
@@ -48,6 +63,19 @@ namespace VPB
         private float? _settingsFloatExpandHeightRef;
         private bool _settingsFloatCollapsed;
         private Vector2? _settingsFloatCollapsedTopLeftPos;
+
+        private Coroutine _settingsFloatRowsDeferCo;
+        private readonly List<InternalSettingRowEntry> _settingsFloatRowQueue = new List<InternalSettingRowEntry>(192);
+        private readonly List<float> _settingsFloatRowHeights = new List<float>(192);
+        private readonly System.Diagnostics.Stopwatch _settingsFloatRowsClock = new System.Diagnostics.Stopwatch();
+        private GameObject _settingsFloatRowsLeadPad;
+        private GameObject _settingsFloatRowsTailPad;
+        private int _settingsFloatRowsBuiltFirst;
+        private int _settingsFloatRowsBuiltLast = -1;
+        private int _settingsFloatRowsFont;
+        private float _settingsFloatRowsScale = 1f;
+        private float _settingsFloatRowsBaseHeight;
+        private float _settingsFloatRowsSpacing;
 
         private GameObject ResolveSettingsFloatHost()
         {
@@ -79,6 +107,7 @@ namespace VPB
 
         private void HideSettingsFloat()
         {
+            StopSettingsFloatDeferredRows();
             CaptureSettingsFloatGeometryToMemory();
             PersistSettingsFloatGeometry();
             if (_settingsFloatRoot != null)
@@ -94,6 +123,7 @@ namespace VPB
 
         private void DestroySettingsFloatChrome()
         {
+            StopSettingsFloatDeferredRows();
             if (_settingsFloatRoot != null)
             {
                 try { UnityEngine.Object.Destroy(_settingsFloatRoot); } catch { }
@@ -114,7 +144,27 @@ namespace VPB
             _settingsFloatFooter = null;
             _settingsFloatCollapseBtn = null;
             _settingsFloatCollapseIcon = null;
+            _settingsFloatModifiedBtn = null;
+            _settingsFloatModifiedBtnBg = null;
+            _settingsFloatModifiedBtnText = null;
+            _settingsFloatEmptyGo = null;
+            _settingsFloatEmptyText = null;
+            _settingsFloatEmptyClearBtn = null;
+            _settingsFloatRevertBtn = null;
+            _settingsFloatCloseBtn = null;
             _settingsFloatGroupTabsH = 0f;
+        }
+
+        private void StopSettingsFloatDeferredRows()
+        {
+            StopCo(ref _settingsFloatRowsDeferCo);
+            _settingsFloatRowsClock.Reset();
+            _settingsFloatRowQueue.Clear();
+            _settingsFloatRowHeights.Clear();
+            _settingsFloatRowsLeadPad = null;
+            _settingsFloatRowsTailPad = null;
+            _settingsFloatRowsBuiltFirst = 0;
+            _settingsFloatRowsBuiltLast = -1;
         }
 
         private void BuildSettingsFloat()
@@ -128,7 +178,6 @@ namespace VPB
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef * s;
             float filterH = GalleryUiDesignTokens.FloatSearchRowHeightRef * s;
             float searchH = GalleryUiDesignTokens.SearchFieldHeightRef * s;
-            float rowH = GalleryUiDesignTokens.SettingsFloatRowHeightRef * s;
 
             LoadSettingsFloatGeometryFromConfig();
             float panelWRef = GalleryUiDesignTokens.SettingsFloatDefaultWidthRef;
@@ -199,7 +248,7 @@ namespace VPB
             UI.ApplyFloatTitleBarMetrics(titleHlg, grip.gameObject, s);
 
             float winIconSz = GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s;
-            UI.CreateFloatTitleWindowIcon(titleBar, "vpb_icons/settings.png", winIconSz);
+            UI.CreateFloatTitleWindowIcon(titleBar, "settings", winIconSz);
 
             Text title = UI.CreateEmphasisTitleLabel(
                 titleBar,
@@ -208,7 +257,7 @@ namespace VPB
             UI.AddLE(title.gameObject, flexibleWidth: 1f, minWidth: 60f * s);
 
             _settingsFloatCollapseBtn = SettingsFloatSquareIconButton(
-                titleBar.transform, chromeSz, "vpb_icons/chevron_up.png",
+                titleBar.transform, chromeSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, ToggleSettingsFloatCollapsed);
             if (_settingsFloatCollapseBtn != null)
             {
@@ -218,7 +267,7 @@ namespace VPB
             }
 
             GameObject closeBtn = SettingsFloatSquareIconButton(
-                titleBar.transform, chromeSz, "vpb_icons/x.png",
+                titleBar.transform, chromeSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, () => ExitInternalSettingsMode(true));
             if (closeBtn != null)
             {
@@ -244,7 +293,7 @@ namespace VPB
                 filterRT.sizeDelta = new Vector2(0f, filterH);
                 filterRT.anchoredPosition = new Vector2(0f, -titleH);
             }
-            UI.AddHLG(_settingsFloatFilterRow, spacing: 0f,
+            UI.AddHLG(_settingsFloatFilterRow, spacing: 6f * s,
                 padding: UI.Pad(
                     GalleryUiDesignTokens.FloatSearchRowPadRef,
                     GalleryUiDesignTokens.FloatSearchRowPadRef,
@@ -252,7 +301,7 @@ namespace VPB
                     GalleryUiDesignTokens.FloatSearchRowPadRef, s),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
-                childForceExpandWidth: true, childForceExpandHeight: false);
+                childForceExpandWidth: false, childForceExpandHeight: false);
 
             _settingsFloatFilterInput = UI.CreateChromeLayoutInputField(
                 _settingsFloatFilterRow.transform,
@@ -263,7 +312,7 @@ namespace VPB
                 2f * s,
                 SettingsFloatFilterBg,
                 UI.InputFieldPlaceholderColor,
-                VPBTranslation.T("gallery.search.settings", "Filter settings…"),
+                VPBTranslation.T("settings.search.placeholder", "Search settings…"),
                 "SettingsFilter");
             if (_settingsFloatFilterInput != null)
             {
@@ -310,7 +359,7 @@ namespace VPB
                     if (clearBg != null) clearBg.color = new Color(0f, 0f, 0f, 0f);
                     try
                     {
-                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
+                        Sprite xSpr = UI.LoadIconSprite("x", GalleryUiColorTokens.SearchClearIconTint);
                         if (xSpr != null)
                             UI.AddIconToButton(_settingsFloatFilterClearGo, xSpr, 6f * s, new Color(0f, 0f, 0f, 0f));
                     }
@@ -321,8 +370,7 @@ namespace VPB
                     clearHover.hoverColor = new Color(1f, 0.2f, 0.2f, 1f);
                     clearHover.borderSize = 2f;
                     clearHover.inward = true;
-                    AddTooltipPlain(_settingsFloatFilterClearGo,
-                        VPBTranslation.T("gallery.creator.strip_filter_clear", "Clear filter"));
+                    AddTooltip(_settingsFloatFilterClearGo, "gallery.creator.strip_filter_clear", "Clear filter");
                 }
 
                 _settingsFloatFilterOnValueChanged = val =>
@@ -341,29 +389,61 @@ namespace VPB
                 RefreshSettingsFloatFilterClearVisible();
             }
 
-            // Group tabs — wrap to multiple rows (no horizontal clip/scroll).
-            _settingsFloatGroupTabsH = chromeSz + 8f * s;
-            _settingsFloatGroupTabsRow = UI.CreateChildRT(panel, "GroupTabs", AnchorPresets.hStretchTop,
-                new Vector2(0f, _settingsFloatGroupTabsH), new Vector2(0f, -(titleH + filterH)));
+            _settingsFloatModifiedBtn = UI.CreateUIButton(
+                _settingsFloatFilterRow, chromeSz, chromeSz, "M", font, 0, 0, AnchorPresets.middleCenter, null);
+            if (_settingsFloatModifiedBtn != null)
+            {
+                _settingsFloatModifiedBtn.name = "ModifiedOnly";
+                UI.AddLE(_settingsFloatModifiedBtn, minWidth: chromeSz, preferredWidth: chromeSz,
+                    minHeight: chromeSz, preferredHeight: chromeSz, flexibleWidth: 0f);
+                _settingsFloatModifiedBtnBg = _settingsFloatModifiedBtn.GetComponent<Image>();
+                _settingsFloatModifiedBtnText = _settingsFloatModifiedBtn.GetComponentInChildren<Text>(true);
+                if (_settingsFloatModifiedBtnText != null)
+                    _settingsFloatModifiedBtnText.text = VPBTranslation.T("settings.modified_only.abbrev", "≠");
+                Button mb = _settingsFloatModifiedBtn.GetComponent<Button>();
+                if (mb != null)
+                {
+                    mb.onClick.RemoveAllListeners();
+                    mb.onClick.AddListener(ToggleSettingsModifiedOnly);
+                }
+                AddTooltip(_settingsFloatModifiedBtn, "settings.modified_only.tip",
+                    "Show only settings that differ from defaults");
+                SyncSettingsModifiedOnlyButton();
+            }
+
+            // Left category list — stable nav (never hidden by search).
+            float sidebarW = GalleryUiDesignTokens.SettingsFloatSidebarWidthRef * s;
+            _settingsFloatGroupTabsH = sidebarW;
+            _settingsFloatGroupTabsRow = UI.CreateChildRT(panel, "Sidebar", AnchorPresets.vStretchLeft,
+                new Vector2(sidebarW, 0f), Vector2.zero);
             RectTransform groupRT = _settingsFloatGroupTabsRow.GetComponent<RectTransform>();
             if (groupRT != null)
             {
-                groupRT.pivot = new Vector2(0.5f, 1f);
-                groupRT.sizeDelta = new Vector2(0f, _settingsFloatGroupTabsH);
-                groupRT.anchoredPosition = new Vector2(0f, -(titleH + filterH));
+                groupRT.anchorMin = new Vector2(0f, 0f);
+                groupRT.anchorMax = new Vector2(0f, 1f);
+                groupRT.pivot = new Vector2(0f, 1f);
+                groupRT.offsetMin = new Vector2(0f, footerH);
+                groupRT.offsetMax = new Vector2(sidebarW, -(titleH + filterH));
+                groupRT.sizeDelta = new Vector2(sidebarW, 0f);
             }
             UI.AddImage(_settingsFloatGroupTabsRow, GalleryUiColorTokens.SurfaceDarker);
             GameObject groupContent = new GameObject("Content");
             groupContent.transform.SetParent(_settingsFloatGroupTabsRow.transform, false);
             _settingsFloatGroupTabsContentRT = groupContent.AddComponent<RectTransform>();
-            _settingsFloatGroupTabsContentRT.anchorMin = new Vector2(0f, 1f);
-            _settingsFloatGroupTabsContentRT.anchorMax = new Vector2(1f, 1f);
-            _settingsFloatGroupTabsContentRT.pivot = new Vector2(0f, 1f);
-            _settingsFloatGroupTabsContentRT.anchoredPosition = Vector2.zero;
-            float pad = SettingsFloatGroupTabPadRef * s;
-            _settingsFloatGroupTabsContentRT.offsetMin = new Vector2(pad, -_settingsFloatGroupTabsH);
-            _settingsFloatGroupTabsContentRT.offsetMax = new Vector2(-pad, -pad);
+            _settingsFloatGroupTabsContentRT.anchorMin = Vector2.zero;
+            _settingsFloatGroupTabsContentRT.anchorMax = Vector2.one;
+            _settingsFloatGroupTabsContentRT.offsetMin = Vector2.zero;
+            _settingsFloatGroupTabsContentRT.offsetMax = Vector2.zero;
             _settingsFloatGroupTabsParent = groupContent.transform;
+            VerticalLayoutGroup sidebarVlg = UI.AddVLG(
+                groupContent,
+                spacing: SettingsFloatSidebarRowGapRef * s,
+                padding: UI.Pad(SettingsFloatSidebarPadRef, SettingsFloatSidebarPadRef, SettingsFloatSidebarPadRef, SettingsFloatSidebarPadRef, s));
+            sidebarVlg.childForceExpandWidth = true;
+            sidebarVlg.childForceExpandHeight = false;
+            sidebarVlg.childControlWidth = true;
+            sidebarVlg.childControlHeight = true;
+            sidebarVlg.childAlignment = TextAnchor.UpperLeft;
 
             // Footer
             _settingsFloatFooter = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
@@ -384,7 +464,7 @@ namespace VPB
             if (_settingsFloatFooter.GetComponent<RectMask2D>() == null)
                 _settingsFloatFooter.AddComponent<RectMask2D>();
 
-            // Full-footer drag hit (behind Cancel/Save/resize) — same job as title bar.
+            // Full-footer drag hit (behind Revert/Close/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(_settingsFloatFooter);
             if (footerDragArea != null)
             {
@@ -402,13 +482,25 @@ namespace VPB
             spacerDrag.Target = _settingsFloatPanelRT;
             spacerDrag.OnMoved = OnSettingsFloatMoved;
 
-            SettingsFloatChromeButton(_settingsFloatFooter.transform, SettingsFloatFooterBtnWRef * s, chromeSz,
-                VPBTranslation.T("settings.tbox.cancel", "Cancel"), font, s,
-                SettingsFloatCancelBg, () => ExitInternalSettingsMode(false));
+            _settingsFloatRevertBtn = SettingsFloatChromeButton(_settingsFloatFooter.transform, SettingsFloatFooterBtnWRef * s, chromeSz,
+                VPBTranslation.T("settings.footer.revert", "Revert"), font, s,
+                SettingsFloatCancelBg, RevertInternalSettingsSession);
+            if (_settingsFloatRevertBtn != null)
+            {
+                _settingsFloatRevertBtn.name = "FooterRevert";
+                AddTooltip(_settingsFloatRevertBtn, "settings.footer.revert.tip",
+                    "Restore values from when this window opened");
+            }
 
-            SettingsFloatChromeButton(_settingsFloatFooter.transform, SettingsFloatFooterSaveBtnWRef * s, chromeSz,
-                VPBTranslation.T("settings.tbox.save", "Save"), font, s,
-                GalleryUiColorTokens.AccentConfirm, () => ExitInternalSettingsMode(true));
+            _settingsFloatCloseBtn = SettingsFloatChromeButton(_settingsFloatFooter.transform, SettingsFloatFooterCloseBtnWRef * s, chromeSz,
+                VPBTranslation.T("settings.footer.close", "Close"), font, s,
+                SettingsFloatGroupActive, () => ExitInternalSettingsMode(true));
+            if (_settingsFloatCloseBtn != null)
+            {
+                _settingsFloatCloseBtn.name = "FooterClose";
+                AddTooltip(_settingsFloatCloseBtn, "settings.footer.close.tip",
+                    "Keep changes and close");
+            }
 
             GameObject resizeHandle = UI.AddChildGOImage(
                 _settingsFloatFooter, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
@@ -424,7 +516,7 @@ namespace VPB
             rhLe.flexibleWidth = 0f;
             try
             {
-                Sprite rhSpr = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
+                Sprite rhSpr = UI.LoadIconSprite("chevrons-down-right", UI.BarIconGlyphTint);
                 if (rhSpr != null)
                     UI.AddIconToButton(resizeHandle, rhSpr, 5f * s, UI.IconButtonBackdrop);
             }
@@ -444,8 +536,8 @@ namespace VPB
             RectTransform scrollRT = _settingsFloatScrollHost.GetComponent<RectTransform>();
             if (scrollRT != null)
             {
-                scrollRT.offsetMin = new Vector2(0f, footerH);
-                scrollRT.offsetMax = new Vector2(0f, -(titleH + filterH + _settingsFloatGroupTabsH));
+                scrollRT.offsetMin = new Vector2(sidebarW, footerH);
+                scrollRT.offsetMax = new Vector2(0f, -(titleH + filterH));
             }
             UI.AddImage(_settingsFloatScrollHost, SettingsFloatScrollBg);
             if (_settingsFloatScrollHost.GetComponent<RectMask2D>() == null)
@@ -484,94 +576,103 @@ namespace VPB
             GameObject content = UI.CreateChildRT(viewport, "Content", AnchorPresets.hStretchTop);
             RectTransform contentRt = content.GetComponent<RectTransform>();
             _settingsFloatScrollRect.content = contentRt;
-            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: 2f * s, padding: UI.Pad(6, 6, 6, 6, s));
+            VerticalLayoutGroup cv = UI.AddVLG(
+                content,
+                spacing: SettingsFloatRowsSpacingRef * s,
+                padding: UI.Pad(SettingsFloatRowsPadRef, SettingsFloatRowsPadRef, SettingsFloatRowsPadRef, SettingsFloatRowsPadRef, s));
             cv.childForceExpandHeight = false;
             cv.childForceExpandWidth = true;
             ContentSizeFitter csf = content.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             _settingsFloatRowsParent = content.transform;
 
+            _settingsFloatEmptyGo = new GameObject("Empty");
+            _settingsFloatEmptyGo.transform.SetParent(viewport.transform, false);
+            RectTransform emptyRT = _settingsFloatEmptyGo.AddComponent<RectTransform>();
+            emptyRT.anchorMin = Vector2.zero;
+            emptyRT.anchorMax = Vector2.one;
+            emptyRT.offsetMin = new Vector2(12f * s, 12f * s);
+            emptyRT.offsetMax = new Vector2(-12f * s, -12f * s);
+            VerticalLayoutGroup emptyVlg = UI.AddVLG( _settingsFloatEmptyGo, spacing: 10f * s, padding: UI.Pad(8, 8, 8, 8, s));
+            emptyVlg.childAlignment = TextAnchor.MiddleCenter;
+            emptyVlg.childForceExpandHeight = false;
+            emptyVlg.childForceExpandWidth = true;
+            _settingsFloatEmptyText = UI.CreateLabel(
+                _settingsFloatEmptyGo,
+                VPBTranslation.T("settings.empty.none", "No settings in this category"),
+                font, GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
+                raycastTarget: false, name: "EmptyLabel");
+            GalleryUiMetrics.ApplyFont(_settingsFloatEmptyText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            UI.AddLE(_settingsFloatEmptyText.gameObject, flexibleWidth: 1f, minHeight: 24f * s);
+            _settingsFloatEmptyClearBtn = SettingsFloatChromeButton(
+                _settingsFloatEmptyGo.transform, 140f * s, chromeSz,
+                VPBTranslation.T("settings.empty.clear", "Clear search"), font, s,
+                SettingsFloatGroupActive, ClearSettingsFinderAndModified);
+            if (_settingsFloatEmptyClearBtn != null)
+            {
+                _settingsFloatEmptyClearBtn.name = "EmptyClear";
+                LayoutElement cle = _settingsFloatEmptyClearBtn.GetComponent<LayoutElement>();
+                if (cle != null) cle.flexibleWidth = 0f;
+            }
+            _settingsFloatEmptyGo.SetActive(false);
+
             _settingsFloatCollapsed = false;
             _settingsFloatExpandHeightRef = panelHRef;
             try { SyncSettingsSideSearchInputFromFilter(); } catch { }
-            RebuildSettingsFloatGroupTabs(font, s, chromeSz);
-            RebuildSettingsFloatRows(font, s, rowH, false);
+            RebuildSettingsFloatSidebar(font, s, chromeSz);
+            // Shell only — rows come from RefreshInternalSettingsListRows on open. Building them here
+            // too meant the whole list was constructed twice on first open (build, then destroy+rebuild).
             try { UI.ApplyFloatRootHoverPolicy(_settingsFloatRoot); } catch { }
             _settingsFloatRoot.SetActive(false);
         }
 
-        private void RebuildSettingsFloatGroupTabs(int font, float s, float chromeSz)
+        /// <summary>
+        /// Left atlas glyph beside chip label. Does not hide text (unlike <see cref="UI.AddIconToButton"/>).
+        /// No colored icon well — selected state stays the chip fill.
+        /// </summary>
+        private static bool ApplySettingsGroupChipIcon(GameObject btn, string iconRole, float s)
         {
-            if (_settingsFloatGroupTabsParent == null) return;
-            for (int c = _settingsFloatGroupTabsParent.childCount - 1; c >= 0; c--)
+            if (btn == null || string.IsNullOrEmpty(iconRole) || s <= 0f) return false;
+            Sprite spr = UI.LoadIconSprite(iconRole, UI.BarIconGlyphTint);
+            if (spr == null) return false;
+
+            float iconSz = SettingsFloatGroupChipIconSizeRef * s;
+            float gap = SettingsFloatGroupChipIconGapRef * s;
+            if (btn.GetComponent<HorizontalLayoutGroup>() == null)
             {
-                try
-                {
-                    GameObject go = _settingsFloatGroupTabsParent.GetChild(c).gameObject;
-                    go.SetActive(false);
-                    UnityEngine.Object.Destroy(go);
-                }
-                catch { }
+                UI.AddHLG(
+                    btn,
+                    spacing: gap,
+                    padding: UI.Pad(SettingsFloatGroupChipPadLRef, SettingsFloatGroupChipPadRRef, 0f, 0f, s),
+                    childAlignment: TextAnchor.MiddleCenter,
+                    childForceExpandWidth: false,
+                    childForceExpandHeight: false);
             }
 
-            string filterNow = (CanonicalSettingsSideSearchText() ?? "").Trim();
-            bool MatchFilter(string label) =>
-                string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;
+            GameObject iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(btn.transform, false);
+            iconGO.transform.SetAsFirstSibling();
+            Image img = UI.AddImage(iconGO, Color.white, false);
+            img.preserveAspect = true;
+            UI.SetIconSprite(img, spr);
+            UI.AddLE(
+                iconGO,
+                minWidth: iconSz, minHeight: iconSz,
+                preferredWidth: iconSz, preferredHeight: iconSz,
+                flexibleWidth: 0f, flexibleHeight: 0f);
 
-            List<SettingsGroupTab> tabs = GetSettingsGroupTabs();
-            bool currentTabVisible = string.Equals(currentSettingsGroup, "all", StringComparison.OrdinalIgnoreCase);
-            for (int i = 0; i < tabs.Count; i++)
+            Text t = btn.GetComponentInChildren<Text>(true);
+            if (t != null)
             {
-                SettingsGroupTab g = tabs[i];
-                if (g == null) continue;
-                if (string.Equals(currentSettingsGroup, g.Key, StringComparison.OrdinalIgnoreCase))
-                {
-                    currentTabVisible = true;
-                    break;
-                }
+                t.alignment = TextAnchor.MiddleLeft;
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                t.raycastTarget = false;
+                LayoutElement tle = t.GetComponent<LayoutElement>();
+                if (tle == null) tle = t.gameObject.AddComponent<LayoutElement>();
+                tle.preferredWidth = t.preferredWidth;
+                tle.flexibleWidth = 0f;
             }
-            if (!currentTabVisible)
-                currentSettingsGroup = "all";
-
-            void AddChip(string key, string label)
-            {
-                if (!string.Equals(key, "all", StringComparison.OrdinalIgnoreCase) && !MatchFilter(label)) return;
-                bool active = string.Equals(currentSettingsGroup, key, StringComparison.OrdinalIgnoreCase);
-                Color bg = active ? SettingsFloatGroupActive : SettingsFloatGroupInactive;
-                string capturedKey = key;
-                GameObject btn = UI.CreateChromeLayoutButton(
-                    _settingsFloatGroupTabsParent, 0f, chromeSz, label, font, bg,
-                    () =>
-                    {
-                        currentSettingsGroup = capturedKey;
-                        try { CancelPluginHotkeyCapture(false); } catch { }
-                        RefreshInternalSettingsListRows(true);
-                    });
-                if (btn != null)
-                {
-                    LayoutElement le = btn.GetComponent<LayoutElement>();
-                    if (le == null) le = btn.AddComponent<LayoutElement>();
-                    le.flexibleWidth = 0f;
-                    le.minWidth = 48f * s;
-                    le.preferredHeight = chromeSz;
-                    le.minHeight = chromeSz;
-                    Text chipTxt = btn.GetComponentInChildren<Text>(true);
-                    float padX = 16f * s;
-                    float textW = chipTxt != null ? chipTxt.preferredWidth : 0f;
-                    le.preferredWidth = Mathf.Max(48f * s, textW + padX);
-                }
-            }
-
-            AddChip("all", VPBTranslation.T("settings.group.all", "All"));
-            for (int i = 0; i < tabs.Count; i++)
-            {
-                SettingsGroupTab g = tabs[i];
-                if (g == null) continue;
-                AddChip(g.Key, g.Label);
-            }
-
-            RelayoutSettingsFloatGroupTabs(s, chromeSz);
-            try { UI.ApplyFloatRootHoverPolicy(_settingsFloatGroupTabsParent != null ? _settingsFloatGroupTabsParent.gameObject : _settingsFloatRoot); } catch { }
+            return true;
         }
 
         private void RefreshSettingsFloatFilterClearVisible()
@@ -583,82 +684,8 @@ namespace VPB
                 _settingsFloatFilterClearGo.SetActive(show);
         }
 
-        /// <summary>
-        /// Manual wrap for category chips (FilterChips / StripKeep pattern).
-        /// Grows GroupTabs row height; updates scroll host top inset.
-        /// </summary>
         private void RelayoutSettingsFloatGroupTabs(float s, float chromeSz)
         {
-            if (_settingsFloatGroupTabsContentRT == null || _settingsFloatGroupTabsRow == null) return;
-
-            float rowH = chromeSz;
-            float colSpacing = SettingsFloatGroupTabRowGapRef * s;
-            float rowSpacing = SettingsFloatGroupTabRowGapRef * s;
-            float pad = SettingsFloatGroupTabPadRef * s;
-
-            float availW = 0f;
-            try
-            {
-                if (_settingsFloatPanelRT != null)
-                    availW = _settingsFloatPanelRT.rect.width - pad * 2f;
-            }
-            catch { }
-            if (availW <= 1f)
-            {
-                try { availW = _settingsFloatGroupTabsContentRT.rect.width; } catch { availW = 0f; }
-            }
-            if (availW <= 1f) availW = 400f * s;
-
-            float x = 0f;
-            float y = 0f;
-            int rows = 1;
-            int n = _settingsFloatGroupTabsContentRT.childCount;
-            for (int i = 0; i < n; i++)
-            {
-                Transform child = _settingsFloatGroupTabsContentRT.GetChild(i);
-                if (child == null || !child.gameObject.activeSelf) continue;
-                RectTransform rt = child as RectTransform;
-                if (rt == null) continue;
-
-                float w = 0f;
-                LayoutElement le = child.GetComponent<LayoutElement>();
-                if (le != null && le.preferredWidth > 1f) w = le.preferredWidth;
-                if (w <= 1f)
-                {
-                    try { LayoutRebuilder.ForceRebuildLayoutImmediate(rt); } catch { }
-                    w = LayoutUtility.GetPreferredWidth(rt);
-                }
-                if (w <= 1f) w = rt.sizeDelta.x;
-                if (w <= 1f) w = 48f * s;
-
-                if (x > 0f && x + w > availW + 0.5f)
-                {
-                    x = 0f;
-                    y -= rowH + rowSpacing;
-                    rows++;
-                }
-
-                rt.anchorMin = new Vector2(0f, 1f);
-                rt.anchorMax = new Vector2(0f, 1f);
-                rt.pivot = new Vector2(0f, 1f);
-                rt.anchoredPosition = new Vector2(x, y);
-                rt.sizeDelta = new Vector2(w, rowH);
-
-                x += w + colSpacing;
-            }
-
-            float totalH = rows * rowH + (rows - 1) * rowSpacing + pad * 2f;
-            if (totalH < chromeSz + 8f * s) totalH = chromeSz + 8f * s;
-            _settingsFloatGroupTabsH = totalH;
-
-            RectTransform groupRT = _settingsFloatGroupTabsRow.GetComponent<RectTransform>();
-            if (groupRT != null)
-                groupRT.sizeDelta = new Vector2(0f, totalH);
-
-            _settingsFloatGroupTabsContentRT.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, totalH);
-            _settingsFloatGroupTabsContentRT.offsetMin = new Vector2(pad, -totalH);
-            _settingsFloatGroupTabsContentRT.offsetMax = new Vector2(-pad, -pad);
-
             ApplySettingsFloatScrollHostInsets(s);
         }
 
@@ -667,61 +694,254 @@ namespace VPB
             if (_settingsFloatScrollHost == null) return;
             float titleH = GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef * s;
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef * s;
-            float chromeSz = GalleryUiDesignTokens.ButtonSizeRef * s;
             float filterH = GalleryUiDesignTokens.FloatSearchRowHeightRef * s;
-            float groupH = _settingsFloatGroupTabsH > 1f ? _settingsFloatGroupTabsH : (chromeSz + 8f * s);
+            float sidebarW = GalleryUiDesignTokens.SettingsFloatSidebarWidthRef * s;
+            _settingsFloatGroupTabsH = sidebarW;
 
             RectTransform scrollRT = _settingsFloatScrollHost.GetComponent<RectTransform>();
-            if (scrollRT == null) return;
-            scrollRT.offsetMin = new Vector2(0f, footerH);
-            scrollRT.offsetMax = new Vector2(0f, -(titleH + filterH + groupH));
+            if (scrollRT != null)
+            {
+                scrollRT.offsetMin = new Vector2(sidebarW, footerH);
+                scrollRT.offsetMax = new Vector2(0f, -(titleH + filterH));
+            }
 
-            // Keep GroupTabs under title+filter when height changes.
             if (_settingsFloatGroupTabsRow != null)
             {
                 RectTransform groupRT = _settingsFloatGroupTabsRow.GetComponent<RectTransform>();
                 if (groupRT != null)
-                    groupRT.anchoredPosition = new Vector2(0f, -(titleH + filterH));
+                {
+                    groupRT.anchorMin = new Vector2(0f, 0f);
+                    groupRT.anchorMax = new Vector2(0f, 1f);
+                    groupRT.pivot = new Vector2(0f, 1f);
+                    groupRT.offsetMin = new Vector2(0f, footerH);
+                    groupRT.offsetMax = new Vector2(sidebarW, -(titleH + filterH));
+                    groupRT.sizeDelta = new Vector2(sidebarW, 0f);
+                }
             }
         }
 
+        /// <summary>
+        /// Rebuilds the settings list. Only the rows covering the viewport (plus a small overscan) are
+        /// built in this frame; everything above and below is a single exact-height placeholder so the
+        /// scroll range and position match a fully built list, and the remaining rows stream in over the
+        /// next frames. Every row click routes back through here, so this governs click latency too.
+        /// </summary>
         private void RebuildSettingsFloatRows(int font, float s, float rowH, bool keepScroll)
         {
             if (_settingsFloatRowsParent == null) return;
 
+            StopSettingsFloatDeferredRows();
+
             float scrollPos = 1f;
             if (keepScroll && _settingsFloatScrollRect != null)
-                scrollPos = _settingsFloatScrollRect.verticalNormalizedPosition;
+                scrollPos = Mathf.Clamp01(_settingsFloatScrollRect.verticalNormalizedPosition);
 
             for (int c = _settingsFloatRowsParent.childCount - 1; c >= 0; c--)
             {
-                try { UnityEngine.Object.Destroy(_settingsFloatRowsParent.GetChild(c).gameObject); } catch { }
+                try
+                {
+                    // Destroy is deferred to end of frame — deactivate now so the layout pass this frame
+                    // does not size the content from old rows plus new ones.
+                    GameObject old = _settingsFloatRowsParent.GetChild(c).gameObject;
+                    old.SetActive(false);
+                    UnityEngine.Object.Destroy(old);
+                }
+                catch { }
             }
 
+            _settingsFloatRowsFont = font;
+            _settingsFloatRowsScale = s;
+            _settingsFloatRowsBaseHeight = rowH;
+            _settingsFloatRowsSpacing = SettingsFloatRowsSpacingRef * s;
+
             List<FileEntry> rows = BuildInternalSettingsRows();
+            float rowsH = 0f;
             for (int i = 0; i < rows.Count; i++)
             {
                 InternalSettingRowEntry row = rows[i] as InternalSettingRowEntry;
                 if (row == null) continue;
-                InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);
-                if (def == null) continue;
-                BuildSettingsFloatRow(row, def, font, s, rowH);
+                InternalSettingDefinition def = row.IsHeader ? null : GetInternalSettingDefinition(row.RowKey);
+                if (!row.IsHeader && def == null) continue;
+                float h = SettingsFloatRowHeight(row, def, rowH, s);
+                _settingsFloatRowQueue.Add(row);
+                _settingsFloatRowHeights.Add(h);
+                rowsH += h;
             }
+
+            int n = _settingsFloatRowQueue.Count;
+            SyncSettingsFloatEmptyState(n, s, font);
+            if (n == 0) return;
+
+            float spacing = _settingsFloatRowsSpacing;
+            float pad = SettingsFloatRowsPadRef * s;
+            float totalH = rowsH + spacing * (n - 1) + pad * 2f;
+            float viewH = SettingsFloatViewportHeight(s);
+            float topY = (1f - scrollPos) * Mathf.Max(0f, totalH - viewH);
+
+            int first = int.MaxValue;
+            int last = -1;
+            float y = pad;
+            for (int i = 0; i < n; i++)
+            {
+                float h = _settingsFloatRowHeights[i];
+                if (y + h > topY && y < topY + viewH)
+                {
+                    if (i < first) first = i;
+                    if (i > last) last = i;
+                }
+                y += h + spacing;
+            }
+            if (last < 0) { first = 0; last = 0; }
+            first = Mathf.Max(0, first - SettingsFloatRowOverscan);
+            last = Mathf.Min(n - 1, last + SettingsFloatRowOverscan);
+
+            if (first > 0)
+                _settingsFloatRowsLeadPad = CreateSettingsFloatRowPad("PendingRowsLead", SettingsFloatRowsSpanHeight(0, first - 1));
+
+            for (int i = first; i <= last; i++)
+            {
+                InternalSettingRowEntry row = _settingsFloatRowQueue[i];
+                BuildSettingsFloatRow(row, row != null && !row.IsHeader ? GetInternalSettingDefinition(row.RowKey) : null, font, s, rowH);
+            }
+
+            if (last < n - 1)
+                _settingsFloatRowsTailPad = CreateSettingsFloatRowPad("PendingRowsTail", SettingsFloatRowsSpanHeight(last + 1, n - 1));
+
+            _settingsFloatRowsBuiltFirst = first;
+            _settingsFloatRowsBuiltLast = last;
 
             if (keepScroll && _settingsFloatScrollRect != null)
                 _settingsFloatScrollRect.verticalNormalizedPosition = Mathf.Clamp01(scrollPos);
-            try { UI.ApplyFloatRootHoverPolicy(_settingsFloatRoot); } catch { }
+            else
+                ApplySettingsFloatScrollToGroup();
+
+            if (first > 0 || last < n - 1)
+                _settingsFloatRowsDeferCo = StartCoroutine(BuildSettingsFloatRowsDeferredCo());
         }
 
-        private void BuildSettingsFloatRow(InternalSettingRowEntry row, InternalSettingDefinition def, int font, float s, float rowH)
+        /// <summary>Height a row will occupy, resolved without building it (drives the placeholders).</summary>
+        private float SettingsFloatRowHeight(InternalSettingRowEntry row, InternalSettingDefinition def, float rowH, float s)
         {
-            float effectiveRowH = rowH;
+            if (row != null && row.IsHeader)
+                return GalleryUiDesignTokens.SettingsFloatSectionHeaderHeightRef * s;
             if (def != null
                 && def.ControlType == InternalSettingControlType.TextArea
                 && !string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
             {
-                effectiveRowH = GalleryUiDesignTokens.SettingsFloatTextAreaRowHeightRef * s;
+                return GalleryUiDesignTokens.SettingsFloatTextAreaRowHeightRef * s;
             }
+            return rowH;
+        }
+
+        /// <summary>Height of rows [fromIndex..toIndex] collapsed into one child: their own heights plus
+        /// the layout spacings between them (the spacing to the neighbouring child stays with the child).</summary>
+        private float SettingsFloatRowsSpanHeight(int fromIndex, int toIndex)
+        {
+            float h = 0f;
+            for (int i = fromIndex; i <= toIndex && i < _settingsFloatRowHeights.Count; i++)
+                h += _settingsFloatRowHeights[i];
+            int count = toIndex - fromIndex + 1;
+            if (count > 1) h += _settingsFloatRowsSpacing * (count - 1);
+            return h;
+        }
+
+        private float SettingsFloatViewportHeight(float s)
+        {
+            float h = 0f;
+            try
+            {
+                if (_settingsFloatScrollRect != null && _settingsFloatScrollRect.viewport != null)
+                    h = _settingsFloatScrollRect.viewport.rect.height;
+            }
+            catch { }
+            if (h <= 1f)
+            {
+                try { if (_settingsFloatPanelRT != null) h = _settingsFloatPanelRT.rect.height; } catch { }
+            }
+            if (h <= 1f) h = GalleryUiDesignTokens.SettingsFloatDefaultHeightRef * s;
+            return h;
+        }
+
+        private GameObject CreateSettingsFloatRowPad(string name, float height)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(_settingsFloatRowsParent, false);
+            go.AddComponent<RectTransform>();
+            UI.AddLE(go, minHeight: height, preferredHeight: height, flexibleWidth: 1f, flexibleHeight: 0f);
+            return go;
+        }
+
+        private IEnumerator BuildSettingsFloatRowsDeferredCo()
+        {
+            int n = _settingsFloatRowQueue.Count;
+            while (_settingsFloatRowsParent != null
+                   && (_settingsFloatRowsBuiltFirst > 0 || _settingsFloatRowsBuiltLast < n - 1))
+            {
+                yield return null;
+                if (_settingsFloatRowsParent == null) break;
+
+                _settingsFloatRowsClock.Reset();
+                _settingsFloatRowsClock.Start();
+                while (_settingsFloatRowsClock.ElapsedMilliseconds < SettingsFloatDeferredRowBudgetMs)
+                {
+                    // Fill downward first (what the user scrolls into), then back up.
+                    if (_settingsFloatRowsBuiltLast < n - 1) BuildSettingsFloatDeferredRow(true);
+                    else if (_settingsFloatRowsBuiltFirst > 0) BuildSettingsFloatDeferredRow(false);
+                    else break;
+                }
+                _settingsFloatRowsClock.Stop();
+            }
+            _settingsFloatRowsDeferCo = null;
+        }
+
+        private void BuildSettingsFloatDeferredRow(bool down)
+        {
+            int n = _settingsFloatRowQueue.Count;
+            int idx = down ? _settingsFloatRowsBuiltLast + 1 : _settingsFloatRowsBuiltFirst - 1;
+            if (idx < 0 || idx >= n) return;
+
+            GameObject padGO = down ? _settingsFloatRowsTailPad : _settingsFloatRowsLeadPad;
+            InternalSettingRowEntry row = _settingsFloatRowQueue[idx];
+            InternalSettingDefinition def = (row != null && !row.IsHeader) ? GetInternalSettingDefinition(row.RowKey) : null;
+            GameObject rowGO = row != null
+                ? BuildSettingsFloatRow(row, def, _settingsFloatRowsFont, _settingsFloatRowsScale, _settingsFloatRowsBaseHeight)
+                : null;
+
+            if (rowGO != null && padGO != null)
+            {
+                int padIdx = padGO.transform.GetSiblingIndex();
+                try { rowGO.transform.SetSiblingIndex(down ? padIdx : padIdx + 1); } catch { }
+            }
+
+            if (down) _settingsFloatRowsBuiltLast = idx;
+            else _settingsFloatRowsBuiltFirst = idx;
+
+            if (padGO == null) return;
+
+            bool exhausted = down ? idx >= n - 1 : idx <= 0;
+            if (exhausted)
+            {
+                try { padGO.SetActive(false); UnityEngine.Object.Destroy(padGO); } catch { }
+                if (down) _settingsFloatRowsTailPad = null;
+                else _settingsFloatRowsLeadPad = null;
+                return;
+            }
+
+            LayoutElement le = padGO.GetComponent<LayoutElement>();
+            if (le == null) return;
+            float shrunk = Mathf.Max(0f, le.preferredHeight - (_settingsFloatRowHeights[idx] + _settingsFloatRowsSpacing));
+            le.minHeight = shrunk;
+            le.preferredHeight = shrunk;
+        }
+
+        private GameObject BuildSettingsFloatRow(InternalSettingRowEntry row, InternalSettingDefinition def, int font, float s, float rowH)
+        {
+            if (row == null) return null;
+            if (row.IsHeader) return BuildSettingsFloatHeaderRow(row, font, s);
+
+            if (def == null) return null;
+
+            float effectiveRowH = SettingsFloatRowHeight(row, def, rowH, s);
 
             GameObject rowGO = new GameObject("SettingsRow_" + (row.RowKey ?? "row"));
             rowGO.transform.SetParent(_settingsFloatRowsParent, false);
@@ -743,11 +963,22 @@ namespace VPB
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: true);
 
+            bool modified = def.HasDefault && !SettingsRowIsAtDefault(def);
+            GameObject dotGO = new GameObject("ModifiedDot");
+            dotGO.transform.SetParent(listRowGO.transform, false);
+            float dotSz = GalleryUiDesignTokens.SettingsFloatModifiedDotSizeRef * s;
+            Image dotImg = UI.AddImage(dotGO, modified ? Color.white : new Color(1f, 1f, 1f, 0f));
+            if (dotImg != null) dotImg.raycastTarget = false;
+            UI.AddLE(dotGO, minWidth: dotSz, minHeight: dotSz, preferredWidth: dotSz, preferredHeight: dotSz, flexibleWidth: 0f);
+            if (modified)
+                AddTooltipPlain(dotGO, VPBTranslation.T("settings.row.modified.tip", "Differs from default"));
+
             Text nameText = UI.CreateLabel(
                 listRowGO, row.Name ?? def.Label ?? row.RowKey ?? "", GalleryUiDesignTokens.SettingsListRowNameFontRef,
-                Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate,
+                modified ? Color.white : GalleryUiColorTokens.TextMuted, TextAnchor.MiddleLeft, HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate,
                 raycastTarget: false, name: "Name");
             GalleryUiMetrics.ApplyFont(nameText, GalleryUiDesignTokens.SettingsListRowNameFontRef, s, GalleryUiDesignTokens.FontMinRef);
+            if (modified) nameText.fontStyle = FontStyle.Bold;
             UI.AddLE(nameText.gameObject, flexibleWidth: 0.45f, minWidth: 80f * s, preferredHeight: effectiveRowH * 0.9f);
 
             GameObject detailsRowGO = new GameObject("Details");
@@ -755,7 +986,38 @@ namespace VPB
             UI.AddHLG(detailsRowGO, spacing: 6f * s, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             UI.AddLE(detailsRowGO, flexibleWidth: 0.55f, minHeight: effectiveRowH * 0.85f, preferredHeight: effectiveRowH * 0.85f);
 
-            RebuildSettingsRowControls(rowGO, def);
+            RebuildSettingsRowControls(rowGO, def, settleLayout: false);
+            // Per row — the root-wide pass walked every Selectable/UIHoverBorder in the whole float twice
+            // per rebuild, and deferred rows would miss it entirely.
+            try { UI.ApplyFloatRootHoverPolicy(rowGO); } catch { }
+            return rowGO;
+        }
+
+        private GameObject BuildSettingsFloatHeaderRow(InternalSettingRowEntry row, int font, float s)
+        {
+            float h = GalleryUiDesignTokens.SettingsFloatSectionHeaderHeightRef * s;
+            GameObject rowGO = new GameObject("SettingsHdr_" + (row.RowKey ?? "hdr"));
+            rowGO.transform.SetParent(_settingsFloatRowsParent, false);
+            UI.AddLE(rowGO, minHeight: h, preferredHeight: h, flexibleWidth: 1f);
+            Color bg = row.IsCategoryHeader ? SettingsFloatGroupActive : GalleryUiColorTokens.SurfacePanel;
+            UI.AddImage(rowGO, bg);
+
+            Text t = UI.CreateLabel(
+                rowGO, row.Name ?? "", GalleryUiDesignTokens.FontCaptionRef,
+                row.IsCategoryHeader ? Color.white : GalleryUiColorTokens.TextDim,
+                TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                raycastTarget: false, name: "Name");
+            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
+            t.fontStyle = FontStyle.Bold;
+            RectTransform tr = t.rectTransform;
+            if (tr != null)
+            {
+                tr.anchorMin = Vector2.zero;
+                tr.anchorMax = Vector2.one;
+                tr.offsetMin = new Vector2(10f * s, 0f);
+                tr.offsetMax = new Vector2(-8f * s, 0f);
+            }
+            return rowGO;
         }
 
         internal InputField GetSettingsFloatFilterInput()
@@ -837,12 +1099,11 @@ namespace VPB
 
             if (_settingsFloatCollapseIcon != null)
             {
-                string path = _settingsFloatCollapsed ? "vpb_icons/chevron_down.png" : "vpb_icons/chevron_up.png";
+                string path = _settingsFloatCollapsed ? "chevron-down" : "chevron-up";
                 Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
                 if (spr != null)
                 {
-                    _settingsFloatCollapseIcon.sprite = spr;
-                    _settingsFloatCollapseIcon.color = Color.white;
+                    UI.SetIconSprite(_settingsFloatCollapseIcon, spr);
                 }
             }
 
@@ -866,7 +1127,7 @@ namespace VPB
             }
         }
 
-        /// <summary>Esc ladder: clear filter → Cancel+close. Must gate on GetKeyDown (warm Update).</summary>
+        /// <summary>Esc ladder: clear search → clear modified-only → Close (keep values). Must gate on GetKeyDown (warm Update).</summary>
         internal bool TryHandleSettingsFloatEsc()
         {
             if (!IsSettingsPanelOpen()) return false;
@@ -881,7 +1142,15 @@ namespace VPB
                 return true;
             }
 
-            ExitInternalSettingsMode(false);
+            if (settingsModifiedOnly)
+            {
+                settingsModifiedOnly = false;
+                SyncSettingsModifiedOnlyButton();
+                RefreshInternalSettingsListRows(true);
+                return true;
+            }
+
+            ExitInternalSettingsMode(true);
             return true;
         }
 
@@ -1001,6 +1270,9 @@ namespace VPB
                 }
             }
 
+            if (_settingsFloatModifiedBtn != null)
+                RescaleSettingsFloatSquareChrome(_settingsFloatModifiedBtn, chromeSz, s);
+
             if (_settingsFloatFooter != null)
             {
                 RectTransform footerRT = _settingsFloatFooter.GetComponent<RectTransform>();
@@ -1016,6 +1288,7 @@ namespace VPB
                     RescaleSettingsFloatSquareChrome(closeTr.gameObject, chromeSz, s);
             }
 
+            ApplySettingsFloatScrollHostInsets(s);
             SyncSettingsFloatCollapseChrome(titleH);
             try { SyncSettingsSideSearchInputFromFilter(); } catch { }
             // One row/tab rebuild at new scale — shell reused.
@@ -1119,6 +1392,47 @@ namespace VPB
         private static Vector2 SettingsFloatTopLeftToCenter(Vector2 topLeft, Vector2 size)
         {
             return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
+        }
+
+        /// <summary>Re-bind settings float chrome strings after locale change. Rows rebuild separately.</summary>
+        private void RefreshSettingsFloatLocalizedChrome()
+        {
+            if (_settingsFloatRoot == null) return;
+
+            if (_settingsFloatTitleBarRT != null)
+            {
+                Transform titleTr = _settingsFloatTitleBarRT.Find("Title");
+                Text title = titleTr != null ? titleTr.GetComponent<Text>() : null;
+                if (title != null)
+                    title.text = VPBTranslation.T("settings.title", "Settings");
+            }
+
+            if (_settingsFloatFilterInput != null)
+            {
+                Text ph = _settingsFloatFilterInput.placeholder as Text;
+                if (ph != null)
+                    ph.text = VPBTranslation.T("settings.search.placeholder", "Search settings…");
+            }
+
+            if (_settingsFloatModifiedBtnText != null)
+                _settingsFloatModifiedBtnText.text = VPBTranslation.T("settings.modified_only.abbrev", "≠");
+
+            if (_settingsFloatFooter != null)
+            {
+                SetChildButtonLabel(_settingsFloatFooter.transform, "FooterRevert",
+                    VPBTranslation.T("settings.footer.revert", "Revert"));
+                SetChildButtonLabel(_settingsFloatFooter.transform, "FooterClose",
+                    VPBTranslation.T("settings.footer.close", "Close"));
+            }
+        }
+
+        private static void SetChildButtonLabel(Transform parent, string childName, string label)
+        {
+            if (parent == null || string.IsNullOrEmpty(childName)) return;
+            Transform tr = parent.Find(childName);
+            if (tr == null) return;
+            Text t = tr.GetComponentInChildren<Text>(true);
+            if (t != null) t.text = label ?? "";
         }
 
         private static GameObject SettingsFloatSquareIconButton(

@@ -13,7 +13,20 @@ namespace VPB
         private const int GlobalSourceFilterButtonWidth = 88;
         private const float GlobalSourceFilterButtonHeight = GalleryUiDesignTokens.TitleBarChipRef;
         private const float GlobalSourceFilterButtonCenterRelativeX = -398f;
-        private const float BrowseFilterMenuPanelWidthRef = 320f;
+        // Property-sheet popup: label column + 3-way segments. Wider than a plain menu so
+        // "Always loaded" / "Untagged" stay readable (Galitz form fill-in; Johnson proximity).
+        private const float BrowseFilterMenuPanelWidthRef = 384f;
+        private const float BrowseFilterMenuPadRef = 8f;
+        private const float BrowseFilterMenuSpacingRef = 3f;
+        private const float BrowseFilterSectionHeightRef = 22f;
+        private const float BrowseFilterLabelColWidthRef = 148f;
+        private const float BrowseFilterFieldIconSizeRef = 22f;
+        private const float BrowseFilterSegIconSizeRef = 16f;
+        private const float BrowseFilterSectionIconSizeRef = 16f;
+        private const float BrowseFilterDividerHeightRef = 7f;
+        private const float BrowseFilterArmedStripeWidthRef = 3f;
+        private const float BrowseFilterLabeledRowPadHRef = 4f;
+        private static readonly Vector3[] BrowseFilterWorldCornersScratch = new Vector3[4];
 
         public void SetupGlobalSourceFilterDropdown(GameObject titleBarGO, GameObject backgroundBoxGO)
         {
@@ -84,18 +97,18 @@ namespace VPB
             }
 
             AddTooltip(globalSourceFilterBtn, "gallery.tooltip.browse_filter",
-                "Filter: source + visibility. Each row is a 3-way choice. Right-click this button clears non-default filters.");
+                "Filter: source, visibility, load, license. Icon rows = 3-way choice. Hover a label for meaning. Right-click or Reset clears.");
 
-            // Compact: filter_off idle / filter_on when active (filter.png is Filter Presets).
+            // Compact: filter-off idle / filter when active (filter-search is Filter Presets).
             try
             {
-                Sprite sp = UI.LoadIconSprite("vpb_icons/filter_off.png", UI.BarIconGlyphTint);
+                Sprite sp = UI.LoadIconSprite("filter-off", UI.BarIconGlyphTint);
                 if (sp != null && globalSourceFilterBtn != null)
                 {
                     GameObject iconGO = new GameObject("Icon");
                     iconGO.transform.SetParent(globalSourceFilterBtn.transform, false);
                     globalSourceFilterBtnIcon = UI.AddImage(iconGO, Color.white, false);
-                    globalSourceFilterBtnIcon.sprite = sp;
+                    UI.SetIconSprite(globalSourceFilterBtnIcon, sp);
                     globalSourceFilterBtnIcon.preserveAspect = true;
                     RectTransform irt = iconGO.GetComponent<RectTransform>();
                     irt.anchorMin = Vector2.zero;
@@ -163,7 +176,16 @@ namespace VPB
                 "BrowseFilterMenuPanel",
                 AnchorPresets.topMiddle,
                 new Vector2(BrowseFilterMenuPanelWidthRef, 50f),
-                new Vector2(GlobalSourceFilterButtonCenterRelativeX, -72f));
+                new Vector2(GlobalSourceFilterButtonCenterRelativeX, -72f),
+                childAlignment: TextAnchor.UpperCenter,
+                configureVlg: vlg =>
+                {
+                    if (vlg == null) return;
+                    vlg.spacing = BrowseFilterMenuSpacingRef;
+                    vlg.padding = UI.Pad(BrowseFilterMenuPadRef, BrowseFilterMenuPadRef, BrowseFilterMenuPadRef, BrowseFilterMenuPadRef);
+                    vlg.childForceExpandHeight = false;
+                    vlg.childForceExpandWidth = true;
+                });
         }
 
         private void ToggleGlobalSourceFilterDropdown()
@@ -176,10 +198,9 @@ namespace VPB
         private void ShowGlobalSourceFilterDropdown()
         {
             if (globalSourceFilterMenuRoot == null) return;
-            RebuildGlobalSourceFilterMenuOptions();
-            try { RescaleGlobalSourceFilterMenuInternal(ChromeScale); } catch { }
             try { globalSourceFilterMenuRoot.transform.SetAsLastSibling(); } catch { }
             globalSourceFilterMenuRoot.SetActive(true);
+            RebuildGlobalSourceFilterMenuOptions();
         }
 
         private void HideGlobalSourceFilterDropdown()
@@ -199,11 +220,14 @@ namespace VPB
             if (panelImg != null)
                 panelImg.color = GalleryUiColorTokens.PopupSurface;
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_source", "Source"));
+            // Primary: Source as labeled row (no extra section — von Restorff one focus).
             int sourceSeg = currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local
                 ? 1
                 : (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var ? 2 : 0);
-            AddBrowseFilterSegmentRow(
+            AddBrowseFilterLabeledRow(
+                VPBTranslation.T("gallery.filter.section_source", "Source"),
+                "package",
+                currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All,
                 new string[]
                 {
                     VPBTranslation.T("gallery.filter.source_all", "All"),
@@ -217,12 +241,18 @@ namespace VPB
                         ? VPBConfig.GlobalSourceFilterValue.Local
                         : (i == 2 ? VPBConfig.GlobalSourceFilterValue.Var : VPBConfig.GlobalSourceFilterValue.All);
                     OnGlobalSourceFilterRowClicked(v);
-                });
+                },
+                "gallery.filter.tip.source",
+                "All packages, Local (loose files), or .var only.",
+                new string[] { "layers-union", "folder-open", "package" });
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_visibility", "Visibility"));
+            AddBrowseFilterDivider();
+            AddBrowseFilterSection(VPBTranslation.T("gallery.filter.section_visibility", "Visibility"), "eye");
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.hidden", "Hidden"));
-            AddBrowseFilterSegmentRow(
+            AddBrowseFilterLabeledRow(
+                VPBTranslation.T("gallery.filter.hidden", "Hidden"),
+                "ghost",
+                _browseHiddenCycle != BrowseFilterCycle.Off,
                 new string[]
                 {
                     VPBTranslation.T("gallery.filter.seg_off", "Off"),
@@ -230,10 +260,14 @@ namespace VPB
                     VPBTranslation.T("gallery.filter.seg_only", "Only")
                 },
                 (int)_browseHiddenCycle,
-                i => SetBrowseHiddenCycle((BrowseFilterCycle)i, refresh: true));
+                i => SetBrowseHiddenCycle((BrowseFilterCycle)i, refresh: true),
+                "gallery.filter.tip.hidden",
+                "Off hides hidden packages. Show includes them. Only = hidden packages only.");
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.old_versions", "Old versions"));
-            AddBrowseFilterSegmentRow(
+            AddBrowseFilterLabeledRow(
+                VPBTranslation.T("gallery.filter.old_versions", "Old versions"),
+                "versions",
+                IsBrowseOldVersionsNonDefault(_browseOldVersionsCycle),
                 new string[]
                 {
                     VPBTranslation.T("gallery.filter.seg_all_versions", "All"),
@@ -241,13 +275,18 @@ namespace VPB
                     VPBTranslation.T("gallery.filter.seg_old_only", "Old only")
                 },
                 (int)_browseOldVersionsCycle,
-                i => SetBrowseOldVersionsCycle((BrowseFilterCycle)i, refresh: true));
+                i => SetBrowseOldVersionsCycle((BrowseFilterCycle)i, refresh: true),
+                "gallery.filter.tip.old_versions",
+                "Newest (default) hides older .var revisions. All = every version. Old only = superseded.");
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.user_tags", "User tags"));
             int tagSeg = _userTagAvailMode == UserTagAvailMode.FilterUntagged
                 ? 1
                 : (_userTagAvailMode == UserTagAvailMode.FilterTaggedOnly ? 2 : 0);
-            AddBrowseFilterSegmentRow(
+            AddBrowseFilterLabeledRow(
+                VPBTranslation.T("gallery.filter.user_tags", "User tags"),
+                "tags",
+                _userTagAvailMode == UserTagAvailMode.FilterUntagged
+                    || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly,
                 new string[]
                 {
                     VPBTranslation.T("gallery.filter.seg_off", "Off"),
@@ -255,12 +294,17 @@ namespace VPB
                     VPBTranslation.T("gallery.filter.seg_tagged", "Tagged")
                 },
                 tagSeg,
-                i => SetBrowseTagPresenceSegment(i));
+                i => SetBrowseTagPresenceSegment(i),
+                "gallery.filter.tip.user_tags",
+                "Off = no tag-presence filter. Untagged / Tagged filter by your tags.");
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_more", "More"));
+            AddBrowseFilterDivider();
+            AddBrowseFilterSection(VPBTranslation.T("gallery.filter.section_in_scene", "In scene"), "player-play");
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.always_loaded", "Always loaded"));
-            AddBrowseFilterSegmentRow(
+            AddBrowseFilterLabeledRow(
+                VPBTranslation.T("gallery.filter.always_loaded", "Always loaded"),
+                "plug-connected",
+                _browseAlwaysLoadedCycle != BrowseFilterCycle.Off,
                 new string[]
                 {
                     VPBTranslation.T("gallery.filter.seg_off", "Off"),
@@ -268,13 +312,17 @@ namespace VPB
                     VPBTranslation.T("gallery.filter.seg_only", "Only")
                 },
                 (int)_browseAlwaysLoadedCycle,
-                i => SetBrowseAlwaysLoadedCycle((BrowseFilterCycle)i, refresh: true));
+                i => SetBrowseAlwaysLoadedCycle((BrowseFilterCycle)i, refresh: true),
+                "gallery.filter.tip.always_loaded",
+                "First sorts always-loaded packages to top. Only shows those packages.");
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.loaded", "Loaded"));
             int loadedSeg = _browseLoadedMode == BrowseLoadedMode.Off
                 ? 0
                 : (_browseLoadedMode == BrowseLoadedMode.LoadedOnly ? 1 : 2);
-            AddBrowseFilterSegmentRow(
+            AddBrowseFilterLabeledRow(
+                VPBTranslation.T("gallery.filter.loaded", "Loaded"),
+                "circle-check",
+                _browseLoadedMode != BrowseLoadedMode.Off,
                 new string[]
                 {
                     VPBTranslation.T("gallery.filter.seg_all", "All"),
@@ -288,10 +336,14 @@ namespace VPB
                         ? BrowseLoadedMode.Off
                         : (i == 1 ? BrowseLoadedMode.LoadedOnly : BrowseLoadedMode.UnloadedOnly);
                     SetBrowseLoadedMode(m, refresh: true);
-                });
+                },
+                "gallery.filter.tip.loaded",
+                "Loaded / Unloaded filter by whether the package is in the current scene.");
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.unused", "Unused"));
-            AddBrowseFilterSegmentRow(
+            AddBrowseFilterLabeledRow(
+                VPBTranslation.T("gallery.filter.unused", "Unused"),
+                "history-toggle",
+                _browseUnusedCycle != BrowseFilterCycle.Off,
                 new string[]
                 {
                     VPBTranslation.T("gallery.filter.seg_off", "Off"),
@@ -299,10 +351,19 @@ namespace VPB
                     VPBTranslation.T("gallery.filter.seg_only", "Only")
                 },
                 (int)_browseUnusedCycle,
-                i => SetBrowseUnusedCycle((BrowseFilterCycle)i, refresh: true));
+                i => SetBrowseUnusedCycle((BrowseFilterCycle)i, refresh: true),
+                "gallery.filter.tip.unused",
+                "First sorts unused packages up. Only shows packages with no load history.");
 
-            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_license", "License"));
+            AddBrowseFilterDivider();
+            AddBrowseFilterSection(VPBTranslation.T("gallery.filter.section_license", "License"), "book");
             AddBrowseFilterLicenseSegmentGrid();
+
+            if (HasTitleBarBrowseFilterActive())
+            {
+                AddBrowseFilterDivider();
+                AddBrowseFilterResetRow();
+            }
 
             try { RescaleGlobalSourceFilterMenuInternal(ChromeScale); } catch { }
             LayoutRebuilder.ForceRebuildLayoutImmediate(globalSourceFilterMenuPanelGO.GetComponent<RectTransform>());
@@ -376,18 +437,20 @@ namespace VPB
             }
         }
 
-        private void AddBrowseFilterMenuHeader(string text)
+        private void AddBrowseFilterSection(string text, string iconRelativePath = null)
         {
             if (globalSourceFilterMenuPanelGO == null || string.IsNullOrEmpty(text)) return;
 
-            GameObject header = new GameObject("BrowseFilterHeader");
+            GameObject header = new GameObject("BrowseFilterSection");
             header.transform.SetParent(globalSourceFilterMenuPanelGO.transform, false);
+
+            Sprite headerIcon = TryLoadBrowseFilterIcon(iconRelativePath, GalleryUiColorTokens.TextDim);
 
             Text label = UI.CreateLabel(
                 header,
                 text,
-                GalleryUiDesignTokens.FontCaptionRef,
-                new Color(0.72f, 0.76f, 0.84f, 1f),
+                GalleryUiDesignTokens.FontBodyRef,
+                GalleryUiColorTokens.TextDim,
                 TextAnchor.MiddleLeft,
                 raycastTarget: false,
                 name: "Text");
@@ -397,14 +460,30 @@ namespace VPB
                 RectTransform lrt = label.rectTransform;
                 lrt.anchorMin = Vector2.zero;
                 lrt.anchorMax = Vector2.one;
-                lrt.offsetMin = new Vector2(10f, 0f);
-                lrt.offsetMax = new Vector2(-6f, 0f);
+                lrt.offsetMin = new Vector2(headerIcon != null ? 26f : 4f, 0f);
+                lrt.offsetMax = new Vector2(-4f, 0f);
+            }
+
+            if (headerIcon != null)
+            {
+                GameObject iconGO = new GameObject("Icon");
+                iconGO.transform.SetParent(header.transform, false);
+                Image iconImg = UI.AddImage(iconGO, Color.white, false);
+                UI.SetIconSprite(iconImg, headerIcon);
+                iconImg.preserveAspect = true;
+                iconImg.raycastTarget = false;
+                RectTransform irt = iconGO.GetComponent<RectTransform>();
+                irt.anchorMin = new Vector2(0f, 0.5f);
+                irt.anchorMax = new Vector2(0f, 0.5f);
+                irt.pivot = new Vector2(0f, 0.5f);
+                irt.sizeDelta = new Vector2(BrowseFilterSectionIconSizeRef, BrowseFilterSectionIconSizeRef);
+                irt.anchoredPosition = new Vector2(4f, 0f);
             }
 
             Image bg = UI.AddImage(header, new Color(0f, 0f, 0f, 0f), false);
             if (bg != null) bg.raycastTarget = false;
 
-            UI.AddLE(header, preferredHeight: 22f, flexibleWidth: 1f);
+            UI.AddLE(header, preferredHeight: BrowseFilterSectionHeightRef, minHeight: BrowseFilterSectionHeightRef, flexibleWidth: 1f);
             RectTransform rt = header.GetComponent<RectTransform>();
             if (rt != null)
             {
@@ -413,30 +492,198 @@ namespace VPB
             }
         }
 
+        private void AddBrowseFilterDivider()
+        {
+            if (globalSourceFilterMenuPanelGO == null) return;
+            GameObject sep = new GameObject("BrowseFilterDivider");
+            sep.transform.SetParent(globalSourceFilterMenuPanelGO.transform, false);
+            // Transparent spacer; 1px hairline child — Image on root would paint a 7px slab.
+            Image bg = UI.AddImage(sep, new Color(0f, 0f, 0f, 0f), false);
+            if (bg != null) bg.raycastTarget = false;
+            UI.AddLE(sep, preferredHeight: BrowseFilterDividerHeightRef, minHeight: BrowseFilterDividerHeightRef, flexibleWidth: 1f);
+            GameObject line = new GameObject("Line");
+            line.transform.SetParent(sep.transform, false);
+            Image lineImg = UI.AddImage(line, GalleryUiColorTokens.RimIdle, false);
+            if (lineImg != null) lineImg.raycastTarget = false;
+            RectTransform lrt = line.GetComponent<RectTransform>();
+            if (lrt != null)
+            {
+                lrt.anchorMin = new Vector2(0f, 0.5f);
+                lrt.anchorMax = new Vector2(1f, 0.5f);
+                lrt.pivot = new Vector2(0.5f, 0.5f);
+                lrt.sizeDelta = new Vector2(0f, 1f);
+                lrt.anchoredPosition = Vector2.zero;
+            }
+        }
+
+        private void AddBrowseFilterResetRow()
+        {
+            if (globalSourceFilterMenuPanelGO == null) return;
+            Sprite icon = TryLoadBrowseFilterIcon("filter-off", GalleryUiColorTokens.TextMuted);
+            GameObject row = UI.AddStretchPopupMenuRow(
+                globalSourceFilterMenuPanelGO.transform,
+                VPBTranslation.T("gallery.filter.reset", "Reset filters"),
+                () =>
+                {
+                    try { ClearTitleBarBrowseFilters(refresh: true); } catch { }
+                    if (globalSourceFilterMenuRoot != null && globalSourceFilterMenuRoot.activeSelf)
+                        RebuildGlobalSourceFilterMenuOptions();
+                },
+                isActive: false,
+                enabled: true,
+                rowHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                icon: icon);
+            if (row != null) row.name = "BrowseFilterReset";
+            AddTooltip(row, "gallery.filter.tip.reset", "Clear source, visibility, load, and license filters. Right-click Filter button does the same.");
+        }
+
+        /// <summary>
+        /// Property-sheet row: icon + field name left, exclusive segments right.
+        /// Armed rows get a left stripe + lifted fill (not color-only — Johnson / WCAG).
+        /// </summary>
+        private void AddBrowseFilterLabeledRow(
+            string label,
+            string iconRole,
+            bool armed,
+            string[] segmentLabels,
+            int selectedIndex,
+            Action<int> onSelect,
+            string tooltipKey = null,
+            string tooltipDefault = null,
+            string[] segmentIcons = null)
+        {
+            if (globalSourceFilterMenuPanelGO == null || string.IsNullOrEmpty(label) || segmentLabels == null || onSelect == null)
+                return;
+
+            GameObject row = new GameObject("BrowseFilterLabeledRow");
+            row.transform.SetParent(globalSourceFilterMenuPanelGO.transform, false);
+            Color rowFill = armed ? GalleryUiColorTokens.SurfacePanel : new Color(0f, 0f, 0f, 0f);
+            Image rowBg = UI.AddImage(row, rowFill, false);
+            if (rowBg != null) rowBg.raycastTarget = false;
+            UI.AddHLG(row, spacing: 6f, padding: UI.Pad(BrowseFilterLabeledRowPadHRef, BrowseFilterLabeledRowPadHRef, 0f, 0f),
+                childAlignment: TextAnchor.MiddleLeft,
+                childControlWidth: true,
+                childControlHeight: true,
+                childForceExpandWidth: false,
+                childForceExpandHeight: true);
+            UI.AddLE(row,
+                preferredHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                minHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                flexibleWidth: 1f);
+
+            GameObject stripe = new GameObject("ArmedStripe");
+            stripe.transform.SetParent(row.transform, false);
+            Color stripeCol = armed ? GalleryUiColorTokens.AccentSelected : new Color(0f, 0f, 0f, 0f);
+            Image stripeImg = UI.AddImage(stripe, stripeCol, false);
+            if (stripeImg != null) stripeImg.raycastTarget = false;
+            UI.AddLE(stripe,
+                minWidth: BrowseFilterArmedStripeWidthRef,
+                preferredWidth: BrowseFilterArmedStripeWidthRef,
+                flexibleWidth: 0f,
+                flexibleHeight: 1f);
+
+            GameObject labelCol = new GameObject("Label");
+            labelCol.transform.SetParent(row.transform, false);
+            Image labelHit = UI.AddImage(labelCol, new Color(0f, 0f, 0f, 0f), true);
+            if (labelHit != null) labelHit.raycastTarget = true;
+            UI.AddHLG(labelCol, spacing: 6f, padding: UI.Pad(0, 0, 0, 0),
+                childAlignment: TextAnchor.MiddleLeft,
+                childControlWidth: true,
+                childControlHeight: true,
+                childForceExpandWidth: false,
+                childForceExpandHeight: false);
+            UI.AddLE(labelCol,
+                minWidth: 72f,
+                preferredWidth: BrowseFilterLabelColWidthRef,
+                flexibleWidth: 0f,
+                flexibleHeight: 1f);
+
+            Color iconTint = armed ? GalleryUiColorTokens.TextPrimary : GalleryUiColorTokens.TextDim;
+            Sprite fieldIcon = TryLoadBrowseFilterIcon(iconRole, iconTint);
+            if (fieldIcon != null)
+            {
+                GameObject iconGO = new GameObject("Icon");
+                iconGO.transform.SetParent(labelCol.transform, false);
+                Image iconImg = UI.AddImage(iconGO, Color.white, false);
+                UI.SetIconSprite(iconImg, fieldIcon);
+                iconImg.preserveAspect = true;
+                iconImg.raycastTarget = false;
+                UI.AddLE(iconGO,
+                    minWidth: BrowseFilterFieldIconSizeRef,
+                    preferredWidth: BrowseFilterFieldIconSizeRef,
+                    minHeight: BrowseFilterFieldIconSizeRef,
+                    preferredHeight: BrowseFilterFieldIconSizeRef,
+                    flexibleWidth: 0f,
+                    flexibleHeight: 0f);
+            }
+
+            Color labelColr = armed ? GalleryUiColorTokens.TextPrimary : GalleryUiColorTokens.TextMuted;
+            Text labelTxt = UI.CreateLabel(
+                labelCol,
+                label,
+                GalleryUiDesignTokens.FontBodyRef,
+                labelColr,
+                TextAnchor.MiddleLeft,
+                horizontalWrap: HorizontalWrapMode.Overflow,
+                raycastTarget: false,
+                name: "Text");
+            if (labelTxt != null)
+            {
+                labelTxt.fontStyle = armed ? FontStyle.Bold : FontStyle.Normal;
+                UI.AddLE(labelTxt.gameObject, flexibleWidth: 1f, flexibleHeight: 0f);
+            }
+
+            if (!string.IsNullOrEmpty(tooltipKey))
+                AddTooltip(labelCol, tooltipKey, tooltipDefault ?? "");
+
+            AddBrowseFilterSegmentRow(segmentLabels, selectedIndex, onSelect, allowEmptySlots: false, parent: row, iconRoles: segmentIcons);
+        }
+
+        private static Sprite TryLoadBrowseFilterIcon(string iconRole, Color tint)
+        {
+            if (string.IsNullOrEmpty(iconRole)) return null;
+            try { return UI.LoadIconSprite(iconRole, tint); }
+            catch { return null; }
+        }
+
         /// <summary>
         /// Visible exclusive segment row (usually 3). Recognition over Shift+click.
         /// Empty labels skipped when <paramref name="allowEmptySlots"/>.
+        /// Optional <paramref name="parent"/> nests inside a labeled row.
         /// </summary>
         private void AddBrowseFilterSegmentRow(
             string[] labels,
             int selectedIndex,
             Action<int> onSelect,
-            bool allowEmptySlots = false)
+            bool allowEmptySlots = false,
+            GameObject parent = null,
+            string[] iconRoles = null)
         {
-            if (globalSourceFilterMenuPanelGO == null || labels == null || labels.Length == 0 || onSelect == null)
+            GameObject host = parent != null ? parent : globalSourceFilterMenuPanelGO;
+            if (host == null || labels == null || labels.Length == 0 || onSelect == null)
                 return;
 
+            bool nested = parent != null && parent != globalSourceFilterMenuPanelGO;
+
             GameObject row = new GameObject("BrowseFilterSegments");
-            row.transform.SetParent(globalSourceFilterMenuPanelGO.transform, false);
+            row.transform.SetParent(host.transform, false);
             UI.AddHLG(row, spacing: 3f, padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true,
                 childControlHeight: true,
                 childForceExpandWidth: true,
                 childForceExpandHeight: true);
-            UI.AddLE(row,
-                preferredHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef,
-                flexibleWidth: 1f);
+            if (nested)
+            {
+                UI.AddLE(row, flexibleWidth: 1f, flexibleHeight: 1f, minWidth: 0f);
+            }
+            else
+            {
+                UI.AddLE(row,
+                    preferredHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                    minHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                    flexibleWidth: 1f);
+            }
 
             if (selectedIndex < -1) selectedIndex = -1;
             if (selectedIndex >= labels.Length) selectedIndex = -1;
@@ -456,12 +703,17 @@ namespace VPB
                 }
 
                 bool active = idx == selectedIndex;
+                string iconRole = null;
+                if (iconRoles != null && idx < iconRoles.Length)
+                    iconRole = iconRoles[idx];
+                Sprite segIcon = TryLoadBrowseFilterIcon(iconRole, active ? GalleryUiColorTokens.TextOnAccent : GalleryUiColorTokens.TextDim);
+
                 GameObject seg = UI.CreateUIButton(
                     row,
                     0f,
                     GalleryUiDesignTokens.PopupMenuRowHeightRef,
                     lab,
-                    GalleryUiDesignTokens.FontCaptionRef,
+                    GalleryUiDesignTokens.FontBodyRef,
                     0f, 0f,
                     AnchorPresets.stretchAll,
                     () =>
@@ -476,11 +728,33 @@ namespace VPB
                 Text t = seg.GetComponentInChildren<Text>(true);
                 if (t != null)
                 {
-                    t.alignment = TextAnchor.MiddleCenter;
+                    t.alignment = segIcon != null ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
                     t.horizontalOverflow = HorizontalWrapMode.Overflow;
                     t.verticalOverflow = VerticalWrapMode.Truncate;
                     t.color = active ? GalleryUiColorTokens.TextOnAccent : GalleryUiColorTokens.SegmentIdleText;
                     VPBUiFont.ApplyTo(t);
+                    if (segIcon != null)
+                    {
+                        RectTransform trt = t.rectTransform;
+                        float left = BrowseFilterSegIconSizeRef + 10f;
+                        trt.offsetMin = new Vector2(left, 0f);
+                        trt.offsetMax = new Vector2(-4f, 0f);
+                    }
+                }
+                if (segIcon != null)
+                {
+                    GameObject iconGO = new GameObject("SegIcon");
+                    iconGO.transform.SetParent(seg.transform, false);
+                    Image iconImg = UI.AddImage(iconGO, Color.white, false);
+                    UI.SetIconSprite(iconImg, segIcon);
+                    iconImg.preserveAspect = true;
+                    iconImg.raycastTarget = false;
+                    RectTransform irt = iconGO.GetComponent<RectTransform>();
+                    irt.anchorMin = new Vector2(0f, 0.5f);
+                    irt.anchorMax = new Vector2(0f, 0.5f);
+                    irt.pivot = new Vector2(0f, 0.5f);
+                    irt.sizeDelta = new Vector2(BrowseFilterSegIconSizeRef, BrowseFilterSegIconSizeRef);
+                    irt.anchoredPosition = new Vector2(5f, 0f);
                 }
                 LayoutElement fle = seg.GetComponent<LayoutElement>();
                 if (fle == null) fle = seg.AddComponent<LayoutElement>();
@@ -552,48 +826,266 @@ namespace VPB
             if (globalSourceFilterMenuPanelGO == null) return;
             if (s <= 0f) s = 1f;
 
-            ScaleVerticalPopupMenuRows(
-                globalSourceFilterMenuPanelGO,
-                s,
-                GalleryUiDesignTokens.PopupMenuRowHeightRef,
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                BrowseFilterMenuPanelWidthRef);
+            VerticalLayoutGroup vlg = globalSourceFilterMenuPanelGO.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null)
+            {
+                int pad = Mathf.RoundToInt(BrowseFilterMenuPadRef * s);
+                vlg.padding = new RectOffset(pad, pad, pad, pad);
+                vlg.spacing = BrowseFilterMenuSpacingRef * s;
+            }
 
-            // Segment rows: scale caption font on each Seg* child (ScaleVerticalPopupMenuRows only hits first Text).
-            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
+            RectTransform panelRT = globalSourceFilterMenuPanelGO.GetComponent<RectTransform>();
+            if (panelRT != null)
+                panelRT.sizeDelta = new Vector2(BrowseFilterMenuPanelWidthRef * s, panelRT.sizeDelta.y);
+
             Transform panel = globalSourceFilterMenuPanelGO.transform;
             for (int i = 0; i < panel.childCount; i++)
+                ScaleBrowseFilterMenuChild(panel.GetChild(i), s);
+
+            if (panelRT == null) return;
+            panelRT.anchorMin = new Vector2(0.5f, 1f);
+            panelRT.anchorMax = new Vector2(0.5f, 1f);
+            panelRT.pivot = new Vector2(0.5f, 1f);
+            PositionBrowseFilterMenuBelowButton(panelRT, s);
+        }
+
+        /// <summary>
+        /// Hang panel from Filter button bottom-center in overlay space.
+        /// Do not copy click Y or clamp the menu above the button (tall content used to slide up).
+        /// </summary>
+        private void PositionBrowseFilterMenuBelowButton(RectTransform panelRT, float s)
+        {
+            if (panelRT == null || globalSourceFilterBtn == null) return;
+            RectTransform btnRT = globalSourceFilterBtn.GetComponent<RectTransform>();
+            RectTransform overlayRT = panelRT.parent as RectTransform;
+            if (overlayRT == null && globalSourceFilterMenuRoot != null)
+                overlayRT = globalSourceFilterMenuRoot.GetComponent<RectTransform>();
+            if (btnRT == null || overlayRT == null) return;
+            if (s <= 0f) s = 1f;
+
+            Camera cam = null;
+            try
             {
-                Transform ch = panel.GetChild(i);
-                if (ch == null || ch.name != "BrowseFilterSegments") continue;
-                LayoutElement le = ch.GetComponent<LayoutElement>();
+                Canvas canvas = overlayRT.GetComponentInParent<Canvas>();
+                if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    cam = canvas.worldCamera;
+            }
+            catch { }
+
+            btnRT.GetWorldCorners(BrowseFilterWorldCornersScratch);
+            Vector3 bottomMid = (BrowseFilterWorldCornersScratch[0] + BrowseFilterWorldCornersScratch[3]) * 0.5f;
+            Vector2 screen = RectTransformUtility.WorldToScreenPoint(cam, bottomMid);
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(overlayRT, screen, cam, out local))
+            {
+                float gapFallback = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+                panelRT.anchoredPosition = new Vector2(
+                    btnRT.anchoredPosition.x,
+                    -(GalleryUiDesignTokens.TitleBarHeightRef + gapFallback) * s);
+            }
+            else
+            {
+                float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+                Rect o = overlayRT.rect;
+                panelRT.anchoredPosition = new Vector2(local.x, local.y - o.yMax - gap);
+            }
+
+            try { LayoutRebuilder.ForceRebuildLayoutImmediate(panelRT); } catch { }
+            UI.ClampPopupMenuPanelX(panelRT, overlayRT, 8f * s);
+        }
+
+        private void ScaleBrowseFilterMenuChild(Transform ch, float s)
+        {
+            if (ch == null) return;
+            string name = ch.name;
+            LayoutElement le = ch.GetComponent<LayoutElement>();
+
+            if (name == "BrowseFilterSection")
+            {
+                float h = BrowseFilterSectionHeightRef * s;
+                if (le != null)
+                {
+                    le.preferredHeight = h;
+                    le.minHeight = h;
+                }
+                Text t = ch.GetComponentInChildren<Text>(true);
+                if (t != null)
+                    GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                Transform iconTr = ch.Find("Icon");
+                if (iconTr != null)
+                {
+                    RectTransform irt = iconTr as RectTransform;
+                    if (irt != null)
+                    {
+                        float sz = BrowseFilterSectionIconSizeRef * s;
+                        irt.sizeDelta = new Vector2(sz, sz);
+                        irt.anchoredPosition = new Vector2(4f * s, 0f);
+                    }
+                }
+                Text lt = ch.GetComponentInChildren<Text>(true);
+                if (lt != null)
+                {
+                    RectTransform lrt = lt.rectTransform;
+                    bool hasIcon = iconTr != null;
+                    lrt.offsetMin = new Vector2((hasIcon ? 26f : 4f) * s, 0f);
+                    lrt.offsetMax = new Vector2(-4f * s, 0f);
+                }
+                return;
+            }
+
+            if (name == "BrowseFilterDivider")
+            {
+                float h = BrowseFilterDividerHeightRef * s;
+                if (le != null)
+                {
+                    le.preferredHeight = h;
+                    le.minHeight = h;
+                }
+                Transform lineTr = ch.Find("Line");
+                if (lineTr != null)
+                {
+                    RectTransform lrt = lineTr as RectTransform;
+                    if (lrt != null)
+                        lrt.sizeDelta = new Vector2(0f, Mathf.Max(1f, s));
+                }
+                return;
+            }
+
+            if (name == "BrowseFilterLabeledRow")
+            {
+                float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
                 if (le != null)
                 {
                     le.preferredHeight = rowH;
                     le.minHeight = rowH;
                 }
-                for (int c = 0; c < ch.childCount; c++)
+                HorizontalLayoutGroup hlg = ch.GetComponent<HorizontalLayoutGroup>();
+                if (hlg != null)
                 {
-                    Transform seg = ch.GetChild(c);
-                    if (seg == null) continue;
-                    Text t = seg.GetComponentInChildren<Text>(true);
-                    if (t != null)
-                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
+                    hlg.spacing = 6f * s;
+                    hlg.padding = UI.Pad(BrowseFilterLabeledRowPadHRef, BrowseFilterLabeledRowPadHRef, 0f, 0f, s);
                 }
+                Transform stripe = ch.Find("ArmedStripe");
+                if (stripe != null)
+                {
+                    LayoutElement sle = stripe.GetComponent<LayoutElement>();
+                    if (sle != null)
+                    {
+                        float w = BrowseFilterArmedStripeWidthRef * s;
+                        sle.minWidth = w;
+                        sle.preferredWidth = w;
+                    }
+                }
+                Transform labelTr = ch.Find("Label");
+                if (labelTr != null)
+                {
+                    LayoutElement lle = labelTr.GetComponent<LayoutElement>();
+                    if (lle != null)
+                    {
+                        lle.minWidth = 72f * s;
+                        lle.preferredWidth = BrowseFilterLabelColWidthRef * s;
+                    }
+                    HorizontalLayoutGroup lhlg = labelTr.GetComponent<HorizontalLayoutGroup>();
+                    if (lhlg != null) lhlg.spacing = 6f * s;
+                    Transform iconTr = labelTr.Find("Icon");
+                    if (iconTr != null)
+                    {
+                        LayoutElement ile = iconTr.GetComponent<LayoutElement>();
+                        if (ile != null)
+                        {
+                            float sz = BrowseFilterFieldIconSizeRef * s;
+                            ile.minWidth = sz;
+                            ile.preferredWidth = sz;
+                            ile.minHeight = sz;
+                            ile.preferredHeight = sz;
+                        }
+                    }
+                    Transform textTr = labelTr.Find("Text");
+                    if (textTr != null)
+                    {
+                        Text lt = textTr.GetComponent<Text>();
+                        if (lt != null)
+                            GalleryUiMetrics.ApplyFont(lt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    }
+                }
+                Transform segs = ch.Find("BrowseFilterSegments");
+                if (segs != null)
+                    ScaleBrowseFilterSegmentHost(segs, s, nested: true);
+                return;
             }
 
-            RectTransform panelRT = globalSourceFilterMenuPanelGO.GetComponent<RectTransform>();
-            if (panelRT == null) return;
-            panelRT.anchorMin = new Vector2(0.5f, 1f);
-            panelRT.anchorMax = new Vector2(0.5f, 1f);
-            panelRT.pivot = new Vector2(0.5f, 1f);
-            if (globalSourceFilterBtn == null) return;
-            RectTransform btnRT = globalSourceFilterBtn.GetComponent<RectTransform>();
-            if (btnRT == null) return;
-            float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
-            panelRT.anchoredPosition = new Vector2(
-                btnRT.anchoredPosition.x,
-                -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
+            if (name == "BrowseFilterSegments")
+            {
+                ScaleBrowseFilterSegmentHost(ch, s, nested: false);
+                return;
+            }
+
+            if (name == "BrowseFilterReset")
+            {
+                float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
+                if (le != null)
+                {
+                    le.preferredHeight = rowH;
+                    le.minHeight = rowH;
+                }
+                Text t = ch.GetComponentInChildren<Text>(true);
+                if (t != null)
+                    GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuOverflowFontRef, s, GalleryUiDesignTokens.FontMinRef);
+                Transform iconTr = ch.Find("RowIcon");
+                if (iconTr != null)
+                {
+                    RectTransform irt = iconTr as RectTransform;
+                    if (irt != null)
+                    {
+                        float iconSz = GalleryUiDesignTokens.PopupMenuRowIconSizeRef * s;
+                        irt.sizeDelta = new Vector2(iconSz, iconSz);
+                        irt.anchoredPosition = new Vector2(GalleryUiDesignTokens.PopupMenuRowTextPadXRef * s, 0f);
+                    }
+                    float leftExtraRef = GalleryUiDesignTokens.PopupMenuRowIconSizeRef + GalleryUiDesignTokens.PopupMenuRowIconGapRef;
+                    if (t != null)
+                        UI.ApplyPopupMenuRowTextPadding(t, s, leftExtraRef);
+                }
+            }
+        }
+
+        private void ScaleBrowseFilterSegmentHost(Transform segs, float s, bool nested)
+        {
+            if (segs == null) return;
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
+            LayoutElement le = segs.GetComponent<LayoutElement>();
+            if (le != null && !nested)
+            {
+                le.preferredHeight = rowH;
+                le.minHeight = rowH;
+            }
+            HorizontalLayoutGroup hlg = segs.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null) hlg.spacing = 3f * s;
+
+            float iconSz = BrowseFilterSegIconSizeRef * s;
+            for (int c = 0; c < segs.childCount; c++)
+            {
+                Transform seg = segs.GetChild(c);
+                if (seg == null) continue;
+                Text t = seg.GetComponentInChildren<Text>(true);
+                if (t != null)
+                    GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                Transform iconTr = seg.Find("SegIcon");
+                if (iconTr != null)
+                {
+                    RectTransform irt = iconTr as RectTransform;
+                    if (irt != null)
+                    {
+                        irt.sizeDelta = new Vector2(iconSz, iconSz);
+                        irt.anchoredPosition = new Vector2(5f * s, 0f);
+                    }
+                    if (t != null)
+                    {
+                        RectTransform trt = t.rectTransform;
+                        trt.offsetMin = new Vector2((BrowseFilterSegIconSizeRef + 10f) * s, 0f);
+                        trt.offsetMax = new Vector2(-4f * s, 0f);
+                    }
+                }
+            }
         }
 
         private void OnGlobalSourceFilterRowClicked(VPBConfig.GlobalSourceFilterValue value)
@@ -937,9 +1429,9 @@ namespace VPB
             {
                 try
                 {
-                    string iconPath = nowArmed ? "vpb_icons/filter_on.png" : "vpb_icons/filter_off.png";
+                    string iconPath = nowArmed ? "filter" : "filter-off";
                     Sprite sp = UI.LoadIconSprite(iconPath, UI.BarIconGlyphTint);
-                    if (sp != null) globalSourceFilterBtnIcon.sprite = sp;
+                    if (sp != null) UI.SetIconSprite(globalSourceFilterBtnIcon, sp);
                 }
                 catch { }
             }

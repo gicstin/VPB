@@ -214,7 +214,7 @@ namespace VPB
             if (showUp)
             {
                 UnityAction upAct = onUp != null ? (UnityAction)(() => onUp()) : null;
-                Sprite upIcon = UI.LoadIconSprite("vpb_icons/up.png", new Color(0.9f, 0.9f, 0.9f, 1f));
+                Sprite upIcon = UI.LoadIconSprite("arrow-up", new Color(0.9f, 0.9f, 0.9f, 1f));
                 GameObject up = UI.CreateSideTabSquareIconButton(row, rowH, upIcon, upAct, new Color(0.22f, 0.42f, 0.58f, 1f), 4f * s);
                 if (upIcon == null) AddButtonOverlayGlyph(up, "▲", GalleryUiMetrics.GlyphFontFromControlHeight(34f, s, GalleryUiDesignTokens.FontMinRef));
                 AddTooltipPlain(up, VPBTranslation.T("settings.category_quick.editor.move_up_tip", "Move up"));
@@ -222,7 +222,7 @@ namespace VPB
             if (showDown)
             {
                 UnityAction dnAct = onDown != null ? (UnityAction)(() => onDown()) : null;
-                Sprite dnIcon = UI.LoadIconSprite("vpb_icons/down.png", new Color(0.9f, 0.9f, 0.9f, 1f));
+                Sprite dnIcon = UI.LoadIconSprite("arrow-down", new Color(0.9f, 0.9f, 0.9f, 1f));
                 GameObject dn = UI.CreateSideTabSquareIconButton(row, rowH, dnIcon, dnAct, new Color(0.22f, 0.42f, 0.58f, 1f), 4f * s);
                 if (dnIcon == null) AddButtonOverlayGlyph(dn, "▼", GalleryUiMetrics.GlyphFontFromControlHeight(34f, s, GalleryUiDesignTokens.FontMinRef));
                 AddTooltipPlain(dn, VPBTranslation.T("settings.category_quick.editor.move_down_tip", "Move down"));

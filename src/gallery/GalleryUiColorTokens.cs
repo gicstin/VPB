@@ -31,7 +31,7 @@ namespace VPB
         /// <summary>Popup row resting.</summary>
         public static readonly Color PopupRowIdle = new Color(0.18f, 0.18f, 0.18f, 1f);
         /// <summary>Popup row active / hovered.</summary>
-        public static readonly Color PopupRowActive = new Color(0.32f, 0.32f, 0.32f, 1f);
+        public static readonly Color PopupRowActive = new Color(0.34f, 0.34f, 0.34f, 1f);
         /// <summary>Centered modal panel body.</summary>
         public static readonly Color ModalSurface = new Color(0.06f, 0.06f, 0.06f, 1f);
 
@@ -47,14 +47,17 @@ namespace VPB
 
         // ── Universal active / chrome (floats + shared interactive) ─────────
         // Role split so Scene Import / presets stop painting every control the same green.
-        /// <summary>Selected list row / armed choice — quiet grey lift (not CTA).</summary>
-        public static readonly Color ActiveSelected = new Color(0.34f, 0.34f, 0.34f, 1f);
+        // Selected vs idle must clear ~3:1 luminance (Johnson / WCAG 1.4.11), not a 0.12 grey step.
+        /// <summary>Selected list row / armed choice — grey lift, still muted (not CTA).</summary>
+        public static readonly Color ActiveSelected = new Color(0.36f, 0.36f, 0.36f, 1f);
         /// <summary>Toggle ON / multi-select armed — muted sage, distinct from Apply.</summary>
-        public static readonly Color ActiveOn = new Color(0.28f, 0.38f, 0.31f, 1f);
-        /// <summary>Keyboard / focus highlight — neutral lift.</summary>
-        public static readonly Color ActiveFocus = new Color(0.40f, 0.40f, 0.40f, 1f);
+        public static readonly Color ActiveOn = new Color(0.28f, 0.38f, 0.32f, 1f);
+        /// <summary>Keyboard / focus highlight — neutral lift above selected fill.</summary>
+        public static readonly Color ActiveFocus = new Color(0.42f, 0.42f, 0.42f, 1f);
         /// <summary>Secondary bulk (Select All) — mid chrome, not neon.</summary>
         public static readonly Color ActiveSecondary = new Color(0.30f, 0.30f, 0.30f, 1f);
+        /// <summary>Selected-but-blocked / paused — amber lift, not grey (change blindness vs idle).</summary>
+        public static readonly Color ActivePaused = new Color(0.36f, 0.30f, 0.16f, 1f);
         /// <summary>Dirty / warn mark.</summary>
         public static readonly Color ActiveWarn = new Color(0.72f, 0.58f, 0.28f, 1f);
         /// <summary>Detach / Float chip.</summary>
@@ -86,9 +89,9 @@ namespace VPB
 
         // ── Interactive accents (selected / confirm / destroy) ───────────────
         /// <summary>Gallery chip selected — muted cool-grey (not saturated blue).</summary>
-        public static readonly Color AccentSelected = new Color(0.34f, 0.38f, 0.42f, 1f);
+        public static readonly Color AccentSelected = new Color(0.34f, 0.40f, 0.46f, 1f);
         /// <summary>Primary confirm CTA (Save / Apply) — reserved; do not reuse on rows.</summary>
-        public static readonly Color AccentConfirm = new Color(0.26f, 0.46f, 0.30f, 1f);
+        public static readonly Color AccentConfirm = new Color(0.26f, 0.46f, 0.32f, 1f);
         /// <summary>Destructive fill — avoid dark-red-on-dark (Johnson).</summary>
         public static readonly Color AccentDanger = new Color(0.62f, 0.28f, 0.28f, 1f);
         public static readonly Color AccentDangerStrong = new Color(0.72f, 0.26f, 0.24f, 1f);
@@ -144,5 +147,9 @@ namespace VPB
         public static readonly Color SegmentIdleText = TextDim;
         /// <summary>Default hover rim when facet not selected (yellow; high periphery pop).</summary>
         public static readonly Color HoverRimDefault = new Color(1f, 1f, 0f, 1f);
+        /// <summary>Idle control edge — quiet luminance, not a white halo (Johnson contrast).</summary>
+        public static readonly Color RimIdle = new Color(0.48f, 0.48f, 0.48f, 0.32f);
+        /// <summary>Armed/selected edge — muted cool, not white-on-grey.</summary>
+        public static readonly Color RimSelected = new Color(0.58f, 0.60f, 0.64f, 0.85f);
     }
 }

@@ -22,10 +22,10 @@ namespace VPB
             {
                 // galleryCreatorSprite loaded later in Init; load directly so title bar button always has icon.
                 Sprite s = galleryCreatorSprite;
-                if (s == null) s = UI.LoadIconSprite("vpb_icons/gallery_creator.png", UI.BarIconGlyphTint);
+                if (s == null) s = UI.LoadIconSprite("user", UI.BarIconGlyphTint);
                 if (s != null)
                 {
-                    UI.AddIconToButton(titleCreatorBtn, s);
+                    UI.AddIconToButton(titleCreatorBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell);
                     var iconT = titleCreatorBtn.transform.Find("Icon");
                     titleCreatorBtnIconImage = iconT != null ? iconT.GetComponent<Image>() : null;
                     if (titleCreatorBtnIconImage != null) titleCreatorBtnIconImage.color = UI.BarIconGlyphTint;

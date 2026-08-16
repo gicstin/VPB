@@ -773,8 +773,8 @@ namespace VPB
             starIconImg.preserveAspect = true;
             try
             {
-                Sprite spr = UI.LoadIconSprite("vpb_icons/star.png", Color.white);
-                if (spr != null) starIconImg.sprite = spr;
+                Sprite spr = UI.LoadIconSprite("filled/star", Color.white);
+                if (spr != null) UI.SetIconSprite(starIconImg, spr);
             }
             catch { }
             RectTransform starIconRT = starIconGO.GetComponent<RectTransform>();

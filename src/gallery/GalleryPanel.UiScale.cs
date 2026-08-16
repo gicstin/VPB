@@ -118,6 +118,7 @@ namespace VPB
             try { RescalePluginsFloatIfOpen(chromeS); } catch { }
             try { RescaleCommandPaletteIfOpen(); } catch { }
             try { RescaleConfirmOverlayIfOpen(); } catch { }
+            try { TboxSyncRandomPreviewLiveScale(); } catch { }
             try { RebuildGridLayout(); } catch { }
         }
 

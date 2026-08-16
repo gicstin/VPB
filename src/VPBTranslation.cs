@@ -93,17 +93,20 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Localized display name for the language switcher; falls back to locale id.</summary>
+        /// <summary>
+        /// Language switcher labels stay as endonyms. Never follow UI locale —
+        /// translating this list hides languages from users who cannot read current locale.
+        /// </summary>
         public static string GetLocaleDisplayName(string localeId)
         {
-            if (string.IsNullOrEmpty(localeId)) return "en";
+            if (string.IsNullOrEmpty(localeId)) return "English";
             switch (localeId.ToLowerInvariant())
             {
-                case "en": return T("i18n.locale.en", "English");
-                case "zh_cn": return T("i18n.locale.zh_cn", "简体中文");
-                case "zh_tw": return T("i18n.locale.zh_tw", "繁體中文");
-                case "ja": return T("i18n.locale.ja", "日本語");
-                case "ko": return T("i18n.locale.ko", "한국어");
+                case "en": return "English";
+                case "zh_cn": return "简体中文";
+                case "zh_tw": return "繁體中文";
+                case "ja": return "日本語";
+                case "ko": return "한국어";
                 default: return localeId;
             }
         }

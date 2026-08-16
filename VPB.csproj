@@ -300,6 +300,10 @@
     <Compile Include="src\util\VpbPackageIndexDiagnostics.cs" />
     <Compile Include="src\hook\VamStartupProfilerPatches.cs" />
     <Compile Include="src\hook\VamStartupOptimizationPatches.cs" />
+    <Compile Include="src\hook\perf\VamLoadPerfHooks.cs" />
+    <Compile Include="src\hook\perf\VamSceneLoadPhaseProfiler.cs" />
+    <Compile Include="src\hook\perf\VamAssetBundleQueue.cs" />
+    <Compile Include="src\hook\perf\VamFrameAttributionProfiler.cs" />
     <Compile Include="src\util\LooseVapGenderProbe.cs" />
     <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VpbImport.SubToggleFilter.cs" />
@@ -323,7 +327,6 @@
     <Compile Include="src\hook\BoneViewMode.cs" />
     <Compile Include="src\hook\JSONOptimization.cs" />
     <Compile Include="src\hook\ImageProcessingOptimization.cs" />
-    <Compile Include="src\hook\DAZMorphMgr.cs" />
     <Compile Include="src\hook\DAZClothingHook.cs" />
     <Compile Include="src\hook\MaterialOptionsTextureGuard.cs" />
     <Compile Include="src\hook\DAZHairSwapHook.cs" />
@@ -398,6 +401,7 @@
     <Compile Include="src\VamHookPlugin.I18n.cs" />
     <Compile Include="src\VamHookPlugin.Settings.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignFloat.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuRandomPreview.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuVrWatch.cs" />
     <Compile Include="src\ContextMenuPanel.cs" />
@@ -448,8 +452,10 @@
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsMaintenance.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsFloat.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsNav.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPerf.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPlugin.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsReset.cs" />
     <Compile Include="src\gallery\GalleryPanel.CompressCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.FooterPluginInfo.cs" />
     <Compile Include="src\gallery\GalleryPanel.PerfPreset.cs" />
@@ -493,6 +499,7 @@
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Helpers.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Layout.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.CategoryAccordion.cs" />
     <Compile Include="src\gallery\GalleryPanel.SidePanelHeader.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Core.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Tags.cs" />
@@ -569,6 +576,7 @@
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\CategoryFilterState.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />
+    <Compile Include="src\gallery\GalleryIconAtlas.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.cs" />
     <Compile Include="src\gallery\GalleryFileButtonBinder.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.Behaviours.cs" />
@@ -668,11 +676,30 @@
     <MakeDir Directories="$(PluginVersionIntermediateDir)" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_PVProjDir)\scripts\PreparePluginVersion.ps1&quot; -VersionFile &quot;$(_PVProjDir)\plugin_version.txt&quot; -IntermediateDir &quot;$(PluginVersionIntermediateDir)&quot; -ProjectDir &quot;$(_PVProjDir)&quot;" WorkingDirectory="$(_PVProjDir)" />
   </Target>
+  <ItemGroup>
+    <VPBIconSource Include="assets\icons\icon_map.json" />
+    <VPBIconSource Include="assets\icons\tabler\*.svg" />
+    <VPBIconSource Include="assets\icons\filled\*.svg" />
+    <VPBIconSource Include="scripts\build_icon_atlas.py" />
+  </ItemGroup>
   <!--
-    Keeps vam_patch/patch_manifest.json vpb_icons rows in sync with vam_patch/BepInEx/plugins/vpb_icons on disk.
+    Repacks assets/icons into vam_patch/BepInEx/plugins/vpb_icons.pack when a source icon or the
+    icon map changes. Requires Python 3 with Pillow and cairosvg; a missing interpreter is a
+    warning, not an error, because the built pack is committed. Set SkipVPBIconAtlas=true to skip.
+  -->
+  <Target Name="BuildVPBIconAtlas" BeforeTargets="BeforeCompile"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBIconAtlas)' != 'true'"
+          Inputs="@(VPBIconSource)" Outputs="$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons.pack">
+    <PropertyGroup>
+      <_IAProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_IAProjDir>
+    </PropertyGroup>
+    <Exec Command="python &quot;$(_IAProjDir)\scripts\build_icon_atlas.py&quot;" WorkingDirectory="$(_IAProjDir)" ContinueOnError="WarnAndContinue" />
+  </Target>
+  <!--
+    Keeps the vpb_icons rows in vam_patch/patch_manifest.json in sync with the shipped icon pack.
     Set SkipVPBPatchManifestSync=true to skip (e.g. CI). Design-time builds are skipped.
   -->
-  <Target Name="SyncPatchManifestVpbIcons" BeforeTargets="BeforeCompile" Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBPatchManifestSync)' != 'true'">
+  <Target Name="SyncPatchManifestVpbIcons" BeforeTargets="BeforeCompile" DependsOnTargets="BuildVPBIconAtlas" Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBPatchManifestSync)' != 'true'">
     <PropertyGroup>
       <_SMProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_SMProjDir>
     </PropertyGroup>

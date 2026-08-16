@@ -53,32 +53,32 @@ namespace VPB
 
         private static readonly Dictionary<string, HelpIconSpec> s_IconMap = new Dictionary<string, HelpIconSpec>(StringComparer.OrdinalIgnoreCase)
         {
-            { "tags", new HelpIconSpec { Path = "vpb_icons/tags.png", Backdrop = new Color(0.14f, 0.42f, 0.48f, 1f) } },
-            { "category", new HelpIconSpec { Path = "vpb_icons/gallery_category.png", Backdrop = new Color(0.60f, 0.15f, 0.15f, 1f) } },
-            { "path", new HelpIconSpec { Path = "vpb_icons/folder.png", Backdrop = new Color(0.15f, 0.15f, 0.45f, 1f) } },
-            { "creator", new HelpIconSpec { Path = "vpb_icons/gallery_creator.png", Backdrop = new Color(0.60f, 0.45f, 0.15f, 1f) } },
-            { "history", new HelpIconSpec { Path = "vpb_icons/history.png", Backdrop = new Color(0.50f, 0.20f, 0.50f, 1f) } },
-            { "import", new HelpIconSpec { Path = "vpb_icons/import.png", Backdrop = new Color(0.10f, 0.26f, 0.44f, 1f) } },
-            { "cache_texture", new HelpIconSpec { Path = "vpb_icons/cache_texture.png", Backdrop = new Color(0.22f, 0.38f, 0.28f, 1f) } },
-            { "compress", new HelpIconSpec { Path = "vpb_icons/compress.png", Backdrop = new Color(0.22f, 0.38f, 0.28f, 1f) } },
-            { "search", new HelpIconSpec { Path = "vpb_icons/search.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "filter", new HelpIconSpec { Path = "vpb_icons/filter_on.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "star", new HelpIconSpec { Path = "vpb_icons/star.png", Backdrop = new Color(0.45f, 0.38f, 0.12f, 1f) } },
-            { "settings", new HelpIconSpec { Path = "vpb_icons/settings.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "refresh", new HelpIconSpec { Path = "vpb_icons/refresh.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "hold", new HelpIconSpec { Path = "vpb_icons/hold.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "layout_grid", new HelpIconSpec { Path = "vpb_icons/layout_grid.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "cleanup", new HelpIconSpec { Path = "vpb_icons/cleanup.png", Backdrop = new Color(0.35f, 0.28f, 0.18f, 1f) } },
-            { "help", new HelpIconSpec { Path = "vpb_icons/info_square.png", Backdrop = new Color(0.12f, 0.28f, 0.42f, 1f) } },
-            { "delete", new HelpIconSpec { Path = "vpb_icons/delete.png", Backdrop = new Color(0.45f, 0.18f, 0.18f, 1f) } },
-            { "load", new HelpIconSpec { Path = "vpb_icons/load.png", Backdrop = new Color(0.18f, 0.32f, 0.22f, 1f) } },
-            { "save", new HelpIconSpec { Path = "vpb_icons/gallery_save.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "target", new HelpIconSpec { Path = "vpb_icons/gallery_target.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "layout_list", new HelpIconSpec { Path = "vpb_icons/layout_list.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "undo", new HelpIconSpec { Path = "vpb_icons/undo.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "select_all", new HelpIconSpec { Path = "vpb_icons/select_all.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "pin", new HelpIconSpec { Path = "vpb_icons/pin_on.png", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
-            { "hub", new HelpIconSpec { Path = "vpb_icons/hub.png", Backdrop = new Color(0.28f, 0.22f, 0.38f, 1f) } },
+            { "tags", new HelpIconSpec { Path = "tags", Backdrop = new Color(0.14f, 0.42f, 0.48f, 1f) } },
+            { "category", new HelpIconSpec { Path = "category-2", Backdrop = new Color(0.60f, 0.15f, 0.15f, 1f) } },
+            { "path", new HelpIconSpec { Path = "folder-open", Backdrop = new Color(0.15f, 0.15f, 0.45f, 1f) } },
+            { "creator", new HelpIconSpec { Path = "user", Backdrop = new Color(0.60f, 0.45f, 0.15f, 1f) } },
+            { "history", new HelpIconSpec { Path = "history-toggle", Backdrop = new Color(0.50f, 0.20f, 0.50f, 1f) } },
+            { "import", new HelpIconSpec { Path = "package-import", Backdrop = new Color(0.10f, 0.26f, 0.44f, 1f) } },
+            { "cache_texture", new HelpIconSpec { Path = "stack-2", Backdrop = new Color(0.22f, 0.38f, 0.28f, 1f) } },
+            { "compress", new HelpIconSpec { Path = "stack-2", Backdrop = new Color(0.22f, 0.38f, 0.28f, 1f) } },
+            { "search", new HelpIconSpec { Path = "search", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "filter", new HelpIconSpec { Path = "filter", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "star", new HelpIconSpec { Path = "filled/star", Backdrop = new Color(0.45f, 0.38f, 0.12f, 1f) } },
+            { "settings", new HelpIconSpec { Path = "settings", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "refresh", new HelpIconSpec { Path = "refresh", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "hold", new HelpIconSpec { Path = "hand-finger", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "layout_grid", new HelpIconSpec { Path = "layout-grid", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "cleanup", new HelpIconSpec { Path = "wash-gentle", Backdrop = new Color(0.35f, 0.28f, 0.18f, 1f) } },
+            { "help", new HelpIconSpec { Path = "help-square-rounded", Backdrop = new Color(0.12f, 0.28f, 0.42f, 1f) } },
+            { "delete", new HelpIconSpec { Path = "trash", Backdrop = new Color(0.45f, 0.18f, 0.18f, 1f) } },
+            { "load", new HelpIconSpec { Path = "player-play", Backdrop = new Color(0.18f, 0.32f, 0.22f, 1f) } },
+            { "save", new HelpIconSpec { Path = "device-floppy", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "target", new HelpIconSpec { Path = "focus-2", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "layout_list", new HelpIconSpec { Path = "layout-list", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "undo", new HelpIconSpec { Path = "arrow-back-up", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "select_all", new HelpIconSpec { Path = "select-all", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "pin", new HelpIconSpec { Path = "pin", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
+            { "hub", new HelpIconSpec { Path = "world-search", Backdrop = new Color(0.28f, 0.22f, 0.38f, 1f) } },
         };
 
         private static string _helpDir;
@@ -618,6 +618,8 @@ namespace VPB
 Tap the **category name** in the title bar (top-left) to open the quick-switch menu.
 
 Or open the {{icon:category|Category}} side button — **red** category grid icon (not {{icon:path|Path}} folder).
+
+Hair, Clothing, Appearance, Pose, and Scene expand **facets** under the selected row (Presets, Custom, gender, region tags). One list — no split pane. Top search filters category names and visible facets.
 
 ## Advanced
 

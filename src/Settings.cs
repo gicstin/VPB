@@ -66,7 +66,6 @@ namespace VPB
         public ConfigEntry<int> TextureLogLevel;
 
         public ConfigEntry<bool> LogStartupDetails;
-        public ConfigEntry<bool> LogMorphDeltaCacheHits;
         public ConfigEntry<string> IndexDiagUidSubstring;
         public ConfigEntry<bool> LogStartupTiming;
         public ConfigEntry<bool> StartupDeferGallerySqlRebuild;
@@ -80,6 +79,11 @@ namespace VPB
         public ConfigEntry<bool> StartupUseCachedVarPathInventory;
         public ConfigEntry<bool> StartupSkipBootstrapNativeRefresh;
         public ConfigEntry<bool> StartupSqlBatchCatMem;
+        public ConfigEntry<bool> LoadParallelAssetBundles;
+        public ConfigEntry<int> LoadParallelAssetBundleWorkers;
+        public ConfigEntry<bool> LoadAttributeSlowFrames;
+        public ConfigEntry<bool> LoadProfileScenePhases;
+        public ConfigEntry<int> LoadProfileSlowFrameMs;
         public ConfigEntry<int> StartupSqlBatchCatMemRows;
         public ConfigEntry<bool> LogHubRequests;
         public ConfigEntry<bool> LogPerfTelemetry;
@@ -189,7 +193,6 @@ namespace VPB
             LogConfigPerf = config.Bind<bool>("Logging", "LogConfigPerf", false, "Log VPB.cfg Save timing and each ConfigChanged subscriber. Set false after troubleshooting.");
 
             LogStartupDetails = config.Bind<bool>("Logging", "LogStartupDetails", false, "Log additional startup/patch/initialization details (can be noisy). Enable when troubleshooting.");
-            LogMorphDeltaCacheHits = config.Bind<bool>("Logging", "LogMorphDeltaCacheHits", false, "Log every DAZMorph LoadDeltas cache hit (very noisy; Naturalis/TittyMagic can emit hundreds per clothing refresh). Keep off unless debugging morph cache.");
             IndexDiagUidSubstring = config.Bind<string>("Logging", "IndexDiagUidSubstring", "", "When set (e.g. RunRudolf.AlternativeFuta), emit [VPB.IndexDiag] logs for that package through disk scan, registry, SQLite index, and gallery listing. Empty = off.");
             LogStartupTiming = config.Bind<bool>("Logging", "LogStartupTiming", false, "Emit [VPB.Startup.Timing] milestones and a cold-start summary (native/VPB package refresh, SyncVamX, bootstrap). Also enabled when LogStartupDetails is true.");
             StartupDeferGallerySqlRebuild = config.Bind<bool>("Startup", "DeferGallerySqlRebuildUntilReady", true, "Defer full gallery SQLite index rebuild until World UI / startup-ready milestone. Speeds cold start; gallery SQL queries wait until rebuild runs.");
@@ -204,6 +207,11 @@ namespace VPB
             StartupSkipBootstrapNativeRefresh = config.Bind<bool>("Startup", "SkipBootstrapNativeRefreshWhenUnchanged", true, "When VPB init already ran native FileManager.Refresh and .var path inventory is unchanged, skip the synchronous Refresh inside SuperController.SyncToKeyFile (Awake). Avoids redundant scan + OnPackageRefresh/SyncVamX stall.");
             StartupSqlBatchCatMem = config.Bind<bool>("Startup", "SqlBatchCatMemInserts", false, "During gallery SQLite rebuild, batch cat_mem INSERT statements instead of one row per Step(). Off by default (prepared inserts are faster on large libraries).");
             StartupSqlBatchCatMemRows = config.Bind<int>("Startup", "SqlBatchCatMemRows", 150, "Rows per batched cat_mem INSERT when SqlBatchCatMemInserts is enabled.");
+            LoadParallelAssetBundles = config.Bind<bool>("SceneLoad", "ParallelAssetBundles", true, "Replace VaM's strictly-serial CUA asset-bundle queue (one bundle per frame, fully awaited) with a deduplicated parallel loader. Requests for the same path share one load instead of racing. Turn off to restore VaM's loader if custom assets misbehave.");
+            LoadParallelAssetBundleWorkers = config.Bind<int>("SceneLoad", "ParallelAssetBundleWorkers", 3, "Concurrent asset-bundle loads. Loads from the same .var are still serialized (VaM shares one ZipFile handle per package).");
+            LoadAttributeSlowFrames = config.Bind<bool>("SceneLoad", "AttributeSlowFrames", false, "DIAGNOSTIC. Patches Update/LateUpdate/FixedUpdate and coroutine MoveNext across VaM and every plugin assembly, then names the top time consumers for each slow frame during a scene load, plus attributed-vs-unattributed ms. Costs seconds of extra startup and per-call overhead while loading. Enable for a benchmark run, then turn back off.");
+            LoadProfileScenePhases = config.Bind<bool>("SceneLoad", "ProfileScenePhases", false, "Emit a per-phase timing breakdown at the end of every scene load (Clear+Unload, Loading Atoms, Restoring Atoms, Post-Restore, Waiting Async Load), plus the slowest frames and the time spent inside VPB's own FileExists / OpenStream / GetVarFileEntry hooks. Cheap to run but writes to the log on every load; enable when investigating slow scene loads.");
+            LoadProfileSlowFrameMs = config.Bind<int>("SceneLoad", "ProfileSlowFrameMs", 250, "Frames longer than this (ms) during a scene load are recorded with the phase they occurred in.");
             LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");
             LogPerfTelemetry = config.Bind<bool>("Logging", "LogPerfTelemetry", false, "Emit a periodic VPB_PERF_TELEMETRY line with cache sizes, queue depths, panel scroll-listener counts, and heap stats. Enable when diagnosing progressive FPS degradation.");
             LogPerfTelemetryIntervalSeconds = config.Bind<int>("Logging", "LogPerfTelemetryIntervalSeconds", 30, "Seconds between VPB_PERF_TELEMETRY snapshots (clamped 1-30). Only used when LogPerfTelemetry is enabled.");

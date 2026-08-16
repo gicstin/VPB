@@ -260,7 +260,7 @@ namespace VPB
             UI.ApplyFloatTitleBarMetrics(titleHlg, grip.gameObject, s);
 
             float winIconSz = GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s;
-            UI.CreateFloatTitleWindowIcon(titleBar, "vpb_icons/c_plugins.png", winIconSz);
+            UI.CreateFloatTitleWindowIcon(titleBar, "plug-connected", winIconSz);
 
             Text title = UI.CreateEmphasisTitleLabel(
                 titleBar,
@@ -272,7 +272,7 @@ namespace VPB
             BuildPluginsFloatDestBar(titleBar, s, font, chromeSz);
 
             _pluginsFloatCollapseBtn = PluginsFloatSquareIconButton(
-                titleBar.transform, chromeSz, "vpb_icons/chevron_up.png",
+                titleBar.transform, chromeSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, TogglePluginsFloatCollapsed);
             if (_pluginsFloatCollapseBtn != null)
             {
@@ -282,7 +282,7 @@ namespace VPB
             }
 
             GameObject closeBtn = PluginsFloatSquareIconButton(
-                titleBar.transform, chromeSz, "vpb_icons/x.png",
+                titleBar.transform, chromeSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, HidePluginsFloat);
             if (closeBtn != null)
             {
@@ -374,7 +374,7 @@ namespace VPB
                     if (clearBg != null) clearBg.color = new Color(0f, 0f, 0f, 0f);
                     try
                     {
-                        Sprite xSpr = UI.LoadIconSprite("vpb_icons/x.png", GalleryUiColorTokens.SearchClearIconTint);
+                        Sprite xSpr = UI.LoadIconSprite("x", GalleryUiColorTokens.SearchClearIconTint);
                         if (xSpr != null)
                             UI.AddIconToButton(_pluginsFloatFilterClearGo, xSpr, 6f * s, new Color(0f, 0f, 0f, 0f));
                     }
@@ -516,7 +516,7 @@ namespace VPB
             }
 
             _pluginsFloatExpandAllBtn = PluginsFloatSquareIconButton(
-                _pluginsFloatFooter.transform, chromeSz, "vpb_icons/chevrons_down.png",
+                _pluginsFloatFooter.transform, chromeSz, "chevrons-down",
                 GalleryUiColorTokens.ChromeIconWell, ExpandAllPluginsFloatCreators);
             if (_pluginsFloatExpandAllBtn != null)
             {
@@ -525,7 +525,7 @@ namespace VPB
                     "Expand all creators (shows packages). Open row chevron for scripts.");
             }
             _pluginsFloatCollapseAllBtn = PluginsFloatSquareIconButton(
-                _pluginsFloatFooter.transform, chromeSz, "vpb_icons/chevron_up.png",
+                _pluginsFloatFooter.transform, chromeSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, CollapseAllPluginsFloatTree);
             if (_pluginsFloatCollapseAllBtn != null)
             {
@@ -561,7 +561,7 @@ namespace VPB
             rhLe.flexibleWidth = 0f;
             try
             {
-                Sprite rhSpr = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
+                Sprite rhSpr = UI.LoadIconSprite("chevrons-down-right", UI.BarIconGlyphTint);
                 if (rhSpr != null)
                     UI.AddIconToButton(resizeHandle, rhSpr, 5f * s, UI.IconButtonBackdrop);
             }
@@ -761,12 +761,11 @@ namespace VPB
 
             if (_pluginsFloatCollapseIcon != null)
             {
-                string path = _pluginsFloatCollapsed ? "vpb_icons/chevron_down.png" : "vpb_icons/chevron_up.png";
+                string path = _pluginsFloatCollapsed ? "chevron-down" : "chevron-up";
                 Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
                 if (spr != null)
                 {
-                    _pluginsFloatCollapseIcon.sprite = spr;
-                    _pluginsFloatCollapseIcon.color = Color.white;
+                    UI.SetIconSprite(_pluginsFloatCollapseIcon, spr);
                 }
             }
 

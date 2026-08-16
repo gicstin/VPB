@@ -3,14 +3,16 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using MVR.FileManagement;
 
 namespace VPB
 {
     /// <summary>
-    /// Panel side of the quick-menu / wrist-watch random hover preview: sample a few candidates from the
-    /// same pool a random button would draw from, hand them out for the preview thumbnail, then launch the
-    /// exact entry the user saw. Sampling is by rejection so no pool copy happens on the hover path.
+    /// Panel side of random hover preview: sample from the same pool a random button would draw from,
+    /// hand out the preview thumbnail, then launch the exact entry the user saw. Sampling is by
+    /// rejection so no pool copy happens on the hover path. Also owns the toolbox overlay (dim +
+    /// centered card on the file grid).
     /// </summary>
     public partial class GalleryPanel
     {
@@ -268,6 +270,352 @@ namespace VPB
                 StartCoroutine(QuickMenu_LoadRandomFromCategoryRoutine(categoryName, preserveUi, preserveTarget, file));
             }
             catch { }
+        }
+
+        // ---------------------------------------------------------------- toolbox overlay
+
+        private const float TboxRandPreviewThumb = 240f;
+        private const float TboxRandPreviewPad = 12f;
+        private const float TboxRandPreviewLabelH = 22f;
+        private const float TboxRandPreviewSubH = 18f;
+        private const float TboxRandPreviewDimAlpha = 0.55f;
+        // Absolute px at ChromeScale 1. Button fraction (0.22) of this card is a lozenge.
+        private const float TboxRandPreviewCornerPx = 6f;
+        private static readonly Color TboxRandPreviewThumbPlaceholder = new Color(0.25f, 0.25f, 0.25f, 0.55f);
+
+        private GameObject _tboxRandPreviewRoot;
+        private RectTransform _tboxRandPreviewCardRt;
+        private RectTransform _tboxRandPreviewThumbRt;
+        private RoundedRect _tboxRandPreviewCardRounded;
+        private RawImage _tboxRandPreviewImg;
+        private Text _tboxRandPreviewLabel;
+        private Text _tboxRandPreviewSub;
+        private FileEntry _tboxRandPreviewPick;
+        private FileEntry _tboxRandPreviewLastPick;
+        private List<FileEntry> _tboxRandPreviewScratch;
+        private bool _tboxRandPreviewHover;
+        private Action<bool> _tboxRandPreviewHoverHandler;
+
+        internal bool TboxRandomPreviewIsShowing()
+        {
+            return _tboxRandPreviewRoot != null && _tboxRandPreviewRoot.activeSelf;
+        }
+
+        private static bool TboxRandomPreviewEnabled()
+        {
+            try
+            {
+                var c = VPBConfig.Instance;
+                return c != null && c.QuickMenuRandomHoverPreview;
+            }
+            catch { return false; }
+        }
+
+        private void TboxBindRandomPreviewHover()
+        {
+            if (tboxLoadRandomBtn == null) return;
+            UIHoverDelegate del = tboxLoadRandomBtn.GetComponent<UIHoverDelegate>();
+            if (del == null) del = tboxLoadRandomBtn.AddComponent<UIHoverDelegate>();
+            if (_tboxRandPreviewHoverHandler != null)
+                del.OnHoverChange -= _tboxRandPreviewHoverHandler;
+            _tboxRandPreviewHoverHandler = OnTboxRandomPreviewHover;
+            del.OnHoverChange += _tboxRandPreviewHoverHandler;
+
+            TboxRandomPreviewScroll wheel = tboxLoadRandomBtn.GetComponent<TboxRandomPreviewScroll>();
+            if (wheel == null) wheel = tboxLoadRandomBtn.AddComponent<TboxRandomPreviewScroll>();
+            wheel.panel = this;
+        }
+
+        private void OnTboxRandomPreviewHover(bool enter)
+        {
+            if (enter) TboxBeginRandomPreview();
+            else TboxEndRandomPreview();
+        }
+
+        private void TboxRerollRandomPreviewFromScroll()
+        {
+            if (!_tboxRandPreviewHover) return;
+            TboxBeginRandomPreview();
+        }
+
+        private string TboxRandomButtonTooltip()
+        {
+            string baseTip = VPBTranslation.T("gallery.tooltip.load_random", "Random in current filtered view (not a preset Dice)");
+            if (!TboxRandomPreviewEnabled()) return baseTip;
+            return baseTip + "\n" + VPBTranslation.T("gallery.tooltip.random_preview_scroll", "Scroll wheel: next preview");
+        }
+
+        private void TboxBeginRandomPreview()
+        {
+            if (!TboxRandomPreviewEnabled())
+            {
+                TboxHideRandomPreview(true);
+                return;
+            }
+
+            _tboxRandPreviewHover = true;
+            if (_tboxRandPreviewScratch == null) _tboxRandPreviewScratch = new List<FileEntry>(4);
+            int n = QuickMenu_FillRandomSampleFromCurrentView(_tboxRandPreviewScratch, 3);
+            FileEntry pick = null;
+            if (n > 0)
+            {
+                for (int i = 0; i < _tboxRandPreviewScratch.Count; i++)
+                {
+                    FileEntry cand = _tboxRandPreviewScratch[i];
+                    if (cand == null) continue;
+                    if (!TboxPreviewSameEntry(cand, _tboxRandPreviewLastPick))
+                    {
+                        pick = cand;
+                        break;
+                    }
+                }
+                if (pick == null) pick = _tboxRandPreviewScratch[0];
+            }
+            _tboxRandPreviewPick = pick;
+            _tboxRandPreviewLastPick = pick;
+            TboxApplyRandomPreviewVisual();
+        }
+
+        private void TboxEndRandomPreview()
+        {
+            _tboxRandPreviewHover = false;
+            _tboxRandPreviewPick = null;
+            TboxHideRandomPreview(false);
+        }
+
+        private void TboxLoadRandomClick()
+        {
+            FileEntry pick = _tboxRandPreviewPick;
+            _tboxRandPreviewPick = null;
+            bool applied = false;
+            try
+            {
+                if (pick != null) applied = ApplyPickedRandomEntry(pick);
+            }
+            catch { applied = false; }
+            if (this == null) return;
+            if (!applied)
+            {
+                try { LoadRandom(); } catch { }
+            }
+            if (this == null) return;
+            if (_tboxRandPreviewHover && TboxRandomPreviewEnabled())
+                TboxBeginRandomPreview();
+            else
+                TboxHideRandomPreview(true);
+        }
+
+        private static bool TboxPreviewSameEntry(FileEntry a, FileEntry b)
+        {
+            if (a == null || b == null) return false;
+            if (ReferenceEquals(a, b)) return true;
+            string pa = a.Path ?? a.Uid;
+            string pb = b.Path ?? b.Uid;
+            return !string.IsNullOrEmpty(pa)
+                && string.Equals(pa, pb, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void TboxEnsureRandomPreviewOverlay()
+        {
+            if (_tboxRandPreviewRoot != null) return;
+            GameObject host = null;
+            if (contentScrollRT != null) host = contentScrollRT.gameObject;
+            if (host == null) host = backgroundBoxGO;
+            if (host == null) return;
+
+            _tboxRandPreviewRoot = UI.CreateChildRT(host, "TboxRandomPreview", AnchorPresets.stretchAll);
+            Image dim = UI.AddImage(_tboxRandPreviewRoot, UI.Black(TboxRandPreviewDimAlpha), true);
+            if (dim != null) dim.raycastTarget = true;
+
+            GameObject card = UI.CreateChildRT(_tboxRandPreviewRoot, "Card", AnchorPresets.middleCenter);
+            if (card == null)
+            {
+                _tboxRandPreviewRoot.SetActive(false);
+                return;
+            }
+            _tboxRandPreviewCardRt = card.GetComponent<RectTransform>();
+            _tboxRandPreviewCardRounded = card.AddComponent<RoundedRect>();
+            _tboxRandPreviewCardRounded.color = GalleryUiColorTokens.ModalSurface;
+            _tboxRandPreviewCardRounded.raycastTarget = false;
+            _tboxRandPreviewCardRounded.excludeFromGlobalRadiusSync = true;
+
+            GameObject thumbGo = UI.CreateChildRT(card, "Thumb", AnchorPresets.middleCenter);
+            _tboxRandPreviewThumbRt = thumbGo != null ? thumbGo.GetComponent<RectTransform>() : null;
+            if (thumbGo != null)
+            {
+                _tboxRandPreviewImg = thumbGo.AddComponent<RawImage>();
+                _tboxRandPreviewImg.raycastTarget = false;
+                _tboxRandPreviewImg.color = TboxRandPreviewThumbPlaceholder;
+            }
+
+            _tboxRandPreviewLabel = UI.CreateLabel(card, "", GalleryUiDesignTokens.FontTitleRef, GalleryUiColorTokens.TextPrimary,
+                TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate, false, false,
+                AnchorPresets.bottomMiddle, Vector2.zero, Vector2.zero, "PreviewLabel");
+            if (_tboxRandPreviewLabel != null) _tboxRandPreviewLabel.resizeTextForBestFit = false;
+
+            _tboxRandPreviewSub = UI.CreateLabel(card, "", GalleryUiDesignTokens.FontCaptionRef, GalleryUiColorTokens.TextMuted,
+                TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate, false, false,
+                AnchorPresets.bottomMiddle, Vector2.zero, Vector2.zero, "PreviewSubLabel");
+            if (_tboxRandPreviewSub != null) _tboxRandPreviewSub.resizeTextForBestFit = false;
+
+            TboxLayoutRandomPreviewCard();
+            _tboxRandPreviewRoot.SetActive(false);
+        }
+
+        private void TboxApplyRandomPreviewVisual()
+        {
+            TboxEnsureRandomPreviewOverlay();
+            if (_tboxRandPreviewRoot == null) return;
+
+            try { HideHoverPreview(null); } catch { }
+
+            if (!_tboxRandPreviewRoot.activeSelf) _tboxRandPreviewRoot.SetActive(true);
+            try { _tboxRandPreviewRoot.transform.SetAsLastSibling(); } catch { }
+
+            TboxLayoutRandomPreviewCard();
+
+            if (_tboxRandPreviewPick == null)
+            {
+                if (_tboxRandPreviewImg != null) ClearThumbnailTarget(_tboxRandPreviewImg);
+                TboxSetPreviewLabel(_tboxRandPreviewLabel, VPBTranslation.T("hook.qmpreview.empty", "No items"));
+                TboxSetPreviewLabel(_tboxRandPreviewSub, VPBTranslation.T("hook.qmpreview.empty_sub", "Nothing in this pool"));
+                return;
+            }
+
+            try { QuickMenu_LoadPreviewThumbnail(_tboxRandPreviewPick, _tboxRandPreviewImg); } catch { }
+
+            string primary;
+            string secondary;
+            QuickMenu_GetPreviewLabelLines(_tboxRandPreviewPick, out primary, out secondary);
+            TboxSetPreviewLabel(_tboxRandPreviewLabel, primary);
+            TboxSetPreviewLabel(_tboxRandPreviewSub, secondary);
+        }
+
+        /// <summary>Live ChromeScale + corner sync. Hide immediately when the settings toggle is off.</summary>
+        internal void TboxSyncRandomPreviewLiveScale()
+        {
+            if (!TboxRandomPreviewEnabled())
+            {
+                TboxHideRandomPreview(true);
+                return;
+            }
+            if (_tboxRandPreviewHover)
+            {
+                if (_tboxRandPreviewRoot != null && _tboxRandPreviewRoot.activeSelf)
+                    TboxLayoutRandomPreviewCard();
+                else
+                    TboxBeginRandomPreview();
+                return;
+            }
+            if (_tboxRandPreviewRoot != null)
+                TboxLayoutRandomPreviewCard();
+        }
+
+        private void TboxLayoutRandomPreviewCard()
+        {
+            if (_tboxRandPreviewCardRt == null) return;
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            float thumb = TboxRandPreviewThumb * s;
+            float pad = TboxRandPreviewPad * s;
+            float labelH = TboxRandPreviewLabelH * s;
+            float subH = TboxRandPreviewSubH * s;
+            float innerW = thumb;
+            _tboxRandPreviewCardRt.sizeDelta = new Vector2(thumb + pad * 2f, thumb + pad * 2f + labelH + subH);
+            if (_tboxRandPreviewThumbRt != null)
+            {
+                _tboxRandPreviewThumbRt.sizeDelta = new Vector2(thumb, thumb);
+                _tboxRandPreviewThumbRt.anchoredPosition = new Vector2(0f, (labelH + subH) * 0.5f);
+            }
+            TboxLayoutPreviewLabel(_tboxRandPreviewLabel, innerW, labelH, new Vector2(0f, pad * 0.5f + subH),
+                GalleryUiDesignTokens.FontTitleRef, s);
+            TboxLayoutPreviewLabel(_tboxRandPreviewSub, innerW, subH, new Vector2(0f, pad * 0.5f),
+                GalleryUiDesignTokens.FontCaptionRef, s);
+            TboxApplyPreviewCornerRadius(s);
+        }
+
+        private static void TboxLayoutPreviewLabel(Text label, float w, float h, Vector2 pos, int fontRef, float s)
+        {
+            if (label == null) return;
+            RectTransform rt = label.rectTransform;
+            if (rt != null)
+            {
+                rt.sizeDelta = new Vector2(w, h);
+                rt.anchoredPosition = pos;
+            }
+            int font = Mathf.RoundToInt(fontRef * s);
+            if (font < GalleryUiDesignTokens.FontMinRef) font = GalleryUiDesignTokens.FontMinRef;
+            if (label.fontSize != font) label.fontSize = font;
+            Vector3 ls = label.transform.localScale;
+            if (ls.x != 1f || ls.y != 1f)
+                label.transform.localScale = Vector3.one;
+        }
+
+        private void TboxApplyPreviewCornerRadius(float s)
+        {
+            RoundedRect rr = _tboxRandPreviewCardRounded;
+            if (rr == null) return;
+            rr.excludeFromGlobalRadiusSync = true;
+            rr.cornerRadiusFraction = 0f;
+            float frac = UI.ResolveGalleryElementCornerRadiusFraction();
+            float px = (frac <= 0f || s <= 0f) ? 0f : TboxRandPreviewCornerPx * s;
+            rr.cornerRadius = px;
+        }
+
+        private void TboxHideRandomPreview(bool clearPick)
+        {
+            if (clearPick) _tboxRandPreviewPick = null;
+            if (_tboxRandPreviewRoot == null || !_tboxRandPreviewRoot.activeSelf) return;
+            if (_tboxRandPreviewImg != null) ClearThumbnailTarget(_tboxRandPreviewImg);
+            _tboxRandPreviewRoot.SetActive(false);
+        }
+
+        private void TboxDestroyRandomPreview()
+        {
+            if (tboxLoadRandomBtn != null)
+            {
+                if (_tboxRandPreviewHoverHandler != null)
+                {
+                    UIHoverDelegate del = tboxLoadRandomBtn.GetComponent<UIHoverDelegate>();
+                    if (del != null) del.OnHoverChange -= _tboxRandPreviewHoverHandler;
+                }
+                TboxRandomPreviewScroll wheel = tboxLoadRandomBtn.GetComponent<TboxRandomPreviewScroll>();
+                if (wheel != null) wheel.panel = null;
+            }
+            _tboxRandPreviewHoverHandler = null;
+            _tboxRandPreviewHover = false;
+            _tboxRandPreviewPick = null;
+            _tboxRandPreviewLastPick = null;
+            if (_tboxRandPreviewScratch != null) _tboxRandPreviewScratch.Clear();
+            if (_tboxRandPreviewImg != null) ClearThumbnailTarget(_tboxRandPreviewImg);
+            _tboxRandPreviewRoot = null;
+            _tboxRandPreviewCardRt = null;
+            _tboxRandPreviewThumbRt = null;
+            _tboxRandPreviewCardRounded = null;
+            _tboxRandPreviewImg = null;
+            _tboxRandPreviewLabel = null;
+            _tboxRandPreviewSub = null;
+        }
+
+        private static void TboxSetPreviewLabel(Text label, string s)
+        {
+            if (label == null) return;
+            string next = s ?? "";
+            if (!string.Equals(label.text, next, StringComparison.Ordinal)) label.text = next;
+        }
+
+        private sealed class TboxRandomPreviewScroll : MonoBehaviour, IScrollHandler
+        {
+            public GalleryPanel panel;
+            private float _notchAccum;
+
+            public void OnScroll(PointerEventData eventData)
+            {
+                if (panel == null || eventData == null) return;
+                int notches = VpbScrollTuning.TakeNotches(ref _notchAccum, eventData.scrollDelta.y);
+                if (notches == 0) return;
+                try { panel.TboxRerollRandomPreviewFromScroll(); } catch { }
+            }
         }
     }
 }

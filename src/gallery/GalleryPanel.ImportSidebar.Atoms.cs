@@ -33,7 +33,7 @@ namespace VPB
             GameObject rndRow = new GameObject("RandomSceneRow");
             rndRow.transform.SetParent(content, false);
             LayoutElement rndLe = UI.AddLE(rndRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-            Image rndBg = AddImportSidebarRoundedBg(rndRow, ImportSidebarSelectedAccent);
+            Image rndBg = AddImportSidebarRoundedBg(rndRow, ImportSidebarSecondaryActionBg);
             Button rndBtn = rndRow.AddComponent<Button>();
             rndBtn.targetGraphic = rndBg;
             UI.NeutralizeSelectableColorTint(rndBtn);
@@ -688,9 +688,10 @@ namespace VPB
 
         private void SetImportSidebarRowSelected(GameObject row, bool selected, bool matchHint = false)
         {
-            Image bg = row.GetComponent<Image>();
-            if (bg != null)
-                bg.color = selected ? ImportSidebarSelectedAccent : (matchHint ? ImportSidebarMatchHintColor : ColorInactiveRow);
+            Color fill = selected
+                ? ImportSidebarSelectedAccent
+                : (matchHint ? ImportSidebarMatchHintColor : ColorInactiveRow);
+            ApplyImportSidebarSelectableChrome(row, selected, fill);
         }
 
         private void UnsubscribeFromAtomEvents()

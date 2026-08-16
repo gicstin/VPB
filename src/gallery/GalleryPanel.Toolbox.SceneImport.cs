@@ -128,7 +128,7 @@ namespace VPB
             bool on = VPBConfig.Instance != null && VPBConfig.Instance.SuppressAppearanceScaleChange;
             img.color = on
                 ? new Color(0.2f, 0.45f, 0.75f, 0.9f)
-                : UI.IconButtonBackdrop;
+                : GalleryUiColorTokens.ChromeIconWell;
         }
 
     }

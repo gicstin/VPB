@@ -645,13 +645,13 @@ namespace VPB
                 Sprite onSpr = ratingStarNormalSprite;
                 if (onSpr == null)
                 {
-                    try { onSpr = UI.LoadIconSprite("vpb_icons/star.png", Color.white); } catch { }
+                    try { onSpr = UI.LoadIconSprite("filled/star", Color.white); } catch { }
                 }
                 if (onSpr == null) return;
                 GameObject iconGO = new GameObject("StarIcon");
                 iconGO.transform.SetParent(starGO.transform, false);
                 iconImg = iconGO.AddComponent<Image>();
-                iconImg.sprite = onSpr;
+                UI.SetIconSprite(iconImg, onSpr);
                 iconImg.preserveAspect = true;
                 iconImg.raycastTarget = false;
                 iconGO.transform.SetAsFirstSibling();

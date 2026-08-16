@@ -543,7 +543,7 @@ namespace VPB
             if (ratingSortIconImage != null)
             {
                 Sprite target = armed ? ratingStarOffSprite : ratingStarNormalSprite;
-                if (target != null) ratingSortIconImage.sprite = target;
+                if (target != null) UI.SetIconSprite(ratingSortIconImage, target);
                 if (armed)
                     ratingSortIconImage.color = rated ? Color.white : ColorUnratedFilterIcon;
                 else
@@ -556,7 +556,7 @@ namespace VPB
                 {
                     if (rated) backdrop.color = ColorHistoryAccent;
                     else if (unrated) backdrop.color = ColorUnratedFilterAccent;
-                    else backdrop.color = UI.ChromeDark;
+                    else backdrop.color = GalleryUiColorTokens.ChromeIconWell;
                 }
             }
         }
@@ -1172,7 +1172,7 @@ namespace VPB
                 Sprite sp = idx < sceneSourceSortModeSprites.Length ? sceneSourceSortModeSprites[idx] : null;
                 if (sp != null)
                 {
-                    iconImg.sprite = sp;
+                    UI.SetIconSprite(iconImg, sp);
                     iconImg.enabled = true;
                 }
                 else
@@ -1272,7 +1272,7 @@ namespace VPB
             if (fileSortDirIconImage != null)
             {
                 Sprite target = state.Direction == SortDirection.Ascending ? fileSortDirAscSprite : fileSortDirDescSprite;
-                if (target != null) fileSortDirIconImage.sprite = target;
+                if (target != null) UI.SetIconSprite(fileSortDirIconImage, target);
             }
         }
 
@@ -1323,7 +1323,7 @@ namespace VPB
                 {
                     if (sp != null)
                     {
-                        iconImg.sprite = sp;
+                        UI.SetIconSprite(iconImg, sp);
                         iconImg.enabled = true;
                     }
                     else

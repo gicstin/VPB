@@ -246,7 +246,7 @@ namespace VPB
                 grip.gameObject, 1f);
 
             UI.CreateFloatTitleWindowIcon(
-                importSidebarFloatTitleBarGO, "vpb_icons/import.png",
+                importSidebarFloatTitleBarGO, "package-import",
                 GalleryUiDesignTokens.FloatTitleWindowIconSizeRef);
 
             importSidebarFloatTitleLabel = UI.CreateEmphasisTitleLabel(
@@ -262,7 +262,7 @@ namespace VPB
                 importSidebarFloatTitleBarGO, chromeSz, chromeSz, " ", 16, 0, 0, AnchorPresets.middleCenter,
                 ToggleImportSidebarFloatCollapsed);
             importSidebarFloatCollapseBtnGO.name = "CollapseBtn";
-            StyleImportSidebarFloatChromeIconBtn(importSidebarFloatCollapseBtnGO, chromeSz, "vpb_icons/chevron_up.png");
+            StyleImportSidebarFloatChromeIconBtn(importSidebarFloatCollapseBtnGO, chromeSz, "chevron-up");
             Transform collapseIconTr = importSidebarFloatCollapseBtnGO.transform.Find("Icon");
             importSidebarFloatCollapseBtnIcon = collapseIconTr != null ? collapseIconTr.GetComponent<Image>() : null;
             var collapseHover = importSidebarFloatCollapseBtnGO.AddComponent<UIHoverDelegate>();
@@ -281,7 +281,7 @@ namespace VPB
                 importSidebarFloatTitleBarGO, chromeSz, chromeSz, " ", 16, 0, 0, AnchorPresets.middleCenter,
                 HideImportSidebarFloatKeepDetach);
             importSidebarFloatCloseBtnGO.name = "TitleClose";
-            StyleImportSidebarFloatChromeIconBtn(importSidebarFloatCloseBtnGO, chromeSz, "vpb_icons/x.png");
+            StyleImportSidebarFloatChromeIconBtn(importSidebarFloatCloseBtnGO, chromeSz, "x");
             var closeHover = importSidebarFloatCloseBtnGO.AddComponent<UIHoverDelegate>();
             closeHover.OnHoverChange += (enter) =>
             {
@@ -386,7 +386,7 @@ namespace VPB
             if (rhImg != null) rhImg.raycastTarget = true;
             UI.EnsureFloatChromeHoverBorder(importSidebarFloatResizeHandleGO);
             StyleImportSidebarFloatChromeIconBtn(
-                importSidebarFloatResizeHandleGO, rh, "vpb_icons/chevrons_down_right.png", UI.IconButtonBackdrop);
+                importSidebarFloatResizeHandleGO, rh, "chevrons-down-right", UI.IconButtonBackdrop);
             var resizer = importSidebarFloatResizeHandleGO.AddComponent<UIFloatPanelResize>();
             resizer.Target = importSidebarRT;
             resizer.GetMinSize = GetImportSidebarFloatMinSizeScaled;
@@ -726,13 +726,12 @@ namespace VPB
         private void SyncImportSidebarFloatCollapseButtonVisual()
         {
             if (importSidebarFloatCollapseBtnGO == null) return;
-            string path = importSidebarFloatCollapsed ? "vpb_icons/chevron_down.png" : "vpb_icons/chevron_up.png";
+            string path = importSidebarFloatCollapsed ? "chevron-down" : "chevron-up";
             Sprite spr = UI.LoadIconSprite(path, UI.BarIconGlyphTint);
             if (spr == null) return;
             if (importSidebarFloatCollapseBtnIcon != null)
             {
-                importSidebarFloatCollapseBtnIcon.sprite = spr;
-                importSidebarFloatCollapseBtnIcon.color = Color.white;
+                UI.SetIconSprite(importSidebarFloatCollapseBtnIcon, spr);
             }
             else
             {

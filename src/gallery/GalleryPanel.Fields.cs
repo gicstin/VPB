@@ -139,6 +139,13 @@ namespace VPB
         private List<GameObject> leftCreatorTabButtons = new List<GameObject>();
         private List<GameObject> rightCategoryTabButtons = new List<GameObject>();
         private List<GameObject> rightCreatorTabButtons = new List<GameObject>();
+        private List<GameObject> leftCategoryAccordionButtons = new List<GameObject>();
+        private List<GameObject> rightCategoryAccordionButtons = new List<GameObject>();
+        private GameObject _leftCategoryAccordionAnchor;
+        private GameObject _rightCategoryAccordionAnchor;
+        private bool _categoryAccordionFillActive;
+        private bool _categoryAccordionFilterChildren;
+        private float _sideTabAccordionChildInsetPx;
         private string leftCategoryTabsLastSig;
         private string leftCreatorTabsLastSig;
         private string rightCategoryTabsLastSig;
@@ -439,7 +446,9 @@ namespace VPB
         private string settingsFilter = "";
         /// <summary>While true, main side-rail search <see cref="InputField.onValueChanged"/> handlers ignore events (programmatic text assignment / layout).</summary>
         private bool _suppressMainSideSearchValueChanged;
-        private string currentSettingsGroup = "all";
+        private string currentSettingsGroup = "appearance";
+        /// <summary>Settings list: show only rows that differ from factory default.</summary>
+        private bool settingsModifiedOnly;
         private bool settingsListViewActive = false;
         private bool internalSettingsSessionActive = false;
         private InternalSettingsSnapshot internalSettingsBackup;
@@ -1373,6 +1382,8 @@ namespace VPB
         private Sprite galleryAddSprite;
         private Sprite galleryReplaceSprite;
         private Sprite galleryRemoveSprite;
+        private Sprite galleryRemoveClothingSprite;
+        private Sprite galleryRemoveHairSprite;
 
         private Image rightFollowBtnIconImage;
         private Image leftFollowBtnIconImage;
@@ -1557,8 +1568,8 @@ namespace VPB
         private Sprite fileSortDirAscSprite;
         private Sprite fileSortDirDescSprite;
         private Image ratingSortIconImage; // Icon image on the star toggle (swapped on/off)
-        private Sprite ratingStarNormalSprite; // star.png — shown when filter is OFF
-        private Sprite ratingStarOffSprite;    // star_off.png — shown when filter is ON
+        private Sprite ratingStarNormalSprite; // star — shown when filter is OFF
+        private Sprite ratingStarOffSprite;    // outline star — shown when filter is ON
         private GameObject fileSortTypeMenuRoot;
         private GameObject fileSortTypeMenuPanelGO;
         

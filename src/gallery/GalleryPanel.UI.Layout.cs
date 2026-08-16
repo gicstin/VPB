@@ -690,7 +690,7 @@ namespace VPB
 
             if (rightFollowBtnIconImage != null && spr != null)
             {
-                rightFollowBtnIconImage.sprite = spr;
+                UI.SetIconSprite(rightFollowBtnIconImage, spr);
                 rightFollowBtnIconImage.enabled = true;
                 if (rightFollowBtnText != null) rightFollowBtnText.gameObject.SetActive(false);
             }
@@ -704,7 +704,7 @@ namespace VPB
 
             if (leftFollowBtnIconImage != null && spr != null)
             {
-                leftFollowBtnIconImage.sprite = spr;
+                UI.SetIconSprite(leftFollowBtnIconImage, spr);
                 leftFollowBtnIconImage.enabled = true;
                 if (leftFollowBtnText != null) leftFollowBtnText.gameObject.SetActive(false);
             }
