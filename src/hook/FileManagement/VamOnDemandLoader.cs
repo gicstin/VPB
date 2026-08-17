@@ -948,40 +948,11 @@ namespace VPB
             return kind;
         }
 
-        static CatalogContentKind ClassifyInternalPathCatalogKind(string internalPath)
-        {
-            if (string.IsNullOrEmpty(internalPath)) return CatalogContentKind.None;
-            // Manifest / zip names may use '\'; IndexOf so mid-path or odd prefixes still match.
-            string p = internalPath.Replace('\\', '/');
-            CatalogContentKind kind = CatalogContentKind.None;
-            if (p.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)
-                || p.IndexOf("/Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0)
-                kind |= CatalogContentKind.Clothing;
-            if (p.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)
-                || p.IndexOf("/Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0)
-                kind |= CatalogContentKind.Hair;
-            if (p.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)
-                || p.IndexOf("/Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase) >= 0
-                || p.IndexOf("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase) >= 0)
-                kind |= CatalogContentKind.Morphs;
-            return kind;
-        }
-
         static CatalogContentKind GetCatalogContentKindForUid(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return CatalogContentKind.None;
             try
             {
-                SerializableVarPackage cached = VarPackageMgr.singleton.TryGetCache(uid);
-                if (cached != null && cached.FileEntryNames != null)
-                {
-                    CatalogContentKind kind = CatalogContentKind.None;
-                    List<string> names = cached.FileEntryNames;
-                    for (int i = 0; i < names.Count; i++)
-                        kind |= ClassifyInternalPathCatalogKind(names[i]);
-                    return kind;
-                }
-
                 VarPackage pkg = FileManager.GetPackage(uid, false);
                 if (pkg == null)
                 {
@@ -989,14 +960,15 @@ namespace VPB
                     return CatalogContentKind.Clothing | CatalogContentKind.Hair | CatalogContentKind.Morphs;
                 }
 
-                List<string> manifestNames;
-                List<long> ticks;
-                List<long> sizes;
-                if (pkg.TryGetCachedFileEntryData(out manifestNames, out ticks, out sizes) && manifestNames != null)
+                bool hasClothing;
+                bool hasHair;
+                bool hasMorphs;
+                if (pkg.TryGetCompleteCatalogContent(out hasClothing, out hasHair, out hasMorphs))
                 {
                     CatalogContentKind kind = CatalogContentKind.None;
-                    for (int i = 0; i < manifestNames.Count; i++)
-                        kind |= ClassifyInternalPathCatalogKind(manifestNames[i]);
+                    if (hasClothing) kind |= CatalogContentKind.Clothing;
+                    if (hasHair) kind |= CatalogContentKind.Hair;
+                    if (hasMorphs) kind |= CatalogContentKind.Morphs;
                     return kind;
                 }
             }

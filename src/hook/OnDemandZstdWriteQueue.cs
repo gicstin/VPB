@@ -42,7 +42,10 @@ namespace VPB
         private static int s_Queued;
         private static int s_ActiveWriters;
         private static int s_MaxWriters = 2;
+        private static long s_PayloadBytes;
         private static volatile bool s_Cancel;
+        private const int MaxPendingJobs = 24;
+        private const long MaxPendingPayloadBytes = 512L * 1024 * 1024;
 
         [ThreadStatic]
         private static Compressor s_ThreadCompressor;
@@ -57,6 +60,13 @@ namespace VPB
         internal static bool IsIdle
         {
             get { return PendingCount <= 0; }
+        }
+
+        internal static IEnumerator CoWaitForCapacity(int payloadBytes)
+        {
+            if (payloadBytes <= 0 || payloadBytes > MaxPendingPayloadBytes) yield break;
+            while (!s_Cancel && (PendingCount >= MaxPendingJobs || Interlocked.Read(ref s_PayloadBytes) + payloadBytes > MaxPendingPayloadBytes))
+                yield return null;
         }
 
         internal static void BeginJobSession()
@@ -154,8 +164,7 @@ namespace VPB
                 DeleteNativePathAfterSuccess = deleteNativePathAfterSuccess
             };
 
-            EnqueueJob(job);
-            return true;
+            return EnqueueJob(job);
         }
 
         /// <summary>
@@ -178,7 +187,7 @@ namespace VPB
             bool rewrite,
             string deleteNativePathAfterSuccess)
         {
-            if (s_Cancel || string.IsNullOrEmpty(zstdPath) || string.IsNullOrEmpty(nativePath))
+            if (s_Cancel || PendingCount >= MaxPendingJobs || string.IsNullOrEmpty(zstdPath) || string.IsNullOrEmpty(nativePath))
                 return false;
             if (!File.Exists(nativePath))
                 return false;
@@ -205,18 +214,32 @@ namespace VPB
                 DeleteNativePathAfterSuccess = deleteNativePathAfterSuccess
             };
 
-            EnqueueJob(job);
-            return true;
+            return EnqueueJob(job);
         }
 
-        private static void EnqueueJob(Job job)
+        private static bool EnqueueJob(Job job)
         {
+            bool queued = false;
             lock (QueueLock)
             {
-                Queue.Enqueue(job);
-                Interlocked.Increment(ref s_Queued);
+                int payloadBytes = job != null && job.Payload != null ? job.Payload.Length : 0;
+                if (!s_Cancel && PendingCount < MaxPendingJobs
+                    && payloadBytes <= MaxPendingPayloadBytes
+                    && s_PayloadBytes + payloadBytes <= MaxPendingPayloadBytes)
+                {
+                    Queue.Enqueue(job);
+                    Interlocked.Increment(ref s_Queued);
+                    s_PayloadBytes += payloadBytes;
+                    queued = true;
+                }
+            }
+            if (!queued)
+            {
+                try { ImageLoadingMgr.ReleaseZstdWritePath(job != null ? job.ZstdPath : null); } catch { }
+                return false;
             }
             TrySpawnWriters();
+            return true;
         }
 
         internal static IEnumerator CoWaitUntilIdle()
@@ -273,7 +296,16 @@ namespace VPB
                 }
 
                 Job captured = job;
-                ThreadPool.QueueUserWorkItem(_ => RunWriter(captured));
+                bool queued = false;
+                try { queued = ThreadPool.QueueUserWorkItem(_ => RunWriter(captured)); }
+                catch { }
+                if (!queued)
+                {
+                    Interlocked.Decrement(ref s_ActiveWriters);
+                    ReleaseJob(captured);
+                    try { NativeTextureOnDemandCache.NotifyZstdWriteFailed(); } catch { }
+                    continue;
+                }
             }
         }
 
@@ -529,7 +561,15 @@ namespace VPB
         {
             if (job == null) return;
             try { ImageLoadingMgr.ReleaseZstdWritePath(job.ZstdPath); } catch { }
-            job.Payload = null;
+            lock (QueueLock)
+            {
+                if (job.Payload != null)
+                {
+                    s_PayloadBytes -= job.Payload.Length;
+                    if (s_PayloadBytes < 0) s_PayloadBytes = 0;
+                    job.Payload = null;
+                }
+            }
         }
 
         /// <summary>Dispose thread-local ZstdNet compressor (native handle) on quit.</summary>

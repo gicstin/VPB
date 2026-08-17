@@ -7,6 +7,9 @@ namespace VPB
     {
         private static readonly Dictionary<int, Stack<byte[]>> pool = new Dictionary<int, Stack<byte[]>>();
         private static readonly object lockObj = new object();
+        private const long MaxPooledBytes = 256L * 1024L * 1024L;
+        private const int MaxPerSize = 4;
+        private static long pooledBytes;
 
         // Debug stats
         public static int TotalRented = 0;
@@ -42,6 +45,7 @@ namespace VPB
                 Stack<byte[]> stack;
                 if (pool.TryGetValue(size, out stack) && stack.Count > 0)
                 {
+                    pooledBytes -= size;
                     PoolHits++;
                     TotalRented++;
                     TotalBytesReused += size;
@@ -73,10 +77,10 @@ namespace VPB
                     pool[size] = stack;
                 }
                 
-                // Prevent pool from growing infinitely, though unlikely with POT sizes
-                if (stack.Count < 50) 
+                if (stack.Count < MaxPerSize && pooledBytes + size <= MaxPooledBytes)
                 {
                     stack.Push(buffer);
+                    pooledBytes += size;
                 }
             }
         }
@@ -86,6 +90,7 @@ namespace VPB
             lock (lockObj)
             {
                 pool.Clear();
+                pooledBytes = 0;
             }
         }
 

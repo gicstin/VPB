@@ -348,7 +348,7 @@ namespace VPB
                 if (candidate != null)
                 {
                     if (candidate.tex == null) candidate.tex = __instance;
-                    ImageLoadingMgr.singleton.TryEnqueueResizeCache(candidate);
+                    ImageLoadingMgr.singleton.TryEnqueueResizeCacheForCurrentCandidate(candidate);
                 }
             }
 
@@ -379,7 +379,7 @@ namespace VPB
 
             if (qi != null)
             {
-                ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi);
+                ImageLoadingMgr.singleton.TryEnqueueResizeCacheForCurrentCandidate(qi);
             }
         }
 

@@ -531,12 +531,22 @@ namespace VPB
             public int TurboJpegScaleDenom;
         }
 
+        private const int MaxPendingThumbnailCacheJobs = 128;
+
         private IEnumerator ProcessThumbnailCacheQueue()
         {
             try
             {
                 while (pendingThumbnailCacheJobs != null && pendingThumbnailCacheJobs.Count > 0)
                 {
+                    while (pendingThumbnailCacheJobs.Count > 0)
+                    {
+                        ThumbnailCacheJob head = pendingThumbnailCacheJobs.Peek();
+                        if (string.IsNullOrEmpty(head.GroupId) || head.GroupId == currentLoadingGroupId) break;
+                        pendingThumbnailCacheJobs.Dequeue();
+                    }
+                    if (pendingThumbnailCacheJobs.Count == 0) break;
+
                     // Gate 1: wait for scroll to settle (1 s idle instead of 0.25 s — gives the
                     // image-loader background threads time to finish their own SaveThumbnail calls
                     // and release the cache write-lock before we add more pressure from the main thread).
@@ -704,6 +714,8 @@ namespace VPB
         private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId, int turboJpegScaleDenom)
         {
             if (pendingThumbnailCacheJobs == null) pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
+            while (pendingThumbnailCacheJobs.Count >= MaxPendingThumbnailCacheJobs)
+                pendingThumbnailCacheJobs.Dequeue();
             pendingThumbnailCacheJobs.Enqueue(new ThumbnailCacheJob { Path = path, Texture = tex, LastWriteTime = lastWriteTime, GroupId = groupId, TurboJpegScaleDenom = turboJpegScaleDenom });
             _thumbCacheTotalEnqueued++;
         }

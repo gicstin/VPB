@@ -143,7 +143,9 @@ namespace VPB
         {
             private static readonly object Gate = new object();
             private static readonly Dictionary<int, Stack<byte[]>> Pools = new Dictionary<int, Stack<byte[]>>();
-            private const int MaxPerLength = 8;
+            private const int MaxPerLength = 2;
+            private const long MaxPooledBytes = 64L * 1024L * 1024L;
+            private static long s_PooledBytes;
 
             internal static byte[] Rent(int length)
             {
@@ -152,7 +154,12 @@ namespace VPB
                 {
                     Stack<byte[]> st;
                     if (Pools.TryGetValue(length, out st) && st != null && st.Count > 0)
-                        return st.Pop();
+                    {
+                        s_PooledBytes -= length;
+                        byte[] arr = st.Pop();
+                        if (st.Count == 0) Pools.Remove(length);
+                        return arr;
+                    }
                 }
                 return new byte[length];
             }
@@ -162,6 +169,7 @@ namespace VPB
                 if (arr == null || arr.Length == 0) return;
                 lock (Gate)
                 {
+                    if (s_PooledBytes + arr.Length > MaxPooledBytes) return;
                     Stack<byte[]> st;
                     if (!Pools.TryGetValue(arr.Length, out st) || st == null)
                     {
@@ -169,7 +177,10 @@ namespace VPB
                         Pools[arr.Length] = st;
                     }
                     if (st.Count < MaxPerLength)
+                    {
                         st.Push(arr);
+                        s_PooledBytes += arr.Length;
+                    }
                 }
             }
         }
@@ -211,6 +222,22 @@ namespace VPB
                 s_ThreadNativeRgbBytes = rgbLen;
             }
             return s_ThreadNativeRgb;
+        }
+
+        internal static void ReleaseThreadResources()
+        {
+            if (s_ThreadNativeRgb != IntPtr.Zero)
+            {
+                try { Marshal.FreeHGlobal(s_ThreadNativeRgb); } catch { }
+                s_ThreadNativeRgb = IntPtr.Zero;
+                s_ThreadNativeRgbBytes = 0;
+            }
+
+            if (s_ThreadTjHandle != IntPtr.Zero)
+            {
+                try { if (s_tjDestroy != null) s_tjDestroy(s_ThreadTjHandle); } catch { }
+                s_ThreadTjHandle = IntPtr.Zero;
+            }
         }
 
         internal static bool TryDecodeJpegToTexture2D(byte[] jpegBytes, int jpegLength, out Texture2D tex, out string error)

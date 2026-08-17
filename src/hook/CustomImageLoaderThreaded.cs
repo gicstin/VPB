@@ -688,6 +688,11 @@ namespace VPB
 			public void Decode()
 			{
 				if (!needsDecoding || raw == null || rawLength == 0) return;
+				Texture2D tempTex = null;
+				Texture2D outputTexForCleanup = null;
+				RenderTexture rtForCleanup = null;
+				RenderTexture previousActive = null;
+				bool changedRenderTarget = false;
 
 				try
 				{
@@ -726,7 +731,7 @@ namespace VPB
 						}
 					}
 
-					Texture2D tempTex = new Texture2D(2, 2);
+					tempTex = new Texture2D(2, 2);
 					byte[] dataToLoad = raw;
 					if (raw.Length != rawLength)
 					{
@@ -770,6 +775,7 @@ namespace VPB
                         if (sizeMatch && noTransforms)
                         {
                             tex = tempTex;
+							tempTex = null;
                             textureFormat = tex.format;
                             width = tex.width;
                             height = tex.height;
@@ -782,21 +788,22 @@ namespace VPB
                         }
 
                         Texture2D outputTex = tempTex;
-                        bool destroyedTemp = false;
-
                         if (targetWidth != origWidth || targetHeight != origHeight)
                         {
-                            RenderTexture rt = RenderTexture.GetTemporary(targetWidth, targetHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
-                            RenderTexture previous = RenderTexture.active;
-                            RenderTexture.active = rt;
+                            rtForCleanup = RenderTexture.GetTemporary(targetWidth, targetHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+                            previousActive = RenderTexture.active;
+                            RenderTexture.active = rtForCleanup;
+                            changedRenderTarget = true;
                             GL.Clear(false, true, fillBackground ? UnityEngine.Color.white : UnityEngine.Color.clear);
-                            Graphics.Blit(tempTex, rt);
+                            Graphics.Blit(tempTex, rtForCleanup);
                             outputTex = new Texture2D(targetWidth, targetHeight, TextureFormat.RGBA32, false);
+                            outputTexForCleanup = outputTex;
                             outputTex.ReadPixels(new Rect(0, 0, targetWidth, targetHeight), 0, 0);
                             outputTex.Apply();
-                            RenderTexture.active = previous;
-                            RenderTexture.ReleaseTemporary(rt);
-                            destroyedTemp = true;
+                            RenderTexture.active = previousActive;
+                            changedRenderTarget = false;
+                            RenderTexture.ReleaseTemporary(rtForCleanup);
+                            rtForCleanup = null;
                         }
 
                         Color32[] pix = outputTex.GetPixels32();
@@ -820,8 +827,10 @@ namespace VPB
                         // Apply transformations (Invert, Alpha, Normal)
                         ApplyTransformations(num8);
 
-                        if (destroyedTemp) UnityEngine.Object.Destroy(tempTex);
+                        if (!object.ReferenceEquals(outputTex, tempTex)) UnityEngine.Object.Destroy(tempTex);
+                        tempTex = null;
                         UnityEngine.Object.Destroy(outputTex);
+						outputTexForCleanup = null;
 					}
                     else
                     {
@@ -834,6 +843,13 @@ namespace VPB
 					LogUtil.LogError("Error in Decode: " + ex);
 					hadError = true;
 					errorText = ex.Message;
+				}
+				finally
+				{
+					if (changedRenderTarget) RenderTexture.active = previousActive;
+					if (rtForCleanup != null) RenderTexture.ReleaseTemporary(rtForCleanup);
+					if (outputTexForCleanup != null) UnityEngine.Object.Destroy(outputTexForCleanup);
+					if (tempTex != null && !object.ReferenceEquals(tempTex, tex)) UnityEngine.Object.Destroy(tempTex);
 				}
 				needsDecoding = false;
 			}
@@ -1097,9 +1113,10 @@ namespace VPB
                 }
 				else if (tex.format == TextureFormat.DXT1 || tex.format == TextureFormat.DXT5)
 				{
+					Texture2D texture2D = null;
                     try
                     {
-					    Texture2D texture2D = new Texture2D(width, height, textureFormat, createMipMaps, linear);
+					    texture2D = new Texture2D(width, height, textureFormat, createMipMaps, linear);
 					    TextureUtil.SafeLoadRawTextureData(texture2D, raw, width, height, textureFormat);
 					    texture2D.Apply(false, false);
 					    if (canCompress)
@@ -1110,12 +1127,15 @@ namespace VPB
 					    tex.LoadRawTextureData(rawTextureData);
 						bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
 					    tex.Apply(false, !isSimTexture && !onDemandCacheBuild);
-					    UnityEngine.Object.Destroy(texture2D);
                     }
                     catch (Exception ex)
                     {
                         LogUtil.LogError($"[VPB] LoadRawTextureData failed (DXT path) for {imgPath}: {ex.Message}");
                     }
+					finally
+					{
+						if (texture2D != null) UnityEngine.Object.Destroy(texture2D);
+					}
 				}
 				else
 				{
@@ -1336,11 +1356,6 @@ namespace VPB
 
                 result.success = result.payload != null && result.payload.Length > 0;
 
-                if (result.success && qi.tex != null)
-                {
-                    try { loader.TryRegisterOnDemandBuiltTexture(qi); } catch { }
-                }
-
                 return result;
             }
             finally
@@ -1497,11 +1512,6 @@ namespace VPB
 
                 result.success = result.payload != null && result.payload.Length > 0;
 
-                if (result.success && qi.tex != null && targetWidth == 0 && targetHeight == 0)
-                {
-                    try { loader.TryRegisterOnDemandBuiltTexture(qi); } catch { }
-                }
-
                 return result;
             }
             finally
@@ -1516,46 +1526,6 @@ namespace VPB
                     loader.ReturnQueuedImage(qi);
                 }
             }
-        }
-
-        /// <summary>Mirror stock PostProcessImageQueue RAM cache after on-demand full-size build.</summary>
-        public void TryRegisterOnDemandBuiltTexture(QueuedImage qi)
-        {
-            if (qi == null || qi.hadError || qi.tex == null || qi.isThumbnail) return;
-            if (qi.setSize && (qi.width > 0 || qi.height > 0)) return;
-            if (string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
-
-            if (textureCache == null)
-            {
-                textureCache = new Dictionary<string, Texture2D>();
-                textureTrackedCache = new Dictionary<Texture2D, bool>();
-            }
-
-            string sig = qi.cacheSignature;
-            if (textureCache.ContainsKey(sig)) return;
-
-            Texture2D dup = null;
-            try
-            {
-                byte[] raw = qi.tex.GetRawTextureData();
-                dup = new Texture2D(qi.tex.width, qi.tex.height, qi.tex.format, qi.tex.mipmapCount > 1, qi.linear);
-                dup.name = sig;
-                dup.LoadRawTextureData(raw);
-                dup.Apply(false, false);
-            }
-            catch
-            {
-                if (dup != null)
-                {
-                    UnityEngine.Object.Destroy(dup);
-                    dup = null;
-                }
-            }
-
-            if (dup == null) return;
-
-            textureCache.Add(sig, dup);
-            textureTrackedCache.Add(dup, true);
         }
 
         /// <summary>In-RAM thumbnail LRU key; matches disk <see cref="GalleryThumbnailCache.GetThumbnailCacheKey"/> tier suffix; <c>|uj</c> = Unity-only decode (hover preview).</summary>
@@ -1680,6 +1650,15 @@ namespace VPB
                 QueuedImage qi = null;
                 try
                 {
+                    CustomImageLoaderThreaded loader = singleton;
+                    if (loader != null
+                        && (Thread.VolatileRead(ref loader.runningTasks) >= GetEffectiveMaxLoaderThreads()
+                            || Thread.VolatileRead(ref loader.runningThumbnailTasks) >= GetEffectiveMaxThumbnailThreads()))
+                    {
+                        Thread.Sleep(1);
+                        continue;
+                    }
+
                     lock (_varThumbIoQueueLock)
                     {
                         if (_varThumbIoQueue.Count > 0)
@@ -1748,17 +1727,22 @@ namespace VPB
         private void StartThumbnailDecodeThread(QueuedImage head)
         {
             if (head == null) return;
+            bool slotAcquired = false;
             try
             {
-                if (head.cancel || head.processed)
+                lock (workerStartLock)
                 {
-                    return;
-                }
+                    if (head.cancel || head.processed || head.working
+                        || runningTasks >= GetEffectiveMaxLoaderThreads()
+                        || runningThumbnailTasks >= GetEffectiveMaxThumbnailThreads())
+                        return;
 
-                head.working = true;
-                try { head.debugWorkStartRealtime = Time.realtimeSinceStartup; } catch { }
-                System.Threading.Interlocked.Increment(ref runningTasks);
-                System.Threading.Interlocked.Increment(ref runningThumbnailTasks);
+                    head.working = true;
+                    try { head.debugWorkStartRealtime = Time.realtimeSinceStartup; } catch { }
+                    System.Threading.Interlocked.Increment(ref runningTasks);
+                    System.Threading.Interlocked.Increment(ref runningThumbnailTasks);
+                    slotAcquired = true;
+                }
 
                 Thread t = new Thread(() =>
                 {
@@ -1773,6 +1757,7 @@ namespace VPB
                     }
                     finally
                     {
+                        TurboJpegNative.ReleaseThreadResources();
                         if (!head.debugAbortIssued)
                         {
                             head.processed = true;
@@ -1793,8 +1778,11 @@ namespace VPB
                 try
                 {
                     head.working = false;
-                    System.Threading.Interlocked.Decrement(ref runningTasks);
-                    System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
+                    if (slotAcquired)
+                    {
+                        System.Threading.Interlocked.Decrement(ref runningTasks);
+                        System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
+                    }
                 }
                 catch { }
             }
@@ -1810,6 +1798,7 @@ namespace VPB
 
         protected int runningTasks;
         protected int runningThumbnailTasks;
+        private readonly object workerStartLock = new object();
         /// <summary>When queued image count exceeds this, drop stale thumbnail requests (see <see cref="PruneThumbnailQueueOverBudget"/>).</summary>
         /// <remarks>Large grids (many cols × buffer rows) enqueue 150+ thumbs per scroll; cap must stay below that burst or prune never runs (imgQ stalls ~500+).</remarks>
         private const int ThumbnailQueueSoftCap = 280;
@@ -1817,6 +1806,9 @@ namespace VPB
 
 		protected Dictionary<string, Texture2D> thumbnailCache;
 		private const int ThumbnailCacheMaxItems = 512;
+		private const long ThumbnailCacheMaxBytes = 512L * 1024L * 1024L;
+		private long thumbnailCacheBytes;
+		private Dictionary<string, long> thumbnailCacheSizes;
 		private LinkedList<string> thumbnailCacheLru;
 		private Dictionary<string, LinkedListNode<string>> thumbnailCacheLruNodes;
 		private Dictionary<Texture2D, int> thumbnailUseCount;
@@ -2016,8 +2008,17 @@ namespace VPB
 			}
 			if (thumbnailCacheLru != null) thumbnailCacheLru.Clear();
 			if (thumbnailCacheLruNodes != null) thumbnailCacheLruNodes.Clear();
+			if (thumbnailCacheSizes != null) thumbnailCacheSizes.Clear();
+			thumbnailCacheBytes = 0;
 			if (thumbnailUseCount != null) thumbnailUseCount.Clear();
-			if (thumbnailEvicted != null) thumbnailEvicted.Clear();
+			if (thumbnailEvicted != null)
+			{
+				foreach (Texture2D t in thumbnailEvicted)
+				{
+					if (t != null) UnityEngine.Object.Destroy(t);
+				}
+				thumbnailEvicted.Clear();
+			}
 		}
 
 		public void RegisterThumbnailUse(Texture2D tex)
@@ -2065,6 +2066,7 @@ namespace VPB
 			if (thumbnailCache != null && thumbnailCache.TryGetValue(key, out value))
 			{
 				thumbnailCache.Remove(key);
+				RemoveThumbnailCacheSize(key);
 				RemoveThumbnailCacheLru(key);
 				if (value != null)
 				{
@@ -2099,6 +2101,7 @@ namespace VPB
 				if (value == null)
 				{
 					thumbnailCache.Remove(key);
+					RemoveThumbnailCacheSize(key);
 					RemoveThumbnailCacheLru(key);
 					return null;
 				}
@@ -2116,9 +2119,38 @@ namespace VPB
 		private void CacheThumbnail(string cacheKey, Texture2D tex)
 		{
 			if (thumbnailCache == null || string.IsNullOrEmpty(cacheKey) || tex == null) return;
-			if (!thumbnailCache.ContainsKey(cacheKey)) thumbnailCache.Add(cacheKey, tex);
+			if (!thumbnailCache.ContainsKey(cacheKey))
+			{
+				thumbnailCache.Add(cacheKey, tex);
+				long bytes = EstimateThumbnailCacheBytes(tex);
+				thumbnailCacheSizes[cacheKey] = bytes;
+				thumbnailCacheBytes += bytes;
+			}
 			TouchThumbnailCacheLru(cacheKey);
 			EnforceThumbnailCacheLimit();
+		}
+
+		private static long EstimateThumbnailCacheBytes(Texture2D tex)
+		{
+			if (tex == null) return 0;
+			try
+			{
+				long bytes = TextureUtil.GetExpectedRawDataSize(Math.Max(1, tex.width), Math.Max(1, tex.height), tex.format);
+				if (bytes <= 0) bytes = (long)Math.Max(1, tex.width) * Math.Max(1, tex.height) * 4L;
+				if (tex.mipmapCount > 1) bytes += bytes / 3L;
+				return bytes;
+			}
+			catch { return 0; }
+		}
+
+		private void RemoveThumbnailCacheSize(string cacheKey)
+		{
+			if (thumbnailCacheSizes == null || string.IsNullOrEmpty(cacheKey)) return;
+			long bytes;
+			if (!thumbnailCacheSizes.TryGetValue(cacheKey, out bytes)) return;
+			thumbnailCacheSizes.Remove(cacheKey);
+			thumbnailCacheBytes -= bytes;
+			if (thumbnailCacheBytes < 0) thumbnailCacheBytes = 0;
 		}
 
 		private void TouchThumbnailCacheLru(string path)
@@ -2151,7 +2183,7 @@ namespace VPB
 		private void EnforceThumbnailCacheLimit()
 		{
 			if (thumbnailCache == null || thumbnailCacheLru == null || ThumbnailCacheMaxItems <= 0) return;
-			while (thumbnailCache.Count > ThumbnailCacheMaxItems)
+			while (thumbnailCache.Count > ThumbnailCacheMaxItems || thumbnailCacheBytes > ThumbnailCacheMaxBytes)
 			{
 				LinkedListNode<string> last = thumbnailCacheLru.Last;
 				if (last == null) break;
@@ -2163,6 +2195,7 @@ namespace VPB
 				if (thumbnailCache.TryGetValue(key, out victim))
 				{
 					thumbnailCache.Remove(key);
+					RemoveThumbnailCacheSize(key);
 					if (victim != null)
 					{
 						if (IsThumbnailInUse(victim))
@@ -2781,9 +2814,13 @@ namespace VPB
             bool success = false;
             if (!head.isThumbnail)
             {
-                head.working = true;
-                try { head.debugWorkStartRealtime = Time.realtimeSinceStartup; } catch { }
-                System.Threading.Interlocked.Increment(ref runningTasks);
+                lock (workerStartLock)
+                {
+                    if (head.cancel || head.processed || head.working || runningTasks >= GetEffectiveMaxLoaderThreads()) return;
+                    head.working = true;
+                    try { head.debugWorkStartRealtime = Time.realtimeSinceStartup; } catch { }
+                    System.Threading.Interlocked.Increment(ref runningTasks);
+                }
                 try
                 {
                     success = ThreadPool.QueueUserWorkItem((state) => {
@@ -2798,6 +2835,7 @@ namespace VPB
                         }
                         finally
                         {
+                            TurboJpegNative.ReleaseThreadResources();
                             head.processed = true;
                             head.working = false;
                             System.Threading.Interlocked.Decrement(ref runningTasks);
@@ -2822,7 +2860,8 @@ namespace VPB
                     bool isVar = false;
                     try { isVar = IsVarPackageVfsPath(head.imgPath); } catch { isVar = false; }
 
-                    if (isVar && head.webRequest == null && !head.cancel && !head.processed)
+                    if (isVar && head.webRequest == null && !head.cancel && !head.processed
+                        && (head.raw == null || head.rawLength <= 0))
                     {
                         head.thumbVarIoPending = true;
                         try { head.debugStage = 10; head.debugStageAux = 0; head.debugStageRealtime = Time.realtimeSinceStartup; } catch { }
@@ -2910,6 +2949,7 @@ namespace VPB
 			textureCache = new Dictionary<string, Texture2D>();
 			textureTrackedCache = new Dictionary<Texture2D, bool>();
 			thumbnailCache = new Dictionary<string, Texture2D>();
+			thumbnailCacheSizes = new Dictionary<string, long>();
 			thumbnailCacheLru = new LinkedList<string>();
 			thumbnailCacheLruNodes = new Dictionary<string, LinkedListNode<string>>();
 			thumbnailUseCount = new Dictionary<Texture2D, int>();

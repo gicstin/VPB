@@ -3546,14 +3546,17 @@ namespace VPB
                             zstdSourceH = loaderZstd.sourceHeight > 0 ? loaderZstd.sourceHeight : loaderNative.sourceHeight;
                         }
 
+                        if (payloadZstd == null || payloadZstd.Length == 0)
+                        {
+                            s_ZstdFails++;
+                            goto AfterZstd;
+                        }
+
+                        yield return OnDemandZstdWriteQueue.CoWaitForCapacity(payloadZstd.Length);
+                        if (s_CancelRequested) yield break;
+
                         try
                         {
-                            if (payloadZstd == null || payloadZstd.Length == 0)
-                            {
-                                s_ZstdFails++;
-                                goto AfterZstd;
-                            }
-
                             int level = 3;
                             try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
 

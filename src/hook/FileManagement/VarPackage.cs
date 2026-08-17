@@ -310,6 +310,8 @@ namespace VPB
 		Dictionary<string, int> cachedInternalPathToIndex;
 		readonly object cachedEntriesLock = new object();
 		volatile List<VarFileEntry> fileEntries;
+		readonly object catalogContentKindsLock = new object();
+		int cachedCatalogContentKinds = -1;
 		private const int CodePageUtf8 = 65001;
 		private const int CodePageGbk = 936;
 		private const int CodePageSystemDefault = 0;
@@ -969,6 +971,56 @@ namespace VPB
 				return true;
 			}
 		}
+
+		// Browse manifest omits morphs and preview-less items, so catalog absence requires complete ZIP directory.
+		internal bool TryGetCompleteCatalogContent(out bool hasClothing, out bool hasHair, out bool hasMorphs)
+		{
+			hasClothing = false;
+			hasHair = false;
+			hasMorphs = false;
+
+			lock (catalogContentKindsLock)
+			{
+				if (cachedCatalogContentKinds < 0)
+				{
+					int kinds = 0;
+					try
+					{
+						int codePage = GetZipNameCodePageForVar(Path);
+						using (ZipFile zip = OpenZipFileForRead(Path, codePage))
+						{
+							foreach (ZipEntry entry in zip)
+							{
+								if (entry == null || !entry.IsFile || string.IsNullOrEmpty(entry.Name)) continue;
+								string name = entry.Name.Replace('\\', '/');
+								if (name.EndsWith(".vam", StringComparison.OrdinalIgnoreCase))
+								{
+									if (name.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)) kinds |= 1;
+									if (name.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)) kinds |= 2;
+								}
+								else if (name.EndsWith(".vmi", StringComparison.OrdinalIgnoreCase)
+									&& name.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase))
+								{
+									kinds |= 4;
+								}
+
+								if (kinds == 7) break;
+							}
+						}
+					}
+					catch
+					{
+						return false;
+					}
+					cachedCatalogContentKinds = kinds;
+				}
+
+				hasClothing = (cachedCatalogContentKinds & 1) != 0;
+				hasHair = (cachedCatalogContentKinds & 2) != 0;
+				hasMorphs = (cachedCatalogContentKinds & 4) != 0;
+				return true;
+			}
+		}
 		public List<VarFileEntry> ClothingFileEntries
 		{
 			get;
@@ -1230,6 +1282,8 @@ namespace VPB
 				cachedFileEntrySizes = null;
 				cachedInternalPathToIndex = null;
 			}
+			lock (catalogContentKindsLock)
+				cachedCatalogContentKinds = -1;
 			ClothingFileEntries = null;
 			HairFileEntries = null;
 			ClothingFileEntryNames = null;

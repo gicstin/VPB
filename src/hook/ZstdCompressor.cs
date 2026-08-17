@@ -8,6 +8,7 @@ namespace VPB
 {
     public class ZstdCompressor
     {
+        private const int MaxDecompressedBytes = 512 * 1024 * 1024;
         private static string _cachedZstdPath = null;
         private static bool _zstdChecked = false;
         private static readonly object _activeProcLock = new object();
@@ -246,14 +247,21 @@ namespace VPB
         /// <returns>The original uncompressed byte array.</returns>
         public static byte[] Decompress(byte[] compressed)
         {
+            return Decompress(compressed, MaxDecompressedBytes);
+        }
+
+        public static byte[] Decompress(byte[] compressed, int maxDecompressedSize)
+        {
             if (compressed == null || compressed.Length == 0)
                 return new byte[0];
+            if (maxDecompressedSize <= 0 || maxDecompressedSize > MaxDecompressedBytes)
+                throw new ArgumentOutOfRangeException("maxDecompressedSize");
 
             try { ExternMethods.Initialize(); } catch { }
 
             using (var decompressor = new Decompressor())
             {
-                return decompressor.Unwrap(compressed);
+                return decompressor.Unwrap(compressed, maxDecompressedSize);
             }
         }
 

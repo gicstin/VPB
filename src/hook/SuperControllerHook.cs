@@ -1622,9 +1622,10 @@ namespace VPB
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "ProcessImageImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
-        public static void PreProcessImageImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        public static void PreProcessImageImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi, out bool __state)
         {
-            if (string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
+            __state = qi != null && qi.skipCache;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
             LogUtil.MarkImageActivity();
 
             ImageLoadingMgr.currentProcessingPath = qi.imgPath;
@@ -1633,11 +1634,13 @@ namespace VPB
 
             if (!Settings.Instance.EnableZstdCompression.Value) return;
 
+            if (NativeImageCacheHasLive(__instance, qi, "immediateTextureCache")) return;
+
             bool immOk = ImageLoadingMgr.singleton.RequestImmediate(qi);
             try { int lvl = Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0; if (lvl >= 1 && (qi.createAlphaFromGrayscale || (qi.imgPath != null && qi.imgPath.IndexOf("Alphamidpart", StringComparison.OrdinalIgnoreCase) >= 0))) LogUtil.Log("[VPB IMM] path=" + qi.imgPath + " A=" + qi.createAlphaFromGrayscale + " ok=" + immOk + " tex=" + (qi.tex != null ? qi.tex.format.ToString() + " " + qi.tex.width + "x" + qi.tex.height : "null")); } catch { }
             if (immOk)
             {
-                qi.skipCache = true;
+                qi.skipCache = false;
                 qi.processed = true;
                 qi.finished = true;
             }
@@ -1645,14 +1648,84 @@ namespace VPB
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "ProcessImageImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
-        public static void PostProcessImageImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        public static void PostProcessImageImmediate(
+            ImageLoaderThreaded __instance,
+            ImageLoaderThreaded.QueuedImage qi,
+            bool __state,
+            Dictionary<string, Texture2D> ___immediateTextureCache)
         {
             ImageLoadingMgr.currentProcessingPath = null;
             ImageLoadingMgr.currentProcessingIsThumbnail = false;
             ImageLoadingMgr.currentProcessingQI = null;
 
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
+            qi.skipCache = __state;
+            try
+            {
+                Texture2D owned;
+                string vpbCachePath;
+                if (qi.tex != null && ___immediateTextureCache != null
+                    && ___immediateTextureCache.TryGetValue(qi.cacheSignature, out owned)
+                    && object.ReferenceEquals(owned, qi.tex)
+                    && ImageLoadingMgr.singleton != null
+                    && ImageLoadingMgr.singleton.TryGetTextureCachePath(qi.tex, out vpbCachePath))
+                {
+                    ImageLoadingMgr.singleton.ReleaseTextureCacheReference(vpbCachePath);
+                }
+            }
+            catch { }
             if (!Settings.Instance.EnableZstdCompression.Value) return;
+        }
+
+        // VPB cache hits skip VaM's queue insertion, so transfer ownership before VaM counts material references.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ImageLoaderThreaded), "RegisterTextureUse", new Type[] { typeof(Texture2D) })]
+        static void PreRegisterTextureUse(
+            Texture2D tex,
+            Dictionary<string, Texture2D> ___textureCache,
+            Dictionary<Texture2D, bool> ___textureTrackedCache)
+        {
+            if (tex == null || ___textureCache == null || ___textureTrackedCache == null) return;
+            if (___textureTrackedCache.ContainsKey(tex)) return;
+
+            ImageLoadingMgr mgr = ImageLoadingMgr.singleton;
+            string vpbCachePath;
+            if (mgr == null || !mgr.TryGetTextureCachePath(tex, out vpbCachePath)) return;
+
+            try
+            {
+                string cacheSignature = tex.name;
+                if (string.IsNullOrEmpty(cacheSignature)) return;
+
+                Texture2D existing;
+                if (___textureCache.TryGetValue(cacheSignature, out existing))
+                {
+                    if (!object.ReferenceEquals(existing, tex)) return;
+                }
+                else
+                {
+                    ___textureCache.Add(cacheSignature, tex);
+                }
+
+                ___textureTrackedCache.Add(tex, true);
+                mgr.ReleaseTextureCacheReference(vpbCachePath);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("VPB texture ownership transfer failed: " + ex.Message);
+            }
+        }
+
+        private static bool NativeImageCacheHasLive(ImageLoaderThreaded loader, ImageLoaderThreaded.QueuedImage qi, string fieldName)
+        {
+            if (loader == null || qi == null || string.IsNullOrEmpty(qi.cacheSignature)) return false;
+            try
+            {
+                var cache = Traverse.Create(loader).Field(fieldName).GetValue() as Dictionary<string, Texture2D>;
+                Texture2D existing;
+                return cache != null && cache.TryGetValue(qi.cacheSignature, out existing) && existing != null;
+            }
+            catch { return false; }
         }
 
         public static void PreProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage __0)
@@ -1883,6 +1956,8 @@ namespace VPB
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
 
+            if (NativeImageCacheHasLive(__instance, qi, "textureCache")) return true;
+
             if (ImageLoadingMgr.singleton.Request(qi))
             {
                 return false;
@@ -1942,8 +2017,16 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
-            if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null) return;
-            if (!Settings.Instance.EnableZstdCompression.Value) return;
+            if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null)
+            {
+                if (ImageLoadingMgr.singleton != null) ImageLoadingMgr.singleton.ReleaseCandidate(__instance);
+                return;
+            }
+            if (!Settings.Instance.EnableZstdCompression.Value)
+            {
+                if (ImageLoadingMgr.singleton != null) ImageLoadingMgr.singleton.ReleaseCandidate(__instance);
+                return;
+            }
 
 
 
@@ -1990,9 +2073,12 @@ namespace VPB
                 if (ImageLoadingMgr.singleton != null)
                 {
                     ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);
-                    ImageLoadingMgr.singleton.TryEnqueueResizeCache(__instance);
+                    ImageLoadingMgr.singleton.TryEnqueueResizeCacheForCurrentCandidate(__instance);
                 }
             }
+
+            if (ImageLoadingMgr.singleton != null)
+                ImageLoadingMgr.singleton.ReleaseCandidate(__instance);
 
         }
 

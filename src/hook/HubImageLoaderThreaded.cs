@@ -262,10 +262,15 @@ namespace VPB
             public void Decode()
             {
                 if (!needsDecoding || raw == null || rawLength == 0) return;
+                Texture2D tempTex = null;
+                Texture2D outputTexForCleanup = null;
+                RenderTexture rtForCleanup = null;
+                RenderTexture previousActive = null;
+                bool changedRenderTarget = false;
 
                 try
                 {
-                    Texture2D tempTex = new Texture2D(2, 2);
+                    tempTex = new Texture2D(2, 2);
                     byte[] dataToLoad = raw;
                     if (raw.Length != rawLength)
                     {
@@ -299,21 +304,23 @@ namespace VPB
                         }
 
                         Texture2D outputTex = tempTex;
-                        bool destroyedTemp = false;
 
                         if (targetWidth != origWidth || targetHeight != origHeight)
                         {
-                            RenderTexture rt = RenderTexture.GetTemporary(targetWidth, targetHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
-                            RenderTexture previous = RenderTexture.active;
-                            RenderTexture.active = rt;
+                            rtForCleanup = RenderTexture.GetTemporary(targetWidth, targetHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+                            previousActive = RenderTexture.active;
+                            RenderTexture.active = rtForCleanup;
+                            changedRenderTarget = true;
                             GL.Clear(false, true, fillBackground ? UnityEngine.Color.white : UnityEngine.Color.clear);
-                            Graphics.Blit(tempTex, rt);
+                            Graphics.Blit(tempTex, rtForCleanup);
                             outputTex = new Texture2D(targetWidth, targetHeight, TextureFormat.RGBA32, false);
+                            outputTexForCleanup = outputTex;
                             outputTex.ReadPixels(new Rect(0, 0, targetWidth, targetHeight), 0, 0);
                             outputTex.Apply();
-                            RenderTexture.active = previous;
-                            RenderTexture.ReleaseTemporary(rt);
-                            destroyedTemp = true;
+                            RenderTexture.active = previousActive;
+                            changedRenderTarget = false;
+                            RenderTexture.ReleaseTemporary(rtForCleanup);
+                            rtForCleanup = null;
                         }
 
                         Color32[] pix = outputTex.GetPixels32();
@@ -343,8 +350,10 @@ namespace VPB
 
                         ApplyTransformations(num8);
 
-                        if (destroyedTemp) UnityEngine.Object.Destroy(tempTex);
+                        if (!object.ReferenceEquals(outputTex, tempTex)) UnityEngine.Object.Destroy(tempTex);
+                        tempTex = null;
                         UnityEngine.Object.Destroy(outputTex);
+                        outputTexForCleanup = null;
                     }
                     else
                     {
@@ -357,6 +366,13 @@ namespace VPB
                     LogUtil.LogError("Error in Decode: " + ex);
                     hadError = true;
                     errorText = ex.Message;
+                }
+                finally
+                {
+                    if (changedRenderTarget) RenderTexture.active = previousActive;
+                    if (rtForCleanup != null) RenderTexture.ReleaseTemporary(rtForCleanup);
+                    if (outputTexForCleanup != null) UnityEngine.Object.Destroy(outputTexForCleanup);
+                    if (tempTex != null) UnityEngine.Object.Destroy(tempTex);
                 }
                 needsDecoding = false;
             }
@@ -732,6 +748,8 @@ namespace VPB
         protected ImageLoaderTaskInfo imageLoaderTask;
         protected bool _threadsRunning;
         protected Dictionary<string, Texture2D> thumbnailCache;
+        private const int MaxThumbnailCacheItems = 512;
+        private Queue<string> thumbnailCacheOrder;
         protected Dictionary<string, Texture2D> textureCache;
         protected Dictionary<string, Texture2D> immediateTextureCache;
         protected Dictionary<Texture2D, bool> textureTrackedCache;
@@ -852,15 +870,46 @@ namespace VPB
 
         public void PurgeAllTextures()
         {
-            if (textureCache == null) return;
-            foreach (Texture2D value in textureCache.Values)
+            if (textureCache != null)
             {
-                if (value != null) TextureUtil.UnmarkDownscaledActive("HIL:" + value.name);
-                UnityEngine.Object.Destroy(value);
+                foreach (Texture2D value in textureCache.Values)
+                {
+                    if (value != null) TextureUtil.UnmarkDownscaledActive("HIL:" + value.name);
+                    UnityEngine.Object.Destroy(value);
+                }
+                textureCache.Clear();
             }
-            textureUseCount.Clear();
-            textureCache.Clear();
-            textureTrackedCache.Clear();
+            if (thumbnailCache != null)
+            {
+                foreach (Texture2D value in thumbnailCache.Values)
+                    UnityEngine.Object.Destroy(value);
+                thumbnailCache.Clear();
+            }
+            if (immediateTextureCache != null)
+            {
+                foreach (Texture2D value in immediateTextureCache.Values)
+                    UnityEngine.Object.Destroy(value);
+                immediateTextureCache.Clear();
+            }
+            if (thumbnailCacheOrder != null) thumbnailCacheOrder.Clear();
+            if (textureUseCount != null) textureUseCount.Clear();
+            if (textureTrackedCache != null) textureTrackedCache.Clear();
+        }
+
+        private void CacheThumbnail(string path, Texture2D tex)
+        {
+            if (string.IsNullOrEmpty(path) || tex == null || thumbnailCache == null) return;
+            if (thumbnailCache.ContainsKey(path)) return;
+            thumbnailCache.Add(path, tex);
+            thumbnailCacheOrder.Enqueue(path);
+            while (thumbnailCache.Count > MaxThumbnailCacheItems && thumbnailCacheOrder.Count > 0)
+            {
+                string oldPath = thumbnailCacheOrder.Dequeue();
+                Texture2D oldTexture;
+                if (!thumbnailCache.TryGetValue(oldPath, out oldTexture)) continue;
+                thumbnailCache.Remove(oldPath);
+                if (oldTexture != null) UnityEngine.Object.Destroy(oldTexture);
+            }
         }
 
         protected void ProcessImageQueueThreaded()
@@ -911,7 +960,7 @@ namespace VPB
                     {
                         if (value.isThumbnail)
                         {
-                            if (!thumbnailCache.ContainsKey(value.imgPath) && value.tex != null) thumbnailCache.Add(value.imgPath, value.tex);
+                            CacheThumbnail(value.imgPath, value.tex);
                         }
                         else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
                         {
@@ -1075,7 +1124,7 @@ namespace VPB
             }
         }
 
-        public void OnDestroy() { if (Application.isPlaying) StopThreads(); PurgeAllTextures(); }
+        public void OnDestroy() { if (Application.isPlaying) StopThreads(); PurgeAllTextures(); if (ReferenceEquals(singleton, this)) singleton = null; }
         protected void OnApplicationQuit() { if (Application.isPlaying) StopThreads(); }
 
         protected void Awake()
@@ -1085,6 +1134,7 @@ namespace VPB
             textureCache = new Dictionary<string, Texture2D>();
             textureTrackedCache = new Dictionary<Texture2D, bool>();
             thumbnailCache = new Dictionary<string, Texture2D>();
+            thumbnailCacheOrder = new Queue<string>();
             textureUseCount = new Dictionary<Texture2D, int>();
             webRequestFailCounts = new Dictionary<string, int>(StringComparer.Ordinal);
             queuedImages = new PriorityQueue<QueuedImage>((a, b) => {
