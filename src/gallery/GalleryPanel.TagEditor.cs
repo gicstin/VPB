@@ -365,7 +365,7 @@ namespace VPB
             _detailStripTagMenuModeTabsGO = UI.CreateChildRT(_detailStripTagMenuPanelGO, "ModeTabs");
             UI.AddHLG(
                 _detailStripTagMenuModeTabsGO,
-                spacing: 4f * s,
+                spacing: UI.GapTight(s),
                 padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true,
@@ -465,7 +465,7 @@ namespace VPB
             _detailStripTagMenuDbListHeaderGO = UI.CreateChildRT(_detailStripTagMenuDbHostGO, "DbListHeader");
             UI.AddHLG(
                 _detailStripTagMenuDbListHeaderGO,
-                spacing: 4f * s,
+                spacing: UI.GapTight(s),
                 padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.MiddleLeft,
                 childForceExpandWidth: false,
@@ -544,7 +544,7 @@ namespace VPB
 
             // Compact multiline create — height follows ChromeScale.
             _detailStripTagMenuDbNewTagBlockGO = UI.CreateChildRT(_detailStripTagMenuDbHostGO, "NewTagBlock");
-            UI.AddVLG(_detailStripTagMenuDbNewTagBlockGO, 2f * s);
+            UI.AddVLG(_detailStripTagMenuDbNewTagBlockGO, UI.GapHair(s));
             float newH = DetailStripTagMenuDbNewTagHRef * s;
             UI.AddLE(_detailStripTagMenuDbNewTagBlockGO, minHeight: newH, preferredHeight: newH, flexibleWidth: 1f, flexibleHeight: 0f);
 
@@ -593,7 +593,7 @@ namespace VPB
                     "Up to 10 000 distinct names per paste; library holds up to 10 000 tag names; each item may have up to 100 tags.");
 
             _detailStripTagMenuDbActionRowGO = UI.CreateChildRT(_detailStripTagMenuDbHostGO, "ActionRow");
-            UI.AddHLG(_detailStripTagMenuDbActionRowGO, spacing: 4f * s, childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false);
+            UI.AddHLG(_detailStripTagMenuDbActionRowGO, spacing: UI.GapTight(s), childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false);
             UI.AddLE(_detailStripTagMenuDbActionRowGO, minHeight: actionBtn + 2f * s, preferredHeight: actionBtn + 2f * s, flexibleWidth: 1f, flexibleHeight: 0f);
 
             GameObject arPadL = new GameObject("PadL");

@@ -1000,7 +1000,7 @@ namespace VPB
             }
             UI.AddImage(ctxBar, RemapContextBarBg);
             UI.AddHLG(
-                ctxBar, spacing: 6f * s, padding: UI.Pad(10, 10, 2, 2, s),
+                ctxBar, spacing: UI.GapTight(s), padding: UI.PadHV(GalleryUiDesignTokens.GroupGapRef, GalleryUiDesignTokens.HairGapRef, s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -1030,7 +1030,7 @@ namespace VPB
             }
             UI.AddImage(colHdr, new Color(0.11f, 0.13f, 0.17f, 1f));
             HorizontalLayoutGroup ch = UI.AddHLG(
-                colHdr, spacing: 6f * s, padding: UI.Pad(10, 10, 4, 4, s),
+                colHdr, spacing: UI.GapTight(s), padding: UI.PadHV(GalleryUiDesignTokens.GroupGapRef, GalleryUiDesignTokens.TightGapRef, s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -1059,7 +1059,7 @@ namespace VPB
                 footerRT.sizeDelta = new Vector2(0f, footerH);
             }
             UI.AddHLG(
-                footer, spacing: 6f * s, padding: UI.Pad(8, 8, 4, 4, s),
+                footer, spacing: UI.GapTight(s), padding: UI.PadFloatFooter(s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -1214,7 +1214,7 @@ namespace VPB
             GameObject content = UI.CreateChildRT(viewport, "Content", AnchorPresets.hStretchTop);
             RectTransform contentRt = content.GetComponent<RectTransform>();
             sr.content = contentRt;
-            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: 4f * s, padding: UI.Pad(6, 6, 6, 6, s));
+            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: UI.GapTight(s), padding: UI.PadPopup(s));
             cv.childForceExpandHeight = false;
             cv.childForceExpandWidth = true;
             ContentSizeFitter csf = content.AddComponent<ContentSizeFitter>();
@@ -1274,7 +1274,7 @@ namespace VPB
         {
             GameObject shell = new GameObject("RemapEmpty");
             shell.transform.SetParent(_remapAtomUidsListParent, false);
-            VerticalLayoutGroup v = UI.AddVLG(shell, spacing: 6f * s, padding: UI.Pad(16, 16, 20, 20, s));
+            VerticalLayoutGroup v = UI.AddVLG(shell, spacing: UI.GapTight(s), padding: UI.PadHV(GalleryUiDesignTokens.RegionGapRef, GalleryUiDesignTokens.SectionGapRef, s));
             v.childForceExpandHeight = false;
             v.childForceExpandWidth = true;
             v.childAlignment = TextAnchor.MiddleCenter;
@@ -1314,7 +1314,7 @@ namespace VPB
             shell.transform.SetParent(_remapAtomUidsListParent, false);
             Image shellBg = UI.AddImage(shell, RemapRowBg);
             if (shellBg != null) shellBg.raycastTarget = true;
-            VerticalLayoutGroup v = UI.AddVLG(shell, spacing: 2f * s, padding: UI.Pad(0, 0, 0, 0));
+            VerticalLayoutGroup v = UI.AddVLG(shell, spacing: UI.GapHair(s), padding: UI.Pad(0, 0, 0, 0));
             v.childForceExpandHeight = false;
             v.childForceExpandWidth = true;
             UI.AddLE(shell, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
@@ -1327,7 +1327,7 @@ namespace VPB
             Image mainBg = UI.AddImage(main, new Color(0f, 0f, 0f, 0.01f));
             if (mainBg != null) mainBg.raycastTarget = true;
             HorizontalLayoutGroup h = UI.AddHLG(
-                main, spacing: 6f * s, padding: UI.Pad(8, 8, 4, 4, s),
+                main, spacing: UI.GapTight(s), padding: UI.PadFloatFooter(s),
                 childForceExpandWidth: false);
             h.childForceExpandHeight = false;
             h.childAlignment = TextAnchor.MiddleLeft;
@@ -1361,7 +1361,7 @@ namespace VPB
             GameObject remapHost = new GameObject("RemapHost");
             remapHost.transform.SetParent(main.transform, false);
             HorizontalLayoutGroup rh = UI.AddHLG(
-                remapHost, spacing: 4f * s, padding: UI.Pad(0, 0, 0, 0),
+                remapHost, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0),
                 childForceExpandWidth: false);
             rh.childForceExpandHeight = false;
             rh.childAlignment = TextAnchor.MiddleLeft;
@@ -1506,7 +1506,7 @@ namespace VPB
             GameObject recvHost = new GameObject("ReceiverHost");
             recvHost.transform.SetParent(main.transform, false);
             HorizontalLayoutGroup recvHl = UI.AddHLG(
-                recvHost, spacing: 4f * s, padding: UI.Pad(0, 0, 0, 0),
+                recvHost, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0),
                 childForceExpandWidth: false);
             recvHl.childForceExpandHeight = false;
             recvHl.childAlignment = TextAnchor.MiddleLeft;
@@ -1602,7 +1602,7 @@ namespace VPB
             expandHost.transform.SetParent(shell.transform, false);
             UI.AddImage(expandHost, new Color(0.06f, 0.07f, 0.09f, 1f));
             VerticalLayoutGroup ev = UI.AddVLG(
-                expandHost, spacing: 2f * s, padding: UI.Pad(8, 8, 4, 6, s));
+                expandHost, spacing: UI.GapHair(s), padding: UI.PadFloatFooter(s));
             ev.childForceExpandHeight = false;
             ev.childForceExpandWidth = true;
             UI.AddLE(expandHost, flexibleWidth: 1f, minHeight: 0f, preferredHeight: 0f);

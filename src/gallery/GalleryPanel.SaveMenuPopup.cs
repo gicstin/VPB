@@ -31,7 +31,7 @@ namespace VPB
             panelRT.pivot = new Vector2(0f, 0.5f);
             panelRT.sizeDelta = new Vector2(260f, 50f);
             Image panelImg = UI.AddImage(panel, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
-            VerticalLayoutGroup vlg = UI.AddVLG(panel, spacing: 4, padding: UI.Pad(6, 6, 6, 6));
+            VerticalLayoutGroup vlg = UI.AddVLG(panel, spacing: UI.GapTight(), padding: UI.PadPopup());
             ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         }
@@ -108,14 +108,25 @@ namespace VPB
             if (panelRT == null) return;
             RectTransform overlayRT = _saveMenuPopupGO != null ? _saveMenuPopupGO.GetComponent<RectTransform>() : null;
             GameObject anchorGO = useLeftSide ? leftSaveBtnGO : rightSaveBtnGO;
-            RectTransform anchorRT = anchorGO != null ? anchorGO.GetComponent<RectTransform>() : null;
+            RectTransform anchorRT = (anchorGO != null && anchorGO.activeSelf) ? anchorGO.GetComponent<RectTransform>() : null;
 
             float gap = 12f;
             if (overlayRT == null || anchorRT == null)
             {
-                // Fallback: pin just inside the chosen rail, vertically centered.
-                panelRT.pivot = new Vector2(useLeftSide ? 0f : 1f, 0.5f);
-                panelRT.anchoredPosition = new Vector2(useLeftSide ? -overlayHalfWidthFallback() : overlayHalfWidthFallback(), 0f);
+                if (_titleBarOverflowBtnGO != null && _titleBarOverflowBtnGO.activeSelf)
+                    anchorRT = _titleBarOverflowBtnRT;
+                if (anchorRT == null)
+                    anchorRT = _titleBarHelpBtnRT;
+                if (overlayRT == null || anchorRT == null)
+                {
+                    panelRT.pivot = new Vector2(useLeftSide ? 0f : 1f, 0.5f);
+                    panelRT.anchoredPosition = new Vector2(useLeftSide ? -overlayHalfWidthFallback() : overlayHalfWidthFallback(), 0f);
+                    return;
+                }
+                Vector3 worldCorner = anchorRT.TransformPoint(new Vector3(anchorRT.rect.xMax, anchorRT.rect.yMin, 0f));
+                Vector3 localTitle = overlayRT.InverseTransformPoint(worldCorner);
+                panelRT.pivot = new Vector2(1f, 1f);
+                panelRT.anchoredPosition = new Vector2(localTitle.x, localTitle.y - 8f);
                 return;
             }
 

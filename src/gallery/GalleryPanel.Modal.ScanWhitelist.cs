@@ -97,7 +97,7 @@ namespace VPB
                 backgroundBoxGO, "VPB_ScanWhitelistModal", 760f * s, 660f * s,
                 new Color(0.06f, 0.06f, 0.08f, 1f), HideScanWhitelistEditorModal, out panel);
 
-            VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
+            VerticalLayoutGroup v = UI.AddVLG(panel, spacing: UI.GapControl(s), padding: UI.PadDialog(s));
 
             GameObject header = new GameObject("HeaderRow");
             header.transform.SetParent(panel.transform, false);
@@ -122,7 +122,7 @@ namespace VPB
             GameObject enableRow = new GameObject("EnableRow");
             enableRow.transform.SetParent(panel.transform, false);
             Image enableBg = UI.AddImage(enableRow, new Color(0.1f, 0.11f, 0.14f, 1f));
-            HorizontalLayoutGroup erh = UI.AddHLG(enableRow, spacing: 10f * s, padding: UI.Pad(8, 8, 6, 6, s), childForceExpandWidth: false);
+            HorizontalLayoutGroup erh = UI.AddHLG(enableRow, spacing: UI.GapGroup(s), padding: UI.PadHV(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, s), childForceExpandWidth: false);
             LayoutElement erLe = UI.AddLE(enableRow, minHeight: 44f * s, preferredHeight: 44f * s);
 
             bool enabled = false;
@@ -163,19 +163,19 @@ namespace VPB
             _scanWlFoldersHdrText = ScanWlCreateSectionHeader(content, VPBTranslation.T("hook.settings.scan_whitelist.folders", "Whitelisted Folders"), 0, bodyFont, s);
             GameObject foldersList = new GameObject("FoldersList");
             foldersList.transform.SetParent(content, false);
-            VerticalLayoutGroup fvg = UI.AddVLG(foldersList, spacing: 3f * s);
+            VerticalLayoutGroup fvg = UI.AddVLG(foldersList, spacing: UI.GapTight(s));
             _scanWlFoldersParent = foldersList.transform;
 
             _scanWlUidsHdrText = ScanWlCreateSectionHeader(content, VPBTranslation.T("hook.settings.scan_whitelist.uids", "Per-Package UID Overrides"), 0, bodyFont, s);
             GameObject uidsList = new GameObject("UidsList");
             uidsList.transform.SetParent(content, false);
-            VerticalLayoutGroup uvg = UI.AddVLG(uidsList, spacing: 3f * s);
+            VerticalLayoutGroup uvg = UI.AddVLG(uidsList, spacing: UI.GapTight(s));
             _scanWlUidsParent = uidsList.transform;
 
             GameObject addFooter = new GameObject("AddFooter");
             addFooter.transform.SetParent(panel.transform, false);
             Image addFooterBg = UI.AddImage(addFooter, new Color(0.09f, 0.09f, 0.12f, 1f));
-            VerticalLayoutGroup addFooterV = UI.AddVLG(addFooter, spacing: 10f * s, padding: UI.Pad(10, 10, 10, 10, s));
+            VerticalLayoutGroup addFooterV = UI.AddVLG(addFooter, spacing: UI.GapGroup(s), padding: UI.PadGroup(s));
 
             ScanWlCreateAddBlock(
                 addFooter.transform,
@@ -394,13 +394,13 @@ namespace VPB
         private static void ScanWlCreateAddBlock(Transform parent, string label, string placeholder, int fontSize, float s, out InputField input, UnityAction onAdd)
         {
             GameObject block = UI.CreateChildRT(parent.gameObject, "AddBlock");
-            UI.AddVLG(block, spacing: 6f * s);
+            UI.AddVLG(block, spacing: UI.GapTight(s));
 
             Text lbl = UI.CreateLabel(block, label, fontSize, new Color(0.78f, 0.8f, 0.84f, 1f), TextAnchor.MiddleLeft, name: "Label");
             LayoutElement lblLe = UI.AddLE(lbl.gameObject, minHeight: 20f * s);
 
             GameObject row = UI.CreateChildRT(block, "Row");
-            UI.AddHLG(row, spacing: 8f * s, childForceExpandWidth: false);
+            UI.AddHLG(row, spacing: UI.GapControl(s), childForceExpandWidth: false);
             LayoutElement rowLe = UI.AddLE(row, minHeight: 36f * s, preferredHeight: 36f * s);
 
             input = ScanWlCreateInputField(row.transform, fontSize, s, 1f, placeholder);
@@ -417,8 +417,8 @@ namespace VPB
         private static void ScanWlAddRemovableRow(GalleryPanel panel, Transform parent, string label, int fontSize, float s, bool altStripe, UnityAction onRemove)
         {
             GameObject removeBtn = UI.CreateRemovableStripeRow(
-                parent, label, fontSize, ScanWlRowHeightScale * s, ScanWlRemoveBtnWidthScale * s, 6f * s,
-                8f * s, UI.Pad(8, 6, 4, 4, s), altStripe,
+                parent, label, fontSize, ScanWlRowHeightScale * s, ScanWlRemoveBtnWidthScale * s, UI.GapTight(s),
+                UI.GapControl(s), UI.PadFloatFooter(s), altStripe,
                 VPBTranslation.T("hook.remove", "Remove"), onRemove);
             if (panel == null || removeBtn == null) return;
             try

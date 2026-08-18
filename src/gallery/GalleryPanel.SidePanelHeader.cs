@@ -5,10 +5,12 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        private const float SidePanelHeaderHeightRef = 32f;
-        private const float SidePanelFilterRowTopRef = 44f;
-        private const float SidePanelHeaderGapRef = 4f;
-        private const float SidePanelHeaderColumnWidthRef = 210f;
+        private const float SidePanelHeaderHeightRef = GalleryUiDesignTokens.ControlSlotHeightRef;
+        private const float SidePanelFilterRowTopRef =
+            GalleryUiDesignTokens.SideTabTopOffsetRef;
+        private const float SidePanelHeaderGapRef = GalleryUiDesignTokens.BandPadRef;
+        private const float SidePanelHeaderColumnWidthRef =
+            GalleryUiDesignTokens.SideTabColumnWidthRef - GalleryUiDesignTokens.SideTabScrollBarWidthRef;
         private const int SidePanelHeaderFontRef = GalleryUiDesignTokens.FontCaptionRef;
 
         private GameObject _leftSidePanelHeaderGO;
@@ -19,12 +21,7 @@ namespace VPB
         private string ResolveDesktopFixedDockSide()
         {
             if (VPBConfig.Instance == null) return "Right";
-            try
-            {
-                if (VPBConfig.Instance.DesktopFixedEnforceDockSide)
-                    return VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedEnforcedDockSide);
-                return VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
-            }
+            try { return EffectiveDockSideString; }
             catch { return "Right"; }
         }
 

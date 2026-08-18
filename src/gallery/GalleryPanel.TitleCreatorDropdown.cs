@@ -163,8 +163,8 @@ namespace VPB
                 float scrollBarWidth = 18f;
                 GameObject scrollGO = UI.CreateChildRT(titleCreatorDropdown, "Scroll", AnchorPresets.stretchAll);
                 RectTransform scrollRT = scrollGO.GetComponent<RectTransform>();
-                scrollRT.offsetMin = new Vector2(10, 10);
-                scrollRT.offsetMax = new Vector2(-10, -54);
+                scrollRT.offsetMin = new Vector2(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.ControlGapRef);
+                scrollRT.offsetMax = new Vector2(-GalleryUiDesignTokens.ControlGapRef, -54);
 
                 var viewportGO = UI.CreateChildRT(scrollGO, "Viewport", AnchorPresets.stretchAll, new Vector2(-scrollBarWidth, 0), new Vector2(-scrollBarWidth / 2f, 0));
                 var vpRT = viewportGO.GetComponent<RectTransform>();

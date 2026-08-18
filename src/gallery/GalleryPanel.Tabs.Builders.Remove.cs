@@ -214,7 +214,7 @@ namespace VPB
                     }
                     return items;
                 },
-                leftRemoveAllClothingBtn, rightRemoveAllClothingBtn,
+                null, null,
                 (target, host) =>
                 {
                     UIDraggableItem dragger = host != null ? host.GetComponent<UIDraggableItem>() : null;
@@ -238,7 +238,7 @@ namespace VPB
             BuildRemoveResourceTabs(
                 container, trackedButtons, isLeft, "hair", removeHairFilter,
                 EnumerateRemovableHair,
-                leftRemoveAllHairBtn, rightRemoveAllHairBtn,
+                null, null,
                 (target, host) =>
                 {
                     UIDraggableItem dragger = host?.GetComponent<UIDraggableItem>();

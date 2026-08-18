@@ -533,7 +533,7 @@ namespace VPB
             // Body — flush under titlebar; list owns flex space (no dead zone above footer).
             GameObject body = new GameObject("Body");
             body.transform.SetParent(panel.transform, false);
-            VerticalLayoutGroup bodyVlg = UI.AddVLG(body, spacing: 4f * s, padding: UI.Pad(8, 8, 6, 2, s));
+            VerticalLayoutGroup bodyVlg = UI.AddVLG(body, spacing: UI.GapTight(s), padding: UI.Pad(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef, s));
             bodyVlg.childForceExpandHeight = false;
             bodyVlg.childControlHeight = true;
             UI.AddLE(body, flexibleHeight: 1f, flexibleWidth: 1f, minHeight: 200f * s);
@@ -568,7 +568,7 @@ namespace VPB
             contentRt.pivot = new Vector2(0.5f, 1f);
             contentRt.anchoredPosition = Vector2.zero;
             contentRt.sizeDelta = new Vector2(0f, 0f);
-            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: 3f * s, padding: UI.Pad(4, 4, 4, 4, s));
+            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: UI.GapTight(s), padding: UI.PadTight(s));
             cv.childForceExpandHeight = false;
             ContentSizeFitter csf = content.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -611,7 +611,7 @@ namespace VPB
             UI.AddImage(footer, StripKeepFooterBarBg);
             UI.AddLE(footer, minHeight: footerH, preferredHeight: footerH, flexibleWidth: 1f, flexibleHeight: 0f);
             UI.AddHLG(
-                footer, spacing: 6f * s, padding: UI.Pad(8, 8, 4, 4, s),
+                footer, spacing: UI.GapTight(s), padding: UI.PadFloatFooter(s),
                 childAlignment: TextAnchor.MiddleRight,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -734,7 +734,7 @@ namespace VPB
             UI.AddLE(_stripKeepDefault3PHost, minHeight: btnH, preferredHeight: btnH, flexibleWidth: 1f, flexibleHeight: 0f);
             UI.AddImage(_stripKeepDefault3PHost, GalleryUiColorTokens.SurfaceDarker);
             HorizontalLayoutGroup hlg = UI.AddHLG(
-                _stripKeepDefault3PHost, spacing: 4f * s, padding: UI.Pad(4, 4, 2, 2, s),
+                _stripKeepDefault3PHost, spacing: UI.GapTight(s), padding: UI.PadHV(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef, s),
                 childForceExpandWidth: false, childForceExpandHeight: false,
                 childControlWidth: true, childControlHeight: true,
                 childAlignment: TextAnchor.MiddleLeft);
@@ -896,7 +896,7 @@ namespace VPB
             Image rowBg = UI.AddImage(row, baseBg);
             if (rowBg != null) rowBg.raycastTarget = false;
             StripKeepRegisterNav(false, it.Kind, it.Uid, rowBg, baseBg);
-            HorizontalLayoutGroup hlg = UI.AddHLG(row, spacing: 4f * s, padding: UI.Pad(2, 2, 2, 2, s), childForceExpandWidth: false);
+            HorizontalLayoutGroup hlg = UI.AddHLG(row, spacing: UI.GapTight(s), padding: UI.PadHair(s), childForceExpandWidth: false);
             hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.childControlWidth = true;
             hlg.childControlHeight = true;
@@ -1048,7 +1048,7 @@ namespace VPB
             Image rowBg = UI.AddImage(row, baseBg);
             if (rowBg != null) rowBg.raycastTarget = false;
             StripKeepRegisterNav(true, kind, null, rowBg, baseBg);
-            HorizontalLayoutGroup hlg = UI.AddHLG(row, spacing: 4f * s, padding: UI.Pad(2, 2, 2, 2, s), childForceExpandWidth: false);
+            HorizontalLayoutGroup hlg = UI.AddHLG(row, spacing: UI.GapTight(s), padding: UI.PadHair(s), childForceExpandWidth: false);
             hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.childControlWidth = true;
             hlg.childControlHeight = true;
@@ -1145,7 +1145,7 @@ namespace VPB
                 Image rowBg = UI.AddImage(row, baseBg);
                 if (rowBg != null) rowBg.raycastTarget = false;
                 StripKeepRegisterNav(false, kind, it.Uid, rowBg, baseBg);
-                HorizontalLayoutGroup hlg = UI.AddHLG(row, spacing: 4f * s, padding: UI.Pad(2, 2, 2, 2, s), childForceExpandWidth: false);
+                HorizontalLayoutGroup hlg = UI.AddHLG(row, spacing: UI.GapTight(s), padding: UI.PadHair(s), childForceExpandWidth: false);
                 hlg.childAlignment = TextAnchor.MiddleLeft;
                 hlg.childControlWidth = true;
                 hlg.childControlHeight = true;
@@ -1690,7 +1690,7 @@ namespace VPB
                 out panel,
                 dimAlpha: 0.45f);
 
-            UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
+            UI.AddVLG(panel, spacing: UI.GapControl(s), padding: UI.PadDialog(s));
 
             Text title = UI.CreateEmphasisTitleLabel(
                 panel,
@@ -1731,7 +1731,7 @@ namespace VPB
             string capturedUid = uid;
             GameObject footer = new GameObject("RenameFooter");
             footer.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup fh = UI.AddHLG(footer, spacing: 8f * s, padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: true);
+            HorizontalLayoutGroup fh = UI.AddHLG(footer, spacing: UI.GapControl(s), padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: true);
             fh.childForceExpandHeight = false;
             UI.AddLE(footer, minHeight: btnH, preferredHeight: btnH);
 

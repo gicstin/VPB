@@ -134,7 +134,7 @@ namespace VPB
                 backgroundBoxGO, "VPB_QuickMenuPosModal", 560f * s, 420f * s,
                 new Color(0.06f, 0.06f, 0.08f, 1f), () => HideQuickMenuPositionEditorModal(false), out panel);
 
-            VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
+            VerticalLayoutGroup v = UI.AddVLG(panel, spacing: UI.GapControl(s), padding: UI.PadDialog(s));
 
             Text ht = UI.CreateEmphasisTitleLabel(panel, VPBTranslation.T("hook.qmpos.title", "Quick Menu Positions (Desktop)"), headerFont, name: "Header");
             LayoutElement hle = UI.AddLE(ht.gameObject, minHeight: 32f * s);

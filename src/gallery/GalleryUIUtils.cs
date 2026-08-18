@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -1708,6 +1708,64 @@ namespace VPB
                 Mathf.RoundToInt(bottom * scale));
         }
 
+        public static float Gap(float designPx, float scale = 1f)
+        {
+            if (scale <= 0f) scale = 1f;
+            return designPx * scale;
+        }
+
+        public static float GapHair(float scale = 1f) => Gap(GalleryUiDesignTokens.HairGapRef, scale);
+        public static float GapTight(float scale = 1f) => Gap(GalleryUiDesignTokens.TightGapRef, scale);
+        public static float GapControl(float scale = 1f) => Gap(GalleryUiDesignTokens.ControlGapRef, scale);
+        public static float GapGroup(float scale = 1f) => Gap(GalleryUiDesignTokens.GroupGapRef, scale);
+        public static float GapRegion(float scale = 1f) => Gap(GalleryUiDesignTokens.RegionGapRef, scale);
+        public static float GapSection(float scale = 1f) => Gap(GalleryUiDesignTokens.SectionGapRef, scale);
+
+        public static RectOffset PadUniform(float all, float scale = 1f) => Pad(all, all, all, all, scale);
+        public static RectOffset PadHV(float h, float v, float scale = 1f) => Pad(h, h, v, v, scale);
+        public static RectOffset PadHair(float scale = 1f) => PadUniform(GalleryUiDesignTokens.HairGapRef, scale);
+        public static RectOffset PadTight(float scale = 1f) => PadUniform(GalleryUiDesignTokens.TightGapRef, scale);
+        public static RectOffset PadControl(float scale = 1f) => PadUniform(GalleryUiDesignTokens.ControlGapRef, scale);
+        public static RectOffset PadGroup(float scale = 1f) => PadUniform(GalleryUiDesignTokens.GroupGapRef, scale);
+        public static RectOffset PadDialog(float scale = 1f) => PadUniform(GalleryUiDesignTokens.DialogPadRef, scale);
+        public static RectOffset PadSection(float scale = 1f) => PadUniform(GalleryUiDesignTokens.SectionGapRef, scale);
+        /// <summary>Float footer / packed chrome: band L/R, tight T/B.</summary>
+        public static RectOffset PadFloatFooter(float scale = 1f)
+            => PadHV(GalleryUiDesignTokens.FloatChromePadHRef, GalleryUiDesignTokens.FloatChromePadVRef, scale);
+        /// <summary>Popup / dropdown shell — same as band (Gestalt: menus match chrome).</summary>
+        public static RectOffset PadPopup(float scale = 1f)
+            => PadUniform(GalleryUiDesignTokens.PopupMenuPaddingRef, scale);
+
+        public static RectOffset BandPad(float scale = 1f)
+        {
+            return Pad(GalleryUiDesignTokens.BandPadHRef, GalleryUiDesignTokens.BandPadHRef,
+                       GalleryUiDesignTokens.BandPadVRef, GalleryUiDesignTokens.BandPadVRef, scale);
+        }
+
+        public static RectOffset RowPad(float scale = 1f)
+        {
+            return Pad(GalleryUiDesignTokens.BandPadHRef, GalleryUiDesignTokens.BandPadHRef, 0f, 0f, scale);
+        }
+
+        public static RectOffset ScrollEndsPad(float scale = 1f)
+        {
+            return Pad(0f, 0f, GalleryUiDesignTokens.BandPadVRef, GalleryUiDesignTokens.BandPadVRef, scale);
+        }
+
+        public static void ApplyBandInset(RectTransform rt, float scale, bool horizontal = true, bool vertical = true)
+        {
+            if (rt == null) return;
+            if (scale <= 0f) scale = 1f;
+            float padH = GalleryUiDesignTokens.BandPadHRef * scale;
+            float padV = GalleryUiDesignTokens.BandPadVRef * scale;
+            Vector2 min = rt.offsetMin;
+            Vector2 max = rt.offsetMax;
+            if (horizontal) { min.x = padH; max.x = -padH; }
+            if (vertical) { min.y = padV; max.y = -padV; }
+            rt.offsetMin = min;
+            rt.offsetMax = max;
+        }
+
         /// <summary>Adds a <see cref="VerticalLayoutGroup"/>. Defaults match the common gallery list column.</summary>
         public static VerticalLayoutGroup AddVLG(GameObject go, float spacing = 0f, RectOffset padding = null, TextAnchor childAlignment = TextAnchor.UpperLeft, bool childControlWidth = true, bool childControlHeight = true, bool childForceExpandWidth = true, bool childForceExpandHeight = false)
         {
@@ -2406,7 +2464,11 @@ namespace VPB
         {
             GameObject panelGO = CreateChildRT(rootGO, panelName, anchorPreset, size, anchoredPosition);
             AddImage(panelGO, PopupBackdrop);
-            VerticalLayoutGroup vlg = AddVLG(panelGO, 4f, Pad(6f, 6f, 6f, 6f), childAlignment);
+            VerticalLayoutGroup vlg = AddVLG(
+                panelGO,
+                GalleryUiDesignTokens.PopupMenuRowSpacingRef,
+                PadPopup(),
+                childAlignment);
             configureVlg?.Invoke(vlg);
             ContentSizeFitter csf = panelGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;

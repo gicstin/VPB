@@ -10,8 +10,8 @@ namespace VPB
     public partial class GalleryPanel
     {
         private const float TitleSearchChipRowHeightRef = 26f;
-        private const float TitleSearchChipRowGapRef = 4f;
-        private const float TitleSearchChipHostPadRef = 2f;
+        private const float TitleSearchChipRowGapRef = GalleryUiDesignTokens.TightGapRef;
+        private const float TitleSearchChipHostPadRef = GalleryUiDesignTokens.HairGapRef;
 
         private readonly List<TitleSearchChip> _titleSearchChips = new List<TitleSearchChip>(8);
         private readonly List<GameObject> _titleSearchChipButtons = new List<GameObject>(8);
@@ -54,7 +54,7 @@ namespace VPB
             // childForceExpandHeight false: keep clear square (not stretched to both rows).
             UI.AddHLG(
                 _titleSearchChipHostGO,
-                spacing: 6f,
+                spacing: UI.GapTight(),
                 padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true,
@@ -151,7 +151,7 @@ namespace VPB
 
             UI.AddHLG(
                 rowGO,
-                spacing: 8f,
+                spacing: UI.GapControl(),
                 padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true,
@@ -201,7 +201,7 @@ namespace VPB
             // Left-pack chips — no center alignment.
             UI.AddHLG(
                 contentGO,
-                spacing: 4f,
+                spacing: UI.GapTight(),
                 padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true,

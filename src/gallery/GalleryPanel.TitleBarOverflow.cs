@@ -9,7 +9,7 @@ namespace VPB
     {
         // Title bar overflow menu (narrow widths hide lang/presets/creator behind "...").
 
-        private const float TitleBarOverflowWidthThresholdRef = 720f;
+        private const float TitleBarOverflowWidthThresholdRef = 768f;
 
         private GameObject _titleBarOverflowBtnGO;
         private RectTransform _titleBarOverflowBtnRT;
@@ -67,6 +67,32 @@ namespace VPB
                 icon: UI.GetButtonIconSprite(_titleBarQfToggleBtnRT != null ? _titleBarQfToggleBtnRT.gameObject : null)
                     ?? UI.LoadIconSprite("filter-search", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.filter_presets", tipDefault: "Filter Presets");
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.overflow_save", "Save…"),
+                () => { CloseTitleBarOverflowMenu(); ToggleSaveMenuPopup(false); },
+                icon: gallerySaveSprite ?? UI.LoadIconSprite("device-floppy", UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.save_pane", tipDefault: "Save presets and related actions.");
+            if (IsShowSideButtonsAuto() && !isFixedLocally)
+            {
+                AddOverflowMenuRow(
+                    panel,
+                    VPBTranslation.T("gallery.title.overflow_flip_rail", "Flip side rail"),
+                    () => { CloseTitleBarOverflowMenu(); FlipAutoSideRail(); },
+                    icon: UI.LoadIconSprite("layout-sidebar", UI.BarIconGlyphTint)
+                        ?? UI.LoadIconSprite("arrow-bar-to-left", UI.BarIconGlyphTint),
+                    tipKey: "gallery.tooltip.flip_side_rail",
+                    tipDefault: "Move the facet rail to the other edge.");
+            }
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.layout_preset.title", "Layout presets"),
+                () => { CloseTitleBarOverflowMenu(); ToggleLayoutPresetsFloat(); },
+                LayoutPresetsFloatIsOpen(),
+                icon: UI.GetButtonIconSprite(_titleBarLayoutPresetsBtnRT != null ? _titleBarLayoutPresetsBtnRT.gameObject : null)
+                    ?? UI.LoadIconSprite("layout-board-split", UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.layout_presets",
+                tipDefault: "Layout presets — save and restore window arrangements. Alt+L.");
 
             // Session recent applies (recognition).
             try
@@ -269,13 +295,12 @@ namespace VPB
         {
             int n = 0;
             if (_titleBarSettingsBtnRT != null) n++;
-            if (overflowMode)
-                n++;
-            else
+            if (!overflowMode)
             {
                 if (hasSourceFilter) n++;
                 if (languageSwitcherBtnGO != null) n++;
                 if (_titleBarQfToggleBtnRT != null) n++;
+                if (_titleBarLayoutPresetsBtnRT != null) n++;
                 if (titleCreatorBtn != null) n++;
             }
             if (n <= 0) return 0f;
@@ -288,12 +313,13 @@ namespace VPB
         {
             float s = paneScale <= 0f ? 1f : paneScale;
             bool useOverflow = titleBarWidth < TitleBarOverflowWidthThresholdRef * s;
-            float halfChip = chip * 0.5f;
 
             if (languageSwitcherBtnGO != null)
                 languageSwitcherBtnGO.SetActive(!useOverflow);
             if (_titleBarQfToggleBtnRT != null)
                 _titleBarQfToggleBtnRT.gameObject.SetActive(!useOverflow);
+            if (_titleBarLayoutPresetsBtnRT != null)
+                _titleBarLayoutPresetsBtnRT.gameObject.SetActive(!useOverflow);
             if (titleCreatorBtn != null)
                 titleCreatorBtn.SetActive(!useOverflow);
             if (globalSourceFilterBtn != null)
@@ -304,14 +330,7 @@ namespace VPB
                 _titleBarFpsRT.gameObject.SetActive(!useOverflow);
 
             if (_titleBarOverflowBtnGO != null)
-            {
                 _titleBarOverflowBtnGO.SetActive(useOverflow);
-                if (useOverflow && _titleBarOverflowBtnRT != null)
-                {
-                    _titleBarOverflowBtnRT.anchoredPosition = new Vector2(xlCursor + halfChip, 0f);
-                    xlCursor += chip + gap;
-                }
-            }
 
             if (!useOverflow)
                 CloseTitleBarOverflowMenu();

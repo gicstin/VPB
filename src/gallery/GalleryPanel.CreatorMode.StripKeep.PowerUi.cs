@@ -645,7 +645,7 @@ namespace VPB
             // Filter + clear + expand/collapse + More
             GameObject filterRow = new GameObject("FilterRow");
             filterRow.transform.SetParent(panel, false);
-            HorizontalLayoutGroup fh = UI.AddHLG(filterRow, spacing: 6f * s, padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: false);
+            HorizontalLayoutGroup fh = UI.AddHLG(filterRow, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: false);
             fh.childForceExpandHeight = false;
             fh.childAlignment = TextAnchor.MiddleLeft;
             fh.childControlWidth = true;
@@ -861,7 +861,7 @@ namespace VPB
         {
             _stripKeepPresetsHost = new GameObject("PresetsHost");
             _stripKeepPresetsHost.transform.SetParent(body, false);
-            VerticalLayoutGroup hostV = UI.AddVLG(_stripKeepPresetsHost, spacing: 4f * s, padding: UI.Pad(0, 0, 0, 0));
+            VerticalLayoutGroup hostV = UI.AddVLG(_stripKeepPresetsHost, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0));
             hostV.childForceExpandHeight = false;
             hostV.childControlHeight = true;
             UI.AddLE(_stripKeepPresetsHost, flexibleWidth: 1f, flexibleHeight: 0f);
@@ -1460,7 +1460,7 @@ namespace VPB
             _stripKeepRecipeSaveInlineHost = new GameObject("RecipeSaveInline");
             _stripKeepRecipeSaveInlineHost.transform.SetParent(parent, false);
             HorizontalLayoutGroup h = UI.AddHLG(
-                _stripKeepRecipeSaveInlineHost, spacing: 6f * s, padding: UI.Pad(2, 2, 2, 2, s),
+                _stripKeepRecipeSaveInlineHost, spacing: UI.GapTight(s), padding: UI.PadHair(s),
                 childForceExpandWidth: false, childForceExpandHeight: false,
                 childControlWidth: true, childControlHeight: true,
                 childAlignment: TextAnchor.MiddleLeft);

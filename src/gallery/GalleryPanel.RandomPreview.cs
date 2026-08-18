@@ -179,7 +179,11 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Bind a preview thumbnail (same decode + cache path as a grid tile) to an arbitrary RawImage.</summary>
+        /// <summary>
+        /// Bind a preview thumbnail to an arbitrary RawImage. Same tier as hover preview / detail strip:
+        /// denom 1 + Unity decode. Grid-column denom would hand back the tile-sized decode, so a small
+        /// pane made the preview card blurry even though the card itself never shrinks.
+        /// </summary>
         internal void QuickMenu_LoadPreviewThumbnail(FileEntry file, RawImage target)
         {
             if (target == null) return;
@@ -188,7 +192,15 @@ namespace VPB
                 ClearThumbnailTarget(target);
                 return;
             }
-            try { LoadThumbnail(file, target, gridThumbnailContext: false); }
+            try
+            {
+                LoadThumbnail(
+                    file,
+                    target,
+                    gridThumbnailContext: false,
+                    turboJpegThumbnailDenom: 1,
+                    thumbnailUnityDecodeOnly: true);
+            }
             catch { ClearThumbnailTarget(target); }
         }
 
@@ -274,16 +286,20 @@ namespace VPB
 
         // ---------------------------------------------------------------- toolbox overlay
 
-        private const float TboxRandPreviewThumb = 240f;
-        private const float TboxRandPreviewPad = 12f;
-        private const float TboxRandPreviewLabelH = 22f;
-        private const float TboxRandPreviewSubH = 18f;
+        private const float TboxRandPreviewThumb = 380f;
+        private const float TboxRandPreviewPad = 14f;
+        private const float TboxRandPreviewLabelH = 26f;
+        private const float TboxRandPreviewSubH = 20f;
+        /// <summary>Card is clipped by the grid viewport, so shrink to fit rather than overflow a small pane.</summary>
+        private const float TboxRandPreviewHostMargin = 16f;
+        private const float TboxRandPreviewMinThumb = 140f;
         private const float TboxRandPreviewDimAlpha = 0.55f;
         // Absolute px at ChromeScale 1. Button fraction (0.22) of this card is a lozenge.
         private const float TboxRandPreviewCornerPx = 6f;
         private static readonly Color TboxRandPreviewThumbPlaceholder = new Color(0.25f, 0.25f, 0.25f, 0.55f);
 
         private GameObject _tboxRandPreviewRoot;
+        private RectTransform _tboxRandPreviewRootRt;
         private RectTransform _tboxRandPreviewCardRt;
         private RectTransform _tboxRandPreviewThumbRt;
         private RoundedRect _tboxRandPreviewCardRounded;
@@ -424,6 +440,7 @@ namespace VPB
             if (host == null) return;
 
             _tboxRandPreviewRoot = UI.CreateChildRT(host, "TboxRandomPreview", AnchorPresets.stretchAll);
+            _tboxRandPreviewRootRt = _tboxRandPreviewRoot.GetComponent<RectTransform>();
             Image dim = UI.AddImage(_tboxRandPreviewRoot, UI.Black(TboxRandPreviewDimAlpha), true);
             if (dim != null) dim.raycastTarget = true;
 
@@ -520,6 +537,20 @@ namespace VPB
             float pad = TboxRandPreviewPad * s;
             float labelH = TboxRandPreviewLabelH * s;
             float subH = TboxRandPreviewSubH * s;
+
+            // Root stretches the grid viewport, which masks: a card wider than the pane loses its edges.
+            RectTransform hostRt = _tboxRandPreviewRootRt;
+            // Rect is 0 until the first layout pass — clamping then would lock the card to the floor.
+            if (hostRt != null && hostRt.rect.width > 1f && hostRt.rect.height > 1f)
+            {
+                float margin = TboxRandPreviewHostMargin * s;
+                float fitW = hostRt.rect.width - margin * 2f - pad * 2f;
+                float fitH = hostRt.rect.height - margin * 2f - pad * 2f - labelH - subH;
+                float fit = Mathf.Min(fitW, fitH);
+                if (fit < thumb)
+                    thumb = Mathf.Max(fit, TboxRandPreviewMinThumb * s);
+            }
+
             float innerW = thumb;
             _tboxRandPreviewCardRt.sizeDelta = new Vector2(thumb + pad * 2f, thumb + pad * 2f + labelH + subH);
             if (_tboxRandPreviewThumbRt != null)
@@ -589,6 +620,7 @@ namespace VPB
             if (_tboxRandPreviewScratch != null) _tboxRandPreviewScratch.Clear();
             if (_tboxRandPreviewImg != null) ClearThumbnailTarget(_tboxRandPreviewImg);
             _tboxRandPreviewRoot = null;
+            _tboxRandPreviewRootRt = null;
             _tboxRandPreviewCardRt = null;
             _tboxRandPreviewThumbRt = null;
             _tboxRandPreviewCardRounded = null;

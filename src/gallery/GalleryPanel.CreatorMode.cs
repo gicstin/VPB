@@ -10,7 +10,7 @@ using VPB.src.util;
 namespace VPB
 {
     /// <summary>
-    /// Scene Tools: sticky power-user scene-authoring mode (side-rail toggle).
+    /// Scene Tools: sticky power-user scene-authoring mode (toolbox toggle).
     /// When ON, toolbox reveals Scene Tools actions (Strip Scene, …). Distinct from Creators author list.
     /// </summary>
     public partial class GalleryPanel
@@ -23,18 +23,6 @@ namespace VPB
         private GameObject tboxCreatorCompressCacheBtn;
         private Image tboxCreatorModeBtnImage;
         private Image tboxCreatorStripSceneBtnImage;
-
-        private GameObject leftCreatorModeSideBtn;
-        private GameObject rightCreatorModeSideBtn;
-        private Image leftCreatorModeBtnIconImage;
-        private Image rightCreatorModeBtnIconImage;
-        private Outline leftCreatorModeBtnOutline;
-        private Outline rightCreatorModeBtnOutline;
-
-        /// <summary>Rail idle/active chrome — blue family (not Creators gold, not Eraser red).</summary>
-        private static readonly Color CreatorModeRailBackdrop = new Color(0.16f, 0.38f, 0.58f, 1f);
-        private static readonly Color CreatorModeOutlineIdle = Color.white;
-        private static readonly Color CreatorModeOutlineActive = new Color(0.35f, 0.75f, 1f, 1f);
 
         /// <summary>
         /// When true, SuperControllerHook.PostRemoveAtom skips per-atom gallery target sync.
@@ -160,36 +148,6 @@ namespace VPB
 
         private void RefreshCreatorModeChrome()
         {
-            // Glyph tint only (white / active rim) — never paint outline with backdrop color
-            // (that hid creator_mode line art against blue fill). Backdrop stays on button Image.
-            Color glyph = creatorModeActive ? CreatorModeOutlineActive : CreatorModeOutlineIdle;
-            try { ApplyCreatorModeRailHoverSelected(leftCreatorModeSideBtn, creatorModeActive, glyph); } catch { }
-            try { ApplyCreatorModeRailHoverSelected(rightCreatorModeSideBtn, creatorModeActive, glyph); } catch { }
-            try { if (leftCreatorModeBtnOutline != null) leftCreatorModeBtnOutline.enabled = false; } catch { }
-            try { if (rightCreatorModeBtnOutline != null) rightCreatorModeBtnOutline.enabled = false; } catch { }
-            try
-            {
-                if (leftCreatorModeSideBtn != null)
-                {
-                    Image bi = leftCreatorModeSideBtn.GetComponent<Image>();
-                    if (bi != null) bi.color = CreatorModeRailBackdrop;
-                }
-                if (leftCreatorModeBtnIconImage != null)
-                    leftCreatorModeBtnIconImage.color = glyph;
-            }
-            catch { }
-            try
-            {
-                if (rightCreatorModeSideBtn != null)
-                {
-                    Image bi = rightCreatorModeSideBtn.GetComponent<Image>();
-                    if (bi != null) bi.color = CreatorModeRailBackdrop;
-                }
-                if (rightCreatorModeBtnIconImage != null)
-                    rightCreatorModeBtnIconImage.color = glyph;
-            }
-            catch { }
-
             if (tboxCreatorStripSceneBtnImage != null)
             {
                 try
@@ -208,39 +166,6 @@ namespace VPB
                 }
                 catch { }
             }
-        }
-
-        private static void ApplyCreatorModeRailHoverSelected(GameObject btn, bool selected, Color rimColor)
-        {
-            if (btn == null) return;
-            UIHoverBorder hb = btn.GetComponent<UIHoverBorder>();
-            if (hb == null) return;
-            hb.isSelected = selected;
-            hb.hoverColor = rimColor;
-            try { hb.ApplyBorderSettings(); } catch { }
-        }
-
-        private Outline CreatorModeAddRailOutline(GameObject btn)
-        {
-            if (btn == null) return null;
-            Outline o = btn.GetComponent<Outline>();
-            if (o == null) o = btn.AddComponent<Outline>();
-            o.effectColor = CreatorModeOutlineIdle;
-            o.effectDistance = new Vector2(2f, -2f);
-            o.useGraphicAlpha = false;
-            o.enabled = false;
-            try
-            {
-                UIHoverBorder hb = btn.GetComponent<UIHoverBorder>();
-                if (hb != null)
-                {
-                    hb.isSelected = false;
-                    hb.hoverColor = CreatorModeOutlineIdle;
-                    hb.ApplyBorderSettings();
-                }
-            }
-            catch { }
-            return o;
         }
 
         private static bool CreatorModeJsonAtomShouldKeep(JSONNode atomNode, HashSet<string> keepUids)

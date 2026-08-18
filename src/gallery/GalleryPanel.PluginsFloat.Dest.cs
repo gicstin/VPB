@@ -54,7 +54,7 @@ namespace VPB
 
             GameObject vp = UI.CreateChildRT(_pluginsFloatDestHost, "Viewport", AnchorPresets.stretchAll);
             RectTransform vpRt = vp.GetComponent<RectTransform>();
-            float rimPad = 2f * s; // UIHoverBorder.borderSize default
+            float rimPad = GalleryUiDesignTokens.ControlRimGutterRef * s;
             if (vpRt != null)
             {
                 // Expand mask so outward hover rim is not clipped (incl. Session chip on left).

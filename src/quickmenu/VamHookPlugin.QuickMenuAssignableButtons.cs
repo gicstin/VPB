@@ -107,6 +107,7 @@ namespace VPB
             ReplaceAddToggle,
             CompressCache,
             AutoHideGallery,
+            LayoutPresets,
             ShowHiddenPackages,
             FpsCounter,
             OpenCategoryScenes,
@@ -197,6 +198,7 @@ namespace VPB
         private Sprite m_QmIconRedo;
         private Sprite m_QmIconHub;
         private Sprite m_QmIconCleanup;
+        private Sprite m_QmIconLayoutPresets;
         private Sprite m_QmIconReplace;
         private Sprite m_QmIconAdd;
         private Sprite m_QmIconCompressCache;
@@ -456,6 +458,7 @@ namespace VPB
                 case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add");
                 case QuickMenuAssignableAction.CompressCache: return VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache");
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide");
+                case QuickMenuAssignableAction.LayoutPresets: return VPBTranslation.T("hook.qmbutton.layout_presets", "Layouts");
                 case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.qmbutton.show_hidden", "Show Hidden");
                 case QuickMenuAssignableAction.FpsCounter: return VPBTranslation.T("hook.qmbutton.fps", "FPS Counter");
                 case QuickMenuAssignableAction.OpenCategoryScenes: return VPBTranslation.T("hook.qmbutton.open_category_scenes", "Open Category: Scenes");
@@ -602,6 +605,7 @@ namespace VPB
                 case QuickMenuAssignableAction.ReplaceAddToggle: return "replace_add_toggle";
                 case QuickMenuAssignableAction.CompressCache: return "compress_cache";
                 case QuickMenuAssignableAction.AutoHideGallery: return "autohide_gallery";
+                case QuickMenuAssignableAction.LayoutPresets: return "layout_presets";
                 case QuickMenuAssignableAction.ShowHiddenPackages: return "show_hidden_packages";
                 case QuickMenuAssignableAction.FpsCounter: return "fps_counter";
                 case QuickMenuAssignableAction.OpenCategoryScenes: return "open_category_scenes";
@@ -661,6 +665,7 @@ namespace VPB
                 case "replace_add_toggle": return QuickMenuAssignableAction.ReplaceAddToggle;
                 case "compress_cache": return QuickMenuAssignableAction.CompressCache;
                 case "autohide_gallery": return QuickMenuAssignableAction.AutoHideGallery;
+                case "layout_presets": return QuickMenuAssignableAction.LayoutPresets;
                 case "show_hidden_packages": return QuickMenuAssignableAction.ShowHiddenPackages;
                 case "fps_counter": return QuickMenuAssignableAction.FpsCounter;
                 case "open_category_scenes": return QuickMenuAssignableAction.OpenCategoryScenes;
@@ -1342,6 +1347,9 @@ namespace VPB
                     icon = on ? m_QmIconAutoHideOn : m_QmIconAutoHideOff;
                     break;
                 }
+                case QuickMenuAssignableAction.LayoutPresets:
+                    icon = m_QmIconLayoutPresets;
+                    break;
                 case QuickMenuAssignableAction.ShowHiddenPackages:
                 {
                     bool on = false;
@@ -1631,6 +1639,9 @@ namespace VPB
                             QuickMenuRefreshSlotVisual(i);
                     break;
                 }
+                case QuickMenuAssignableAction.LayoutPresets:
+                    GalleryPanel.OpenLayoutPresetsFloatAnywhere();
+                    break;
                 case QuickMenuAssignableAction.ShowHiddenPackages:
                 {
                     var p = QuickMenuGetTargetPanel();
@@ -2003,6 +2014,7 @@ namespace VPB
                 case QuickMenuAssignableAction.ReplaceAddToggle: return m_QmIconReplace ?? m_QmIconAdd;
                 case QuickMenuAssignableAction.CompressCache: return m_QmIconCompressCache;
                 case QuickMenuAssignableAction.AutoHideGallery: return m_QmIconAutoHideOff ?? m_QmIconAutoHideOn;
+                case QuickMenuAssignableAction.LayoutPresets: return m_QmIconLayoutPresets;
                 case QuickMenuAssignableAction.ShowHiddenPackages: return m_QmIconShowHiddenOff ?? m_QmIconShowHiddenOn;
                 case QuickMenuAssignableAction.FpsCounter: return m_QmIconPages != null && m_QmIconPages.Length > 0 ? m_QmIconPages[0] : m_QmIconAssignEmpty;
                 case QuickMenuAssignableAction.OpenCategoryScenes: return m_QmIconCategoryScenes ?? m_QmIconOpenCategory;

@@ -331,7 +331,7 @@ namespace VPB
         {
             _stripKeepPossOptionsHost = new GameObject("PossessOptions");
             _stripKeepPossOptionsHost.transform.SetParent(parent, false);
-            VerticalLayoutGroup v = UI.AddVLG(_stripKeepPossOptionsHost, spacing: 2f * s, padding: UI.Pad(0, 0, 0, 0));
+            VerticalLayoutGroup v = UI.AddVLG(_stripKeepPossOptionsHost, spacing: UI.GapHair(s), padding: UI.Pad(0, 0, 0, 0));
             v.childForceExpandHeight = false;
             UI.AddLE(_stripKeepPossOptionsHost, flexibleWidth: 1f, flexibleHeight: 0f);
 

@@ -140,7 +140,7 @@ namespace VPB
             _stripKeepCreateOptionsHost = new GameObject("CreateOptions");
             _stripKeepCreateOptionsHost.transform.SetParent(parent, false);
             VerticalLayoutGroup v = UI.AddVLG(
-                _stripKeepCreateOptionsHost, spacing: 2f * s, padding: UI.Pad(0, 0, 0, 0));
+                _stripKeepCreateOptionsHost, spacing: UI.GapHair(s), padding: UI.Pad(0, 0, 0, 0));
             v.childForceExpandHeight = false;
             v.childControlHeight = true;
             UI.AddImage(_stripKeepCreateOptionsHost, GalleryUiColorTokens.SurfaceDarker);
@@ -161,7 +161,7 @@ namespace VPB
                 flexibleWidth: 1f, flexibleHeight: 0f);
             UI.AddImage(_stripKeepImportSubSceneHost, GalleryUiColorTokens.SurfacePanel);
             UI.AddHLG(
-                _stripKeepImportSubSceneHost, spacing: 4f * s, padding: UI.Pad(4, 4, 2, 2, s),
+                _stripKeepImportSubSceneHost, spacing: UI.GapTight(s), padding: UI.PadHV(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef, s),
                 childForceExpandWidth: false, childForceExpandHeight: false,
                 childControlWidth: true, childControlHeight: true,
                 childAlignment: TextAnchor.MiddleLeft);

@@ -252,7 +252,7 @@ namespace VPB
             contentRt.sizeDelta = new Vector2(0f, 0f);
             // childForceExpandWidth must stay false — expand equalizes chip cells (clip / waste).
             HorizontalLayoutGroup hlg = UI.AddHLG(
-                content, spacing: 4f * s, padding: UI.Pad(2, 2, 2, 2, s),
+                content, spacing: UI.GapTight(s), padding: UI.PadHair(s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: true);

@@ -136,7 +136,7 @@ namespace VPB
                 HideMergeOutfitPicker,
                 out panel);
 
-            UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
+            UI.AddVLG(panel, spacing: UI.GapControl(s), padding: UI.PadDialog(s));
 
             // Title only — Cancel / dim dismiss cover close.
             GameObject header = new GameObject("HeaderRow");
@@ -164,7 +164,7 @@ namespace VPB
             // Bulk: Select All / None
             GameObject bulk = new GameObject("BulkRow");
             bulk.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup bh = UI.AddHLG(bulk, spacing: 6f * s, padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: false);
+            HorizontalLayoutGroup bh = UI.AddHLG(bulk, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: false);
             bh.childForceExpandWidth = false;
             bh.childForceExpandHeight = false;
             UI.AddLE(bulk, minHeight: btnH, preferredHeight: btnH);
@@ -179,7 +179,7 @@ namespace VPB
             _mergeOutfitCategoryBtnImgs.Clear();
             GameObject cat = new GameObject("CategoryRow");
             cat.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup ch = UI.AddHLG(cat, spacing: 6f * s, padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: false);
+            HorizontalLayoutGroup ch = UI.AddHLG(cat, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: false);
             ch.childForceExpandWidth = false;
             ch.childForceExpandHeight = false;
             UI.AddLE(cat, minHeight: btnH, preferredHeight: btnH);
@@ -235,7 +235,7 @@ namespace VPB
             contentRt.pivot = new Vector2(0.5f, 1f);
             contentRt.anchoredPosition = Vector2.zero;
             contentRt.sizeDelta = new Vector2(0f, 0f);
-            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: 4f * s, padding: UI.Pad(4, 4, 4, 4, s));
+            VerticalLayoutGroup cv = UI.AddVLG(content, spacing: UI.GapTight(s), padding: UI.PadTight(s));
             cv.childForceExpandHeight = false;
             ContentSizeFitter csf = content.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -255,7 +255,7 @@ namespace VPB
             // Footer
             GameObject footer = new GameObject("FooterRow");
             footer.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup fh = UI.AddHLG(footer, spacing: 10f * s, padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: true);
+            HorizontalLayoutGroup fh = UI.AddHLG(footer, spacing: UI.GapGroup(s), padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: true);
             fh.childForceExpandHeight = false;
             UI.AddLE(footer, minHeight: btnH, preferredHeight: btnH);
 

@@ -308,7 +308,7 @@ namespace VPB
                 filterRT.sizeDelta = new Vector2(0f, filterH);
                 filterRT.anchoredPosition = new Vector2(0f, -titleH);
             }
-            UI.AddHLG(_pluginsFloatFilterRow, spacing: 6f * s,
+            UI.AddHLG(_pluginsFloatFilterRow, spacing: UI.GapTight(s),
                 padding: UI.Pad(
                     GalleryUiDesignTokens.FloatSearchRowPadRef,
                     GalleryUiDesignTokens.FloatSearchRowPadRef,
@@ -436,8 +436,8 @@ namespace VPB
                 optRT.sizeDelta = new Vector2(0f, optionsH);
                 optRT.anchoredPosition = new Vector2(0f, -(titleH + filterH));
             }
-            UI.AddHLG(_pluginsFloatOptionsRow, spacing: 8f * s,
-                padding: UI.Pad(6, 6, 2, 2, s),
+            UI.AddHLG(_pluginsFloatOptionsRow, spacing: UI.GapControl(s),
+                padding: UI.PadHV(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef, s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -499,7 +499,7 @@ namespace VPB
                 footerRT.sizeDelta = new Vector2(0f, footerH);
             }
             UI.AddHLG(
-                _pluginsFloatFooter, spacing: 4f * s, padding: UI.Pad(6, 6, 4, 4, s),
+                _pluginsFloatFooter, spacing: UI.GapTight(s), padding: UI.PadFloatFooter(s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);

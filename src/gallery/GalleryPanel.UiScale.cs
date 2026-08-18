@@ -36,10 +36,8 @@ namespace VPB
         {
             if (vlg == null) return;
             if (s <= 0f) s = 1f;
-            int padInner = Mathf.RoundToInt(GalleryUiDesignTokens.SideTabRowPadRef * s);
             vlg.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
-            // Column margin handles outer edge; reserve right pad only for scrollbar gutter.
-            vlg.padding = new RectOffset(0, padInner, 0, 0);
+            vlg.padding = UI.ScrollEndsPad(s);
         }
 
         internal static void SyncSideTabListHolderVerticalLayoutOn(VerticalLayoutGroup vlg, float s)
@@ -47,7 +45,7 @@ namespace VPB
             if (vlg == null) return;
             if (s <= 0f) s = 1f;
             vlg.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
-            vlg.padding = new RectOffset(0, 0, 0, 0);
+            vlg.padding = UI.Pad(0f, 0f, 0f, 0f);
         }
 
         internal static void SyncSideTabListVerticalLayoutOn(VerticalLayoutGroup vlg, float s)
@@ -116,6 +114,7 @@ namespace VPB
             try { RescaleRemapAtomUidsIfOpen(chromeS); } catch { }
             try { RescaleSettingsFloatIfOpen(chromeS); } catch { }
             try { RescalePluginsFloatIfOpen(chromeS); } catch { }
+            try { RescaleLayoutPresetsFloatIfOpen(chromeS); } catch { }
             try { RescaleCommandPaletteIfOpen(); } catch { }
             try { RescaleConfirmOverlayIfOpen(); } catch { }
             try { TboxSyncRandomPreviewLiveScale(); } catch { }
@@ -163,7 +162,7 @@ namespace VPB
             RectTransform cellRt = binder != null ? binder.rectTransform : btnGO.GetComponent<RectTransform>();
             float cellW = cellRt != null && cellRt.rect.width > 1f ? cellRt.rect.width : GalleryUiDesignTokens.GridCellRefSize;
 
-            bool show = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible();
+            bool show = GridLabelsStripVisibleForThisPane();
             float labelFrac = show ? GetGridLabelFraction(cellW) : 0f;
 
             float thumbPad = 3f;
@@ -508,6 +507,7 @@ namespace VPB
             try { RescaleGlobalSourceFilterMenuInternal(s); } catch { }
             try { quickFiltersUI?.ApplyLayout(s); } catch { }
             try { RescaleSaveMenuPopupInternal(s); } catch { }
+            try { RescaleDockAnchorMenuInternal(s); } catch { }
             try { DetailStripSyncTagMenuLayout(s); } catch { }
             try { RescaleStripKeepSelectorInternal(s); } catch { }
             if (tboxTargetMenuOpen)
@@ -538,6 +538,7 @@ namespace VPB
 
             ApplyTitleBarChipScale(_titleBarSettingsBtnRT, titleBarSettingsBtnText, GalleryUiDesignTokens.TitleBarChipFontRef, s);
             ApplyTitleBarChipScale(_titleBarQfToggleBtnRT, quickFiltersToggleBtnText, GalleryUiDesignTokens.TitleBarChipFontRef, s);
+            ApplyTitleBarChipScale(_titleBarLayoutPresetsBtnRT, layoutPresetsToggleBtnText, GalleryUiDesignTokens.TitleBarChipFontRef, s);
             ApplyTitleBarChipScale(_titleBarRatingSortToggleBtnRT, ratingSortToggleBtnText, GalleryUiDesignTokens.TitleBarRatingFontRef, s);
             ApplyTitleBarChipScale(_titleBarRefreshBtnRT, titleBarRefreshBtnText, GalleryUiDesignTokens.TitleBarRefreshFontRef, s);
             ApplyTitleBarChipScale(_titleBarFileSortTypeBtnRT, fileSortTypeText, GalleryUiDesignTokens.TitleBarChipFontRef, s);
@@ -560,6 +561,7 @@ namespace VPB
             }
 
             ApplyTitleBarChipScale(_titleBarHelpBtnRT, _titleBarHelpBtnRT != null ? _titleBarHelpBtnRT.GetComponentInChildren<Text>() : null, GalleryUiDesignTokens.TitleBarHelpFontRef, s);
+            ApplyTitleBarChipScale(_titleBarFollowBtnRT, _titleBarFollowBtnText, 0, s, GalleryUiDesignTokens.FontMinRef, glyph: true);
             ApplyTitleBarChipScale(_titleBarOverflowBtnRT, _titleBarOverflowBtnGO != null ? _titleBarOverflowBtnGO.GetComponentInChildren<Text>() : null, GalleryUiDesignTokens.TitleBarOverflowFontRef, s);
             ApplyTitleBarChipScale(_titleBarMinimizeBtnRT, _titleBarMinimizeBtnRT != null ? _titleBarMinimizeBtnRT.GetComponentInChildren<Text>() : null, 0, s, GalleryUiDesignTokens.FontMinRef, glyph: true);
             ApplyTitleBarChipScale(_titleBarCloseBtnRT, _titleBarCloseBtnRT != null ? _titleBarCloseBtnRT.GetComponentInChildren<Text>() : null, 0, s, GalleryUiDesignTokens.FontMinRef, glyph: true);
@@ -623,6 +625,8 @@ namespace VPB
             ScaleButtonIconPadding(footerDockBtn != null ? footerDockBtn.GetComponent<RectTransform>() : null, s);
             ScaleButtonIconPadding(footerHeightBtn != null ? footerHeightBtn.GetComponent<RectTransform>() : null, s);
             ScaleButtonIconPadding(footerLayoutBtn != null ? footerLayoutBtn.GetComponent<RectTransform>() : null, s);
+            ScaleButtonIconPadding(footerApplyModeBtn != null ? footerApplyModeBtn.GetComponent<RectTransform>() : null, s);
+            ScaleButtonIconPadding(footerHoldToLaunchToggleBtn != null ? footerHoldToLaunchToggleBtn.GetComponent<RectTransform>() : null, s);
             ScaleButtonIconPadding(footerPerfMinusBtn != null ? footerPerfMinusBtn.GetComponent<RectTransform>() : null, s);
             ScaleButtonIconPadding(footerPerfPlusBtn != null ? footerPerfPlusBtn.GetComponent<RectTransform>() : null, s);
 
@@ -634,6 +638,7 @@ namespace VPB
         {
             ScaleButtonIconPadding(_titleBarSettingsBtnRT, scale);
             ScaleButtonIconPadding(_titleBarQfToggleBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarLayoutPresetsBtnRT, scale);
             ScaleButtonIconPadding(_titleBarRatingSortToggleBtnRT, scale);
             ScaleButtonIconPadding(_titleBarRefreshBtnRT, scale);
             ScaleButtonIconPadding(_titleBarFileSortTypeBtnRT, scale);
@@ -643,6 +648,7 @@ namespace VPB
             if (languageSwitcherBtnGO != null)
                 ScaleButtonIconPadding(languageSwitcherBtnGO.GetComponent<RectTransform>(), scale);
             ScaleButtonIconPadding(_titleBarHelpBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarFollowBtnRT, scale);
             ScaleButtonIconPadding(_titleBarOverflowBtnRT, scale);
             ScaleButtonIconPadding(_titleBarMinimizeBtnRT, scale);
             ScaleButtonIconPadding(_titleBarCloseBtnRT, scale);

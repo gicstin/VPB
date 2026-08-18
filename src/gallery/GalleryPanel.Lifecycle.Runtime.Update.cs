@@ -204,14 +204,16 @@ namespace VPB
                     if (backgroundBoxGO.activeSelf != wantSubtree)
                         backgroundBoxGO.SetActive(wantSubtree);
 
-                    bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
-                    string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
+                    bool autoCollapse = DockAutoHide;
+                    GalleryDockSide dockSide = EffectiveDockSide;
+                    string dock = GalleryDockLayout.ToConfigString(dockSide);
 
                     // Show trigger whenever collapsed (to allow expanding), or when in AH mode expanded (for hover detection)
                     bool showTrigger = isCollapsed || autoCollapse;
-                    if (collapseTriggerGO != null) collapseTriggerGO.SetActive(showTrigger && string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase));
-                    if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(showTrigger && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase));
-                    if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(showTrigger && string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase));
+                    if (collapseTriggerGO != null) collapseTriggerGO.SetActive(showTrigger && dockSide == GalleryDockSide.Right);
+                    if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(showTrigger && dockSide == GalleryDockSide.Left);
+                    if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(showTrigger && dockSide == GalleryDockSide.Top);
+                    SyncCollapseTriggerBands();
                     ApplyFixedCollapseTriggerVisuals();
 
                     if (isCollapsed)
@@ -264,7 +266,7 @@ namespace VPB
                         // Engagement = pointer on pane OR text focus / modal chrome (Ctrl+F, fields…).
                         // Modeless floats do not pin expanded. Hover-only gate collapsed mid-typing.
                         bool isEngaged = IsGalleryInteractionEngaged() || isHoveringTrigger || isHoveringTriggerManual;
-                        if (!isEngaged)
+                        if (!isEngaged && !GalleryDockLayout.InExpandGrace())
                         {
                             collapseTimer += Time.deltaTime;
                             float delay = 1.0f;
@@ -308,18 +310,17 @@ namespace VPB
                         bgRT = backgroundBoxGO.GetComponent<RectTransform>();
                         _backgroundBoxRT = bgRT;
                     }
-                    float leftRatio = VPBConfig.Instance.DesktopCustomWidth;
-                    dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
-                    
-                    float bottomAnchor = 0f;
-                    if (VPBConfig.Instance.DesktopFixedHeightMode == 1)
+                    dockSide = EffectiveDockSide;
+                    dock = GalleryDockLayout.ToConfigString(dockSide);
+                    ApplyDockSortingOrder();
+
+                    if (DockHeightMode == 1)
                     {
-                        float raw = VPBConfig.Instance.DesktopCustomHeight;
-                        float clamped = Mathf.Clamp(raw, 0.05f, 0.85f);
-                        bottomAnchor = clamped;
+                        float raw = DockCustomHeight;
+                        float clamped = Mathf.Clamp(raw, GalleryDockLayout.MinCrossAnchor, GalleryDockLayout.MaxCrossAnchor);
                         if (Mathf.Abs(raw - clamped) > 0.0001f)
                         {
-                            VPBConfig.Instance.DesktopCustomHeight = clamped;
+                            DockCustomHeight = clamped;
                             try { VPBConfig.Instance.Save(false, true); } catch { }
                         }
                     }
@@ -330,6 +331,16 @@ namespace VPB
                     bool isTopDock = string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
                     bool showFixedBottomLeft = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || isTopDock);
                     bool showFixedBottomRight = isFixedLocally && (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) || isTopDock);
+
+                    // Cross-slot limits belong on the resizer, not just on the resolved rect: otherwise
+                    // the drag preview runs past a bound the layout then silently snaps back from.
+                    float dragMinY = isTopDock
+                        ? GalleryDockLayout.TopBottomAnchorFloor()
+                        : GalleryDockLayout.MinCrossAnchor;
+                    float dragMaxY = isTopDock
+                        ? GalleryDockLayout.MaxCrossAnchor
+                        : GalleryDockLayout.SideBottomAnchorCeiling();
+
                     if (_resizeHandleFixedBottomGO != null)
                     {
                         if (_resizeHandleFixedBottomGO.activeSelf != showFixedBottomLeft)
@@ -340,6 +351,8 @@ namespace VPB
                         {
                             rz.resizeX = !isTopDock;
                             rz.resizeY = true;
+                            rz.minAnchorY = dragMinY;
+                            rz.maxAnchorY = dragMaxY;
                         }
                     }
                     if (_resizeHandleFixedBottomRightGO != null)
@@ -352,11 +365,16 @@ namespace VPB
                         {
                             rz.resizeX = !isTopDock;
                             rz.resizeY = true;
+                            rz.minAnchorY = dragMinY;
+                            rz.maxAnchorY = dragMaxY;
                         }
                     }
 
                     // Icons only when dock / visibility changes — ApplyBarIconFromPath every frame was hot-path waste.
-                    string iconKey = dock + "|" + (showFixedBottomLeft ? "1" : "0") + (showFixedBottomRight ? "1" : "0") + (isTopDock ? "T" : "S");
+                    int iconKey = ((int)dockSide << 3)
+                        | ((showFixedBottomLeft ? 1 : 0) << 2)
+                        | ((showFixedBottomRight ? 1 : 0) << 1)
+                        | (isTopDock ? 1 : 0);
                     if (iconKey != _fixedDockHandleIconKey)
                     {
                         _fixedDockHandleIconKey = iconKey;
@@ -372,23 +390,8 @@ namespace VPB
                     if (_resizeHandleTopLeftGO != null && _resizeHandleTopLeftGO.activeSelf) _resizeHandleTopLeftGO.SetActive(false);
 
                     Vector2 desiredMin, desiredMax;
-                    if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
-                    {
-                        desiredMin = new Vector2(0f, bottomAnchor);
-                        desiredMax = new Vector2(1f - leftRatio, 1f);
-                    }
-                    else if (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase))
-                    {
-                        desiredMin = new Vector2(0f, bottomAnchor);
-                        desiredMax = new Vector2(1f, 1f);
-                    }
-                    else
-                    {
-                        desiredMin = new Vector2(leftRatio, bottomAnchor);
-                        desiredMax = new Vector2(1f, 1f);
-                    }
-
-                    if (bgRT.anchorMin != desiredMin || bgRT.anchorMax != desiredMax)
+                    if (GalleryDockLayout.TryGetRect(dockSide, out desiredMin, out desiredMax)
+                        && (bgRT.anchorMin != desiredMin || bgRT.anchorMax != desiredMax))
                     {
                         bgRT.anchorMin = desiredMin;
                         bgRT.anchorMax = desiredMax;
@@ -402,9 +405,9 @@ namespace VPB
                     if (isCollapsed)
                     {
                         Vector2 off;
-                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
+                        if (dockSide == GalleryDockSide.Left)
                             off = new Vector2(-bgRT.rect.width, 0f);
-                        else if (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase))
+                        else if (dockSide == GalleryDockSide.Top)
                             off = new Vector2(0f, bgRT.rect.height);
                         else
                             off = new Vector2(bgRT.rect.width, 0f);
@@ -452,7 +455,7 @@ namespace VPB
                         if (_resizeHandleTopLeftGO != null) _resizeHandleTopLeftGO.SetActive(true);
                         if (_resizeHandleFixedBottomGO != null && _resizeHandleFixedBottomGO.activeSelf) _resizeHandleFixedBottomGO.SetActive(false);
                         if (_resizeHandleFixedBottomRightGO != null && _resizeHandleFixedBottomRightGO.activeSelf) _resizeHandleFixedBottomRightGO.SetActive(false);
-                        _fixedDockHandleIconKey = null;
+                        _fixedDockHandleIconKey = int.MinValue;
 
                         RepositionInFront();
                     }
@@ -670,6 +673,9 @@ namespace VPB
                 try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
             }
 
+            try { TickLayoutRevertBar(); } catch { }
+            try { TickLayoutModeWatch(); } catch { }
+
             try { ValidateHoverPreviewActive(); } catch { }
         }
 
@@ -741,6 +747,12 @@ namespace VPB
             if (!ctrlEarly && altEarly && Input.GetKeyDown(KeyCode.I))
             {
                 try { ToggleFloatingImportSidebar(); } catch { }
+                return;
+            }
+            // Alt+L — layout presets manager.
+            if (!ctrlEarly && altEarly && Input.GetKeyDown(KeyCode.L))
+            {
+                try { ToggleLayoutPresetsFloat(); } catch { }
                 return;
             }
             if (ctrlEarly && Input.GetKeyDown(KeyCode.Z))
@@ -838,6 +850,10 @@ namespace VPB
 
             // Plugins float: Esc clear filter → close.
             if (TryHandlePluginsFloatEsc())
+                return;
+
+            // Layout presets float: Esc menu → rename/delete → close (before InputField gate).
+            if (TryHandleLayoutPresetsFloatKeyboard())
                 return;
 
             // Scene Import float: Esc expand / hide-keep-detach.

@@ -6,11 +6,11 @@ namespace VPB
     public partial class GalleryPanel : MonoBehaviour
     {
         /// <summary>Gaps between neighbouring title-bar controls (× scale).</summary>
-        private const float TitleBarChromeElementGapRef = 8f;
+        private const float TitleBarChromeElementGapRef = GalleryUiDesignTokens.ControlGapRef;
         /// <summary>Gap categoryΓåöcontrols and controlsΓåöfps pack.</summary>
-        private const float TitleBarChromeSectionGapRef = 12f;
-        /// <summary>Padding before close button hits window edge.</summary>
-        private const float TitleBarChromeEndMarginRef = 10f;
+        private const float TitleBarChromeSectionGapRef = GalleryUiDesignTokens.Space4Ref;
+        /// <summary>Padding before close button hits window edge — same band pad as the leading edge.</summary>
+        private const float TitleBarChromeEndMarginRef = GalleryUiDesignTokens.BandPadRef;
         /// <summary>Usable inner width below this (├ù inner pane scale) switches to compact search icon.</summary>
         private const float TitleSearchCollapseWidthPx = 128f;
         private const float TitleBarCategoryClampMaxRef = 260f;
@@ -49,7 +49,8 @@ namespace VPB
                 && _titleBarLayoutLastOverflow == overflowMode
                 && _titleBarLayoutLastCatShown == catShown
                 && _titleBarLayoutLastFlushLeft == flushLeftInset
-                && _titleBarLayoutLastHasSource == hasSourceFilter)
+                && _titleBarLayoutLastHasSource == hasSourceFilter
+                && _titleBarLayoutLastFollowShown == (_titleBarFollowBtnGO != null && _titleBarFollowBtnGO.activeSelf))
             {
                 return;
             }
@@ -61,6 +62,7 @@ namespace VPB
             _titleBarLayoutLastCatShown = catShown;
             _titleBarLayoutLastFlushLeft = flushLeftInset;
             _titleBarLayoutLastHasSource = hasSourceFilter;
+            _titleBarLayoutLastFollowShown = _titleBarFollowBtnGO != null && _titleBarFollowBtnGO.activeSelf;
 
             try { RescaleTitleBarChromeInternal(UiMetrics); } catch { }
 
@@ -86,12 +88,17 @@ namespace VPB
             float endM = TitleBarChromeEndMarginRef * s;
             float chip = GalleryUiDesignTokens.TitleBarChipRef * s;
             float halfChip = chip * 0.5f;
-            float leftInset = flushLeftInset ? 0f : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * s;
+            float leftInset = flushLeftInset
+                ? GalleryUiDesignTokens.BandPadRef * s
+                : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * s;
 
             int sortCount = overflowMode ? 3 : 4;
             float sortSpan = sortCount * chip + (sortCount - 1) * g;
 
-            float rp = endM + chip + g + chip + g + chip + (overflowMode ? 0f : (g + fpsWRead));
+            bool followShown = _titleBarFollowBtnGO != null && _titleBarFollowBtnGO.activeSelf;
+            int rightChips = 3 + (overflowMode ? 1 : 0) + (followShown ? 1 : 0);
+            float rp = endM + rightChips * chip + Mathf.Max(0, rightChips - 1) * g
+                + (overflowMode ? 0f : (g + fpsWRead));
             float rightPackLeft = halfW - rp;
 
             float sourceFullW = GlobalSourceFilterButtonWidth * s;
@@ -161,6 +168,20 @@ namespace VPB
             if (_titleBarHelpBtnRT != null)
                 _titleBarHelpBtnRT.anchoredPosition = new Vector2(xc, 0f);
             xRight = xc - halfChip;
+            if (overflowMode && _titleBarOverflowBtnRT != null)
+            {
+                xRight -= g;
+                xc = xRight - halfChip;
+                _titleBarOverflowBtnRT.anchoredPosition = new Vector2(xc, 0f);
+                xRight = xc - halfChip;
+            }
+            if (followShown && _titleBarFollowBtnRT != null)
+            {
+                xRight -= g;
+                xc = xRight - halfChip;
+                _titleBarFollowBtnRT.anchoredPosition = new Vector2(xc, 0f);
+                xRight = xc - halfChip;
+            }
             if (!overflowMode)
             {
                 xRight -= g;
@@ -223,26 +244,13 @@ namespace VPB
                 if (pinned < LeftPinCount) xl += g;
             }
 
-            // Overflow “…” fills remaining pin slots when mid filters are hidden.
-            float overflowPinX = xl;
-            bool overflowInPin = false;
-            if (overflowMode && pinned < LeftPinCount && _titleBarOverflowBtnGO != null)
-            {
-                overflowInPin = true;
-                overflowPinX = xl;
-                xl += chip;
-                pinned++;
-            }
-
+            // Overflow “…” lives in the right window pack (Save / Flip always reachable).
             float leftPinEnd = xl;
             float midZoneLeft = leftPinEnd + sec;
             float midZoneRight = rightPackLeft - sec;
 
-            // Sync overflow visibility / non-pin overflow button; pin placement overrides X when needed.
-            float overflowCursor = overflowInPin ? overflowPinX : midZoneLeft;
+            float overflowCursor = midZoneLeft;
             try { overflowMode = ApplyTitleBarOverflowLayout(s, W, overflowCursor, chip, g, ref overflowCursor); } catch { }
-            if (overflowInPin && _titleBarOverflowBtnRT != null)
-                _titleBarOverflowBtnRT.anchoredPosition = new Vector2(overflowPinX + halfChip, 0f);
             if (languagePinned && langRT != null && languageSwitcherBtnGO != null && languageSwitcherBtnGO.activeSelf)
                 langRT.anchoredPosition = new Vector2(languagePinX, 0f);
 
@@ -254,11 +262,8 @@ namespace VPB
                 if (!settingsPinned && _titleBarSettingsBtnRT != null) midFilterCount++;
                 if (!languagePinned && langRT != null) midFilterCount++;
                 if (_titleBarQfToggleBtnRT != null) midFilterCount++;
+                if (_titleBarLayoutPresetsBtnRT != null) midFilterCount++;
                 if (titleCreatorBtn != null) midFilterCount++;
-            }
-            else if (!overflowInPin && _titleBarOverflowBtnGO != null)
-            {
-                midFilterCount++;
             }
 
             float midFiltersSpan = midFilterCount <= 0
@@ -329,6 +334,11 @@ namespace VPB
                     _titleBarQfToggleBtnRT.anchoredPosition = new Vector2(xm + halfChip, 0f);
                     xm += chip + g;
                 }
+                if (_titleBarLayoutPresetsBtnRT != null)
+                {
+                    _titleBarLayoutPresetsBtnRT.anchoredPosition = new Vector2(xm + halfChip, 0f);
+                    xm += chip + g;
+                }
                 if (titleCreatorBtn != null)
                 {
                     RectTransform crt = titleCreatorBtn.GetComponent<RectTransform>();
@@ -338,12 +348,6 @@ namespace VPB
                         xm += chip + g;
                     }
                 }
-            }
-            else if (!overflowInPin && _titleBarOverflowBtnRT != null && _titleBarOverflowBtnGO != null
-                     && _titleBarOverflowBtnGO.activeSelf)
-            {
-                _titleBarOverflowBtnRT.anchoredPosition = new Vector2(xm + halfChip, 0f);
-                xm += chip + g;
             }
 
             float cxSearch = xm + wSearch * 0.5f;

@@ -113,6 +113,12 @@ namespace VPB
 
             if (quickFiltersToggleBtnText != null)
                 quickFiltersToggleBtnText.text = VPBTranslation.T("gallery.title.filter_presets", "P");
+            if (layoutPresetsToggleBtnText != null)
+            {
+                bool hasIcon = layoutPresetsToggleBtnIconImage != null;
+                if (!hasIcon)
+                    layoutPresetsToggleBtnText.text = VPBTranslation.T("gallery.title.layout_presets_abbrev", "L");
+            }
             if (titleBarRefreshBtnText != null)
                 titleBarRefreshBtnText.text = VPBTranslation.T("gallery.title.refresh", "Refresh");
 
@@ -155,20 +161,7 @@ namespace VPB
                 if (!hasIcon)
                     titleBarSettingsBtnText.text = VPBTranslation.T("gallery.title.settings_abbrev", "S");
             }
-            if (rightCloneBtnIconImage == null && rightCloneBtnText != null)
-                rightCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
-            if (leftCloneBtnIconImage == null && leftCloneBtnText != null)
-                leftCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
-
-            // Buttons stored as GOs – reach the Text child at refresh time
-            if (rightSaveBtnIconImage == null) RefreshGoText(rightSaveBtnGO, "gallery.side.save", "Save");
-            if (leftSaveBtnIconImage == null) RefreshGoText(leftSaveBtnGO, "gallery.side.save", "Save");
-            if (rightRemoveAtomBtnIconImage == null) RefreshGoText(rightRemoveAtomBtn, "gallery.side.remove", "Remove");
-            if (leftRemoveAtomBtnIconImage == null) RefreshGoText(leftRemoveAtomBtn, "gallery.side.remove", "Remove");
-            if (rightRemoveAllClothingBtnIconImage == null) RefreshGoText(rightRemoveAllClothingBtn, "gallery.side.remove_clothing", "Unequip\nClothing");
-            if (leftRemoveAllClothingBtnIconImage == null) RefreshGoText(leftRemoveAllClothingBtn, "gallery.side.remove_clothing", "Unequip\nClothing");
-            if (rightRemoveAllHairBtnIconImage == null) RefreshGoText(rightRemoveAllHairBtn, "gallery.side.remove_hair", "Unequip\nHair");
-            if (leftRemoveAllHairBtnIconImage == null) RefreshGoText(leftRemoveAllHairBtn, "gallery.side.remove_hair", "Unequip\nHair");
+            try { SyncSideRailFacetCaptions(); } catch { }
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }
@@ -197,7 +190,7 @@ namespace VPB
             if (_langBtnText != null)
                 _langBtnText.text = GetLocaleShortCode(VPBTranslation.CurrentLocale);
 
-            UpdateDesktopModeButton();
+            UpdateDockAnchorButton();
             UpdateFollowButtonState();
             UpdateReplaceButtonState();
             UpdateKeepClothingButtonState();

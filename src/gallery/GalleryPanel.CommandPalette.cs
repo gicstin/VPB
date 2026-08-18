@@ -117,6 +117,39 @@ namespace VPB
             });
         }
 
+        /// <summary>
+        /// Named layout presets of the running mode, resolved by id so a rename or reorder cannot
+        /// fire the wrong one. The catalog is rebuilt whenever presets change.
+        /// </summary>
+        private void AddCommandPaletteLayoutPresetEntries(string group)
+        {
+            var list = new List<GalleryLayoutPreset>(8);
+            try { CollectLayoutPresetsForCurrentMode(list); }
+            catch { return; }
+
+            int max = list.Count < 9 ? list.Count : 9;
+            for (int i = 0; i < max; i++)
+            {
+                GalleryLayoutPreset e = list[i];
+                if (e == null || string.IsNullOrEmpty(e.Name)) continue;
+                int id = e.Id;
+                AddCommandPaletteEntry(
+                    "layout_preset_" + id,
+                    null,
+                    VPBTranslation.T("gallery.cmd.layout_preset_apply", "Apply layout") + ": " + e.Name,
+                    "",
+                    group,
+                    "layout preset arrangement window " + e.Name,
+                    () => { try { ApplyLayoutPresetById(id); } catch { } });
+            }
+        }
+
+        /// <summary>Drops the cached catalog so layout-preset rows rebuild with current names.</summary>
+        internal void InvalidateCommandPaletteCatalog()
+        {
+            _commandPaletteCatalog.Clear();
+        }
+
         private void EnsureCommandPaletteCatalog()
         {
             if (_commandPaletteCatalog.Count > 0) return;
@@ -250,6 +283,31 @@ namespace VPB
                 () => { try { AdjustGridColumns(1); } catch { } });
             AddCommandPaletteEntry("grid_cols_fewer", "gallery.cmd.grid_cols_fewer", "Fewer grid columns", "Ctrl+wheel", GView, "zoom in larger thumbs",
                 () => { try { AdjustGridColumns(-1); } catch { } });
+            AddCommandPaletteEntry("layout_save", "gallery.cmd.layout_save", "Save layout", "", GView, "window arrangement dock position remember",
+                () => { try { SaveLastLayoutSnapshot(); } catch { } });
+            AddCommandPaletteEntry("layout_apply", "gallery.cmd.layout_apply", "Restore saved layout", "", GView, "window arrangement dock position recall",
+                () => { try { ApplyLastLayoutSnapshot(); } catch { } });
+            AddCommandPaletteEntry("layout_revert", "gallery.cmd.layout_revert", "Undo layout change", "", GView, "revert layout back arrangement",
+                () => { try { RevertLayoutToSnapshot(); } catch { } });
+            AddCommandPaletteEntry("layout_presets", "gallery.cmd.layout_presets", "Layout presets…", "Alt+L", GView, "named layout preset manager window arrangement",
+                () => { try { ToggleLayoutPresetsFloat(); } catch { } });
+            AddCommandPaletteEntry("clone_pane", "gallery.cmd.clone_pane", "Clone pane", "", GView, "duplicate window copy",
+                () => { try { if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true); } catch { } },
+                () => Gallery.singleton != null && Gallery.singleton.PanelCount < Gallery.MaxPanels);
+            AddCommandPaletteEntry("save_menu", "gallery.cmd.save_menu", "Save…", "", GView, "preset save scene appearance floppy",
+                () => { try { ToggleSaveMenuPopup(false); } catch { } });
+            AddCommandPaletteEntry("flip_rail", "gallery.cmd.flip_rail", "Flip side rail", "", GView, "left right auto facet",
+                () => { try { FlipAutoSideRail(); } catch { } },
+                () => IsShowSideButtonsAuto() && !isFixedLocally);
+            AddCommandPaletteEntry("layout_preset_new", "gallery.cmd.layout_preset_new", "Save layout as preset", "", GView, "named layout preset store arrangement",
+                () => { try { SaveCurrentLayoutAsPreset(null); } catch { } });
+            AddCommandPaletteEntry("layout_preset_suggested", "gallery.cmd.layout_preset_suggested", "Apply suggested layout for this mode", "", GView, "vr desktop switch offered layout",
+                () => { try { ApplySuggestedLayoutPreset(); } catch { } },
+                HasSuggestedLayoutPreset);
+            AddCommandPaletteEntry("layout_preset_update", "gallery.cmd.layout_preset_update", "Update active layout preset", "", GView, "named layout preset overwrite",
+                () => { try { UpdateLayoutPresetFromLive(GalleryLayoutPresetStore.FindById(GalleryLayoutPresetStore.ActiveId)); } catch { } },
+                () => GalleryLayoutPresetStore.ActiveId != 0);
+            AddCommandPaletteLayoutPresetEntries(GView);
             AddCommandPaletteEntry("settings", "gallery.cmd.settings", "Open Settings", "", GView, "prefs options config",
                 () => { try { OpenSettingsSideTab(); } catch { } });
             AddCommandPaletteEntry("settings_interaction", "gallery.cmd.settings_interaction", "Settings → Interaction / Hotkeys", "", GView, "try-on apply hold bindings keys chords",
@@ -409,7 +467,7 @@ namespace VPB
             if (s <= 0.01f) s = 1f;
             GalleryModalTypography type = new GalleryModalTypography(s);
             _commandPaletteBuiltChromeScale = s;
-            _commandPaletteRowSpacing = 4f * s;
+            _commandPaletteRowSpacing = UI.GapTight(s);
 
             float panelW = 560f * s;
             float panelH = 680f * s;
@@ -436,13 +494,13 @@ namespace VPB
                 TextAnchor.MiddleLeft,
                 anchorPreset: AnchorPresets.hStretchTop,
                 size: new Vector2(0, 36f * s),
-                anchoredPosition: new Vector2(16f * s, -8f * s),
+                anchoredPosition: new Vector2(GalleryUiDesignTokens.RegionGapRef * s, -GalleryUiDesignTokens.ControlGapRef * s),
                 name: "CmdTitle");
             GalleryUiMetrics.ApplyEmphasisTitle(titleLbl, type.Title);
             RectTransform titleRT = titleLbl != null ? titleLbl.GetComponent<RectTransform>() : null;
             if (titleRT != null)
             {
-                titleRT.offsetMin = new Vector2(16f * s, titleRT.offsetMin.y);
+                titleRT.offsetMin = new Vector2(GalleryUiDesignTokens.RegionGapRef * s, titleRT.offsetMin.y);
                 titleRT.offsetMax = new Vector2(-(closeSz + 20f * s), titleRT.offsetMax.y);
             }
 
@@ -477,8 +535,8 @@ namespace VPB
 
             GameObject searchRow = UI.CreateChildRT(panelGO, "CmdSearch", AnchorPresets.hStretchTop, new Vector2(0, 36f * s));
             RectTransform searchRT = searchRow.GetComponent<RectTransform>();
-            searchRT.offsetMin = new Vector2(16f * s, -84f * s);
-            searchRT.offsetMax = new Vector2(-16f * s, -48f * s);
+            searchRT.offsetMin = new Vector2(GalleryUiDesignTokens.RegionGapRef * s, -84f * s);
+            searchRT.offsetMax = new Vector2(-GalleryUiDesignTokens.RegionGapRef * s, -48f * s);
 
             _commandPaletteInput = CreateSearchInput(
                 searchRow,
@@ -517,8 +575,8 @@ namespace VPB
             {
                 scrollRT.anchorMin = Vector2.zero;
                 scrollRT.anchorMax = Vector2.one;
-                scrollRT.offsetMin = new Vector2(12f * s, 12f * s);
-                scrollRT.offsetMax = new Vector2(-12f * s, -96f * s);
+                scrollRT.offsetMin = new Vector2(GalleryUiDesignTokens.GroupGapRef * s, GalleryUiDesignTokens.GroupGapRef * s);
+                scrollRT.offsetMax = new Vector2(-GalleryUiDesignTokens.GroupGapRef * s, -96f * s);
             }
 
             RebuildCommandPaletteRows("");
@@ -557,7 +615,7 @@ namespace VPB
             contentRT.pivot = new Vector2(0.5f, 1f);
             contentRT.anchoredPosition = Vector2.zero;
             contentRT.sizeDelta = new Vector2(0f, 0f);
-            VerticalLayoutGroup vlg = UI.AddVLG(content, spacing: _commandPaletteRowSpacing, padding: UI.Pad(4, 4, 4, 4, s));
+            VerticalLayoutGroup vlg = UI.AddVLG(content, spacing: _commandPaletteRowSpacing, padding: UI.PadTight(s));
             vlg.childForceExpandHeight = false;
             vlg.childForceExpandWidth = true;
             vlg.childControlHeight = true;
@@ -666,8 +724,8 @@ namespace VPB
 
             float s = ChromeScale;
             if (s <= 0.01f) s = 1f;
-            float spacing = _commandPaletteRowSpacing > 0f ? _commandPaletteRowSpacing : 4f * s;
-            float pad = 8f * s;
+            float spacing = _commandPaletteRowSpacing > 0f ? _commandPaletteRowSpacing : UI.GapTight(s);
+            float pad = UI.GapControl(s);
             VerticalLayoutGroup vlg = _commandPaletteListRT.GetComponent<VerticalLayoutGroup>();
             if (vlg != null && vlg.padding != null)
                 pad = vlg.padding.top + vlg.padding.bottom;
@@ -896,13 +954,16 @@ namespace VPB
                     hle.minHeight = headerH;
                     hle.flexibleWidth = 1f;
                     hle.flexibleHeight = 0f;
-                    Text ht = hdr.AddComponent<Text>();
-                    ht.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                    ht.text = row.HeaderText ?? "";
-                    ht.color = new Color(0.65f, 0.70f, 0.78f, 0.95f);
-                    ht.alignment = TextAnchor.MiddleLeft;
-                    ht.raycastTarget = false;
+                    Text ht = UI.CreateLabel(
+                        hdr,
+                        row.HeaderText ?? "",
+                        type.Caption,
+                        new Color(0.65f, 0.70f, 0.78f, 0.95f),
+                        TextAnchor.MiddleLeft,
+                        raycastTarget: false,
+                        name: "Text");
                     GalleryUiMetrics.ApplyFont(ht, type.Caption, s, 11);
+                    UI.ApplyPopupMenuRowTextPadding(ht, s);
                     _commandPaletteRowGOs.Add(hdr);
                     continue;
                 }
@@ -930,6 +991,7 @@ namespace VPB
                     btnTxt.alignment = TextAnchor.MiddleLeft;
                     if (!row.Enabled)
                         btnTxt.color = new Color(0.55f, 0.55f, 0.58f, 0.9f);
+                    UI.ApplyPopupMenuRowTextPadding(btnTxt, s);
                 }
                 LayoutElement le = btn.GetComponent<LayoutElement>();
                 if (le != null)
@@ -1035,7 +1097,7 @@ namespace VPB
                 return;
             }
 
-            float spacing = _commandPaletteRowSpacing > 0f ? _commandPaletteRowSpacing : 4f;
+            float spacing = _commandPaletteRowSpacing > 0f ? _commandPaletteRowSpacing : GalleryUiDesignTokens.TightGapRef;
             float padTop = 0f;
             VerticalLayoutGroup vlg = _commandPaletteListRT.GetComponent<VerticalLayoutGroup>();
             if (vlg != null && vlg.padding != null)

@@ -35,44 +35,6 @@ namespace VPB
             co = null;
         }
 
-        private void UpdateSideButtonsVisibility()
-        {
-            if (VPBConfig.Instance == null) return;
-            string mode = VPBConfig.Instance.ShowSideButtons;
-            bool fixedMode = isFixedLocally;
-            string dock = "Right";
-            try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
-            bool topDock = fixedMode && string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
-
-            if (leftSideContainer != null) 
-            {
-                if (isCollapsed || topDock) leftSideContainer.SetActive(false);
-                else if (fixedMode && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
-                    leftSideContainer.SetActive(false);
-                else
-                    leftSideContainer.SetActive(mode == "Both" || mode == "Left");
-            }
-            
-            if (rightSideContainer != null) 
-            {
-                if (isCollapsed || topDock) rightSideContainer.SetActive(false);
-                else if (fixedMode)
-                    rightSideContainer.SetActive(string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) && (mode == "Both" || mode == "Right"));
-                else
-                    rightSideContainer.SetActive(mode == "Both" || mode == "Right");
-            }
-
-            // Creator chips: no SetActive here. Presence-only (see SyncCreatorSideRailPresence).
-            // Visibility = parent rail container, same as Category/Path.
-
-            // Keep History side buttons on the same purple family as active side-tab buttons.
-            Color historyBackdrop = ColorHistoryAccent;
-            if (rightHistoryBtnImage != null) rightHistoryBtnImage.color = historyBackdrop;
-            if (leftHistoryBtnImage != null) leftHistoryBtnImage.color = historyBackdrop;
-            if (rightHistoryBtnIconImage != null) rightHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
-            if (leftHistoryBtnIconImage != null) leftHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
-        }
-
         private const string CreatorSideRailBtnNameLeft = "VPB_SideRail_Creator_L";
         private const string CreatorSideRailBtnNameRight = "VPB_SideRail_Creator_R";
 
@@ -422,7 +384,7 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged += ApplyInnerPaneScale;
             VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
             VPBConfig.Instance.ConfigChanged += UpdateFooterFollowStates;
-            VPBConfig.Instance.ConfigChanged += UpdateDesktopModeButton;
+            VPBConfig.Instance.ConfigChanged += UpdateDockAnchorButton;
             VPBConfig.Instance.ConfigChanged += UpdateLayout;
             VPBConfig.Instance.ConfigChanged += RefreshSideTabAreasForConfigChange;
             VPBConfig.Instance.ConfigChanged += ApplyVamMenuGateVisibility;
@@ -437,7 +399,7 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged -= ApplyInnerPaneScale;
             VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
             VPBConfig.Instance.ConfigChanged -= UpdateFooterFollowStates;
-            VPBConfig.Instance.ConfigChanged -= UpdateDesktopModeButton;
+            VPBConfig.Instance.ConfigChanged -= UpdateDockAnchorButton;
             VPBConfig.Instance.ConfigChanged -= UpdateLayout;
             VPBConfig.Instance.ConfigChanged -= RefreshSideTabAreasForConfigChange;
             VPBConfig.Instance.ConfigChanged -= ApplyVamMenuGateVisibility;
@@ -493,6 +455,7 @@ namespace VPB
             _hoverPathRevealOwner = null;
 
             try { DestroyPluginsFloatChrome(); } catch { }
+            try { TeardownLayoutPresetsFloat(); } catch { }
             try { TboxDestroyRandomPreview(); } catch { }
 
             // Re-enable saving on teardown so the cache isn't left permanently paused.

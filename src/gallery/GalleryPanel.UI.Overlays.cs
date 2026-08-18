@@ -969,8 +969,8 @@ namespace VPB
             RectTransform listRT = listGO.AddComponent<RectTransform>();
             listRT.anchorMin = new Vector2(0, 0);
             listRT.anchorMax = new Vector2(1, 1);
-            listRT.offsetMin = new Vector2(10, 10);
-            listRT.offsetMax = new Vector2(-10, -34);
+            listRT.offsetMin = new Vector2(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.ControlGapRef);
+            listRT.offsetMax = new Vector2(-GalleryUiDesignTokens.ControlGapRef, -34);
 
             VerticalLayoutGroup vlg = UI.AddVLG(listGO, spacing: rowGap);
 
@@ -1169,8 +1169,8 @@ namespace VPB
             RectTransform listRT = listGO.AddComponent<RectTransform>();
             listRT.anchorMin = new Vector2(0, 0);
             listRT.anchorMax = new Vector2(1, 1);
-            listRT.offsetMin = new Vector2(10, 10);
-            listRT.offsetMax = new Vector2(-10, -34);
+            listRT.offsetMin = new Vector2(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.ControlGapRef);
+            listRT.offsetMax = new Vector2(-GalleryUiDesignTokens.ControlGapRef, -34);
 
             GridLayoutGroup glg = listGO.AddComponent<GridLayoutGroup>();
             glg.cellSize = new Vector2(panelW - 20f, rowH);
@@ -1379,8 +1379,8 @@ namespace VPB
             RectTransform listRT = listGO.AddComponent<RectTransform>();
             listRT.anchorMin = new Vector2(0, 0);
             listRT.anchorMax = new Vector2(1, 1);
-            listRT.offsetMin = new Vector2(10, 10);
-            listRT.offsetMax = new Vector2(-10, -34);
+            listRT.offsetMin = new Vector2(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.ControlGapRef);
+            listRT.offsetMax = new Vector2(-GalleryUiDesignTokens.ControlGapRef, -34);
 
             GridLayoutGroup glg = listGO.AddComponent<GridLayoutGroup>();
             glg.cellSize = new Vector2(panelW - 20f, rowH);

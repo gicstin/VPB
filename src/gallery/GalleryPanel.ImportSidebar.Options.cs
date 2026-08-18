@@ -760,7 +760,7 @@ namespace VPB
             // scrolls when it overflows ImportSidebarVisiblePluginRows.
             importSidebarPluginChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
-                0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
+                0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: UI.GapHair(), addBottomFlexSpacer: false);
             LayoutElement scrollLe = UI.AddLE(importSidebarPluginChecklistRoot, flexibleWidth: 1f);
             importSidebarPluginChecklistLe = scrollLe;
             innerPaneScaleActions.Add(s => UpdatePluginChecklistHeight());
@@ -884,7 +884,7 @@ namespace VPB
 
             ui.ChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
-                0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
+                0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: UI.GapHair(), addBottomFlexSpacer: false);
             LayoutElement scrollLe = UI.AddLE(ui.ChecklistRoot, flexibleWidth: 1f);
             ui.ChecklistLe = scrollLe;
             innerPaneScaleActions.Add(s => UpdateCUAChecklistHeights());
@@ -1149,7 +1149,7 @@ namespace VPB
 
             importSidebarSceneAtomUi.ChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
-                0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
+                0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: UI.GapHair(), addBottomFlexSpacer: false);
             LayoutElement scrollLe = UI.AddLE(importSidebarSceneAtomUi.ChecklistRoot, flexibleWidth: 1f);
             importSidebarSceneAtomUi.ChecklistLe = scrollLe;
             innerPaneScaleActions.Add(s => UpdateSceneAtomChecklistHeight());

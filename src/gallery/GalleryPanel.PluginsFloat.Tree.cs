@@ -700,7 +700,7 @@ namespace VPB
             rowHover.target = rowBg;
             rowHover.SetColors(PluginsFloatRowBg, Color.Lerp(PluginsFloatRowBg, Color.white, 0.14f));
 
-            HorizontalLayoutGroup hlg = UI.AddHLG(row, spacing: 4f * s, padding: UI.Pad(2, 2, 2, 2, s),
+            HorizontalLayoutGroup hlg = UI.AddHLG(row, spacing: UI.GapTight(s), padding: UI.PadHair(s),
                 childForceExpandWidth: false);
             hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.childControlWidth = true;

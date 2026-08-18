@@ -1,4 +1,4 @@
-namespace VPB
+﻿namespace VPB
 {
     /// <summary>Design-reference pixel sizes at gallery UI scale 1.0 (before host/DPI factors).</summary>
     public static class GalleryUiDesignTokens
@@ -31,6 +31,44 @@ namespace VPB
         public const float GlyphFontHeightFactor = 0.55f;
         /// <summary>All interactive buttons: 2× FontBody. Ratio is global and intentional.</summary>
         public const float ButtonSizeRef = FontBodyRef * 2; // 32
+
+        // Dense power-user scale (Johnson proximity / Gestalt). Tight inside a group,
+        // one step looser between groups. Never invent 3/5/6/10/14 — snap to this ladder.
+        public const float Space1Ref = 2f;
+        public const float Space2Ref = 4f;
+        public const float Space3Ref = 8f;
+        public const float Space4Ref = 12f;
+        public const float Space5Ref = 16f;
+        public const float Space6Ref = 24f;
+
+        /// <summary>Hairline — icon/title tight, 1px-feel seams, caption stacks.</summary>
+        public const float HairGapRef = Space1Ref;
+        /// <summary>Inside a control / packed chrome row (sibling buttons, chips).</summary>
+        public const float TightGapRef = Space2Ref;
+        /// <summary>Between sibling controls in one group (band pad, popup pad).</summary>
+        public const float ControlGapRef = Space3Ref;
+        /// <summary>Between related groups (indent, menu text pad, zone gap).</summary>
+        public const float GroupGapRef = Space4Ref;
+        /// <summary>Between regions / dialog inset.</summary>
+        public const float RegionGapRef = Space5Ref;
+        /// <summary>Section / empty-state / large modal breathe.</summary>
+        public const float SectionGapRef = Space6Ref;
+
+        public const float ControlRimThicknessRef = Space1Ref;
+        public const float ControlRimGutterRef = ControlRimThicknessRef;
+        public const float ControlSlotHeightRef = ButtonSizeRef + ControlRimGutterRef * 2f;
+        public const float BandPadRef = ControlGapRef;
+        public const float BandPadHRef = BandPadRef;
+        /// <summary>Chrome T/B — tight like float bars so title/toolbox/grid stay dense.</summary>
+        public const float BandPadVRef = TightGapRef;
+        public const float BandContentInsetVRef = BandPadVRef + ControlRimGutterRef;
+        public const float ControlRowGapRef = TightGapRef;
+        /// <summary>Centered modal / confirm shell inset.</summary>
+        public const float DialogPadRef = RegionGapRef;
+        /// <summary>Float footer / chrome L/R (matches band).</summary>
+        public const float FloatChromePadHRef = ControlGapRef;
+        /// <summary>Float footer / chrome T/B — tighter than L/R so bar stays Fitts-short.</summary>
+        public const float FloatChromePadVRef = TightGapRef;
         /// <summary>Rounded-corner radius for gallery buttons + their hover border, as a fraction of the
         /// control's shorter side (0..0.5). Default when no user override is stored in VPB.cfg.
         /// Live value comes from <see cref="VPBConfig.GalleryElementCornerRadiusFraction"/> /
@@ -38,7 +76,7 @@ namespace VPB
         public const float ButtonCornerRadiusFraction = 0.22f;
 
         // Title bar
-        public const float TitleBarHeightRef = 48f;
+        public const float TitleBarHeightRef = ButtonSizeRef + BandPadVRef * 2f;
         public const float TitleBarChipRef = ButtonSizeRef;
         public const float TitleBarCategoryRowHeightRef = 36f;
         public const float TitleBarTitleLeftInsetRef = 60f;
@@ -64,42 +102,43 @@ namespace VPB
         public const float SearchFieldHeightRef = 35f;
         public const int SearchFieldFontRef = FontRef;
         public const float SearchIconSizeRef = 24f;
-        public const float SearchIconLeftPadRef = 6f;
-        public const float SearchTextLeftInsetRef = 38f;
+        public const float SearchIconLeftPadRef = TightGapRef;
+        /// <summary>TextArea left = icon pad + glyph + control gap (clears glass).</summary>
+        public const float SearchTextLeftInsetRef = SearchIconLeftPadRef + SearchIconSizeRef + ControlGapRef;
         public const float SearchClearBtnSizeRef = ButtonSizeRef;
         public const float SearchTextRightInsetRef = SearchClearBtnSizeRef;
         public const int SearchClearFontRef = FontRef;
         public const float SearchClearBtnRightInsetRef = 0f;
-        public const float SearchIconButtonPadRef = 4f;
+        public const float SearchIconButtonPadRef = TightGapRef;
         /// <summary>Pad around float chrome search rows (settings / filter presets).</summary>
-        public const float FloatSearchRowPadRef = 6f;
+        public const float FloatSearchRowPadRef = BandPadRef;
         /// <summary>Title-adjacent search row height (field + pad). Shared by settings + presets.</summary>
         public const float FloatSearchRowHeightRef = SearchFieldHeightRef + FloatSearchRowPadRef * 2f;
         /// <summary>Window-type glyph in float title bars (settings gear, tags, filter, import).</summary>
         public const float FloatTitleWindowIconSizeRef = 22f;
         /// <summary>Space after window icon before title label (design px at scale 1).</summary>
-        public const float FloatTitleWindowIconGapRef = 6f;
+        public const float FloatTitleWindowIconGapRef = TightGapRef;
         /// <summary>Float title bar L/R pad — keep icon near left (grip + this).</summary>
-        public const float FloatTitleBarPadHRef = 4f;
+        public const float FloatTitleBarPadHRef = TightGapRef;
         /// <summary>Float title bar T/B pad.</summary>
-        public const float FloatTitleBarPadVRef = 4f;
+        public const float FloatTitleBarPadVRef = TightGapRef;
         /// <summary>HLG spacing between grip · icon · title · chrome.</summary>
-        public const float FloatTitleBarSpacingRef = 2f;
+        public const float FloatTitleBarSpacingRef = HairGapRef;
         /// <summary>Drag-grip column width before window icon.</summary>
         public const float FloatTitleGripWidthRef = 12f;
         /// <summary>Pad inside float title/footer chrome icon buttons (collapse / close / resize).</summary>
-        public const float FloatChromeIconPadRef = 5f;
+        public const float FloatChromeIconPadRef = TightGapRef;
         /// <summary>Pad inside tree-row expand chevron wells (Plugins / Strip Keep).</summary>
-        public const float TreeRowExpandIconPadRef = 6f;
+        public const float TreeRowExpandIconPadRef = TightGapRef;
 
         // Resize handles — sized/positioned like the corner-most bar button (40px, seated in the bar).
-        // Horizontal centre inset = EdgeMargin + half button (mirrors the footer's 10px right padding).
+        // Horizontal centre inset = EdgeMargin + half button (mirrors float footer L/R pad).
         // Vertical centre inset = the bar's half-height so the handle lines up with the bar buttons.
         public const float ResizeHandleFixedHitRef = 40f;
         public const float ResizeHandleCornerHitRef = 40f;
-        public const float ResizeHandleEdgeMarginRef = 10f;     // horizontal gap from the panel side
-        public const float ResizeHandleFooterCenterYRef = 20f;  // footer bar half-height (bottom corners)
-        public const float ResizeHandleTitleCenterYRef = 24f;   // title bar half-height (top corners)
+        public const float ResizeHandleEdgeMarginRef = ControlGapRef;
+        public const float ResizeHandleFooterCenterYRef = FooterBarHeightRef * 0.5f;
+        public const float ResizeHandleTitleCenterYRef = TitleBarHeightRef * 0.5f;
         public const float ResizeHandleLegacyHitRef = 30f;
 
         // Footer perf controls
@@ -108,27 +147,26 @@ namespace VPB
 
         // Side tab column
         public const float SideTabColumnWidthRef = 220f;
-        public const float SideTabSideMarginRef = 10f;
-        public const float SideTabOpenGridInsetRef = 230f;
+        public const float SideTabSideMarginRef = BandPadRef;
+        public const float SideTabOpenGridInsetRef = SideTabColumnWidthRef + BandPadRef * 2f;
         public const float SideTabClosedGridInsetRef = 0f;
         public const float SideTabRowHeightRef = ButtonSizeRef;
         /// <summary>
         /// Creator list ★ badge — inset inside <see cref="SideTabRowHeightRef"/> so hover rim
         /// stays smaller than the row inward outline (badge was full row tall + outward rim).
         /// </summary>
-        public const float CreatorRatingBadgeSizeRef = ButtonSizeRef - 8f;
-        public const float SideTabControlGapRef = 5f;
+        public const float CreatorRatingBadgeSizeRef = ButtonSizeRef - ControlGapRef;
+        public const float SideTabControlGapRef = ControlGapRef;
         public const float SideTabRefreshBtnWidthRef = ButtonSizeRef;
-        /// <summary>Sort column + left margin reserved from tab width for main side search (10 + 35).</summary>
-        public const float SideTabMainSearchSortReserveRef = 45f;
-        public const float SideTabRowSpacingRef = 4f;
+        public const float SideTabMainSearchSortReserveRef =
+            BandPadRef + SideTabRowHeightRef + ControlGapRef + BandPadRef;
+        public const float SideTabRowSpacingRef = ControlRowGapRef;
         /// <summary>Left inset for facet rows nested under the selected category (accordion).</summary>
-        public const float SideTabAccordionIndentRef = 16f;
-        /// <summary>Gap below sort+search row before tab list; matches collapse-header gap (4px).</summary>
-        public const float SideTabFilterRowBottomGapRef = SideTabRowSpacingRef;
+        public const float SideTabAccordionIndentRef = RegionGapRef;
+        public const float SideTabFilterRowBottomGapRef = 0f;
         /// <summary>Gap below split seam before lower-pane sort+search row.</summary>
-        public const float SideTabSubFilterRowTopGapRef = 10f;
-        public const float SideTabRowPadRef = 5f;
+        public const float SideTabSubFilterRowTopGapRef = BandPadRef;
+        public const float SideTabRowPadRef = BandPadRef;
         public const float SideTabScrollBarWidthRef = 15f;
         public const int TabButtonFontRef = FontRef;
         public const int TabButtonFontMin = FontMinRef;
@@ -136,12 +174,12 @@ namespace VPB
         public const float TabButtonPreferredWidthRef = 170f;
 
         // Footer / filter chrome
-        public const float FooterBarHeightRef = 44f;
-        public const float FooterInfoRowHeightRef = 36f;
-        public const float FooterToolboxTopRef = 80f;
+        public const float FooterBarHeightRef = ButtonSizeRef + BandPadVRef * 2f;
+        public const float FooterInfoRowHeightRef = ControlSlotHeightRef;
+        public const float FooterToolboxTopRef = FooterBarHeightRef + FooterInfoRowHeightRef;
         /// <summary>Near-grid sticky mode / apply-semantics banner (below filter chips).</summary>
         public const float ModeSemanticsBannerHeightRef = 34f;
-        public const float ModeSemanticsBannerGapRef = 4f;
+        public const float ModeSemanticsBannerGapRef = TightGapRef;
         /// <summary>
         /// Context Bar: ActiveFilterChipBar hard-caps to this many wrap rows.
         /// Extra filters go to +N overflow (never grow grid inset).
@@ -162,13 +200,13 @@ namespace VPB
         /// <summary>Hit pad for actions/meta — above line height, below full button (dense strip).</summary>
         public const float FooterDetailStripHitHeightRef = 22f;
         /// <summary>Equal gap between detail-strip text bands (title / meta / actions / flex lines).</summary>
-        public const float FooterDetailStripBandGapRef = 1f;
+        public const float FooterDetailStripBandGapRef = HairGapRef;
         /// <summary>Detail-strip thumb edge cap (square); must stay ≥ strip max so preview stays flush.</summary>
         public const float FooterDetailStripThumbMaxRef = FooterDetailStripHeightRef;
         /// <summary>Prev/next overlay on thumb — same size as gallery chrome buttons.</summary>
         public const float FooterDetailStripThumbNavBtnRef = ButtonSizeRef;
         /// <summary>Edge inset for thumb nav overlay buttons (design px at scale 1).</summary>
-        public const float FooterDetailStripThumbNavInsetRef = 4f;
+        public const float FooterDetailStripThumbNavInsetRef = TightGapRef;
         /// <summary>Scrub index chip height on thumb (n/N) — match button chrome.</summary>
         public const float FooterDetailStripThumbScrubIndexHRef = ButtonSizeRef;
         /// <summary>Top drag grip hit height (sits above strip content, not over it).</summary>
@@ -202,9 +240,9 @@ namespace VPB
         /// <summary>Max wrapped lines for native tags under description scroll.</summary>
         public const int FooterDetailStripSideTagsMaxLines = 2;
         public const float FilterChipRowHeightRef = ButtonSizeRef;
-        public const float FilterChipRowMarginRef = 6f;
-        public const float FilterChipDismissSizeRef = ButtonSizeRef - 4f;
-        public const float FilterChipLabelDismissGapRef = 6f;
+        public const float FilterChipRowMarginRef = TightGapRef;
+        public const float FilterChipDismissSizeRef = ButtonSizeRef - TightGapRef;
+        public const float FilterChipLabelDismissGapRef = TightGapRef;
 
         // Side rail buttons (settings, follow, save, etc.)
         public const float SideButtonWidthRef = 120f;
@@ -212,15 +250,15 @@ namespace VPB
         public const float SideButtonSquareRef = ButtonSizeRef;
         public const float SideButtonContainerWidthRef = 130f;
         public const float SideButtonContainerOffsetRef = 140f;
-        public const float SideButtonSpacingRef = 38f;
+        public const float SideButtonSpacingRef = ButtonSizeRef + TightGapRef;
         /// <summary>Extra gap between Layout / Browse / Tools rail zones when EnableButtonGaps is on.</summary>
-        public const float SideButtonGroupGapRef = 12f;
+        public const float SideButtonGroupGapRef = GroupGapRef;
         /// <summary>gapTier multiplier at zone starts in <c>GetSideButtonsLayout</c>.</summary>
         public const int SideButtonZoneGapTier = 2;
         public const float SideButtonZoneSepHeightRef = 1f;
         public const float SideButtonZoneSepWidthRef = 20f;
         public const float SideButtonSubmenuWidthFactorRef = 1.6f;
-        public const float SideButtonEdgeInsetRef = 6f;
+        public const float SideButtonEdgeInsetRef = TightGapRef;
         public const int SideButtonFontRef = FontRef;
         public const int SideButtonFontMin = FontMinRef;
         public const int SideButtonSubmenuFontRef = FontRef;
@@ -260,16 +298,16 @@ namespace VPB
 
         // Import sidebar (matches side tab column family)
         public const float ImportSidebarWidthRef = 220f;
-        public const float ImportSidebarHeaderHeightRef = 32f;
+        public const float ImportSidebarHeaderHeightRef = ControlSlotHeightRef;
         public const float ImportSidebarApplyHeightRef = ButtonSizeRef;
         /// <summary>Pinned reason line above Apply when import is blocked.</summary>
         public const float ImportSidebarApplyReasonHeightRef = 18f;
-        public const float ImportSidebarSideMarginRef = 10f;
+        public const float ImportSidebarSideMarginRef = BandPadRef;
         public const float ImportSidebarTopRowRef = 65f;
         public const float ImportSidebarScrollBarWidthRef = 10f;
         public const float ImportSidebarInnerPadHRef = SideTabRowPadRef;
         public const float ImportSidebarLabelPadLeftRef = ImportSidebarInnerPadHRef + 8f;
-        public const float ImportSidebarLabelPadRightRef = 4f;
+        public const float ImportSidebarLabelPadRightRef = TightGapRef;
         public const float ImportSidebarHeaderGapRef = SideTabRowSpacingRef;
         public const float ImportSidebarRowSpacingRef = SideTabRowSpacingRef;
         public const float ImportSidebarRowHeightRef = ButtonSizeRef;
@@ -287,14 +325,14 @@ namespace VPB
         public const float ImportSidebarFloatAbsoluteMaxWidthRef = 4000f;
         public const float ImportSidebarFloatAbsoluteMaxHeightRef = 4000f;
         /// <summary>Inset from float host edges when computing max size.</summary>
-        public const float ImportSidebarFloatHostMarginRef = 24f;
+        public const float ImportSidebarFloatHostMarginRef = SectionGapRef;
 
         // In-app help panel
         public const float InAppHelpPanelWidthRef = 460f;
         public const float InAppHelpHeaderHeightRef = 44f;
         public const float InAppHelpSearchHeightRef = 40f;
         public const float InAppHelpNavBtnHeightRef = ButtonSizeRef;
-        public const float InAppHelpBodyLineSpacingRef = 3f;
+        public const float InAppHelpBodyLineSpacingRef = HairGapRef;
         public const float InAppHelpIconPreviewDockSizeRef = 82f;
         public const float InAppHelpIconPreviewGlyphSizeRef = 64f;
         public const float InAppHelpScaleFloor = 0.85f;
@@ -306,17 +344,17 @@ namespace VPB
         public const int InAppHelpBodyFontMin = FontMinRef;
 
         // Popup / dropdown menus
-        public const float PopupMenuPaddingRef = 6f;
-        public const float PopupMenuRowSpacingRef = 4f;
-        public const float PopupMenuRowHeightRef = ButtonSizeRef;
+        public const float PopupMenuPaddingRef = BandPadRef;
+        public const float PopupMenuRowSpacingRef = ControlRowGapRef;
+        public const float PopupMenuRowHeightRef = ControlSlotHeightRef;
         public const float PopupMenuRowHeightCompactRef = ButtonSizeRef;
-        public const float PopupMenuRowTextPadXRef = 10f;
+        public const float PopupMenuRowTextPadXRef = ControlGapRef;
         public const float PopupMenuRowIconSizeRef = 22f;
-        public const float PopupMenuRowIconGapRef = 8f;
+        public const float PopupMenuRowIconGapRef = ControlGapRef;
         public const int PopupMenuRowFontRef = FontBodyRef;
         public const int PopupMenuRowFontLargeRef = FontTitleRef;
         public const int PopupMenuOverflowFontRef = FontBodyRef;
-        public const float PopupMenuAnchorGapRef = 2f;
+        public const float PopupMenuAnchorGapRef = HairGapRef;
         public const float PopupMenuPanelWidthRef = 230f;
         /// <summary>Filter-presets dropdown: search + Float chip + sort need wider panel than plain popup rows.</summary>
         public const float QuickFiltersPanelWidthRef = 300f;
@@ -348,9 +386,9 @@ namespace VPB
         public const float QuickFiltersFloatMaxWidthRef = 640f;
         public const float QuickFiltersFloatMaxHeightRef = 900f;
         /// <summary>Fits <see cref="ButtonSizeRef"/> collapse/close chips + pad (Jakob with gallery chrome).</summary>
-        public const float QuickFiltersTitleBarHeightRef = ButtonSizeRef + 8f;
+        public const float QuickFiltersTitleBarHeightRef = ButtonSizeRef + ControlGapRef;
         /// <summary>Float footer: undo/redo + resize grip row (merge lives on actions row).</summary>
-        public const float QuickFiltersFooterHeightRef = ButtonSizeRef + 8f;
+        public const float QuickFiltersFooterHeightRef = ButtonSizeRef + ControlGapRef;
         /// <summary>Max leaf presets selectable when merging into one multi-random preset.</summary>
         public const int QuickFiltersMergeMaxMembers = 6;
         /// <summary>Settings floating window defaults / clamps (design px at scale 1). Wider default fits category sidebar + rows.</summary>
@@ -391,11 +429,11 @@ namespace VPB
         public const float PluginsFloatMaxHeightRef = 1100f;
         public const float PluginsFloatRowHeightRef = 36f;
         public const float PluginsFloatExpandWidthRef = PluginsFloatRowHeightRef;
-        public const float PluginsFloatChildIndentRef = 14f;
+        public const float PluginsFloatChildIndentRef = GroupGapRef;
         /// <summary>Fixed version column width (vN) — recognition over recall.</summary>
         public const float PluginsFloatVersionWidthRef = 44f;
         /// <summary>Gap between version label and ★ so digits do not crowd the star.</summary>
-        public const float PluginsFloatVersionStarGapRef = 10f;
+        public const float PluginsFloatVersionStarGapRef = ControlGapRef;
         /// <summary>Options strip under search (latest-version filter).</summary>
         /// <summary>Two filter toggles side-by-side under search.</summary>
         public const float PluginsFloatOptionsRowHeightRef = 30f;
@@ -436,7 +474,7 @@ namespace VPB
         // In-app help close (legacy name kept; sized with action buttons)
         public const float TboxPinBtnSizeRef = ButtonSizeRef;
         public const float InAppHelpCloseBtnSizeRef = ButtonSizeRef;
-        public const float InAppHelpCloseBtnRightInsetRef = 6f;
+        public const float InAppHelpCloseBtnRightInsetRef = TightGapRef;
         public const float InAppHelpCloseBtnLeftInsetRef = 40f;
 
         // Footer info / hover path tooltip row
@@ -449,14 +487,14 @@ namespace VPB
         // Content top reserve must equal the title bar height so grid/chips/side tabs clear it
         // exactly (no overlap, no gap) regardless of scale.
         public const float SideTabTopOffsetRef = TitleBarHeightRef;
-        public const float SideTabSplitSeamRef = 5f;
+        public const float SideTabSplitSeamRef = TightGapRef;
         /// <summary>Bottom sub-pane share in category split view (golden minor; top gets major remainder).</summary>
         public const float CategorySideSubPaneHeightFraction = GoldenRatioMinor;
         /// <summary>Min usable height for subcategory/tags pane when InfoBar grows.</summary>
         public const float SideTabSubPaneMinHeightRef = 110f;
         /// <summary>Min usable height for upper category pane when split is raised for tall InfoBar.</summary>
         public const float SideTabMainPaneMinHeightRef = 90f;
-        public const float SideTabScrollBottomPadRef = 8f;
+        public const float SideTabScrollBottomPadRef = BandPadRef;
         public const float GalleryMainBottomFallbackRef = 120f;
     }
 }

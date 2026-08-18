@@ -1013,7 +1013,7 @@ namespace VPB
             _footerLeftSectionRT = leftSection.AddComponent<RectTransform>();
             UI.AddLE(leftSection, flexibleWidth: 0f);
             
-            HorizontalLayoutGroup leftHLG = UI.AddHLG(leftSection, spacing: 10, childAlignment: TextAnchor.MiddleLeft, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
+            HorizontalLayoutGroup leftHLG = UI.AddHLG(leftSection, spacing: UI.GapControl(), childAlignment: TextAnchor.MiddleLeft, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
             {
                 var hlg = leftHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
@@ -1068,7 +1068,7 @@ namespace VPB
             _footerCenterSectionRT = centerSection.AddComponent<RectTransform>();
             UI.AddLE(centerSection, flexibleWidth: 1f);
             
-            _footerCenterHLG = UI.AddHLG(centerSection, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
+            _footerCenterHLG = UI.AddHLG(centerSection, spacing: UI.GapControl(), childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
             {
                 var hlg = _footerCenterHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
@@ -1083,7 +1083,7 @@ namespace VPB
                 _footerPerfGroupRT = perfGroup.AddComponent<RectTransform>();
                 _footerPerfGroupRT.anchorMin = _footerPerfGroupRT.anchorMax = new Vector2(0.5f, 0.5f);
                 _footerPerfGroupRT.pivot = new Vector2(0.5f, 0.5f);
-                HorizontalLayoutGroup perfHLG = UI.AddHLG(perfGroup, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
+                HorizontalLayoutGroup perfHLG = UI.AddHLG(perfGroup, spacing: UI.GapControl(), childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
                 ContentSizeFitter perfFit = perfGroup.AddComponent<ContentSizeFitter>();
                 perfFit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
                 perfFit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -1142,7 +1142,7 @@ namespace VPB
             _footerRightSectionRT = rightSection.AddComponent<RectTransform>();
             UI.AddLE(rightSection, flexibleWidth: 0f);
             
-            HorizontalLayoutGroup rightHLG = UI.AddHLG(rightSection, spacing: 10, childAlignment: TextAnchor.MiddleRight, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
+            HorizontalLayoutGroup rightHLG = UI.AddHLG(rightSection, spacing: UI.GapControl(), childAlignment: TextAnchor.MiddleRight, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
             {
                 var hlg = rightHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
@@ -1189,6 +1189,32 @@ namespace VPB
             }
             AddTooltip(footerHoldToLaunchToggleBtn, "gallery.tooltip.hold_to_launch_toggle", "Hold trigger/button on item to apply/launch. While ON, drag-drop is paused (same press). See Settings for duration.");
 
+            footerApplyModeBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef, " ", 20, 0, 0, AnchorPresets.middleCenter, ToggleApplyMode);
+            footerApplyModeBtn.name = "FooterApplyModeBtn";
+            footerApplyModeBtnImage = footerApplyModeBtn.GetComponent<Image>();
+            footerApplyModeBtnText = footerApplyModeBtn.GetComponentInChildren<Text>(true);
+            {
+                if (galleryApplyOneClickSprite == null)
+                    galleryApplyOneClickSprite = UI.LoadIconSprite("box-multiple-1", UI.BarIconGlyphTint);
+                if (galleryApplyTwoClickSprite == null)
+                    galleryApplyTwoClickSprite = UI.LoadIconSprite("box-multiple-2", UI.BarIconGlyphTint);
+                Sprite apInit = ItemApplyMode == ApplyMode.SingleClick
+                    ? (galleryApplyOneClickSprite ?? galleryApplyTwoClickSprite)
+                    : (galleryApplyTwoClickSprite ?? galleryApplyOneClickSprite);
+                Color apCol = ItemApplyMode == ApplyMode.SingleClick
+                    ? new Color(0.6f, 0.45f, 0.15f, 1f)
+                    : new Color(0.15f, 0.15f, 0.45f, 1f);
+                if (apInit != null)
+                {
+                    UI.AddIconToButton(footerApplyModeBtn, apInit, 4f, apCol);
+                    Transform iconT = footerApplyModeBtn.transform.Find("Icon");
+                    footerApplyModeBtnIconImage = iconT != null ? iconT.GetComponent<Image>() : null;
+                }
+                else if (footerApplyModeBtnImage != null)
+                    footerApplyModeBtnImage.color = apCol;
+            }
+            AddTooltip(footerApplyModeBtn, "gallery.tooltip.apply_mode", "Toggle 1-click vs 2-click apply.");
+
             footerLayoutBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"▤", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
             footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
@@ -1196,13 +1222,15 @@ namespace VPB
             footerLayoutListSprite = UI.LoadIconSprite("layout-list", UI.BarIconGlyphTint);
             { Sprite init = footerLayoutListSprite ?? footerLayoutGridSprite; if (init != null) { UI.AddIconToButton(footerLayoutBtn, init); footerLayoutIconImage = footerLayoutBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
-            footerDockBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"", 20, 0, 0, AnchorPresets.middleCenter, CycleDesktopFixedDockSide);
+            footerDockBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"", 20, 0, 0, AnchorPresets.middleCenter,
+                () => ToggleDockAnchorMenu(footerDockBtn, DockMenuPlacement.Above));
             footerDockBtnImage = footerDockBtn.GetComponent<Image>();
             footerDockRightSprite = UI.LoadIconSprite("box-align-right", UI.BarIconGlyphTint);
             footerDockLeftSprite  = UI.LoadIconSprite("box-align-left",  UI.BarIconGlyphTint);
             footerDockTopSprite   = UI.LoadIconSprite("box-align-top",   UI.BarIconGlyphTint);
             { Sprite init = footerDockRightSprite ?? footerDockLeftSprite ?? footerDockTopSprite; if (init != null) { UI.AddIconToButton(footerDockBtn, init); footerDockIconImage = footerDockBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
-            AddTooltipPlain(footerDockBtn, VPBTranslation.T("gallery.tooltip.dock_side", "Dock side (Left/Right/Top)"));
+            AddTooltipPlain(footerDockBtn, VPBTranslation.T("gallery.tooltip.dock_side",
+                "Dock this pane — or a clone of it — to the top or the opposite edge."));
 
             footerHeightBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"↕", 20, 0, 0, AnchorPresets.middleCenter, ToggleFixedHeightMode);
             footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
@@ -1238,6 +1266,7 @@ namespace VPB
             AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase columns (Ctrl+scroll wheel over gallery)");
             AddHoverDelegate(footerMenuGateBtn);
             AddHoverDelegate(footerHoldToLaunchToggleBtn);
+            AddHoverDelegate(footerApplyModeBtn);
             AddHoverDelegate(footerBackBtn);
             AddTooltip(footerBackBtn, "gallery.tooltip.filter_back", "Go back one filter level");
             AddHoverDelegate(footerClearFilterBtn);
@@ -1285,6 +1314,7 @@ namespace VPB
                 footerMenuGateBtn, footerWatchToggleBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerHoldToLaunchToggleBtn,
+                footerApplyModeBtn,
                 footerLayoutBtn, footerHeightBtn, footerAutoHideBtn, footerDockBtn,
                 _footerOverflowBtnGO,
             };
@@ -1869,8 +1899,8 @@ namespace VPB
 
             var imgGO = UI.CreateChildRT(hoverPreviewGO, "Image", AnchorPresets.stretchAll);
             var rt = imgGO.GetComponent<RectTransform>();
-            rt.offsetMin = new Vector2(4f, 4f);
-            rt.offsetMax = new Vector2(-4f, -4f);
+            rt.offsetMin = new Vector2(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef);
+            rt.offsetMax = new Vector2(-GalleryUiDesignTokens.TightGapRef, -GalleryUiDesignTokens.TightGapRef);
 
             hoverPreviewImage = imgGO.AddComponent<RawImage>();
             hoverPreviewImage.color = new Color(1f, 1f, 1f, 1f);
@@ -2381,7 +2411,7 @@ namespace VPB
         private void ToggleFixedHeightMode()
         {
             if (VPBConfig.Instance == null) return;
-            VPBConfig.Instance.DesktopFixedHeightMode = (VPBConfig.Instance.DesktopFixedHeightMode + 1) % 2;
+            DockHeightMode = (DockHeightMode + 1) % 2;
             VPBConfig.Instance.Save();
             UpdateFooterHeightState();
             InvalidateFooterOverflowLayout();
@@ -2395,12 +2425,14 @@ namespace VPB
             Color activeColor = UI.AccentBlue;
             Color inactiveColor = GalleryUiColorTokens.ChromeIconWell;
 
+            int heightMode = DockHeightMode;
+
             if (footerHeightBtnImage != null)
-                footerHeightBtnImage.color = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? activeColor : inactiveColor;
+                footerHeightBtnImage.color = heightMode > 0 ? activeColor : inactiveColor;
 
             if (footerHeightBtnText != null)
             {
-                switch(VPBConfig.Instance.DesktopFixedHeightMode)
+                switch(heightMode)
                 {
                     case 0: footerHeightBtnText.text = VPBTranslation.T("gallery.footer.height_h1", "H1"); break;
                     case 1: footerHeightBtnText.text = VPBTranslation.T("gallery.footer.height_hc", "HC"); break;
@@ -2409,7 +2441,7 @@ namespace VPB
 
             if (footerHeightIconImage != null)
             {
-                Sprite target = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? footerHeightFreeSprite : footerHeightFixedSprite;
+                Sprite target = heightMode > 0 ? footerHeightFreeSprite : footerHeightFixedSprite;
                 if (target != null) UI.SetIconSprite(footerHeightIconImage, target);
             }
 
@@ -2417,7 +2449,7 @@ namespace VPB
             {
                 var del = footerHeightBtn.GetComponent<UIHoverDelegate>();
                 if (del != null) del.OnHoverChange = null;
-                string modeText = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? "Toggle Adjustable Height Mode" : "Toggle Full Height Mode";
+                string modeText = heightMode > 0 ? "Toggle Adjustable Height Mode" : "Toggle Full Height Mode";
                 AddTooltipPlain(footerHeightBtn, modeText);
             }
         }
@@ -2436,7 +2468,7 @@ namespace VPB
         private void ToggleAutoHideMode()
         {
             if (VPBConfig.Instance == null) return;
-            VPBConfig.Instance.DesktopFixedAutoCollapse = !VPBConfig.Instance.DesktopFixedAutoCollapse;
+            DockAutoHide = !DockAutoHide;
             VPBConfig.Instance.Save();
             UpdateFooterAutoHideState();
             UpdateLayout();
@@ -2524,19 +2556,13 @@ namespace VPB
             offSprite = footerAutoHideOffSprite;
             onSprite = footerAutoHideOnSprite;
             if (VPBConfig.Instance == null) return;
-            string side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
-            try
-            {
-                if (VPBConfig.Instance.DesktopFixedEnforceDockSide)
-                    side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedEnforcedDockSide);
-            }
-            catch { }
-            if (string.Equals(side, "Left", StringComparison.OrdinalIgnoreCase))
+            GalleryDockSide side = EffectiveDockSide;
+            if (side == GalleryDockSide.Left)
             {
                 offSprite = footerAutoHideLeftOffSprite ?? offSprite;
                 onSprite = footerAutoHideLeftOnSprite ?? onSprite;
             }
-            else if (string.Equals(side, "Top", StringComparison.OrdinalIgnoreCase))
+            else if (side == GalleryDockSide.Top)
             {
                 offSprite = footerAutoHideTopOffSprite ?? offSprite;
                 onSprite = footerAutoHideTopOnSprite ?? onSprite;
@@ -2555,12 +2581,14 @@ namespace VPB
             Color activeColor = UI.AccentBlue;
             Color inactiveColor = GalleryUiColorTokens.ChromeIconWell;
 
+            bool autoHide = DockAutoHide;
+
             if (footerAutoHideBtnImage != null)
-                footerAutoHideBtnImage.color = VPBConfig.Instance.DesktopFixedAutoCollapse ? activeColor : inactiveColor;
+                footerAutoHideBtnImage.color = autoHide ? activeColor : inactiveColor;
 
             if (footerAutoHideBtnText != null)
             {
-                footerAutoHideBtnText.text = VPBConfig.Instance.DesktopFixedAutoCollapse
+                footerAutoHideBtnText.text = autoHide
                     ? VPBTranslation.T("gallery.footer.autohide_on", "AH")
                     : VPBTranslation.T("gallery.footer.autohide_off", "AO");
             }
@@ -2568,7 +2596,7 @@ namespace VPB
             if (footerAutoHideIconImage != null)
             {
                 GetFooterAutoHideSpritesForCurrentDock(out Sprite dockOff, out Sprite dockOn);
-                Sprite target = VPBConfig.Instance.DesktopFixedAutoCollapse ? dockOn : dockOff;
+                Sprite target = autoHide ? dockOn : dockOff;
                 if (target != null) UI.SetIconSprite(footerAutoHideIconImage, target);
             }
 
@@ -2578,7 +2606,7 @@ namespace VPB
                 if (del != null) del.OnHoverChange = null;
                 AddTooltipPlain(
                     footerAutoHideBtn,
-                    VPBConfig.Instance.DesktopFixedAutoCollapse
+                    autoHide
                         ? VPBTranslation.T(
                             "gallery.tooltip.autohide_enabled",
                             "Auto-Hide on — collapses when idle (pointer away, no text focus)")
@@ -2701,56 +2729,39 @@ namespace VPB
             del.OnPointerEnterEvent += pe;
         }
 
-        private void UpdateDesktopModeButton()
+        private void UpdateDockAnchorButton()
         {
             if (VPBConfig.Instance == null) return;
 
-            bool isVR = XrUtils.IsVrActive();
+            bool isVR = false;
+            try { isVR = XrUtils.IsVrActive(); } catch { }
 
             bool fixedMode = isFixedLocally;
-            string text = fixedMode
-                ? VPBTranslation.T("gallery.desktop.floating", "Floating")
-                : VPBTranslation.T("gallery.desktop.fixed", "Fixed");
-            Color color = fixedMode ? UI.AccentBlue : UI.ChromeDark;
-            Sprite deskSpr = fixedMode ? galleryFloatSprite : galleryFixedSprite;
+            bool canClone = Gallery.singleton != null && Gallery.singleton.PanelCount < Gallery.MaxPanels;
+            string text = isVR
+                ? VPBTranslation.T("gallery.side.clone", "Clone")
+                : VPBTranslation.T("gallery.side.dock_anchor", "Dock");
+            Color color = isVR
+                ? GalleryUiColorTokens.ChromeIconWell
+                : (fixedMode ? UI.AccentBlue : UI.ChromeDark);
+            Sprite deskSpr = isVR
+                ? (galleryCloneSprite ?? galleryDockAnchorSprite)
+                : galleryDockAnchorSprite;
+            string tipKey = isVR ? "gallery.tooltip.clone_pane" : "gallery.tooltip.dock_anchor";
+            string tipFallback = isVR
+                ? "Clone this gallery pane."
+                : "Dock this pane — or a clone of it — to an edge, or float it again.";
 
-            GameObject rightDeskGo = rightDesktopModeBtnImage != null ? rightDesktopModeBtnImage.gameObject : null;
-            if (rightDeskGo != null) rightDeskGo.SetActive(!isVR);
-
-            if (rightDesktopModeBtnIconImage != null && deskSpr != null)
-            {
-                UI.SetIconSprite(rightDesktopModeBtnIconImage, deskSpr);
-                rightDesktopModeBtnIconImage.enabled = true;
-                if (rightDesktopModeBtnText != null) rightDesktopModeBtnText.gameObject.SetActive(false);
-            }
-            else if (rightDesktopModeBtnText != null)
-            {
-                rightDesktopModeBtnText.gameObject.SetActive(true);
-                rightDesktopModeBtnText.text = text;
-            }
-
-            if (rightDesktopModeBtnImage != null) rightDesktopModeBtnImage.color = color;
-
-            GameObject leftDeskGo = leftDesktopModeBtnImage != null ? leftDesktopModeBtnImage.gameObject : null;
-            if (leftDeskGo != null) leftDeskGo.SetActive(!isVR);
-
-            if (leftDesktopModeBtnIconImage != null && deskSpr != null)
-            {
-                UI.SetIconSprite(leftDesktopModeBtnIconImage, deskSpr);
-                leftDesktopModeBtnIconImage.enabled = true;
-                if (leftDesktopModeBtnText != null) leftDesktopModeBtnText.gameObject.SetActive(false);
-            }
-            else if (leftDesktopModeBtnText != null)
-            {
-                leftDesktopModeBtnText.gameObject.SetActive(true);
-                leftDesktopModeBtnText.text = text;
-            }
-
-            if (leftDesktopModeBtnImage != null) leftDesktopModeBtnImage.color = color;
+            ApplyDockAnchorButtonVisual(
+                rightDockAnchorBtnImage, rightDockAnchorBtnIconImage, rightDockAnchorBtnText,
+                deskSpr, text, color, isVR, canClone, tipKey, tipFallback);
+            ApplyDockAnchorButtonVisual(
+                leftDockAnchorBtnImage, leftDockAnchorBtnIconImage, leftDockAnchorBtnText,
+                deskSpr, text, color, isVR, canClone, tipKey, tipFallback);
 
             ApplyFooterModeButtonVisibility();
 
-            SyncSideFollowRailButtonsVisibility();
+            SyncTitleFollowButtonVisibility();
 
             UpdateSideButtonPositions();
             UpdateFooterDockButtonState();
@@ -2758,46 +2769,61 @@ namespace VPB
             try { UpdateFooterVrWatchState(); } catch { }
         }
 
+        private void ApplyDockAnchorButtonVisual(
+            Image img, Image icon, Text label,
+            Sprite spr, string text, Color color,
+            bool isVR, bool canClone, string tipKey, string tipFallback)
+        {
+            if (img == null) return;
+            GameObject go = img.gameObject;
+            if (!go.activeSelf) go.SetActive(true);
+
+            if (icon != null && spr != null)
+            {
+                UI.SetIconSprite(icon, spr);
+                icon.enabled = true;
+                if (label != null) label.gameObject.SetActive(false);
+            }
+            else if (label != null)
+            {
+                label.gameObject.SetActive(true);
+                label.text = text;
+            }
+
+            img.color = color;
+            Button b = img.GetComponent<Button>();
+            if (b != null) b.interactable = !isVR || canClone;
+            try { AddTooltip(go, tipKey, tipFallback); } catch { }
+        }
+
         private void UpdateFooterDockButtonState()
         {
             if (footerDockIconImage == null || VPBConfig.Instance == null) return;
-            string side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
-            try
-            {
-                if (VPBConfig.Instance.DesktopFixedEnforceDockSide)
-                    side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedEnforcedDockSide);
-            }
-            catch { }
+            GalleryDockSide side = EffectiveDockSide;
             Sprite spr = footerDockRightSprite;
-            if (string.Equals(side, "Left", StringComparison.OrdinalIgnoreCase)) spr = footerDockLeftSprite;
-            else if (string.Equals(side, "Top", StringComparison.OrdinalIgnoreCase)) spr = footerDockTopSprite;
+            if (side == GalleryDockSide.Left) spr = footerDockLeftSprite;
+            else if (side == GalleryDockSide.Top) spr = footerDockTopSprite;
             if (spr != null) UI.SetIconSprite(footerDockIconImage, spr);
         }
 
-        /// <summary>Camera-follow is only meaningful when the panel is not fixed; hide side-rail follow controls in fixed mode.</summary>
+        /// <summary>Camera-follow lives on the facet rail; hide while docked. Title Follow is a duplicate — keep off.</summary>
+        private void SyncTitleFollowButtonVisibility()
+        {
+            bool showRail = !isFixedLocally;
+            if (rightFollowBtnImage != null && rightFollowBtnImage.gameObject.activeSelf != showRail)
+                rightFollowBtnImage.gameObject.SetActive(showRail);
+            if (leftFollowBtnImage != null && leftFollowBtnImage.gameObject.activeSelf != showRail)
+                leftFollowBtnImage.gameObject.SetActive(showRail);
+            if (_titleBarFollowBtnGO != null && _titleBarFollowBtnGO.activeSelf)
+            {
+                _titleBarFollowBtnGO.SetActive(false);
+                _titleBarLayoutLastScale = float.NaN;
+            }
+        }
+
         private void SyncSideFollowRailButtonsVisibility()
         {
-            bool show = !isFixedLocally;
-            if (show && _sideRailOverflowCollapsedIdx != null && _sideRailOverflowCollapsedIdx.Count > 0)
-            {
-                // Keep hidden if height-fit overflow already ate this slot.
-                int followIdx = -1;
-                try
-                {
-                    List<RectTransform> refList = rightSideButtons != null && rightSideButtons.Count > 0 ? rightSideButtons : leftSideButtons;
-                    if (refList != null)
-                    {
-                        Text ft = rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText;
-                        if (ft != null)
-                            followIdx = refList.FindIndex(rt => rt != null && rt.GetComponentInChildren<Text>(true) == ft);
-                    }
-                }
-                catch { }
-                if (followIdx >= 0 && _sideRailOverflowCollapsedIdx.Contains(followIdx))
-                    show = false;
-            }
-            if (rightFollowBtnImage != null) rightFollowBtnImage.gameObject.SetActive(show);
-            if (leftFollowBtnImage != null) leftFollowBtnImage.gameObject.SetActive(show);
+            SyncTitleFollowButtonVisibility();
         }
 
         private void PopulateClothingSubmenuButtons(Atom target)
@@ -2859,16 +2885,6 @@ namespace VPB
             UpdateTabs();
         }
 
-        private bool RemoveContextRowUsesIcon(GameObject btn)
-        {
-            if (btn == null) return false;
-            if (btn == rightRemoveAllClothingBtn && rightRemoveAllClothingBtnIconImage != null) return true;
-            if (btn == leftRemoveAllClothingBtn && leftRemoveAllClothingBtnIconImage != null) return true;
-            if (btn == rightRemoveAllHairBtn && rightRemoveAllHairBtnIconImage != null) return true;
-            if (btn == leftRemoveAllHairBtn && leftRemoveAllHairBtnIconImage != null) return true;
-            return false;
-        }
-
         private void UpdateRemoveButtonLabels(GameObject leftBtn, GameObject rightBtn, string baseLabel, int optionCount)
         {
             try
@@ -2876,12 +2892,12 @@ namespace VPB
                 bool hasOptions = optionCount > 0;
                 string suffix = hasOptions ? (" (" + optionCount.ToString() + ")") : "";
 
-                if (leftBtn != null && !RemoveContextRowUsesIcon(leftBtn))
+                if (leftBtn != null)
                 {
                     Text t = leftBtn.GetComponentInChildren<Text>();
                     if (t != null) t.text = hasOptions ? ("< " + baseLabel + suffix) : baseLabel;
                 }
-                if (rightBtn != null && !RemoveContextRowUsesIcon(rightBtn))
+                if (rightBtn != null)
                 {
                     Text t = rightBtn.GetComponentInChildren<Text>();
                     if (t != null) t.text = hasOptions ? (baseLabel + " >" + suffix) : baseLabel;
@@ -2892,7 +2908,7 @@ namespace VPB
 
         private void UpdateRemoveClothingButtonLabels(int optionCount)
         {
-            UpdateRemoveButtonLabels(leftRemoveAllClothingBtn, rightRemoveAllClothingBtn, "Unequip\nClothing", optionCount);
+            UpdateRemoveButtonLabels(null, null, "Unequip\nClothing", optionCount);
         }
 
         private void ApplyClothingPreview(Atom target, string itemUid)
@@ -3069,96 +3085,25 @@ namespace VPB
             previewRemoveClothingAllPrevVals.Clear();
         }
 
-        private void ToggleDesktopMode()
-        {
-            ToggleDesktopModeWithDockHint(null);
-        }
-
-        private void ToggleDesktopModeWithDockHint(string dockSideOrNull)
+        /// <summary>
+        /// Releases this pane's edge and returns it to floating. <see cref="VPBConfig.DesktopFixedMode"/>
+        /// tracks whether ANY pane is still docked, not just this one.
+        /// </summary>
+        internal void FloatPaneFromDock()
         {
             if (VPBConfig.Instance == null) return;
+            if (!isFixedLocally) return;
 
-            bool isVR = XrUtils.IsVrActive();
-            if (isVR)
-            {
-                if (isFixedLocally) SetFixedLocally(false);
-                return;
-            }
-
-            // Fixed/Floating button must be a pure toggle.
-            // Dock side switching handled by footer dock toggle + settings enforcement, not by which side rail was clicked.
-            if (isFixedLocally)
-            {
-                isFixedLocally = false;
-                VPBConfig.Instance.DesktopFixedMode = false;
-                VPBConfig.Instance.Save();
-                UpdateDesktopModeButton();
-                try { UpdateSpringScrollButtonToggleUI(); } catch { }
-                InvalidateFooterOverflowLayout();
-                MarkGalleryPaneChromeDirty();
-                UpdateLayout();
-                try { SyncCategoryQuickSwitchChrome(); } catch { }
-                return;
-            }
-
-            string hint = dockSideOrNull;
-            if (!string.IsNullOrEmpty(hint))
-                hint = VPBConfig.NormalizeDesktopFixedDockSide(hint);
-
-            string desiredDock = null;
-            try
-            {
-                if (VPBConfig.Instance.DesktopFixedEnforceDockSide)
-                    desiredDock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedEnforcedDockSide);
-            }
-            catch { desiredDock = null; }
-            if (string.IsNullOrEmpty(desiredDock))
-            {
-                desiredDock = !string.IsNullOrEmpty(hint)
-                    ? hint
-                    : VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDefaultDockSide);
-            }
-
-            // Only one can be fixed. Revert others.
-            if (Gallery.singleton != null)
-            {
-                foreach (var p in Gallery.singleton.Panels)
-                {
-                    if (p != this) p.SetFixedLocally(false);
-                }
-            }
-            isFixedLocally = true;
-            VPBConfig.Instance.DesktopFixedMode = true;
-            VPBConfig.Instance.DesktopFixedDockSide = desiredDock;
-            
+            isFixedLocally = false;
+            try { ReleaseDockSide(); } catch { }
+            VPBConfig.Instance.DesktopFixedMode = GalleryDockLayout.OccupiedCount() > 0;
             VPBConfig.Instance.Save();
-            UpdateDesktopModeButton();
+            UpdateDockAnchorButton();
             try { UpdateSpringScrollButtonToggleUI(); } catch { }
             InvalidateFooterOverflowLayout();
             MarkGalleryPaneChromeDirty();
             UpdateLayout();
             try { SyncCategoryQuickSwitchChrome(); } catch { }
-        }
-
-        private void CycleDesktopFixedDockSide()
-        {
-            if (VPBConfig.Instance == null) return;
-            if (!isFixedLocally) return;
-            bool enforce = false;
-            try { enforce = VPBConfig.Instance.DesktopFixedEnforceDockSide; } catch { enforce = false; }
-            string cur = VPBConfig.NormalizeDesktopFixedDockSide(enforce ? VPBConfig.Instance.DesktopFixedEnforcedDockSide : VPBConfig.Instance.DesktopFixedDockSide);
-            string next = "Right";
-            if (string.Equals(cur, "Right", StringComparison.OrdinalIgnoreCase)) next = "Left";
-            else if (string.Equals(cur, "Left", StringComparison.OrdinalIgnoreCase)) next = "Top";
-            else if (string.Equals(cur, "Top", StringComparison.OrdinalIgnoreCase)) next = "Right";
-            if (enforce) VPBConfig.Instance.DesktopFixedEnforcedDockSide = next;
-            VPBConfig.Instance.DesktopFixedDockSide = next;
-            VPBConfig.Instance.Save(true, true);
-            UpdateFooterDockButtonState();
-            UpdateFooterAutoHideState();
-            InvalidateFooterOverflowLayout();
-            MarkGalleryPaneChromeDirty();
-            UpdateLayout();
         }
 
         public void SetFixedLocally(bool fixedMode)
@@ -3170,9 +3115,21 @@ namespace VPB
             }
 
             if (isFixedLocally == fixedMode) return;
+
+            if (fixedMode)
+            {
+                GalleryDockSide taken = GalleryDockSide.None;
+                try { taken = ClaimDockSide(ResolvePreferredDockSide(null)); } catch { }
+                if (taken == GalleryDockSide.None) return;
+            }
+            else
+            {
+                try { ReleaseDockSide(); } catch { }
+            }
+
             isFixedLocally = fixedMode;
             if (!fixedMode) SetCollapsed(false);
-            UpdateDesktopModeButton();
+            UpdateDockAnchorButton();
             try { UpdateSpringScrollButtonToggleUI(); } catch { }
             UpdateSideButtonsVisibility();
             InvalidateFooterOverflowLayout();
@@ -3203,6 +3160,17 @@ namespace VPB
             }
             isCollapsed = collapsed;
             collapseTimer = 0f;
+            try
+            {
+                GalleryDockSlot slot = GalleryDockLayout.Slot(DockSide);
+                if (slot != null && slot.Collapsed != collapsed)
+                {
+                    slot.Collapsed = collapsed;
+                    GalleryDockLayout.BumpVersion();
+                }
+                if (!collapsed) GalleryDockLayout.NotifyExpanded();
+            }
+            catch { }
             if (collapsed)
             {
                 try { HideHoverPreview(null); } catch { }
@@ -3220,10 +3188,10 @@ namespace VPB
                 Vector2 off = Vector2.zero;
                 if (collapsed && VPBConfig.Instance != null)
                 {
-                    string side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
-                    if (string.Equals(side, "Left", StringComparison.OrdinalIgnoreCase))
+                    GalleryDockSide side = EffectiveDockSide;
+                    if (side == GalleryDockSide.Left)
                         off = new Vector2(-rt.rect.width, 0f);
-                    else if (string.Equals(side, "Top", StringComparison.OrdinalIgnoreCase))
+                    else if (side == GalleryDockSide.Top)
                         off = new Vector2(0f, rt.rect.height);
                     else
                         off = new Vector2(rt.rect.width, 0f);
@@ -3766,31 +3734,18 @@ namespace VPB
                 ? (galleryApplyOneClickSprite ?? galleryApplyTwoClickSprite)
                 : (galleryApplyTwoClickSprite ?? galleryApplyOneClickSprite);
 
-            if (rightApplyModeBtnIconImage != null && modeSprite != null)
+            if (footerApplyModeBtnIconImage != null && modeSprite != null)
             {
-                if (rightApplyModeBtnText != null) rightApplyModeBtnText.gameObject.SetActive(false);
-                UI.SetIconSprite(rightApplyModeBtnIconImage, modeSprite);
-                rightApplyModeBtnIconImage.enabled = true;
+                if (footerApplyModeBtnText != null) footerApplyModeBtnText.gameObject.SetActive(false);
+                UI.SetIconSprite(footerApplyModeBtnIconImage, modeSprite);
+                footerApplyModeBtnIconImage.enabled = true;
             }
-            else if (rightApplyModeBtnText != null)
+            else if (footerApplyModeBtnText != null)
             {
-                rightApplyModeBtnText.gameObject.SetActive(true);
-                rightApplyModeBtnText.text = text;
+                footerApplyModeBtnText.gameObject.SetActive(true);
+                footerApplyModeBtnText.text = text;
             }
-            if (rightApplyModeBtnImage != null) rightApplyModeBtnImage.color = color;
-
-            if (leftApplyModeBtnIconImage != null && modeSprite != null)
-            {
-                if (leftApplyModeBtnText != null) leftApplyModeBtnText.gameObject.SetActive(false);
-                UI.SetIconSprite(leftApplyModeBtnIconImage, modeSprite);
-                leftApplyModeBtnIconImage.enabled = true;
-            }
-            else if (leftApplyModeBtnText != null)
-            {
-                leftApplyModeBtnText.gameObject.SetActive(true);
-                leftApplyModeBtnText.text = text;
-            }
-            if (leftApplyModeBtnImage != null) leftApplyModeBtnImage.color = color;
+            if (footerApplyModeBtnImage != null) footerApplyModeBtnImage.color = color;
 
             // Hold-to-launch overrides 1-click apply: disable the toggle button while hold mode is on.
             // Task chrome sticky suppress also locks the toggle (ApplyTaskChromeApplyHoldPolicy dims peers).
@@ -3799,12 +3754,11 @@ namespace VPB
             bool disableApplyToggle = holdToLaunchEnabled || stickySuppress;
             try
             {
-                if (rightApplyModeBtnImage != null)
+                if (footerApplyModeBtnImage != null)
                 {
-                    var b = rightApplyModeBtnImage.GetComponent<Button>();
+                    var b = footerApplyModeBtnImage.GetComponent<Button>();
                     if (b != null) b.interactable = !disableApplyToggle;
-                    if (disableApplyToggle) rightApplyModeBtnImage.color = new Color(0.25f, 0.25f, 0.25f, 0.9f);
-                    // Tooltip swap (best-effort)
+                    if (disableApplyToggle) footerApplyModeBtnImage.color = new Color(0.25f, 0.25f, 0.25f, 0.9f);
                     string tipKey = stickySuppress
                         ? "gallery.tooltip.apply_mode_disabled_sticky"
                         : (disableApplyToggle ? "gallery.tooltip.apply_mode_disabled_hold_to_launch" : "gallery.tooltip.apply_mode");
@@ -3813,22 +3767,7 @@ namespace VPB
                         : (disableApplyToggle
                             ? "Hold-launch ON — drag-drop paused. Turn Hold off to change 1-click/2-click and restore drag-drop."
                             : "Toggle 1-click vs 2-click apply.");
-                    AddTooltip(rightApplyModeBtnImage.gameObject, tipKey, tipFallback);
-                }
-                if (leftApplyModeBtnImage != null)
-                {
-                    var b = leftApplyModeBtnImage.GetComponent<Button>();
-                    if (b != null) b.interactable = !disableApplyToggle;
-                    if (disableApplyToggle) leftApplyModeBtnImage.color = new Color(0.25f, 0.25f, 0.25f, 0.9f);
-                    string tipKey = stickySuppress
-                        ? "gallery.tooltip.apply_mode_disabled_sticky"
-                        : (disableApplyToggle ? "gallery.tooltip.apply_mode_disabled_hold_to_launch" : "gallery.tooltip.apply_mode");
-                    string tipFallback = stickySuppress
-                        ? "Sticky tool active — Esc exits tool before changing apply mode."
-                        : (disableApplyToggle
-                            ? "Hold-launch ON — drag-drop paused. Turn Hold off to change 1-click/2-click and restore drag-drop."
-                            : "Toggle 1-click vs 2-click apply.");
-                    AddTooltip(leftApplyModeBtnImage.gameObject, tipKey, tipFallback);
+                    AddTooltip(footerApplyModeBtnImage.gameObject, tipKey, tipFallback);
                 }
             }
             catch { }

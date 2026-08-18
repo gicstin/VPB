@@ -502,6 +502,8 @@ namespace VPB
 
         private sealed class InternalSettingsSnapshot
         {
+            public float LayoutPresetRevertBarSeconds;
+            public bool LayoutPresetSuggestOnModeSwitch;
             public bool DisableGalleryTransparency;
             public bool DisableGalleryPaneTransparency;
             public bool DisableGalleryAssignableButtonsTransparency;
@@ -894,10 +896,10 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.showSideButtons", GroupKey = "visuals", Label = VPBTranslation.T("settings.show_side_buttons", "Show Side Buttons"),
-                Tooltip = VPBTranslation.T("settings.tip.show_side_buttons", "Choose which sides of the gallery show the action buttons."),
-                ControlType = InternalSettingControlType.Cycle, Options = new [] { "Both", "Left", "Right" },
-                GetString = () => VPBConfig.Instance.ShowSideButtons,
-                SetString = v => { VPBConfig.Instance.ShowSideButtons = v; VPBConfig.Instance.TriggerChange(); }
+                Tooltip = VPBTranslation.T("settings.tip.show_side_buttons", "Auto = one rail on the free edge (flip from title …). Left / Right / Both override."),
+                ControlType = InternalSettingControlType.Cycle, Options = new [] { "Auto", "Left", "Right", "Both" },
+                GetString = () => VPBConfig.NormalizeShowSideButtons(VPBConfig.Instance.ShowSideButtons),
+                SetString = v => { VPBConfig.Instance.ShowSideButtons = VPBConfig.NormalizeShowSideButtons(v); VPBConfig.Instance.TriggerChange(); }
             });
 
             defs.Add(new InternalSettingDefinition {
@@ -1019,6 +1021,39 @@ namespace VPB
                 },
                 Min = 0.1f, Max = 10f, Step = 0.1f, Decimals = 1,
                 RowVisible = () => VPBConfig.Instance != null && !VPBConfig.Instance.IsVR
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.layoutPresets", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.layout_preset.open", "Layout presets…"),
+                Tooltip = VPBTranslation.T("settings.tip.layout_preset.open",
+                    "Save and restore window arrangements: docked panes, floating panes, open float windows, category and filters. VR and desktop layouts are kept separate. Alt+L."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () => { ToggleLayoutPresetsFloat(); }
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.layoutRevertSeconds", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.layout_preset.revert_seconds", "Layout undo bar (s)"),
+                Tooltip = VPBTranslation.T("settings.tip.layout_preset.revert_seconds",
+                    "How long the Revert bar stays up after a layout is applied."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.LayoutPresetRevertBarSeconds,
+                SetFloat = v => {
+                    VPBConfig.Instance.LayoutPresetRevertBarSeconds = Mathf.Clamp(v, 2f, 30f);
+                    try { VPBConfig.Instance.Save(false, true); } catch { }
+                },
+                Min = 2f, Max = 30f, Step = 1f, Decimals = 0
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.layoutSuggestOnModeSwitch", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.layout_preset.suggest", "Offer layout on VR/desktop switch"),
+                Tooltip = VPBTranslation.T("settings.tip.layout_preset.suggest",
+                    "When the mode changes, offer that mode's startup layout instead of applying it silently."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.LayoutPresetSuggestOnModeSwitch,
+                SetBool = v => { VPBConfig.Instance.LayoutPresetSuggestOnModeSwitch = v; VPBConfig.Instance.TriggerChange(); }
             });
 
             defs.Add(new InternalSettingDefinition {
@@ -2181,6 +2216,8 @@ namespace VPB
                 GalleryScanWlTempBorderColorA = VPBConfig.Instance.GalleryScanWlTempBorderColorA,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
+                LayoutPresetRevertBarSeconds = VPBConfig.Instance.LayoutPresetRevertBarSeconds,
+                LayoutPresetSuggestOnModeSwitch = VPBConfig.Instance.LayoutPresetSuggestOnModeSwitch,
                 GalleryVrMenuAnchorTiltDeg = VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg),
                 GalleryCategoryQuickOrder = VPBConfig.Instance.GalleryCategoryQuickOrder ?? "",
                 GalleryCategoryQuickSwitchHidden = VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "",
@@ -2618,7 +2655,7 @@ namespace VPB
 
             GameObject controls = new GameObject("SettingsControlContainer");
             controls.transform.SetParent(detailsTr, false);
-            HorizontalLayoutGroup hlg = UI.AddHLG(controls, spacing: 6f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+            HorizontalLayoutGroup hlg = UI.AddHLG(controls, spacing: UI.GapTight(uiS), childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             LayoutElement cle = UI.AddLE(controls, minHeight: chipH, flexibleWidth: 1f);
 
             try
@@ -2773,7 +2810,7 @@ namespace VPB
                 GameObject stepperHost = new GameObject("SettingsValueStepper");
                 stepperHost.transform.SetParent(controls.transform, false);
                 // Gestalt: − field + read as one spin unit (Galitz spin + slider hybrid; Fitts square hits).
-                UI.AddHLG(stepperHost, spacing: 2f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+                UI.AddHLG(stepperHost, spacing: UI.GapHair(uiS), childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
                 float stepBtnW = GalleryUiDesignTokens.ButtonSizeRef;
                 float inputW = 78f;
                 UI.AddLE(
@@ -2881,7 +2918,7 @@ namespace VPB
                     cle.minHeight = 40f * uiS;
                     GameObject btnRow = new GameObject("SettingsTextAreaButtons");
                     btnRow.transform.SetParent(controls.transform, false);
-                    HorizontalLayoutGroup bh = UI.AddHLG(btnRow, spacing: 6f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+                    HorizontalLayoutGroup bh = UI.AddHLG(btnRow, spacing: UI.GapTight(uiS), childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
                     LayoutElement ble = UI.AddLE(btnRow, minHeight: chipH);
 
                     CreateMiniButton(btnRow.transform, "EDIT…", 96f, GalleryUiColorTokens.SurfaceMid, () =>
@@ -3140,6 +3177,8 @@ namespace VPB
             VPBConfig.Instance.GalleryScanWlTempBorderColorA = b.GalleryScanWlTempBorderColorA;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
+            VPBConfig.Instance.LayoutPresetRevertBarSeconds = b.LayoutPresetRevertBarSeconds;
+            VPBConfig.Instance.LayoutPresetSuggestOnModeSwitch = b.LayoutPresetSuggestOnModeSwitch;
             VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg = VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(b.GalleryVrMenuAnchorTiltDeg);
             VPBConfig.Instance.GalleryCategoryQuickOrder = b.GalleryCategoryQuickOrder ?? "";
             VPBConfig.Instance.GalleryCategoryQuickSwitchHidden = b.GalleryCategoryQuickSwitchHidden ?? "";

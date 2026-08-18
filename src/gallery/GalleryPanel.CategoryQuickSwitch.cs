@@ -102,7 +102,7 @@ namespace VPB
                     }
                     else
                     {
-                        hlg.padding = UI.Pad(6, 0, 0, 0);
+                        hlg.padding = UI.Pad(GalleryUiDesignTokens.TightGapRef, 0, 0, 0);
                         hlg.spacing = 6f;
                     }
                 }
@@ -171,7 +171,7 @@ namespace VPB
             headerBehaviour.Panel = this;
 
             // Small left inset so arrow never touches edge.
-            var hlg = UI.AddHLG(cqRoot, spacing: 6, padding: UI.Pad(6, 0, 0, 0), childForceExpandWidth: false, childForceExpandHeight: true);
+            var hlg = UI.AddHLG(cqRoot, spacing: UI.GapTight(), padding: UI.Pad(GalleryUiDesignTokens.TightGapRef, 0, 0, 0), childForceExpandWidth: false, childForceExpandHeight: true);
 
             // Chevron indicator, left of label (header only; not settings rows).
             {
@@ -285,8 +285,8 @@ namespace VPB
             var scrollRT = _categoryQuickMenuScrollGO.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
-            scrollRT.offsetMin = new Vector2(4, 4);
-            scrollRT.offsetMax = new Vector2(-4, -4);
+            scrollRT.offsetMin = new Vector2(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef);
+            scrollRT.offsetMax = new Vector2(-GalleryUiDesignTokens.TightGapRef, -GalleryUiDesignTokens.TightGapRef);
 
             var sr = _categoryQuickMenuScrollGO.GetComponent<ScrollRect>();
             if (sr != null)
@@ -348,7 +348,9 @@ namespace VPB
             _categoryQuickLayoutLastRowCount = rowCount;
             _categoryQuickLayoutLastCompact = _categoryQuickCompact;
 
-            float leftInset = flushLeft ? 0f : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * paneScale;
+            float leftInset = flushLeft
+                ? GalleryUiDesignTokens.BandPadRef * paneScale
+                : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * paneScale;
             // Same height as Source/settings chips so label cannot peek above neighbours.
             float catH = GalleryUiDesignTokens.TitleBarChipRef * paneScale;
             // Prefer labeled width (same as title-bar responsive), not ClampMax — Max made VR

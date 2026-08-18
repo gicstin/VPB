@@ -459,19 +459,6 @@ namespace VPB
         private GameObject footerRedoBtnGO;
         private GameObject footerCommandPaletteBtnGO;
 
-        private GameObject rightRemoveAllClothingBtn;
-        private Image rightRemoveAllClothingBtnIconImage;
-        private GameObject rightRemoveAllHairBtn;
-        private Image rightRemoveAllHairBtnIconImage;
-        private GameObject rightRemoveAtomBtn;
-        private Image rightRemoveAtomBtnIconImage;
-        private GameObject leftRemoveAllClothingBtn;
-        private Image leftRemoveAllClothingBtnIconImage;
-        private GameObject leftRemoveAllHairBtn;
-        private Image leftRemoveAllHairBtnIconImage;
-        private GameObject leftRemoveAtomBtn;
-        private Image leftRemoveAtomBtnIconImage;
-
         private GameObject clothingSlotPickerOverlayGO;
         private GameObject _confirmOverlayGO;
         private UnityAction _confirmOnConfirm;
@@ -1109,12 +1096,18 @@ namespace VPB
         private Text titleBarSettingsBtnText;
         private RectTransform _titleBarSettingsBtnRT;
         private RectTransform _titleBarQfToggleBtnRT;
+        private RectTransform _titleBarLayoutPresetsBtnRT;
         private RectTransform _titleBarFileSortTypeBtnRT;
         private RectTransform _titleBarFileSortDirBtnRT;
         private RectTransform _titleBarRatingSortToggleBtnRT;
         private RectTransform _titleBarRefreshBtnRT;
         private RectTransform _titleBarFpsRT;
         private RectTransform _titleBarHelpBtnRT;
+        private RectTransform _titleBarFollowBtnRT;
+        private GameObject _titleBarFollowBtnGO;
+        private Image _titleBarFollowBtnImage;
+        private Image _titleBarFollowBtnIconImage;
+        private Text _titleBarFollowBtnText;
         private RectTransform _titleBarMinimizeBtnRT;
         private RectTransform _titleBarCloseBtnRT;
 
@@ -1126,6 +1119,7 @@ namespace VPB
         private bool _titleBarLayoutLastCatShown;
         private bool _titleBarLayoutLastFlushLeft;
         private bool _titleBarLayoutLastHasSource;
+        private bool _titleBarLayoutLastFollowShown;
 
         // Fixed desktop dock "Top": side rail buttons live on footer bar.
         private GameObject _footerSideButtonsGroupGO;
@@ -1137,8 +1131,6 @@ namespace VPB
         private RectTransform _footerLeftSectionRT;
         private RectTransform _footerRightSectionRT;
         private bool _titleBarSideButtonsReparented;
-        private Text rightCloneBtnText;
-        private Text leftCloneBtnText;
 
         private Text rightFollowBtnText;
         private Image rightFollowBtnImage;
@@ -1217,7 +1209,7 @@ namespace VPB
         private RectTransform _collapseTriggerTopRT;
         private UIAnchorResizer _fixedBottomResizer;
         private UIAnchorResizer _fixedBottomRightResizer;
-        private string _fixedDockHandleIconKey;
+        private int _fixedDockHandleIconKey = int.MinValue;
         private GameObject footerBackBtn;
         private GameObject footerClearFilterBtn;
         private Text footerFilterModeText;
@@ -1274,19 +1266,44 @@ namespace VPB
         private GameObject footerHoldToLaunchToggleBtn;
         private Image footerHoldToLaunchToggleBtnImage;
         private Image footerHoldToLaunchToggleIconImage;
+        private GameObject footerApplyModeBtn;
+        private Image footerApplyModeBtnImage;
+        private Image footerApplyModeBtnIconImage;
+        private Text footerApplyModeBtnText;
         private Sprite footerHoldToLaunchOnSprite;
         private Sprite footerHoldToLaunchOffSprite;
+        /// <summary>
+        /// Per-pane grid column count. <see cref="VPBConfig.GridColumnCount"/> is last-used default for newly created panes.
+        /// Wheel/± must not write that default with ConfigChanged — every pane RebuildGridLayout would hitch.
+        /// </summary>
         public int GridColumnCount
         {
-            get { return VPBConfig.Instance != null ? VPBConfig.Instance.GridColumnCount : 4; }
-            set {
-                if (VPBConfig.Instance != null) {
-                    VPBConfig.Instance.GridColumnCount = value;
-                    try { VPBConfig.Instance.Save(true, true); } catch { }
-                }
+            get { return gridColumnCount; }
+            set
+            {
+                int v = value;
+                if (v < 1) v = 1;
+                else if (v > 12) v = 12;
+                if (gridColumnCount == v) return;
+                gridColumnCount = v;
+                PersistGridColumnCountDefault(v);
             }
         }
-        private int gridColumnCount = 4; // Legacy field for local caching during scroll if needed
+        private int gridColumnCount = 4;
+
+        private static void PersistGridColumnCountDefault(int cols)
+        {
+            VPBConfig cfg = VPBConfig.Instance;
+            if (cfg == null || cfg.GridColumnCount == cols) return;
+            cfg.GridColumnCount = cols;
+            try { cfg.Save(false, true); } catch { }
+        }
+
+        internal bool GridLabelsStripVisibleForThisPane()
+        {
+            VPBConfig cfg = VPBConfig.Instance;
+            return cfg != null && cfg.GalleryGridLabelsStripVisible(gridColumnCount);
+        }
 
         /// <summary>Row height for RecyclingGridView / list rows; settings UI uses session zoom only.</summary>
         private float EffectiveListRowHeightForGallery()
@@ -1347,25 +1364,18 @@ namespace VPB
                 }
             }
         }
-        private Text rightApplyModeBtnText;
-        private Image rightApplyModeBtnImage;
-        private Image rightApplyModeBtnIconImage;
-        private Text leftApplyModeBtnText;
-        private Image leftApplyModeBtnImage;
-        private Image leftApplyModeBtnIconImage;
 
-        private Text rightDesktopModeBtnText;
-        private Image rightDesktopModeBtnImage;
-        private Image rightDesktopModeBtnIconImage;
-        private Text leftDesktopModeBtnText;
-        private Image leftDesktopModeBtnImage;
-        private Image leftDesktopModeBtnIconImage;
+        private Text rightDockAnchorBtnText;
+        private Image rightDockAnchorBtnImage;
+        private Image rightDockAnchorBtnIconImage;
+        private Text leftDockAnchorBtnText;
+        private Image leftDockAnchorBtnImage;
+        private Image leftDockAnchorBtnIconImage;
 
-        /// <summary>First N entries in <see cref="rightSideButtons"/> / <see cref="leftSideButtons"/> are 50×50 icon buttons (desktop float/fixed, follow, clone).</summary>
-        internal const int GalleryLeadingIconButtonCount = 3;
+        /// <summary>First N entries in <see cref="rightSideButtons"/> / <see cref="leftSideButtons"/> are 50×50 icon buttons (dock, follow).</summary>
+        internal const int GalleryLeadingIconButtonCount = 2;
 
-        private Sprite galleryFloatSprite;
-        private Sprite galleryFixedSprite;
+        private Sprite galleryDockAnchorSprite;
         private Sprite galleryFollowOnSprite;
         private Sprite galleryFollowOffSprite;
         private Sprite galleryCloneSprite;
@@ -1387,8 +1397,6 @@ namespace VPB
 
         private Image rightFollowBtnIconImage;
         private Image leftFollowBtnIconImage;
-        private Image rightCloneBtnIconImage;
-        private Image leftCloneBtnIconImage;
         private Image rightSaveBtnIconImage;
         private Image leftSaveBtnIconImage;
 
@@ -1507,7 +1515,7 @@ namespace VPB
         internal const string PrimaryPanelId = "panel_0";
         private Coroutine _deferredCollapseLayoutCo;
 
-        private string PanelId
+        internal string PanelId
         {
             get
             {
@@ -1522,6 +1530,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(id)) return;
             _panelId = id;
+            InvalidateDockSideCache();
         }
 
         // Sorting
@@ -1580,6 +1589,8 @@ namespace VPB
         private string sidePaneSortMenuContext;
         private Text quickFiltersToggleBtnText; // NEW
         private Image quickFiltersToggleBtnIconImage;
+        private Text layoutPresetsToggleBtnText;
+        private Image layoutPresetsToggleBtnIconImage;
         private GameObject ratingSortToggleBtn;
         private Text ratingSortToggleBtnText;
         private Text titleBarRefreshBtnText;

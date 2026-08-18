@@ -215,6 +215,11 @@ namespace VPB
             public List<string> paths;
         }
 
+        internal void EnsureGalleryCategories()
+        {
+            if (!m_GalleryCatsInited) InitGalleryCategories();
+        }
+
         private void InitGalleryCategories()
         {
             if (Gallery.singleton == null) return;

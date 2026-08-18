@@ -138,7 +138,10 @@ namespace VPB
         public float GalleryElementCornerRadiusFraction = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
         /// <summary>When true (default), VR hover dwell shows a local tooltip label on controls.</summary>
         public bool VrHoverTooltipEnabled = true;
-        public string ShowSideButtons = "Both"; // "Both", "Left", "Right"
+        /// <summary>Which facet rails show: Auto (one free-edge rail), Left, Right, or Both.</summary>
+        public string ShowSideButtons = "Auto";
+        /// <summary>Last Auto-mode rail edge while floating ("Left" or "Right"). Docked panes ignore this.</summary>
+        public string LastGallerySideRailEdge = "Right";
         public string _followAngle = "Both"; // "Off", "Desktop", "VR", "Both"
         public string FollowAngle
         {
@@ -512,14 +515,39 @@ namespace VPB
         /// </summary>
         public string CreatorStripLastRecipeJson = "";
 
-        /// <summary>Strip keep floating panel position (canvas-local), when saved.</summary>
-        public bool CreatorStripPanelPosSaved = false;
-        public float CreatorStripPanelPosX = 0f;
-        public float CreatorStripPanelPosY = 0f;
-        /// <summary>Strip keep floating panel size at scale 1, when saved.</summary>
-        public bool CreatorStripPanelSizeSaved = false;
-        public float CreatorStripPanelWidthRef = 560f;
-        public float CreatorStripPanelHeightRef = 640f;
+        /// <summary>Strip keep floating panel geometry (canvas-local pos, size at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair CreatorStripPanelGeometry =
+            new FloatGeometryPair("CreatorStripPanel", 560f, 640f);
+        public bool CreatorStripPanelPosSaved
+        {
+            get { return CreatorStripPanelGeometry.Current.PosSaved; }
+            set { CreatorStripPanelGeometry.Current.PosSaved = value; }
+        }
+        public float CreatorStripPanelPosX
+        {
+            get { return CreatorStripPanelGeometry.Current.PosX; }
+            set { CreatorStripPanelGeometry.Current.PosX = value; }
+        }
+        public float CreatorStripPanelPosY
+        {
+            get { return CreatorStripPanelGeometry.Current.PosY; }
+            set { CreatorStripPanelGeometry.Current.PosY = value; }
+        }
+        public bool CreatorStripPanelSizeSaved
+        {
+            get { return CreatorStripPanelGeometry.Current.SizeSaved; }
+            set { CreatorStripPanelGeometry.Current.SizeSaved = value; }
+        }
+        public float CreatorStripPanelWidthRef
+        {
+            get { return CreatorStripPanelGeometry.Current.WidthRef; }
+            set { CreatorStripPanelGeometry.Current.WidthRef = value; }
+        }
+        public float CreatorStripPanelHeightRef
+        {
+            get { return CreatorStripPanelGeometry.Current.HeightRef; }
+            set { CreatorStripPanelGeometry.Current.HeightRef = value; }
+        }
 
         /// <summary>
         /// Strip Scene possessable policy (Session Plugins parity).
@@ -557,64 +585,247 @@ namespace VPB
         /// Clamped between FooterDetailStripMinHeightRef and FooterDetailStripHeightRef when applied.
         /// </summary>
         public float GalleryDetailStripHeightRef = 0f;
-        /// <summary>When true, restore last quick-tag popup anchored position (canvas-local).</summary>
-        public bool GalleryDetailStripTagMenuPosSaved = false;
-        public float GalleryDetailStripTagMenuPosX = 0f;
-        public float GalleryDetailStripTagMenuPosY = 0f;
-        /// <summary>When true, restore last quick-tag popup size (design px at scale 1).</summary>
-        public bool GalleryDetailStripTagMenuSizeSaved = false;
-        public float GalleryDetailStripTagMenuWidthRef = 0f;
-        public float GalleryDetailStripTagMenuHeightRef = 0f;
+        /// <summary>Quick-tag popup geometry (canvas-local pos, design px at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair GalleryDetailStripTagMenuGeometry =
+            new FloatGeometryPair("GalleryDetailStripTagMenu", 0f, 0f);
+        public bool GalleryDetailStripTagMenuPosSaved
+        {
+            get { return GalleryDetailStripTagMenuGeometry.Current.PosSaved; }
+            set { GalleryDetailStripTagMenuGeometry.Current.PosSaved = value; }
+        }
+        public float GalleryDetailStripTagMenuPosX
+        {
+            get { return GalleryDetailStripTagMenuGeometry.Current.PosX; }
+            set { GalleryDetailStripTagMenuGeometry.Current.PosX = value; }
+        }
+        public float GalleryDetailStripTagMenuPosY
+        {
+            get { return GalleryDetailStripTagMenuGeometry.Current.PosY; }
+            set { GalleryDetailStripTagMenuGeometry.Current.PosY = value; }
+        }
+        public bool GalleryDetailStripTagMenuSizeSaved
+        {
+            get { return GalleryDetailStripTagMenuGeometry.Current.SizeSaved; }
+            set { GalleryDetailStripTagMenuGeometry.Current.SizeSaved = value; }
+        }
+        public float GalleryDetailStripTagMenuWidthRef
+        {
+            get { return GalleryDetailStripTagMenuGeometry.Current.WidthRef; }
+            set { GalleryDetailStripTagMenuGeometry.Current.WidthRef = value; }
+        }
+        public float GalleryDetailStripTagMenuHeightRef
+        {
+            get { return GalleryDetailStripTagMenuGeometry.Current.HeightRef; }
+            set { GalleryDetailStripTagMenuGeometry.Current.HeightRef = value; }
+        }
         /// <summary>Filter presets list opens as floating window (title-bar button still toggles).</summary>
         public bool GalleryQuickFiltersDetached = false;
-        /// <summary>When true, restore last filter-presets floating position (canvas-local, center).</summary>
-        public bool GalleryQuickFiltersPosSaved = false;
-        public float GalleryQuickFiltersPosX = 0f;
-        public float GalleryQuickFiltersPosY = 0f;
-        /// <summary>When true, restore last filter-presets floating size (design px at scale 1).</summary>
-        public bool GalleryQuickFiltersSizeSaved = false;
-        public float GalleryQuickFiltersWidthRef = 280f;
-        public float GalleryQuickFiltersHeightRef = 420f;
+        /// <summary>Filter-presets float geometry (canvas-local center, design px at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair GalleryQuickFiltersGeometry =
+            new FloatGeometryPair("GalleryQuickFilters", 280f, 420f);
+        public bool GalleryQuickFiltersPosSaved
+        {
+            get { return GalleryQuickFiltersGeometry.Current.PosSaved; }
+            set { GalleryQuickFiltersGeometry.Current.PosSaved = value; }
+        }
+        public float GalleryQuickFiltersPosX
+        {
+            get { return GalleryQuickFiltersGeometry.Current.PosX; }
+            set { GalleryQuickFiltersGeometry.Current.PosX = value; }
+        }
+        public float GalleryQuickFiltersPosY
+        {
+            get { return GalleryQuickFiltersGeometry.Current.PosY; }
+            set { GalleryQuickFiltersGeometry.Current.PosY = value; }
+        }
+        public bool GalleryQuickFiltersSizeSaved
+        {
+            get { return GalleryQuickFiltersGeometry.Current.SizeSaved; }
+            set { GalleryQuickFiltersGeometry.Current.SizeSaved = value; }
+        }
+        public float GalleryQuickFiltersWidthRef
+        {
+            get { return GalleryQuickFiltersGeometry.Current.WidthRef; }
+            set { GalleryQuickFiltersGeometry.Current.WidthRef = value; }
+        }
+        public float GalleryQuickFiltersHeightRef
+        {
+            get { return GalleryQuickFiltersGeometry.Current.HeightRef; }
+            set { GalleryQuickFiltersGeometry.Current.HeightRef = value; }
+        }
         /// <summary>Scene Import sidebar opens as floating window (side-rail still toggles open/close).</summary>
         public bool GalleryImportSidebarDetached = false;
-        /// <summary>When true, restore last Scene Import floating position (canvas-local, center).</summary>
-        public bool GalleryImportSidebarPosSaved = false;
-        public float GalleryImportSidebarPosX = 0f;
-        public float GalleryImportSidebarPosY = 0f;
-        /// <summary>When true, restore last Scene Import floating size (design px at scale 1).</summary>
-        public bool GalleryImportSidebarSizeSaved = false;
-        public float GalleryImportSidebarWidthRef = 360f;
-        public float GalleryImportSidebarHeightRef = 560f;
-        /// <summary>When true, restore last Remap Atom UIDs floating position (canvas-local, center).</summary>
-        public bool GalleryRemapAtomUidsPosSaved = false;
-        public float GalleryRemapAtomUidsPosX = 0f;
-        public float GalleryRemapAtomUidsPosY = 0f;
-        /// <summary>When true, restore last Remap Atom UIDs floating size (design px at scale 1).</summary>
-        public bool GalleryRemapAtomUidsSizeSaved = false;
-        public float GalleryRemapAtomUidsWidthRef = 680f;
-        public float GalleryRemapAtomUidsHeightRef = 460f;
-        public bool GallerySettingsFloatPosSaved = false;
-        public float GallerySettingsFloatPosX = 0f;
-        public float GallerySettingsFloatPosY = 0f;
-        /// <summary>When true, restore last Settings floating size (design px at scale 1).</summary>
-        public bool GallerySettingsFloatSizeSaved = false;
-        public float GallerySettingsFloatWidthRef = 680f;
-        public float GallerySettingsFloatHeightRef = 640f;
+        /// <summary>Scene Import float geometry (canvas-local center, design px at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair GalleryImportSidebarGeometry =
+            new FloatGeometryPair("GalleryImportSidebar", 360f, 560f);
+        public bool GalleryImportSidebarPosSaved
+        {
+            get { return GalleryImportSidebarGeometry.Current.PosSaved; }
+            set { GalleryImportSidebarGeometry.Current.PosSaved = value; }
+        }
+        public float GalleryImportSidebarPosX
+        {
+            get { return GalleryImportSidebarGeometry.Current.PosX; }
+            set { GalleryImportSidebarGeometry.Current.PosX = value; }
+        }
+        public float GalleryImportSidebarPosY
+        {
+            get { return GalleryImportSidebarGeometry.Current.PosY; }
+            set { GalleryImportSidebarGeometry.Current.PosY = value; }
+        }
+        public bool GalleryImportSidebarSizeSaved
+        {
+            get { return GalleryImportSidebarGeometry.Current.SizeSaved; }
+            set { GalleryImportSidebarGeometry.Current.SizeSaved = value; }
+        }
+        public float GalleryImportSidebarWidthRef
+        {
+            get { return GalleryImportSidebarGeometry.Current.WidthRef; }
+            set { GalleryImportSidebarGeometry.Current.WidthRef = value; }
+        }
+        public float GalleryImportSidebarHeightRef
+        {
+            get { return GalleryImportSidebarGeometry.Current.HeightRef; }
+            set { GalleryImportSidebarGeometry.Current.HeightRef = value; }
+        }
+        /// <summary>Remap Atom UIDs float geometry (canvas-local center, design px at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair GalleryRemapAtomUidsGeometry =
+            new FloatGeometryPair("GalleryRemapAtomUids", 680f, 460f);
+        public bool GalleryRemapAtomUidsPosSaved
+        {
+            get { return GalleryRemapAtomUidsGeometry.Current.PosSaved; }
+            set { GalleryRemapAtomUidsGeometry.Current.PosSaved = value; }
+        }
+        public float GalleryRemapAtomUidsPosX
+        {
+            get { return GalleryRemapAtomUidsGeometry.Current.PosX; }
+            set { GalleryRemapAtomUidsGeometry.Current.PosX = value; }
+        }
+        public float GalleryRemapAtomUidsPosY
+        {
+            get { return GalleryRemapAtomUidsGeometry.Current.PosY; }
+            set { GalleryRemapAtomUidsGeometry.Current.PosY = value; }
+        }
+        public bool GalleryRemapAtomUidsSizeSaved
+        {
+            get { return GalleryRemapAtomUidsGeometry.Current.SizeSaved; }
+            set { GalleryRemapAtomUidsGeometry.Current.SizeSaved = value; }
+        }
+        public float GalleryRemapAtomUidsWidthRef
+        {
+            get { return GalleryRemapAtomUidsGeometry.Current.WidthRef; }
+            set { GalleryRemapAtomUidsGeometry.Current.WidthRef = value; }
+        }
+        public float GalleryRemapAtomUidsHeightRef
+        {
+            get { return GalleryRemapAtomUidsGeometry.Current.HeightRef; }
+            set { GalleryRemapAtomUidsGeometry.Current.HeightRef = value; }
+        }
+        /// <summary>Settings float geometry (canvas-local center, design px at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair GallerySettingsFloatGeometry =
+            new FloatGeometryPair("GallerySettingsFloat", 680f, 640f);
+        public bool GallerySettingsFloatPosSaved
+        {
+            get { return GallerySettingsFloatGeometry.Current.PosSaved; }
+            set { GallerySettingsFloatGeometry.Current.PosSaved = value; }
+        }
+        public float GallerySettingsFloatPosX
+        {
+            get { return GallerySettingsFloatGeometry.Current.PosX; }
+            set { GallerySettingsFloatGeometry.Current.PosX = value; }
+        }
+        public float GallerySettingsFloatPosY
+        {
+            get { return GallerySettingsFloatGeometry.Current.PosY; }
+            set { GallerySettingsFloatGeometry.Current.PosY = value; }
+        }
+        public bool GallerySettingsFloatSizeSaved
+        {
+            get { return GallerySettingsFloatGeometry.Current.SizeSaved; }
+            set { GallerySettingsFloatGeometry.Current.SizeSaved = value; }
+        }
+        public float GallerySettingsFloatWidthRef
+        {
+            get { return GallerySettingsFloatGeometry.Current.WidthRef; }
+            set { GallerySettingsFloatGeometry.Current.WidthRef = value; }
+        }
+        public float GallerySettingsFloatHeightRef
+        {
+            get { return GallerySettingsFloatGeometry.Current.HeightRef; }
+            set { GallerySettingsFloatGeometry.Current.HeightRef = value; }
+        }
         /// <summary>Last Settings category key (appearance, browsing, …). Never "all".</summary>
         public string GallerySettingsLastGroup = "appearance";
-        public bool GalleryPluginsFloatPosSaved = false;
-        public float GalleryPluginsFloatPosX = 0f;
-        public float GalleryPluginsFloatPosY = 0f;
-        /// <summary>When true, restore last Plugins floating size (design px at scale 1).</summary>
-        public bool GalleryPluginsFloatSizeSaved = false;
-        public float GalleryPluginsFloatWidthRef = 460f;
-        public float GalleryPluginsFloatHeightRef = 560f;
-        public bool QuickMenuAssignFloatPosSaved = false;
-        public float QuickMenuAssignFloatPosX = 0f;
-        public float QuickMenuAssignFloatPosY = 0f;
-        public bool QuickMenuAssignFloatSizeSaved = false;
-        public float QuickMenuAssignFloatWidthRef = 360f;
-        public float QuickMenuAssignFloatHeightRef = 480f;
+        /// <summary>Plugins float geometry (canvas-local center, design px at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair GalleryPluginsFloatGeometry =
+            new FloatGeometryPair("GalleryPluginsFloat", 460f, 560f);
+        public bool GalleryPluginsFloatPosSaved
+        {
+            get { return GalleryPluginsFloatGeometry.Current.PosSaved; }
+            set { GalleryPluginsFloatGeometry.Current.PosSaved = value; }
+        }
+        public float GalleryPluginsFloatPosX
+        {
+            get { return GalleryPluginsFloatGeometry.Current.PosX; }
+            set { GalleryPluginsFloatGeometry.Current.PosX = value; }
+        }
+        public float GalleryPluginsFloatPosY
+        {
+            get { return GalleryPluginsFloatGeometry.Current.PosY; }
+            set { GalleryPluginsFloatGeometry.Current.PosY = value; }
+        }
+        public bool GalleryPluginsFloatSizeSaved
+        {
+            get { return GalleryPluginsFloatGeometry.Current.SizeSaved; }
+            set { GalleryPluginsFloatGeometry.Current.SizeSaved = value; }
+        }
+        public float GalleryPluginsFloatWidthRef
+        {
+            get { return GalleryPluginsFloatGeometry.Current.WidthRef; }
+            set { GalleryPluginsFloatGeometry.Current.WidthRef = value; }
+        }
+        public float GalleryPluginsFloatHeightRef
+        {
+            get { return GalleryPluginsFloatGeometry.Current.HeightRef; }
+            set { GalleryPluginsFloatGeometry.Current.HeightRef = value; }
+        }
+        /// <summary>Layout presets manager float geometry (canvas-local center, design px at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair GalleryLayoutPresetsFloatGeometry =
+            new FloatGeometryPair("GalleryLayoutPresetsFloat", 380f, 460f);
+
+        /// <summary>Quick-menu assign float geometry (canvas-local center, design px at scale 1), per mode.</summary>
+        public readonly FloatGeometryPair QuickMenuAssignFloatGeometry =
+            new FloatGeometryPair("QuickMenuAssignFloat", 360f, 480f);
+        public bool QuickMenuAssignFloatPosSaved
+        {
+            get { return QuickMenuAssignFloatGeometry.Current.PosSaved; }
+            set { QuickMenuAssignFloatGeometry.Current.PosSaved = value; }
+        }
+        public float QuickMenuAssignFloatPosX
+        {
+            get { return QuickMenuAssignFloatGeometry.Current.PosX; }
+            set { QuickMenuAssignFloatGeometry.Current.PosX = value; }
+        }
+        public float QuickMenuAssignFloatPosY
+        {
+            get { return QuickMenuAssignFloatGeometry.Current.PosY; }
+            set { QuickMenuAssignFloatGeometry.Current.PosY = value; }
+        }
+        public bool QuickMenuAssignFloatSizeSaved
+        {
+            get { return QuickMenuAssignFloatGeometry.Current.SizeSaved; }
+            set { QuickMenuAssignFloatGeometry.Current.SizeSaved = value; }
+        }
+        public float QuickMenuAssignFloatWidthRef
+        {
+            get { return QuickMenuAssignFloatGeometry.Current.WidthRef; }
+            set { QuickMenuAssignFloatGeometry.Current.WidthRef = value; }
+        }
+        public float QuickMenuAssignFloatHeightRef
+        {
+            get { return QuickMenuAssignFloatGeometry.Current.HeightRef; }
+            set { QuickMenuAssignFloatGeometry.Current.HeightRef = value; }
+        }
         /// <summary>Plugins float: show only highest integer version per Author.Name package group.</summary>
         public bool GalleryPluginsFloatLatestOnly = false;
         /// <summary>Plugins float: hide orphan .cs/.dll roots; keep .cslist parents (and their children on expand).</summary>
@@ -982,6 +1193,22 @@ namespace VPB
         /// <summary>Settings cycle options for <see cref="GalleryDefaultLeftSidePanel"/> / <see cref="GalleryDefaultRightSidePanel"/>.</summary>
         public static readonly string[] GallerySidePanelOptions = { "None", "Import", "Tags", "Category", "Creator", "Path", "History" };
 
+        public static string NormalizeShowSideButtons(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "Auto";
+            string v = value.Trim();
+            if (string.Equals(v, "Left", StringComparison.OrdinalIgnoreCase)) return "Left";
+            if (string.Equals(v, "Right", StringComparison.OrdinalIgnoreCase)) return "Right";
+            if (string.Equals(v, "Both", StringComparison.OrdinalIgnoreCase)) return "Both";
+            return "Auto";
+        }
+
+        public static string NormalizeSideRailEdge(string value)
+        {
+            if (string.Equals(value, "Left", StringComparison.OrdinalIgnoreCase)) return "Left";
+            return "Right";
+        }
+
         private static readonly string[] s_GallerySidePanelCanonical = GallerySidePanelOptions;
 
         /// <summary>Maps user/config values to a canonical side-panel default (see <see cref="GallerySidePanelOptions"/>).</summary>
@@ -1092,8 +1319,7 @@ namespace VPB
                 StringComparison.OrdinalIgnoreCase);
         }
         public bool DesktopFixedMode = false;
-        public bool DesktopFixedAutoCollapse = true;
-        /// <summary>Seconds pointer must be outside fixed pane before auto-collapse (when DesktopFixedAutoCollapse is on).</summary>
+        /// <summary>Seconds pointer must be outside fixed pane before auto-collapse (when auto-hide is on).</summary>
         public float DesktopFixedAutoHideSeconds = 1.0f;
         /// <summary>Desktop fixed gallery dock edge: Right (default), Left, or Top.</summary>
         public string DesktopFixedDockSide = "Right";
@@ -1103,9 +1329,62 @@ namespace VPB
         public bool DesktopFixedEnforceDockSide = false;
         /// <summary>Dock side used when <see cref="DesktopFixedEnforceDockSide"/> is true.</summary>
         public string DesktopFixedEnforcedDockSide = "Right";
-        public int DesktopFixedHeightMode = 0; // 0: Full, 1: Custom
-        public float DesktopCustomHeight = 0.5f;
-        public float DesktopCustomWidth = GalleryUiDesignTokens.GoldenRatioMajor;
+
+        /// <summary>Named layout preset applied automatically on startup, per mode. 0 = none.</summary>
+        public int LayoutPresetStartupIdDesktop;
+        public int LayoutPresetStartupIdVR;
+        /// <summary>Offer the matching layout when VR/desktop mode changes. Suggestion only — never auto-applies.</summary>
+        public bool LayoutPresetSuggestOnModeSwitch = true;
+
+        /// <summary>Seconds the layout Revert bar stays up after an apply.</summary>
+        public float LayoutPresetRevertBarSeconds = 8f;
+
+        /// <summary>Implicit per-mode "last layout" snapshot JSON. Separate from named layout presets.</summary>
+        public string LastLayoutSnapshotDesktop = "";
+        public string LastLayoutSnapshotVR = "";
+
+        public readonly GalleryDockSlot DockLeft = new GalleryDockSlot("DockLeft");
+        public readonly GalleryDockSlot DockTop = new GalleryDockSlot("DockTop");
+        public readonly GalleryDockSlot DockRight = new GalleryDockSlot("DockRight");
+
+        public GalleryDockSlot DockSlotFor(GalleryDockSide side)
+        {
+            if (side == GalleryDockSide.Left) return DockLeft;
+            if (side == GalleryDockSide.Top) return DockTop;
+            if (side == GalleryDockSide.Right) return DockRight;
+            return null;
+        }
+
+        /// <summary>Slot named by <see cref="DesktopFixedDockSide"/>; backing store for the legacy single-dock fields.</summary>
+        public GalleryDockSlot ActiveDockSlot
+        {
+            get
+            {
+                GalleryDockSlot s = DockSlotFor(GalleryDockLayout.Parse(DesktopFixedDockSide));
+                return s != null ? s : DockRight;
+            }
+        }
+
+        public bool DesktopFixedAutoCollapse
+        {
+            get { return ActiveDockSlot.AutoHide; }
+            set { ActiveDockSlot.AutoHide = value; }
+        }
+        public int DesktopFixedHeightMode
+        {
+            get { return ActiveDockSlot.HeightMode; }
+            set { ActiveDockSlot.HeightMode = value; GalleryDockLayout.BumpVersion(); }
+        }
+        public float DesktopCustomHeight
+        {
+            get { return ActiveDockSlot.CustomHeight; }
+            set { ActiveDockSlot.CustomHeight = value; GalleryDockLayout.BumpVersion(); }
+        }
+        public float DesktopCustomWidth
+        {
+            get { return ActiveDockSlot.WidthFree; }
+            set { ActiveDockSlot.WidthFree = value; GalleryDockLayout.BumpVersion(); }
+        }
         public bool EnableAutoFixedGallery = true;
         public float ListRowHeight = 100f;
         public int GridColumnCount = 4;
@@ -1302,8 +1581,13 @@ namespace VPB
 
         public bool GalleryGridLabelsStripVisible()
         {
+            return GalleryGridLabelsStripVisible(GridColumnCount);
+        }
+
+        public bool GalleryGridLabelsStripVisible(int columnCount)
+        {
             if (!GalleryGridLabelsEnabled) return false;
-            if (GalleryGridLabelsAutoHideAtHighDensity && GridColumnCount >= 11) return false;
+            if (GalleryGridLabelsAutoHideAtHighDensity && columnCount >= 11) return false;
             return true;
         }
 
@@ -1382,7 +1666,8 @@ namespace VPB
             EnableGalleryButtonChromeRims = true;
             GalleryElementCornerRadiusFraction = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
             VrHoverTooltipEnabled = true;
-            ShowSideButtons = "Both";
+            ShowSideButtons = "Auto";
+            LastGallerySideRailEdge = "Right";
             _followAngle = "Both";
             _followDistance = "VR";
             _followEyeHeight = "VR";
@@ -1433,15 +1718,21 @@ namespace VPB
             SceneImportCacheLimitMb = SceneImportCacheLimitMbDefault;
             InitialGalleryCategory = "Scenes";
             DesktopFixedMode = false;
-            DesktopFixedAutoCollapse = true;
             DesktopFixedAutoHideSeconds = 1.0f;
             DesktopFixedDockSide = "Right";
             DesktopFixedDefaultDockSide = "Right";
             DesktopFixedEnforceDockSide = false;
             DesktopFixedEnforcedDockSide = "Right";
-            DesktopFixedHeightMode = 0;
-            DesktopCustomHeight = 0.5f;
-            DesktopCustomWidth = GalleryUiDesignTokens.GoldenRatioMajor;
+            LayoutPresetStartupIdDesktop = 0;
+            LayoutPresetStartupIdVR = 0;
+            LayoutPresetSuggestOnModeSwitch = true;
+            LayoutPresetRevertBarSeconds = 8f;
+            LastLayoutSnapshotDesktop = "";
+            LastLayoutSnapshotVR = "";
+            DockLeft.Reset();
+            DockTop.Reset();
+            DockRight.Reset();
+            GalleryDockLayout.BumpVersion();
             EnableAutoFixedGallery = true;
             ListRowHeight = 100f;
             GridColumnCount = 4;
@@ -1504,12 +1795,7 @@ namespace VPB
             CreatorStripKeepMask = (int)SceneUtils.CreatorStripKeepDefault;
             CreatorStripRecipesJson = "[]";
             CreatorStripLastRecipeJson = "";
-            CreatorStripPanelPosSaved = false;
-            CreatorStripPanelPosX = 0f;
-            CreatorStripPanelPosY = 0f;
-            CreatorStripPanelSizeSaved = false;
-            CreatorStripPanelWidthRef = 560f;
-            CreatorStripPanelHeightRef = 640f;
+            CreatorStripPanelGeometry.Reset();
             CreatorStripRemovePossessable = true;
             CreatorStripAddPossessableMale = true;
             CreatorStripAddPossessableFemale = false;
@@ -1521,51 +1807,17 @@ namespace VPB
             GalleryDetailStripSideInfoEnabled = true;
             GalleryDetailStripThumbOnRight = false;
             GalleryDetailStripHeightRef = 0f;
-            GalleryDetailStripTagMenuPosSaved = false;
-            GalleryDetailStripTagMenuPosX = 0f;
-            GalleryDetailStripTagMenuPosY = 0f;
-            GalleryDetailStripTagMenuSizeSaved = false;
-            GalleryDetailStripTagMenuWidthRef = 0f;
-            GalleryDetailStripTagMenuHeightRef = 0f;
+            GalleryDetailStripTagMenuGeometry.Reset();
             GalleryQuickFiltersDetached = false;
-            GalleryQuickFiltersPosSaved = false;
-            GalleryQuickFiltersPosX = 0f;
-            GalleryQuickFiltersPosY = 0f;
-            GalleryQuickFiltersSizeSaved = false;
-            GalleryQuickFiltersWidthRef = 280f;
-            GalleryQuickFiltersHeightRef = 420f;
+            GalleryQuickFiltersGeometry.Reset();
             GalleryImportSidebarDetached = false;
-            GalleryImportSidebarPosSaved = false;
-            GalleryImportSidebarPosX = 0f;
-            GalleryImportSidebarPosY = 0f;
-            GalleryImportSidebarSizeSaved = false;
-            GalleryImportSidebarWidthRef = 360f;
-            GalleryImportSidebarHeightRef = 560f;
-            GalleryRemapAtomUidsPosSaved = false;
-            GalleryRemapAtomUidsPosX = 0f;
-            GalleryRemapAtomUidsPosY = 0f;
-            GalleryRemapAtomUidsSizeSaved = false;
-            GalleryRemapAtomUidsWidthRef = 680f;
-            GalleryRemapAtomUidsHeightRef = 460f;
-            GallerySettingsFloatPosSaved = false;
-            GallerySettingsFloatPosX = 0f;
-            GallerySettingsFloatPosY = 0f;
-            GallerySettingsFloatSizeSaved = false;
-            GallerySettingsFloatWidthRef = 680f;
-            GallerySettingsFloatHeightRef = 640f;
+            GalleryImportSidebarGeometry.Reset();
+            GalleryRemapAtomUidsGeometry.Reset();
+            GallerySettingsFloatGeometry.Reset();
             GallerySettingsLastGroup = "appearance";
-            GalleryPluginsFloatPosSaved = false;
-            GalleryPluginsFloatPosX = 0f;
-            GalleryPluginsFloatPosY = 0f;
-            GalleryPluginsFloatSizeSaved = false;
-            GalleryPluginsFloatWidthRef = 460f;
-            GalleryPluginsFloatHeightRef = 560f;
-            QuickMenuAssignFloatPosSaved = false;
-            QuickMenuAssignFloatPosX = 0f;
-            QuickMenuAssignFloatPosY = 0f;
-            QuickMenuAssignFloatSizeSaved = false;
-            QuickMenuAssignFloatWidthRef = 360f;
-            QuickMenuAssignFloatHeightRef = 480f;
+            GalleryPluginsFloatGeometry.Reset();
+            GalleryLayoutPresetsFloatGeometry.Reset();
+            QuickMenuAssignFloatGeometry.Reset();
             GalleryPluginsFloatLatestOnly = false;
             GalleryPluginsFloatCslistOnly = false;
             UiLocale = "";
@@ -1616,7 +1868,10 @@ namespace VPB
                         if (node["GalleryElementCornerRadiusFraction"] != null)
                             GalleryElementCornerRadiusFraction = ClampGalleryElementCornerRadiusFraction(node["GalleryElementCornerRadiusFraction"].AsFloat);
                         if (node["VrHoverTooltipEnabled"] != null) VrHoverTooltipEnabled = node["VrHoverTooltipEnabled"].AsBool;
-                        if (node["ShowSideButtons"] != null) ShowSideButtons = node["ShowSideButtons"].Value;
+                        if (node["ShowSideButtons"] != null)
+                            ShowSideButtons = NormalizeShowSideButtons(node["ShowSideButtons"].Value);
+                        if (node["LastGallerySideRailEdge"] != null)
+                            LastGallerySideRailEdge = NormalizeSideRailEdge(node["LastGallerySideRailEdge"].Value);
                         
                         // Handle legacy bools if they exist, or just use string
                         if (node["FollowAngle"] != null) {
@@ -1763,16 +2018,29 @@ namespace VPB
                             GalleryShowCategoryIcons = node["GalleryShowCategoryIcons"].AsBool;
                         if (node["GalleryConsolidateCreatorNames"] != null)
                             GalleryConsolidateCreatorNames = node["GalleryConsolidateCreatorNames"].AsBool;
+                        if (node["DesktopFixedDockSide"] != null) DesktopFixedDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedDockSide"].Value);
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedAutoHideSeconds"] != null) DesktopFixedAutoHideSeconds = node["DesktopFixedAutoHideSeconds"].AsFloat;
-                        if (node["DesktopFixedDockSide"] != null) DesktopFixedDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedDockSide"].Value);
                         if (node["DesktopFixedDefaultDockSide"] != null) DesktopFixedDefaultDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedDefaultDockSide"].Value);
                         if (node["DesktopFixedEnforceDockSide"] != null) DesktopFixedEnforceDockSide = node["DesktopFixedEnforceDockSide"].AsBool;
                         if (node["DesktopFixedEnforcedDockSide"] != null) DesktopFixedEnforcedDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedEnforcedDockSide"].Value);
                         if (node["DesktopFixedHeightMode"] != null) DesktopFixedHeightMode = node["DesktopFixedHeightMode"].AsInt;
                         if (node["DesktopCustomHeight"] != null) DesktopCustomHeight = node["DesktopCustomHeight"].AsFloat;
                         if (node["DesktopCustomWidth"] != null) DesktopCustomWidth = node["DesktopCustomWidth"].AsFloat;
+                        GalleryDockLayout.LoadSlotsFromConfigNode(node, this);
+                        if (node["LayoutPresetStartupIdDesktop"] != null)
+                            LayoutPresetStartupIdDesktop = node["LayoutPresetStartupIdDesktop"].AsInt;
+                        if (node["LayoutPresetStartupIdVR"] != null)
+                            LayoutPresetStartupIdVR = node["LayoutPresetStartupIdVR"].AsInt;
+                        if (node["LayoutPresetSuggestOnModeSwitch"] != null)
+                            LayoutPresetSuggestOnModeSwitch = node["LayoutPresetSuggestOnModeSwitch"].AsBool;
+                        if (node["LayoutPresetRevertBarSeconds"] != null)
+                            LayoutPresetRevertBarSeconds = node["LayoutPresetRevertBarSeconds"].AsFloat;
+                        if (node["LastLayoutSnapshotDesktop"] != null)
+                            LastLayoutSnapshotDesktop = node["LastLayoutSnapshotDesktop"].Value ?? "";
+                        if (node["LastLayoutSnapshotVR"] != null)
+                            LastLayoutSnapshotVR = node["LastLayoutSnapshotVR"].Value ?? "";
                         if (node["EnableAutoFixedGallery"] != null) EnableAutoFixedGallery = node["EnableAutoFixedGallery"].AsBool;
                         if (node["ListRowHeight"] != null) ListRowHeight = node["ListRowHeight"].AsFloat;
                         if (node["GridColumnCount"] != null) GridColumnCount = node["GridColumnCount"].AsInt;
@@ -1854,18 +2122,7 @@ namespace VPB
                             string last = node["CreatorStripLastRecipeJson"].Value;
                             CreatorStripLastRecipeJson = last ?? "";
                         }
-                        if (node["CreatorStripPanelPosSaved"] != null)
-                            CreatorStripPanelPosSaved = node["CreatorStripPanelPosSaved"].AsBool;
-                        if (node["CreatorStripPanelPosX"] != null)
-                            CreatorStripPanelPosX = node["CreatorStripPanelPosX"].AsFloat;
-                        if (node["CreatorStripPanelPosY"] != null)
-                            CreatorStripPanelPosY = node["CreatorStripPanelPosY"].AsFloat;
-                        if (node["CreatorStripPanelSizeSaved"] != null)
-                            CreatorStripPanelSizeSaved = node["CreatorStripPanelSizeSaved"].AsBool;
-                        if (node["CreatorStripPanelWidthRef"] != null)
-                            CreatorStripPanelWidthRef = Mathf.Max(0f, node["CreatorStripPanelWidthRef"].AsFloat);
-                        if (node["CreatorStripPanelHeightRef"] != null)
-                            CreatorStripPanelHeightRef = Mathf.Max(0f, node["CreatorStripPanelHeightRef"].AsFloat);
+                        CreatorStripPanelGeometry.Load(node);
                         if (node["CreatorStripRemovePossessable"] != null)
                             CreatorStripRemovePossessable = node["CreatorStripRemovePossessable"].AsBool;
                         if (node["CreatorStripAddPossessableMale"] != null)
@@ -1897,96 +2154,20 @@ namespace VPB
                         if (node["GalleryDetailStripThumbOnRight"] != null) GalleryDetailStripThumbOnRight = node["GalleryDetailStripThumbOnRight"].AsBool;
                         if (node["GalleryDetailStripHeightRef"] != null)
                             GalleryDetailStripHeightRef = Mathf.Max(0f, node["GalleryDetailStripHeightRef"].AsFloat);
-                        if (node["GalleryDetailStripTagMenuPosSaved"] != null)
-                            GalleryDetailStripTagMenuPosSaved = node["GalleryDetailStripTagMenuPosSaved"].AsBool;
-                        if (node["GalleryDetailStripTagMenuPosX"] != null)
-                            GalleryDetailStripTagMenuPosX = node["GalleryDetailStripTagMenuPosX"].AsFloat;
-                        if (node["GalleryDetailStripTagMenuPosY"] != null)
-                            GalleryDetailStripTagMenuPosY = node["GalleryDetailStripTagMenuPosY"].AsFloat;
-                        if (node["GalleryDetailStripTagMenuSizeSaved"] != null)
-                            GalleryDetailStripTagMenuSizeSaved = node["GalleryDetailStripTagMenuSizeSaved"].AsBool;
-                        if (node["GalleryDetailStripTagMenuWidthRef"] != null)
-                            GalleryDetailStripTagMenuWidthRef = Mathf.Max(0f, node["GalleryDetailStripTagMenuWidthRef"].AsFloat);
-                        if (node["GalleryDetailStripTagMenuHeightRef"] != null)
-                            GalleryDetailStripTagMenuHeightRef = Mathf.Max(0f, node["GalleryDetailStripTagMenuHeightRef"].AsFloat);
+                        GalleryDetailStripTagMenuGeometry.Load(node);
                         if (node["GalleryQuickFiltersDetached"] != null)
                             GalleryQuickFiltersDetached = node["GalleryQuickFiltersDetached"].AsBool;
-                        if (node["GalleryQuickFiltersPosSaved"] != null)
-                            GalleryQuickFiltersPosSaved = node["GalleryQuickFiltersPosSaved"].AsBool;
-                        if (node["GalleryQuickFiltersPosX"] != null)
-                            GalleryQuickFiltersPosX = node["GalleryQuickFiltersPosX"].AsFloat;
-                        if (node["GalleryQuickFiltersPosY"] != null)
-                            GalleryQuickFiltersPosY = node["GalleryQuickFiltersPosY"].AsFloat;
-                        if (node["GalleryQuickFiltersSizeSaved"] != null)
-                            GalleryQuickFiltersSizeSaved = node["GalleryQuickFiltersSizeSaved"].AsBool;
-                        if (node["GalleryQuickFiltersWidthRef"] != null)
-                            GalleryQuickFiltersWidthRef = Mathf.Max(0f, node["GalleryQuickFiltersWidthRef"].AsFloat);
-                        if (node["GalleryQuickFiltersHeightRef"] != null)
-                            GalleryQuickFiltersHeightRef = Mathf.Max(0f, node["GalleryQuickFiltersHeightRef"].AsFloat);
+                        GalleryQuickFiltersGeometry.Load(node);
                         if (node["GalleryImportSidebarDetached"] != null)
                             GalleryImportSidebarDetached = node["GalleryImportSidebarDetached"].AsBool;
-                        if (node["GalleryImportSidebarPosSaved"] != null)
-                            GalleryImportSidebarPosSaved = node["GalleryImportSidebarPosSaved"].AsBool;
-                        if (node["GalleryImportSidebarPosX"] != null)
-                            GalleryImportSidebarPosX = node["GalleryImportSidebarPosX"].AsFloat;
-                        if (node["GalleryImportSidebarPosY"] != null)
-                            GalleryImportSidebarPosY = node["GalleryImportSidebarPosY"].AsFloat;
-                        if (node["GalleryImportSidebarSizeSaved"] != null)
-                            GalleryImportSidebarSizeSaved = node["GalleryImportSidebarSizeSaved"].AsBool;
-                        if (node["GalleryImportSidebarWidthRef"] != null)
-                            GalleryImportSidebarWidthRef = Mathf.Max(0f, node["GalleryImportSidebarWidthRef"].AsFloat);
-                        if (node["GalleryImportSidebarHeightRef"] != null)
-                            GalleryImportSidebarHeightRef = Mathf.Max(0f, node["GalleryImportSidebarHeightRef"].AsFloat);
-                        if (node["GalleryRemapAtomUidsPosSaved"] != null)
-                            GalleryRemapAtomUidsPosSaved = node["GalleryRemapAtomUidsPosSaved"].AsBool;
-                        if (node["GalleryRemapAtomUidsPosX"] != null)
-                            GalleryRemapAtomUidsPosX = node["GalleryRemapAtomUidsPosX"].AsFloat;
-                        if (node["GalleryRemapAtomUidsPosY"] != null)
-                            GalleryRemapAtomUidsPosY = node["GalleryRemapAtomUidsPosY"].AsFloat;
-                        if (node["GalleryRemapAtomUidsSizeSaved"] != null)
-                            GalleryRemapAtomUidsSizeSaved = node["GalleryRemapAtomUidsSizeSaved"].AsBool;
-                        if (node["GalleryRemapAtomUidsWidthRef"] != null)
-                            GalleryRemapAtomUidsWidthRef = Mathf.Max(0f, node["GalleryRemapAtomUidsWidthRef"].AsFloat);
-                        if (node["GalleryRemapAtomUidsHeightRef"] != null)
-                            GalleryRemapAtomUidsHeightRef = Mathf.Max(0f, node["GalleryRemapAtomUidsHeightRef"].AsFloat);
-                        if (node["GallerySettingsFloatPosSaved"] != null)
-                            GallerySettingsFloatPosSaved = node["GallerySettingsFloatPosSaved"].AsBool;
-                        if (node["GallerySettingsFloatPosX"] != null)
-                            GallerySettingsFloatPosX = node["GallerySettingsFloatPosX"].AsFloat;
-                        if (node["GallerySettingsFloatPosY"] != null)
-                            GallerySettingsFloatPosY = node["GallerySettingsFloatPosY"].AsFloat;
-                        if (node["GallerySettingsFloatSizeSaved"] != null)
-                            GallerySettingsFloatSizeSaved = node["GallerySettingsFloatSizeSaved"].AsBool;
-                        if (node["GallerySettingsFloatWidthRef"] != null)
-                            GallerySettingsFloatWidthRef = Mathf.Max(0f, node["GallerySettingsFloatWidthRef"].AsFloat);
-                        if (node["GallerySettingsFloatHeightRef"] != null)
-                            GallerySettingsFloatHeightRef = Mathf.Max(0f, node["GallerySettingsFloatHeightRef"].AsFloat);
+                        GalleryImportSidebarGeometry.Load(node);
+                        GalleryRemapAtomUidsGeometry.Load(node);
+                        GallerySettingsFloatGeometry.Load(node);
                         if (node["GallerySettingsLastGroup"] != null)
                             GallerySettingsLastGroup = node["GallerySettingsLastGroup"].Value ?? "appearance";
-                        if (node["GalleryPluginsFloatPosSaved"] != null)
-                            GalleryPluginsFloatPosSaved = node["GalleryPluginsFloatPosSaved"].AsBool;
-                        if (node["GalleryPluginsFloatPosX"] != null)
-                            GalleryPluginsFloatPosX = node["GalleryPluginsFloatPosX"].AsFloat;
-                        if (node["GalleryPluginsFloatPosY"] != null)
-                            GalleryPluginsFloatPosY = node["GalleryPluginsFloatPosY"].AsFloat;
-                        if (node["GalleryPluginsFloatSizeSaved"] != null)
-                            GalleryPluginsFloatSizeSaved = node["GalleryPluginsFloatSizeSaved"].AsBool;
-                        if (node["GalleryPluginsFloatWidthRef"] != null)
-                            GalleryPluginsFloatWidthRef = Mathf.Max(0f, node["GalleryPluginsFloatWidthRef"].AsFloat);
-                        if (node["GalleryPluginsFloatHeightRef"] != null)
-                            GalleryPluginsFloatHeightRef = Mathf.Max(0f, node["GalleryPluginsFloatHeightRef"].AsFloat);
-                        if (node["QuickMenuAssignFloatPosSaved"] != null)
-                            QuickMenuAssignFloatPosSaved = node["QuickMenuAssignFloatPosSaved"].AsBool;
-                        if (node["QuickMenuAssignFloatPosX"] != null)
-                            QuickMenuAssignFloatPosX = node["QuickMenuAssignFloatPosX"].AsFloat;
-                        if (node["QuickMenuAssignFloatPosY"] != null)
-                            QuickMenuAssignFloatPosY = node["QuickMenuAssignFloatPosY"].AsFloat;
-                        if (node["QuickMenuAssignFloatSizeSaved"] != null)
-                            QuickMenuAssignFloatSizeSaved = node["QuickMenuAssignFloatSizeSaved"].AsBool;
-                        if (node["QuickMenuAssignFloatWidthRef"] != null)
-                            QuickMenuAssignFloatWidthRef = Mathf.Max(0f, node["QuickMenuAssignFloatWidthRef"].AsFloat);
-                        if (node["QuickMenuAssignFloatHeightRef"] != null)
-                            QuickMenuAssignFloatHeightRef = Mathf.Max(0f, node["QuickMenuAssignFloatHeightRef"].AsFloat);
+                        GalleryPluginsFloatGeometry.Load(node);
+                        GalleryLayoutPresetsFloatGeometry.Load(node);
+                        QuickMenuAssignFloatGeometry.Load(node);
                         if (node["GalleryPluginsFloatLatestOnly"] != null)
                             GalleryPluginsFloatLatestOnly = node["GalleryPluginsFloatLatestOnly"].AsBool;
                         if (node["GalleryPluginsFloatCslistOnly"] != null)
@@ -2203,10 +2384,9 @@ namespace VPB
 
                         // Migration/validation: clamp fixed-mode anchors so panel never becomes unusably tiny.
                         // Prevents "stuck" desktop UI when DesktopCustomHeight/Width are out of range.
-                        float w = ClampDesktopFixedAnchor01(DesktopCustomWidth, 0.05f, 0.85f, GalleryUiDesignTokens.GoldenRatioMajor);
-                        float h = ClampDesktopFixedAnchor01(DesktopCustomHeight, 0.05f, 0.85f, 0.5f);
-                        if (Mathf.Abs(DesktopCustomWidth - w) > 0.0001f) { DesktopCustomWidth = w; changed = true; }
-                        if (Mathf.Abs(DesktopCustomHeight - h) > 0.0001f) { DesktopCustomHeight = h; changed = true; }
+                        changed |= ClampDockSlotAnchors(DockLeft);
+                        changed |= ClampDockSlotAnchors(DockTop);
+                        changed |= ClampDockSlotAnchors(DockRight);
                         float ah = ClampDesktopFixedAnchor01(DesktopFixedAutoHideSeconds, 0.1f, 10f, 1.0f);
                         if (Mathf.Abs(DesktopFixedAutoHideSeconds - ah) > 0.0001f) { DesktopFixedAutoHideSeconds = ah; changed = true; }
                         if (changed)
@@ -2294,6 +2474,7 @@ namespace VPB
                 node["GalleryElementCornerRadiusFraction"].AsFloat = ClampGalleryElementCornerRadiusFraction(GalleryElementCornerRadiusFraction);
                 node["VrHoverTooltipEnabled"].AsBool = VrHoverTooltipEnabled;
                 node["ShowSideButtons"] = ShowSideButtons;
+                node["LastGallerySideRailEdge"] = LastGallerySideRailEdge;
                 node["FollowAngle"] = _followAngle;
                 node["FollowDistance"] = _followDistance;
                 node["FollowEyeHeight"] = _followEyeHeight;
@@ -2376,6 +2557,15 @@ namespace VPB
                 node["DesktopFixedHeightMode"].AsInt = DesktopFixedHeightMode;
                 node["DesktopCustomHeight"].AsFloat = DesktopCustomHeight;
                 node["DesktopCustomWidth"].AsFloat = DesktopCustomWidth;
+                DockLeft.Save(node);
+                DockTop.Save(node);
+                DockRight.Save(node);
+                node["LayoutPresetStartupIdDesktop"].AsInt = LayoutPresetStartupIdDesktop;
+                node["LayoutPresetStartupIdVR"].AsInt = LayoutPresetStartupIdVR;
+                node["LayoutPresetSuggestOnModeSwitch"].AsBool = LayoutPresetSuggestOnModeSwitch;
+                node["LayoutPresetRevertBarSeconds"].AsFloat = Mathf.Clamp(LayoutPresetRevertBarSeconds, 2f, 30f);
+                node["LastLayoutSnapshotDesktop"] = LastLayoutSnapshotDesktop ?? "";
+                node["LastLayoutSnapshotVR"] = LastLayoutSnapshotVR ?? "";
                 node["EnableAutoFixedGallery"].AsBool = EnableAutoFixedGallery;
                 node["ListRowHeight"].AsFloat = ListRowHeight;
                 node["GridColumnCount"].AsInt = GridColumnCount;
@@ -2436,12 +2626,7 @@ namespace VPB
                     ? "[]"
                     : CreatorStripRecipesJson;
                 node["CreatorStripLastRecipeJson"] = CreatorStripLastRecipeJson ?? "";
-                node["CreatorStripPanelPosSaved"].AsBool = CreatorStripPanelPosSaved;
-                node["CreatorStripPanelPosX"].AsFloat = CreatorStripPanelPosX;
-                node["CreatorStripPanelPosY"].AsFloat = CreatorStripPanelPosY;
-                node["CreatorStripPanelSizeSaved"].AsBool = CreatorStripPanelSizeSaved;
-                node["CreatorStripPanelWidthRef"].AsFloat = Mathf.Max(0f, CreatorStripPanelWidthRef);
-                node["CreatorStripPanelHeightRef"].AsFloat = Mathf.Max(0f, CreatorStripPanelHeightRef);
+                CreatorStripPanelGeometry.Save(node);
                 node["CreatorStripRemovePossessable"].AsBool = CreatorStripRemovePossessable;
                 node["CreatorStripAddPossessableMale"].AsBool = CreatorStripAddPossessableMale;
                 node["CreatorStripAddPossessableFemale"].AsBool = CreatorStripAddPossessableFemale;
@@ -2457,53 +2642,19 @@ namespace VPB
                 node["GalleryDetailStripSideInfoEnabled"].AsBool = GalleryDetailStripSideInfoEnabled;
                 node["GalleryDetailStripThumbOnRight"].AsBool = GalleryDetailStripThumbOnRight;
                 node["GalleryDetailStripHeightRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripHeightRef);
-                node["GalleryDetailStripTagMenuPosSaved"].AsBool = GalleryDetailStripTagMenuPosSaved;
-                node["GalleryDetailStripTagMenuPosX"].AsFloat = GalleryDetailStripTagMenuPosX;
-                node["GalleryDetailStripTagMenuPosY"].AsFloat = GalleryDetailStripTagMenuPosY;
-                node["GalleryDetailStripTagMenuSizeSaved"].AsBool = GalleryDetailStripTagMenuSizeSaved;
-                node["GalleryDetailStripTagMenuWidthRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripTagMenuWidthRef);
-                node["GalleryDetailStripTagMenuHeightRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripTagMenuHeightRef);
+                GalleryDetailStripTagMenuGeometry.Save(node);
                 node["GalleryQuickFiltersDetached"].AsBool = GalleryQuickFiltersDetached;
-                node["GalleryQuickFiltersPosSaved"].AsBool = GalleryQuickFiltersPosSaved;
-                node["GalleryQuickFiltersPosX"].AsFloat = GalleryQuickFiltersPosX;
-                node["GalleryQuickFiltersPosY"].AsFloat = GalleryQuickFiltersPosY;
-                node["GalleryQuickFiltersSizeSaved"].AsBool = GalleryQuickFiltersSizeSaved;
-                node["GalleryQuickFiltersWidthRef"].AsFloat = Mathf.Max(0f, GalleryQuickFiltersWidthRef);
-                node["GalleryQuickFiltersHeightRef"].AsFloat = Mathf.Max(0f, GalleryQuickFiltersHeightRef);
+                GalleryQuickFiltersGeometry.Save(node);
                 node["GalleryImportSidebarDetached"].AsBool = GalleryImportSidebarDetached;
-                node["GalleryImportSidebarPosSaved"].AsBool = GalleryImportSidebarPosSaved;
-                node["GalleryImportSidebarPosX"].AsFloat = GalleryImportSidebarPosX;
-                node["GalleryImportSidebarPosY"].AsFloat = GalleryImportSidebarPosY;
-                node["GalleryImportSidebarSizeSaved"].AsBool = GalleryImportSidebarSizeSaved;
-                node["GalleryImportSidebarWidthRef"].AsFloat = Mathf.Max(0f, GalleryImportSidebarWidthRef);
-                node["GalleryImportSidebarHeightRef"].AsFloat = Mathf.Max(0f, GalleryImportSidebarHeightRef);
-                node["GalleryRemapAtomUidsPosSaved"].AsBool = GalleryRemapAtomUidsPosSaved;
-                node["GalleryRemapAtomUidsPosX"].AsFloat = GalleryRemapAtomUidsPosX;
-                node["GalleryRemapAtomUidsPosY"].AsFloat = GalleryRemapAtomUidsPosY;
-                node["GalleryRemapAtomUidsSizeSaved"].AsBool = GalleryRemapAtomUidsSizeSaved;
-                node["GalleryRemapAtomUidsWidthRef"].AsFloat = Mathf.Max(0f, GalleryRemapAtomUidsWidthRef);
-                node["GalleryRemapAtomUidsHeightRef"].AsFloat = Mathf.Max(0f, GalleryRemapAtomUidsHeightRef);
-                node["GallerySettingsFloatPosSaved"].AsBool = GallerySettingsFloatPosSaved;
-                node["GallerySettingsFloatPosX"].AsFloat = GallerySettingsFloatPosX;
-                node["GallerySettingsFloatPosY"].AsFloat = GallerySettingsFloatPosY;
-                node["GallerySettingsFloatSizeSaved"].AsBool = GallerySettingsFloatSizeSaved;
-                node["GallerySettingsFloatWidthRef"].AsFloat = Mathf.Max(0f, GallerySettingsFloatWidthRef);
-                node["GallerySettingsFloatHeightRef"].AsFloat = Mathf.Max(0f, GallerySettingsFloatHeightRef);
+                GalleryImportSidebarGeometry.Save(node);
+                GalleryRemapAtomUidsGeometry.Save(node);
+                GallerySettingsFloatGeometry.Save(node);
                 node["GallerySettingsLastGroup"] = string.IsNullOrEmpty(GallerySettingsLastGroup)
                     ? "appearance"
                     : GallerySettingsLastGroup;
-                node["GalleryPluginsFloatPosSaved"].AsBool = GalleryPluginsFloatPosSaved;
-                node["GalleryPluginsFloatPosX"].AsFloat = GalleryPluginsFloatPosX;
-                node["GalleryPluginsFloatPosY"].AsFloat = GalleryPluginsFloatPosY;
-                node["GalleryPluginsFloatSizeSaved"].AsBool = GalleryPluginsFloatSizeSaved;
-                node["GalleryPluginsFloatWidthRef"].AsFloat = Mathf.Max(0f, GalleryPluginsFloatWidthRef);
-                node["GalleryPluginsFloatHeightRef"].AsFloat = Mathf.Max(0f, GalleryPluginsFloatHeightRef);
-                node["QuickMenuAssignFloatPosSaved"].AsBool = QuickMenuAssignFloatPosSaved;
-                node["QuickMenuAssignFloatPosX"].AsFloat = QuickMenuAssignFloatPosX;
-                node["QuickMenuAssignFloatPosY"].AsFloat = QuickMenuAssignFloatPosY;
-                node["QuickMenuAssignFloatSizeSaved"].AsBool = QuickMenuAssignFloatSizeSaved;
-                node["QuickMenuAssignFloatWidthRef"].AsFloat = Mathf.Max(0f, QuickMenuAssignFloatWidthRef);
-                node["QuickMenuAssignFloatHeightRef"].AsFloat = Mathf.Max(0f, QuickMenuAssignFloatHeightRef);
+                GalleryPluginsFloatGeometry.Save(node);
+                GalleryLayoutPresetsFloatGeometry.Save(node);
+                QuickMenuAssignFloatGeometry.Save(node);
                 node["GalleryPluginsFloatLatestOnly"].AsBool = GalleryPluginsFloatLatestOnly;
                 node["GalleryPluginsFloatCslistOnly"].AsBool = GalleryPluginsFloatCslistOnly;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
@@ -2785,6 +2936,21 @@ namespace VPB
             if (v < min) return min;
             if (v > max) return max;
             return v;
+        }
+
+        /// <summary>Keeps a dock slot's anchors usable so a docked pane can never become unreachably small.</summary>
+        private static bool ClampDockSlotAnchors(GalleryDockSlot slot)
+        {
+            if (slot == null) return false;
+            bool changed = false;
+            float w = ClampDesktopFixedAnchor01(slot.WidthFree,
+                GalleryDockLayout.MinCrossAnchor, GalleryDockLayout.MaxCrossAnchor, GalleryUiDesignTokens.GoldenRatioMajor);
+            float h = ClampDesktopFixedAnchor01(slot.CustomHeight,
+                GalleryDockLayout.MinCrossAnchor, GalleryDockLayout.MaxCrossAnchor, 0.5f);
+            if (Mathf.Abs(slot.WidthFree - w) > 0.0001f) { slot.WidthFree = w; changed = true; }
+            if (Mathf.Abs(slot.CustomHeight - h) > 0.0001f) { slot.CustomHeight = h; changed = true; }
+            if (changed) GalleryDockLayout.BumpVersion();
+            return changed;
         }
 
         public bool ShouldDisableGalleryPaneTransparency()

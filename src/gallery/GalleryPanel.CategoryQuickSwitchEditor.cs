@@ -199,7 +199,7 @@ namespace VPB
             float rowH = 42f * s;
 
             GameObject row = UI.CreateChildRT(parent.gameObject, "CatQuickRow");
-            UI.AddHLG(row, 6f * s, childForceExpandWidth: false);
+            UI.AddHLG(row, UI.GapTight(s), childForceExpandWidth: false);
             LayoutElement le = UI.AddLE(row, minHeight: rowH, preferredHeight: rowH);
 
             if (displayIndex.HasValue)
@@ -269,11 +269,11 @@ namespace VPB
             GameObject panel = UI.CreateChildRT(_catQuickEditorRoot, "Panel", AnchorPresets.middleCenter, new Vector2(860f * s, 720f * s));
             Image pbg = AddCategoryQuickRoundedBg(panel, new Color(0.06f, 0.06f, 0.08f, 1f));
 
-            UI.AddVLG(panel, 10f * s, UI.Pad(14f, 14f, 14f, 14f, s));
+            UI.AddVLG(panel, UI.GapGroup(s), UI.PadDialog(s));
 
             // Header row.
             GameObject header = UI.CreateChildRT(panel, "HeaderRow");
-            UI.AddHLG(header, 8f * s, childForceExpandWidth: false);
+            UI.AddHLG(header, UI.GapControl(s), childForceExpandWidth: false);
             LayoutElement hle = UI.AddLE(header, minHeight: 54f * s, preferredHeight: 54f * s);
 
             Text title = UI.CreateEmphasisTitleLabel(header, VPBTranslation.T("settings.category_quick.editor.title", "Edit header category dropdown"), headerFont);
@@ -314,7 +314,7 @@ namespace VPB
             LayoutElement vhLe = UI.AddLE(vh.gameObject, minHeight: 34f * s);
 
             GameObject visList = UI.CreateChildRT(content.gameObject, "VisibleList");
-            UI.AddVLG(visList, 6f * s);
+            UI.AddVLG(visList, UI.GapTight(s));
             _catQuickEditorVisibleParent = visList.transform;
 
             Text hhT = UI.CreateEmphasisTitleLabel(content.gameObject,
@@ -323,7 +323,7 @@ namespace VPB
             LayoutElement hhLe = UI.AddLE(hhT.gameObject, minHeight: 34f * s);
 
             GameObject hidList = UI.CreateChildRT(content.gameObject, "HiddenList");
-            UI.AddVLG(hidList, 6f * s);
+            UI.AddVLG(hidList, UI.GapTight(s));
             _catQuickEditorHiddenParent = hidList.transform;
 
             RebuildCategoryQuickEditorRows();

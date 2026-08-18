@@ -759,7 +759,7 @@ namespace VPB
             rootRT.pivot = new Vector2(0.5f, 1f);
             rootRT.sizeDelta = Vector2.zero;
 
-            UI.AddVLG(root, 6f * s, UI.Pad(6f, 6f, 4f, 8f, s), TextAnchor.UpperCenter);
+            UI.AddVLG(root, UI.GapTight(s), UI.Pad(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.ControlGapRef, s), TextAnchor.UpperCenter);
 
             LayoutElement rootLe = UI.AddLE(root, flexibleWidth: 1f);
             ContentSizeFitter rootCsf = root.AddComponent<ContentSizeFitter>();
@@ -767,7 +767,7 @@ namespace VPB
             rootCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             GameObject titleRow = UI.CreateChildRT(root, "AppliedTitleRow");
-            UI.AddHLG(titleRow, 8f * s);
+            UI.AddHLG(titleRow, UI.GapControl(s));
 
             float delSz = Mathf.Max(32f, 42f * s);
 
@@ -1267,7 +1267,7 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
             float s = ChromeScale;
-            UI.AddVLG(go, GalleryUiDesignTokens.SideTabRowSpacingRef * s, UI.Pad(5f, 5f, 0f, 4f, s), TextAnchor.UpperCenter);
+            UI.AddVLG(go, GalleryUiDesignTokens.SideTabRowSpacingRef * s, UI.Pad(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, 0f, GalleryUiDesignTokens.TightGapRef, s), TextAnchor.UpperCenter);
             go.transform.SetAsLastSibling();
             if (isLeft) leftUserTagsAvailPinnedStickyGO = go;
             else rightUserTagsAvailPinnedStickyGO = go;
@@ -1289,7 +1289,7 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
             float s = ChromeScale;
-            UI.AddVLG(go, GalleryUiDesignTokens.SideTabRowSpacingRef * s, UI.Pad(5f, 5f, 0f, 4f, s), TextAnchor.UpperCenter);
+            UI.AddVLG(go, GalleryUiDesignTokens.SideTabRowSpacingRef * s, UI.Pad(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, 0f, GalleryUiDesignTokens.TightGapRef, s), TextAnchor.UpperCenter);
             go.transform.SetAsLastSibling();
             if (isLeft) leftUserTagsAppliedPinnedStickyGO = go;
             else rightUserTagsAppliedPinnedStickyGO = go;
@@ -2587,7 +2587,7 @@ namespace VPB
             rootRT.pivot = new Vector2(0.5f, 1f);
             rootRT.sizeDelta = Vector2.zero;
 
-            UI.AddVLG(root, 7f * s, UI.Pad(6f, 6f, 4f, 10f, s), TextAnchor.UpperCenter);
+            UI.AddVLG(root, UI.GapControl(s), UI.Pad(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.GroupGapRef, s), TextAnchor.UpperCenter);
 
             LayoutElement rootLe = UI.AddLE(root, flexibleWidth: 1f);
             ContentSizeFitter rootCsf = root.AddComponent<ContentSizeFitter>();
@@ -2598,7 +2598,7 @@ namespace VPB
             float titleBand = Mathf.Max(30f * s, titleFs * 1.22f);
 
             GameObject titleRow = UI.CreateChildRT(root, "TagsTitleRow");
-            UI.AddHLG(titleRow, 5f * s, childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false);
+            UI.AddHLG(titleRow, UI.GapTight(s), childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false);
             LayoutElement titleRowLe = UI.AddLE(titleRow, minHeight: titleBand, preferredHeight: titleBand, flexibleWidth: 1f);
 
             Text titleTxt = UI.CreateLabel(titleRow, FormatUserTagAvailTitle(0),
@@ -2619,7 +2619,7 @@ namespace VPB
 
             // false: segment buttons share width; edit stays square.
             GameObject btnRow = UI.CreateChildRT(root, "BulkBtnRow");
-            UI.AddHLG(btnRow, 6f * s, childForceExpandWidth: false);
+            UI.AddHLG(btnRow, UI.GapTight(s), childForceExpandWidth: false);
             LayoutElement rowLe = UI.AddLE(btnRow, minHeight: 34f * s, preferredHeight: 36f * s, flexibleWidth: 1f);
 
             float editSq = 36f * s;
@@ -3416,7 +3416,7 @@ namespace VPB
                 new Color(0.14f, 0.14f, 0.17f, 1f), null, out panel, dimAlpha: 0.5f);
             panel.name = panelName;
             rootGo.SetActive(false);
-            UI.AddVLG(panel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
+            UI.AddVLG(panel, UI.GapGroup(s), UI.PadHV(GalleryUiDesignTokens.DialogPadRef, GalleryUiDesignTokens.GroupGapRef, s));
 
             titleText = UI.CreateLabel(panel, title, titleFont, Color.white, name: titleObjectName);
             UI.AddLE(titleText.gameObject, minHeight: 24f * s, flexibleWidth: 1f);
@@ -3427,7 +3427,7 @@ namespace VPB
                 placeholder, inputName);
 
             GameObject btnRow = UI.CreateChildRT(panel, buttonsName);
-            UI.AddHLG(btnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
+            UI.AddHLG(btnRow, UI.GapControl(s), childAlignment: TextAnchor.MiddleCenter);
             UI.AddLE(btnRow, minHeight: 40f * s, flexibleWidth: 1f);
 
             GameObject cancel = UI.CreateUIButton(btnRow, 0f, 0f, cancelLabel, smallFont, 0f, 0f, AnchorPresets.stretchAll, onCancel);

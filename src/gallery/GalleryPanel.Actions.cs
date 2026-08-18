@@ -1537,8 +1537,7 @@ namespace VPB
             bool labelsOn = false;
             try
             {
-                labelsOn = VPBConfig.Instance != null
-                    && VPBConfig.Instance.GalleryGridLabelsStripVisible()
+                labelsOn = GridLabelsStripVisibleForThisPane()
                     && layoutMode == GalleryLayoutMode.Grid;
             }
             catch { labelsOn = false; }
@@ -1970,9 +1969,9 @@ namespace VPB
                 catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick scan whitelist: " + ex); }
             }
 
-            if (isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode == 0)
+            if (isFixedLocally && VPBConfig.Instance != null && DockHeightMode == 0)
             {
-                VPBConfig.Instance.DesktopFixedHeightMode = 1; // Custom height
+                DockHeightMode = 1; // Custom height
                 UpdateFooterHeightState();
                 UpdateLayout();
             }

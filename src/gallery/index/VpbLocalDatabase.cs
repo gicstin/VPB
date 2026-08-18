@@ -664,6 +664,7 @@ namespace VPB
             EnsurePackageManifestSchema(conn);
             EnsureGalleryUserTagTables(conn);
             EnsureFilterPresetTables(conn);
+            EnsureLayoutPresetTables(conn);
             EnsurePkgNewestSchema(conn);
             EnsurePkgLicenseSchema(conn);
         }

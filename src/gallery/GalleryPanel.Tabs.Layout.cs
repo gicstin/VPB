@@ -7,15 +7,16 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        private float SideTabBottomMargin => GalleryMainAreaBottomInset() + 8f;
-        private float SideTabDefaultBottomOffset => GalleryMainAreaBottomInset() + 8f;
+        private float SideTabBottomMargin => SideTabScrollBottomInsetY();
+        private float SideTabDefaultBottomOffset => SideTabScrollBottomInsetY();
 
-        // Top inset for side tab scroll: clears sort + search row (SideTabTopOffsetRef*s + row + gap).
+        // Top inset for side tab scroll: clears sort + search row. Must read the same anchor the
+        // filter row is placed from (SidePanelFilterRowTopRef).
         // Filter chip bar lives in the main grid column only — do not add ActiveFilterChromeTopInsetPx here.
         private float TabScrollTopOffset()
         {
             float s = ChromeScale;
-            float rowTop = GalleryUiDesignTokens.SideTabTopOffsetRef * s;
+            float rowTop = SidePanelFilterRowTopRef * s;
             float headerExtra = 0f;
             try { headerExtra = SidePanelHeaderExtraTopInset(); } catch { }
             float rowH = GalleryUiDesignTokens.SideTabRowHeightRef * s;
@@ -193,7 +194,7 @@ namespace VPB
                     RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
                     leftRT.anchorMin = new Vector2(0, splitY);
                     leftRT.anchorMax = new Vector2(0, 1);
-                    leftRT.offsetMin = new Vector2(10, SideTabSplitSeamInset());
+                    leftRT.offsetMin = new Vector2(GalleryUiDesignTokens.SideTabSideMarginRef * ChromeScale, SideTabSplitSeamInset());
                     leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
 
                     RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
@@ -234,7 +235,7 @@ namespace VPB
                     RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
                     leftRT.anchorMin = new Vector2(0, 0);
                     leftRT.anchorMax = new Vector2(0, 1);
-                    leftRT.offsetMin = new Vector2(10, SideTabDefaultBottomOffset); // Restore default
+                    leftRT.offsetMin = new Vector2(GalleryUiDesignTokens.SideTabSideMarginRef * ChromeScale, SideTabDefaultBottomOffset);
                     leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
 
                     if (rebuildSideTabLists)

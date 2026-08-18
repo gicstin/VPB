@@ -314,10 +314,9 @@ namespace VPB
         private static void ApplySideTabVirtRowHorizontalLayout(RectTransform rt, float s, float rowH)
         {
             if (rt == null) return;
-            float pad = GalleryUiDesignTokens.SideTabRowPadRef * s;
-            rt.sizeDelta = new Vector2(-pad, rowH);
+            rt.sizeDelta = new Vector2(0f, rowH);
             rt.offsetMin = new Vector2(0f, rt.offsetMin.y);
-            rt.offsetMax = new Vector2(-pad, rt.offsetMax.y);
+            rt.offsetMax = new Vector2(0f, rt.offsetMax.y);
         }
 
         private void EnsureSideTabVirtPool(List<GameObject> pool, Transform parent, int desired)
@@ -1643,7 +1642,7 @@ namespace VPB
             RectTransform textAreaRT = textArea.AddComponent<RectTransform>();
             textAreaRT.anchorMin = Vector2.zero;
             textAreaRT.anchorMax = Vector2.one;
-            textAreaRT.offsetMin = new Vector2(38, 0); // Left offset accounts for search icon
+            textAreaRT.offsetMin = new Vector2(GalleryUiDesignTokens.SearchTextLeftInsetRef, 0);
             textAreaRT.offsetMax = new Vector2(-GalleryUiDesignTokens.SearchTextRightInsetRef, 0);
 
             // Search icon (left side of input)
@@ -1884,7 +1883,7 @@ namespace VPB
         /// </summary>
         internal float GetGridLabelStripHeightPx()
         {
-            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsStripVisible()) return 0f;
+            if (!GridLabelsStripVisibleForThisPane()) return 0f;
 
             float fontDesign = 18f;
             try { fontDesign = VPBConfig.Instance.GalleryGridLabelFontSize; }
@@ -2435,7 +2434,7 @@ namespace VPB
             listRowRT.offsetMin = new Vector2(60, 0);
             listRowRT.offsetMax = new Vector2(-50, 0);
 
-            VerticalLayoutGroup listVLG = UI.AddVLG(listRowGO, 0f, UI.Pad(5f, 5f, 5f, 5f), TextAnchor.MiddleLeft);
+            VerticalLayoutGroup listVLG = UI.AddVLG(listRowGO, 0f, UI.PadTight(), TextAnchor.MiddleLeft);
 
             // Name
             Text listNameText = UI.CreateLabel(listRowGO, "", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.LowerLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Name");
@@ -2445,7 +2444,7 @@ namespace VPB
             // Details Row
             GameObject detailsRowGO = new GameObject("Details");
             detailsRowGO.transform.SetParent(listRowGO.transform, false);
-            HorizontalLayoutGroup detailsHLG = UI.AddHLG(detailsRowGO, 15f, UI.Pad(0f, 0f, 0f, 0f), childForceExpandWidth: false);
+            HorizontalLayoutGroup detailsHLG = UI.AddHLG(detailsRowGO, UI.GapRegion(), UI.Pad(0f, 0f, 0f, 0f), childForceExpandWidth: false);
             LayoutElement detailsLE = UI.AddLE(detailsRowGO, minHeight: 24, flexibleWidth: 1);
 
             // Helper to create detail text
@@ -2470,7 +2469,7 @@ namespace VPB
             // Plain VerticalLayoutGroup child like Name/Details: let the group drive position/size.
             // Custom bottom-stretch anchors here fight the group and mis-place the strip.
             listBadgesGO.AddComponent<RectTransform>();
-            HorizontalLayoutGroup listBadgesHLG = UI.AddHLG(listBadgesGO, spacing: 4f, childForceExpandWidth: false);
+            HorizontalLayoutGroup listBadgesHLG = UI.AddHLG(listBadgesGO, spacing: UI.GapTight(), childForceExpandWidth: false);
             LayoutElement listBadgesLE = UI.AddLE(listBadgesGO, minHeight: 32f, preferredHeight: 32f, flexibleWidth: 1f, flexibleHeight: 0f);
 
             // Rating (Top-right corner)

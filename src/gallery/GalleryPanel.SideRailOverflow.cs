@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -79,7 +80,7 @@ namespace VPB
         /// Rails sit on pane edges — do NOT reserve InfoBar/toolbox height (that emptied
         /// floating/VR rails into "…" while vertical space sat unused beside the strip).
         /// </summary>
-        private const float SideRailChromeEdgePadRef = 8f;
+        private const float SideRailChromeEdgePadRef = GalleryUiDesignTokens.BandPadHRef;
 
         /// <summary>
         /// Free Y band for side-rail button centers (bg-local), and first↔last center span.
@@ -266,8 +267,8 @@ namespace VPB
         private bool IsSideRailFloatingIndex(int idx)
         {
             if (idx < 0) return false;
-            GameObject leftDesk = leftDesktopModeBtnImage != null ? leftDesktopModeBtnImage.gameObject : null;
-            GameObject rightDesk = rightDesktopModeBtnImage != null ? rightDesktopModeBtnImage.gameObject : null;
+            GameObject leftDesk = leftDockAnchorBtnImage != null ? leftDockAnchorBtnImage.gameObject : null;
+            GameObject rightDesk = rightDockAnchorBtnImage != null ? rightDockAnchorBtnImage.gameObject : null;
             if (TryGetSideRailButtonPair(idx, out RectTransform left, out RectTransform right))
             {
                 if (left != null && leftDesk != null && left.gameObject == leftDesk) return true;
@@ -276,15 +277,49 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Next layout index to hide (tools/end first). Never hides Floating/Fixed.</summary>
+        /// <summary>Next layout index to hide. Import first; never Category.</summary>
         private int PickNextSideRailCollapseIndex()
         {
             SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
+            int categoryIdx = -1;
+            if (leftCategoryBtnImage != null)
+            {
+                TryGetSideRailButtonPairFromGo(leftCategoryBtnImage.gameObject, out categoryIdx);
+            }
+            if (categoryIdx < 0 && rightCategoryBtnImage != null)
+                TryGetSideRailButtonPairFromGo(rightCategoryBtnImage.gameObject, out categoryIdx);
+
+            int importIdx = -1;
+            GameObject impGo = leftSceneImportSideBtn != null ? leftSceneImportSideBtn : rightSceneImportSideBtn;
+            if (impGo != null) TryGetSideRailButtonPairFromGo(impGo, out importIdx);
+
+            int dockIdx = -1;
+            if (rightDockAnchorBtnImage != null)
+                TryGetSideRailButtonPairFromGo(rightDockAnchorBtnImage.gameObject, out dockIdx);
+            if (dockIdx < 0 && leftDockAnchorBtnImage != null)
+                TryGetSideRailButtonPairFromGo(leftDockAnchorBtnImage.gameObject, out dockIdx);
+
+            int followIdx = -1;
+            if (rightFollowBtnImage != null)
+                TryGetSideRailButtonPairFromGo(rightFollowBtnImage.gameObject, out followIdx);
+            if (followIdx < 0 && leftFollowBtnImage != null)
+                TryGetSideRailButtonPairFromGo(leftFollowBtnImage.gameObject, out followIdx);
+
+            if (importIdx >= 0 && !_sideRailOverflowCollapsedIdx.Contains(importIdx))
+            {
+                if (TryGetSideRailButtonPair(importIdx, out RectTransform il, out RectTransform ir))
+                {
+                    GameObject go = il != null ? il.gameObject : (ir != null ? ir.gameObject : null);
+                    if (go != null && go.activeSelf) return importIdx;
+                }
+            }
+
             for (int i = layout.Length - 1; i >= 0; i--)
             {
                 int idx = layout[i].buttonIndex;
                 if (idx < 0) continue;
-                if (IsSideRailFloatingIndex(idx)) continue;
+                if (idx == categoryIdx) continue;
+                if (idx == dockIdx || idx == followIdx) continue;
                 if (_sideRailOverflowCollapsedIdx.Contains(idx)) continue;
                 if (!TryGetSideRailButtonPair(idx, out RectTransform left, out RectTransform right)) continue;
                 GameObject go = left != null ? left.gameObject : right.gameObject;
@@ -292,6 +327,34 @@ namespace VPB
                 return idx;
             }
             return -1;
+        }
+
+        private void TryGetSideRailButtonPairFromGo(GameObject go, out int idx)
+        {
+            idx = -1;
+            if (go == null) return;
+            if (leftSideButtons != null)
+            {
+                for (int i = 0; i < leftSideButtons.Count; i++)
+                {
+                    if (leftSideButtons[i] != null && leftSideButtons[i].gameObject == go)
+                    {
+                        idx = i;
+                        return;
+                    }
+                }
+            }
+            if (rightSideButtons != null)
+            {
+                for (int i = 0; i < rightSideButtons.Count; i++)
+                {
+                    if (rightSideButtons[i] != null && rightSideButtons[i].gameObject == go)
+                    {
+                        idx = i;
+                        return;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -451,23 +514,26 @@ namespace VPB
             tipDefault = null;
             if (go == null) return false;
 
-            if (SideRailGoMatches(go, leftDesktopModeBtnImage, rightDesktopModeBtnImage, leftDesktopModeBtnText, rightDesktopModeBtnText))
+            if (SideRailGoMatches(go, leftDockAnchorBtnImage, rightDockAnchorBtnImage, leftDockAnchorBtnText, rightDockAnchorBtnText))
             {
-                tipKey = "gallery.tooltip.desktop_mode";
-                tipDefault = "Toggle fixed vs floating panel (desktop only).";
+                bool vr = false;
+                try { vr = XrUtils.IsVrActive(); } catch { }
+                if (vr)
+                {
+                    tipKey = "gallery.tooltip.clone_pane";
+                    tipDefault = "Clone this gallery pane.";
+                }
+                else
+                {
+                    tipKey = "gallery.tooltip.dock_anchor";
+                    tipDefault = "Dock this pane — or a clone of it — to an edge, or float it again.";
+                }
                 return true;
             }
             if (SideRailGoMatches(go, leftFollowBtnImage, rightFollowBtnImage, leftFollowBtnText, rightFollowBtnText))
             {
                 tipKey = "gallery.tooltip.follow_mode";
                 tipDefault = "Toggle camera follow for the panel.";
-                return true;
-            }
-            if (SideRailGoMatchesIcon(go, leftCloneBtnIconImage, rightCloneBtnIconImage)
-                || SideRailGoIs(go, leftCloneBtnText, rightCloneBtnText))
-            {
-                tipKey = "gallery.tooltip.clone_pane";
-                tipDefault = "Clone this gallery pane.";
                 return true;
             }
             if (SideRailGoIs(go, leftSaveBtnGO, rightSaveBtnGO)
@@ -495,22 +561,6 @@ namespace VPB
                 tipDefault = "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.";
                 return true;
             }
-            if (SideRailGoIs(go, leftCreatorModeSideBtn, rightCreatorModeSideBtn)
-                || SideRailGoMatchesIcon(go, leftCreatorModeBtnIconImage, rightCreatorModeBtnIconImage))
-            {
-                tipKey = "gallery.tooltip.creator_mode";
-                tipDefault = "Scene Tools — sticky scene authoring (Strip Scene, …). Not the Creators author list. Ctrl+Shift+K. Esc exits.";
-                return true;
-            }
-            if (SideRailGoIs(go, leftRemoveAtomBtn, rightRemoveAtomBtn)
-                || SideRailGoMatchesIcon(go, leftRemoveAtomBtnIconImage, rightRemoveAtomBtnIconImage)
-                || SideRailGoIs(go, leftRemoveAllClothingBtn, rightRemoveAllClothingBtn)
-                || SideRailGoIs(go, leftRemoveAllHairBtn, rightRemoveAllHairBtn))
-            {
-                tipKey = "gallery.tooltip.remove_context";
-                tipDefault = "Remove or open remove options for the current category (clothing, hair, or scene).";
-                return true;
-            }
             if (SideRailGoMatches(go, leftCategoryBtnImage, rightCategoryBtnImage, leftCategoryBtnText, rightCategoryBtnText))
             {
                 tipKey = "gallery.tooltip.category_list";
@@ -535,12 +585,6 @@ namespace VPB
                 tipDefault = "Launch history and usage filters.";
                 return true;
             }
-            if (SideRailGoMatches(go, leftApplyModeBtnImage, rightApplyModeBtnImage, leftApplyModeBtnText, rightApplyModeBtnText))
-            {
-                tipKey = "gallery.tooltip.apply_mode";
-                tipDefault = "Toggle 1-click vs 2-click apply.";
-                return true;
-            }
             return false;
         }
 
@@ -549,17 +593,16 @@ namespace VPB
         {
             if (go == null) return VPBTranslation.T("gallery.side.overflow_item", "Action");
 
-            if (SideRailGoMatches(go, leftDesktopModeBtnImage, rightDesktopModeBtnImage, leftDesktopModeBtnText, rightDesktopModeBtnText))
+            if (SideRailGoMatches(go, leftDockAnchorBtnImage, rightDockAnchorBtnImage, leftDockAnchorBtnText, rightDockAnchorBtnText))
             {
-                return isFixedLocally
-                    ? VPBTranslation.T("gallery.desktop.floating", "Floating")
-                    : VPBTranslation.T("gallery.desktop.fixed", "Fixed");
+                bool vr = false;
+                try { vr = XrUtils.IsVrActive(); } catch { }
+                return vr
+                    ? VPBTranslation.T("gallery.side.overflow_clone", "Clone pane")
+                    : VPBTranslation.T("gallery.side.overflow_dock_anchor", "Dock…");
             }
             if (SideRailGoMatches(go, leftFollowBtnImage, rightFollowBtnImage, leftFollowBtnText, rightFollowBtnText))
                 return VPBTranslation.T("gallery.side.overflow_follow", "Follow");
-            if (SideRailGoMatchesIcon(go, leftCloneBtnIconImage, rightCloneBtnIconImage)
-                || SideRailGoIs(go, leftCloneBtnText, rightCloneBtnText))
-                return VPBTranslation.T("gallery.side.overflow_clone", "Clone pane");
             if (SideRailGoIs(go, leftSaveBtnGO, rightSaveBtnGO)
                 || SideRailGoMatchesIcon(go, leftSaveBtnIconImage, rightSaveBtnIconImage))
                 return VPBTranslation.T("gallery.side.overflow_save", "Save");
@@ -569,16 +612,6 @@ namespace VPB
                 return VPBTranslation.T("gallery.side.overflow_tags", "User Tags");
             if (SideRailGoIs(go, leftRemoveModeSideBtn, rightRemoveModeSideBtn))
                 return VPBTranslation.T("gallery.side.overflow_remove_mode", "Scene Eraser");
-            if (SideRailGoIs(go, leftCreatorModeSideBtn, rightCreatorModeSideBtn)
-                || SideRailGoMatchesIcon(go, leftCreatorModeBtnIconImage, rightCreatorModeBtnIconImage))
-                return VPBTranslation.T("gallery.side.overflow_creator_mode", "Scene Tools");
-            if (SideRailGoIs(go, leftRemoveAtomBtn, rightRemoveAtomBtn)
-                || SideRailGoMatchesIcon(go, leftRemoveAtomBtnIconImage, rightRemoveAtomBtnIconImage))
-                return VPBTranslation.T("gallery.side.overflow_remove", "Unequip");
-            if (SideRailGoIs(go, leftRemoveAllClothingBtn, rightRemoveAllClothingBtn))
-                return VPBTranslation.T("gallery.side.overflow_remove_clothing", "Unequip clothing");
-            if (SideRailGoIs(go, leftRemoveAllHairBtn, rightRemoveAllHairBtn))
-                return VPBTranslation.T("gallery.side.overflow_remove_hair", "Unequip hair");
             if (SideRailGoMatches(go, leftCategoryBtnImage, rightCategoryBtnImage, leftCategoryBtnText, rightCategoryBtnText))
                 return VPBTranslation.T("gallery.side.overflow_category", "Category");
             if (SideRailGoMatches(go, leftCreatorBtnImage, rightCreatorBtnImage, leftCreatorBtnText, rightCreatorBtnText))
@@ -587,8 +620,6 @@ namespace VPB
                 return VPBTranslation.T("gallery.side.overflow_path", "Paths");
             if (SideRailGoMatchesImage(go, leftHistoryBtnImage, rightHistoryBtnImage))
                 return VPBTranslation.T("gallery.side.overflow_history", "History");
-            if (SideRailGoMatches(go, leftApplyModeBtnImage, rightApplyModeBtnImage, leftApplyModeBtnText, rightApplyModeBtnText))
-                return VPBTranslation.T("gallery.side.overflow_apply_mode", "Apply mode");
 
             Text txt = go.GetComponentInChildren<Text>(true);
             if (txt != null)

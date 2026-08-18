@@ -23,14 +23,14 @@ namespace VPB
 
         private const float SettingsFloatFooterBtnWRef = 96f;
         private const float SettingsFloatFooterCloseBtnWRef = 88f;
-        private const float SettingsFloatSidebarPadRef = 4f;
-        private const float SettingsFloatSidebarRowGapRef = 2f;
-        private const float SettingsFloatGroupChipIconSizeRef = 16f;
-        private const float SettingsFloatGroupChipIconGapRef = 4f;
-        private const float SettingsFloatGroupChipPadLRef = 6f;
-        private const float SettingsFloatGroupChipPadRRef = 8f;
-        private const float SettingsFloatRowsSpacingRef = 2f;
-        private const float SettingsFloatRowsPadRef = 6f;
+        private const float SettingsFloatSidebarPadRef = GalleryUiDesignTokens.TightGapRef;
+        private const float SettingsFloatSidebarRowGapRef = GalleryUiDesignTokens.HairGapRef;
+        private const float SettingsFloatGroupChipIconSizeRef = GalleryUiDesignTokens.RegionGapRef;
+        private const float SettingsFloatGroupChipIconGapRef = GalleryUiDesignTokens.TightGapRef;
+        private const float SettingsFloatGroupChipPadLRef = GalleryUiDesignTokens.TightGapRef;
+        private const float SettingsFloatGroupChipPadRRef = GalleryUiDesignTokens.ControlGapRef;
+        private const float SettingsFloatRowsSpacingRef = GalleryUiDesignTokens.HairGapRef;
+        private const float SettingsFloatRowsPadRef = GalleryUiDesignTokens.TightGapRef;
 
         // Row build is windowed: the full list is ~165 definitions and a single row costs ~15 GameObjects
         // (rounded backgrounds, mini buttons, slider parts, hover borders), so building them all in one
@@ -293,7 +293,7 @@ namespace VPB
                 filterRT.sizeDelta = new Vector2(0f, filterH);
                 filterRT.anchoredPosition = new Vector2(0f, -titleH);
             }
-            UI.AddHLG(_settingsFloatFilterRow, spacing: 6f * s,
+            UI.AddHLG(_settingsFloatFilterRow, spacing: UI.GapTight(s),
                 padding: UI.Pad(
                     GalleryUiDesignTokens.FloatSearchRowPadRef,
                     GalleryUiDesignTokens.FloatSearchRowPadRef,
@@ -457,7 +457,7 @@ namespace VPB
                 footerRT.sizeDelta = new Vector2(0f, footerH);
             }
             UI.AddHLG(
-                _settingsFloatFooter, spacing: 6f * s, padding: UI.Pad(8, 8, 4, 4, s),
+                _settingsFloatFooter, spacing: UI.GapTight(s), padding: UI.PadFloatFooter(s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -593,7 +593,7 @@ namespace VPB
             emptyRT.anchorMax = Vector2.one;
             emptyRT.offsetMin = new Vector2(12f * s, 12f * s);
             emptyRT.offsetMax = new Vector2(-12f * s, -12f * s);
-            VerticalLayoutGroup emptyVlg = UI.AddVLG( _settingsFloatEmptyGo, spacing: 10f * s, padding: UI.Pad(8, 8, 8, 8, s));
+            VerticalLayoutGroup emptyVlg = UI.AddVLG( _settingsFloatEmptyGo, spacing: UI.GapGroup(s), padding: UI.PadControl(s));
             emptyVlg.childAlignment = TextAnchor.MiddleCenter;
             emptyVlg.childForceExpandHeight = false;
             emptyVlg.childForceExpandWidth = true;
@@ -958,7 +958,7 @@ namespace VPB
             listRowRT.offsetMax = new Vector2(-8f * s, -2f * s);
 
             HorizontalLayoutGroup listHlg = UI.AddHLG(
-                listRowGO, spacing: 8f * s, padding: UI.Pad(2, 2, 4, 4, s),
+                listRowGO, spacing: UI.GapControl(s), padding: UI.PadHV(GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.TightGapRef, s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: true);
@@ -983,7 +983,7 @@ namespace VPB
 
             GameObject detailsRowGO = new GameObject("Details");
             detailsRowGO.transform.SetParent(listRowGO.transform, false);
-            UI.AddHLG(detailsRowGO, spacing: 6f * s, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+            UI.AddHLG(detailsRowGO, spacing: UI.GapTight(s), childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             UI.AddLE(detailsRowGO, flexibleWidth: 0.55f, minHeight: effectiveRowH * 0.85f, preferredHeight: effectiveRowH * 0.85f);
 
             RebuildSettingsRowControls(rowGO, def, settleLayout: false);

@@ -533,6 +533,7 @@ namespace VPB
                 if (p != null && p.gameObject != null) Destroy(p.gameObject);
             }
             panels.Clear();
+            try { GalleryPanel.DestroyLayoutPresetsOverlay(); } catch { }
         }
 
         /// <summary>Next slot for extra panes after <see cref="GalleryPanel.PrimaryPanelId"/>. First pane always gets primary so SQL filter memory survives Close.</summary>
@@ -551,10 +552,27 @@ namespace VPB
 
         public void RemovePanel(GalleryPanel p)
         {
+            if (p != null)
+            {
+                try { GalleryDockLayout.Release(p.PanelId); } catch { }
+            }
             if (panels.Contains(p)) panels.Remove(p);
             // All panes gone → next create is primary again (browse memory restores).
             if (panels.Count == 0)
                 _nextExtraPanelSlot = 1;
+        }
+
+        /// <summary>True when a live pane still owns this stable id (dock-slot self-heal).</summary>
+        internal static bool HasPanelWithId(string panelId)
+        {
+            if (string.IsNullOrEmpty(panelId) || singleton == null || singleton.panels == null) return false;
+            for (int i = 0; i < singleton.panels.Count; i++)
+            {
+                GalleryPanel p = singleton.panels[i];
+                if (p != null && string.Equals(p.PanelId, panelId, StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
         }
 
         public void Init()
@@ -633,12 +651,13 @@ namespace VPB
             return s;
         }
 
-        public void ClonePanel(GalleryPanel original, bool toRight)
+        /// <summary>Returns the new pane so callers can keep acting on it (e.g. park it on a dock edge).</summary>
+        public GalleryPanel ClonePanel(GalleryPanel original, bool toRight)
         {
             if (panels.Count >= MaxPanels)
             {
                 // Optionally warn user?
-                return;
+                return null;
             }
 
             var cloneTiming = System.Diagnostics.Stopwatch.StartNew();
@@ -736,6 +755,7 @@ namespace VPB
             p.hasBeenPositioned = true;
             p.BeginPaneLoadTiming(cloneTiming, "clone");
             p.Show(original.GetTitle(), original.GetCurrentExtension(), original.GetCurrentPath());
+            return p;
         }
 
         public void Show(string title, string extension, string path)

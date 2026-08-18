@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
@@ -123,7 +123,7 @@ namespace VPB
             public float flexW;
         }
         private readonly Dictionary<GameObject, TboxBaseWidthSpec> tboxBaseWidthSpec = new Dictionary<GameObject, TboxBaseWidthSpec>(64);
-        private const float tboxBtnRowGapRef = 4f;
+        private const float tboxBtnRowGapRef = GalleryUiDesignTokens.ControlRowGapRef;
         private float TboxBtnRowGapScaled()
         {
             float s = ChromeScale;
@@ -159,6 +159,32 @@ namespace VPB
         private float TboxActionButtonInnerHeight()
         {
             return GalleryUiDesignTokens.ButtonSizeRef * ChromeScale;
+        }
+
+        private float TboxActionRowSlotHeight()
+        {
+            return GalleryUiMetrics.Slot(GalleryUiDesignTokens.TboxActionButtonSizeRef, ChromeScale);
+        }
+
+        private float TboxActionButtonGapScaled()
+        {
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            return GalleryUiDesignTokens.ControlGapRef * s;
+        }
+
+        private float TboxActionBandHeight(int rows)
+        {
+            return GalleryUiMetrics.BandHeight(rows, GalleryUiDesignTokens.TboxActionButtonSizeRef,
+                GalleryUiDesignTokens.ControlRowGapRef, ChromeScale);
+        }
+
+        private void TboxSyncActionRowSpacing()
+        {
+            float g = TboxActionButtonGapScaled();
+            if (tboxBtnRow0HLG != null) tboxBtnRow0HLG.spacing = g;
+            if (tboxBtnRow1HLG != null) tboxBtnRow1HLG.spacing = g;
+            if (tboxBtnRow2HLG != null) tboxBtnRow2HLG.spacing = g;
         }
 
         private void TboxSetAllFlexActionButtonHeights(float innerRowH)
@@ -287,13 +313,13 @@ namespace VPB
         {
             if (tboxButtonsFlexRootRT == null || tboxBtnRow0HLG == null || tboxBtnRow1HLG == null || tboxBtnRow2HLG == null) return;
 
-            // Button rows use the button height as their slot height so no blank space appears
-            // when multiple rows are active.
             float innerH = TboxActionButtonInnerHeight();
-            if (tboxBtnRow0LE != null) { tboxBtnRow0LE.minHeight = innerH; tboxBtnRow0LE.preferredHeight = innerH; }
-            if (tboxBtnRow1LE != null) { tboxBtnRow1LE.minHeight = innerH; tboxBtnRow1LE.preferredHeight = innerH; }
-            if (tboxBtnRow2LE != null) { tboxBtnRow2LE.minHeight = innerH; tboxBtnRow2LE.preferredHeight = innerH; }
+            float slotH = TboxActionRowSlotHeight();
+            if (tboxBtnRow0LE != null) { tboxBtnRow0LE.minHeight = slotH; tboxBtnRow0LE.preferredHeight = slotH; }
+            if (tboxBtnRow1LE != null) { tboxBtnRow1LE.minHeight = slotH; tboxBtnRow1LE.preferredHeight = slotH; }
+            if (tboxBtnRow2LE != null) { tboxBtnRow2LE.minHeight = slotH; tboxBtnRow2LE.preferredHeight = slotH; }
             TboxSetAllFlexActionButtonHeights(innerH);
+            TboxSyncActionRowSpacing();
 
             // Details is one-row top-left chrome — pad only that band; wrap rows use full width.
             try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }
@@ -312,7 +338,7 @@ namespace VPB
                 ? Mathf.Max(8f, availFull - detailsReserve)
                 : availFull;
 
-            const float gap = 10f;
+            float gap = TboxActionButtonGapScaled();
 
             bool TryGetBaseWidths(GameObject go, out float minW, out float prefW)
             {
@@ -572,7 +598,7 @@ namespace VPB
             }
 
             float rowGap = TboxBtnRowGapScaled();
-            float band = innerH * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (rowGap * (tboxButtonLayoutRows - 1)) : 0f);
+            float band = TboxActionBandHeight(tboxButtonLayoutRows);
             // Add appearance clothing-mode row height when active
             if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
                 band += tboxInfoRowHeight + rowGap;
@@ -623,8 +649,9 @@ namespace VPB
             le.minWidth = 72f;
             le.preferredWidth = 100f;
             le.flexibleWidth = 1f;
-            le.minHeight = tboxInfoRowHeight;
-            le.preferredHeight = tboxInfoRowHeight;
+            le.minHeight = TboxActionButtonInnerHeight();
+            le.preferredHeight = TboxActionButtonInnerHeight();
+            le.flexibleHeight = 0f;
             AddTooltip(go, tooltipKey, tooltipText);
         }
 
@@ -665,7 +692,7 @@ namespace VPB
             rowRT.offsetMin = Vector2.zero;
             rowRT.offsetMax = Vector2.zero;
 
-            var rowHLG = UI.AddHLG(rowGO, spacing: 12f, padding: UI.Pad(8, 8, 0, 0), childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false, childForceExpandHeight: true);
+            var rowHLG = UI.AddHLG(rowGO, spacing: GalleryUiDesignTokens.Space4Ref, padding: UI.RowPad(), childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false, childForceExpandHeight: true);
 
             const int tboxCollapsedFont = GalleryUiDesignTokens.FontBodyRef;
 
@@ -704,8 +731,7 @@ namespace VPB
             tboxButtonsFlexRootRT = flexGO.AddComponent<RectTransform>();
             tboxButtonsFlexRootRT.anchorMin = Vector2.zero;
             tboxButtonsFlexRootRT.anchorMax = Vector2.one;
-            tboxButtonsFlexRootRT.offsetMin = new Vector2(8f, 0f);
-            tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f, 0f);
+            UI.ApplyBandInset(tboxButtonsFlexRootRT, ChromeScale);
             tboxButtonsFlexRootRT.pivot = new Vector2(0.5f, 0f);
             var flexVlg = UI.AddVLG(flexGO, spacing: TboxBtnRowGapScaled(), childAlignment: TextAnchor.UpperRight);
 
@@ -721,6 +747,8 @@ namespace VPB
             tboxButtonStash = stashGO;
 
             float innerRowH = TboxActionButtonInnerHeight();
+            float rowSlotH = TboxActionRowSlotHeight();
+            float btnGap = TboxActionButtonGapScaled();
 
             tboxBtnRow0GO = new GameObject("TboxBtnRow0");
             tboxBtnRow0GO.transform.SetParent(flexGO.transform, false);
@@ -728,8 +756,8 @@ namespace VPB
             tboxBtnRow0RT.anchorMin = Vector2.zero;
             tboxBtnRow0RT.anchorMax = Vector2.one;
             tboxBtnRow0RT.sizeDelta = Vector2.zero;
-            tboxBtnRow0LE = UI.AddLE(tboxBtnRow0GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
-            tboxBtnRow0HLG = UI.AddHLG(tboxBtnRow0GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+            tboxBtnRow0LE = UI.AddLE(tboxBtnRow0GO, minHeight: rowSlotH, preferredHeight: rowSlotH, flexibleWidth: 1f);
+            tboxBtnRow0HLG = UI.AddHLG(tboxBtnRow0GO, spacing: btnGap, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
 
             tboxBtnRow1GO = new GameObject("TboxBtnRow1");
             tboxBtnRow1GO.transform.SetParent(flexGO.transform, false);
@@ -737,8 +765,8 @@ namespace VPB
             tboxBtnRow1RT.anchorMin = Vector2.zero;
             tboxBtnRow1RT.anchorMax = Vector2.one;
             tboxBtnRow1RT.sizeDelta = Vector2.zero;
-            tboxBtnRow1LE = UI.AddLE(tboxBtnRow1GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
-            tboxBtnRow1HLG = UI.AddHLG(tboxBtnRow1GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+            tboxBtnRow1LE = UI.AddLE(tboxBtnRow1GO, minHeight: rowSlotH, preferredHeight: rowSlotH, flexibleWidth: 1f);
+            tboxBtnRow1HLG = UI.AddHLG(tboxBtnRow1GO, spacing: btnGap, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             tboxBtnRow1GO.SetActive(false);
 
             tboxBtnRow2GO = new GameObject("TboxBtnRow2");
@@ -747,8 +775,8 @@ namespace VPB
             tboxBtnRow2RT.anchorMin = Vector2.zero;
             tboxBtnRow2RT.anchorMax = Vector2.one;
             tboxBtnRow2RT.sizeDelta = Vector2.zero;
-            tboxBtnRow2LE = UI.AddLE(tboxBtnRow2GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
-            tboxBtnRow2HLG = UI.AddHLG(tboxBtnRow2GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+            tboxBtnRow2LE = UI.AddLE(tboxBtnRow2GO, minHeight: rowSlotH, preferredHeight: rowSlotH, flexibleWidth: 1f);
+            tboxBtnRow2HLG = UI.AddHLG(tboxBtnRow2GO, spacing: btnGap, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             tboxBtnRow2GO.SetActive(false);
 
             // ── Appearance Clothing Mode Row (Preset / Keep / Only) ────────────
@@ -762,7 +790,7 @@ namespace VPB
             tboxClothingModeRowRT.anchorMax = Vector2.one;
             tboxClothingModeRowRT.sizeDelta = Vector2.zero;
             tboxClothingModeRowLE = UI.AddLE(tboxClothingModeRowGO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
-            tboxClothingModeRowHLG = UI.AddHLG(tboxClothingModeRowGO, spacing: 8f, padding: UI.Pad(8, 8, 0, 0), childForceExpandWidth: false, childForceExpandHeight: true);
+            tboxClothingModeRowHLG = UI.AddHLG(tboxClothingModeRowGO, spacing: btnGap, padding: UI.RowPad(), childForceExpandWidth: false, childForceExpandHeight: false);
             tboxClothingModeRowGO.SetActive(false);
 
             // Leading label
@@ -1607,8 +1635,8 @@ namespace VPB
                     HorizontalLayoutGroup labelHlg = labelRow.GetComponent<HorizontalLayoutGroup>();
                     if (labelHlg != null)
                     {
-                        labelHlg.spacing = 12f * s;
-                        labelHlg.padding = UI.Pad(8, 8, 0, 0, s);
+                        labelHlg.spacing = GalleryUiDesignTokens.Space4Ref * s;
+                        labelHlg.padding = UI.RowPad(s);
                     }
                 }
             }
@@ -1619,14 +1647,12 @@ namespace VPB
             }
             if (tboxButtonsFlexRootRT != null)
             {
-                tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f * s, 0f);
-                try { DetailStripApplyToolboxFlexLeftInset(s); } catch
-                {
-                    tboxButtonsFlexRootRT.offsetMin = new Vector2(8f * s, 0f);
-                }
+                UI.ApplyBandInset(tboxButtonsFlexRootRT, s);
+                try { DetailStripApplyToolboxFlexLeftInset(s); } catch { }
                 VerticalLayoutGroup flexVlg = tboxButtonsFlexRoot != null
                     ? tboxButtonsFlexRoot.GetComponent<VerticalLayoutGroup>() : null;
                 if (flexVlg != null) flexVlg.spacing = gap;
+                TboxSyncActionRowSpacing();
             }
             if (tboxRowSepRT != null)
                 tboxRowSepRT.anchoredPosition = new Vector2(0f, rowH);
@@ -1780,7 +1806,7 @@ namespace VPB
             rowRT.anchorMin = Vector2.zero; rowRT.anchorMax = Vector2.one;
             rowRT.pivot = new Vector2(0.5f, 0.5f);
             rowRT.offsetMin = rowRT.offsetMax = Vector2.zero;
-            var rowHLG = UI.AddHLG(tboxTargetDropdownRowGO, spacing: 2f, childForceExpandHeight: true);
+            var rowHLG = UI.AddHLG(tboxTargetDropdownRowGO, spacing: UI.GapHair(), childForceExpandHeight: true);
             var rowLE = UI.AddLE(tboxTargetDropdownRowGO, minWidth: 140f, minHeight: innerRowH, preferredWidth: 220f, preferredHeight: innerRowH, flexibleWidth: 1f, flexibleHeight: 0f);
             tboxPersonAtomBtns.Add(tboxTargetDropdownRowGO);
 
@@ -1863,7 +1889,7 @@ namespace VPB
             outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
             outline.effectDistance = new Vector2(1f, -1f);
 
-            VerticalLayoutGroup vlg = UI.AddVLG(tboxTargetMenuPanelGO, spacing: 4, padding: UI.Pad(6, 6, 6, 6), childAlignment: TextAnchor.UpperCenter);
+            VerticalLayoutGroup vlg = UI.AddVLG(tboxTargetMenuPanelGO, spacing: UI.GapTight(), padding: UI.PadPopup(), childAlignment: TextAnchor.UpperCenter);
 
             ContentSizeFitter csf = tboxTargetMenuPanelGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -1911,7 +1937,7 @@ namespace VPB
 
                 var rowImg = UI.AddImage(rowGO, isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f), false); // children handle clicks
 
-                var rowHLG = UI.AddHLG(rowGO, spacing: 4f, padding: UI.Pad(4, 4, 2, 2), childForceExpandWidth: false, childForceExpandHeight: true);
+                var rowHLG = UI.AddHLG(rowGO, spacing: UI.GapTight(), padding: UI.PadHV(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef), childForceExpandWidth: false, childForceExpandHeight: true);
 
                 var rowLE = UI.AddLE(rowGO, preferredHeight: rowH, flexibleWidth: 1f);
 
@@ -2051,10 +2077,8 @@ namespace VPB
         {
             if (tboxRT == null) return;
 
-            float innerH = TboxActionButtonInnerHeight();
             float gap = TboxBtnRowGapScaled();
-            float btnBand = innerH * Mathf.Max(1, tboxButtonLayoutRows)
-                + (tboxButtonLayoutRows > 1 ? gap * (tboxButtonLayoutRows - 1) : 0f);
+            float btnBand = TboxActionBandHeight(tboxButtonLayoutRows);
             if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
                 btnBand += tboxInfoRowHeight + gap;
             btnBand += TryOnToolboxReservedHeight();
@@ -2331,8 +2355,8 @@ namespace VPB
             show(tboxCleanupAddExcludeBtn, cleanupHasNonExcludedSelection);
             show(tboxCleanupRemoveExcludeBtn, cleanupHasExcludedSelection);
 
-            // Creator Mode: tools only while mode ON (rail toggle). Toolbox CM button stays hidden.
-            show(tboxCreatorModeBtn, false);
+            // Scene Tools stays in toolbox; Eraser lives on the facet rail.
+            show(tboxCreatorModeBtn, !isCleanup);
             show(tboxCreatorStripSceneBtn, isCreator && !isCleanup);
             show(tboxCreatorCompressCacheBtn, isCreator && !isCleanup);
             if (isCreator) RefreshCreatorModeChrome();

@@ -138,7 +138,7 @@ namespace VPB
             winOutline.effectDistance = new Vector2(2f, -2f);
             winOutline.effectColor = new Color(0f, 0f, 0f, 0.6f);
 
-            VerticalLayoutGroup vlg = UI.AddVLG(window, spacing: 12, padding: UI.Pad(20, 20, 22, 20), childAlignment: TextAnchor.UpperCenter);
+            VerticalLayoutGroup vlg = UI.AddVLG(window, spacing: UI.GapGroup(), padding: UI.PadSection(), childAlignment: TextAnchor.UpperCenter);
 
             GameObject titleGo = CreateWindowText(window, "Pick a Color", 20, FontStyle.Normal, Color.white, TextAnchor.UpperCenter, true);
             titleTextComponent = titleGo.GetComponent<Text>();
@@ -166,7 +166,7 @@ namespace VPB
 
             GameObject btnRow = new GameObject("ButtonRow");
             btnRow.transform.SetParent(window.transform, false);
-            HorizontalLayoutGroup hlg = UI.AddHLG(btnRow, spacing: 14, childAlignment: TextAnchor.MiddleCenter);
+            HorizontalLayoutGroup hlg = UI.AddHLG(btnRow, spacing: UI.GapGroup(), childAlignment: TextAnchor.MiddleCenter);
             LayoutElement rowLe = UI.AddLE(btnRow, preferredHeight: 48, flexibleHeight: 0);
 
             CreateDialogButton(hlg.transform, "Cancel", Hide);
@@ -246,7 +246,7 @@ namespace VPB
             row.transform.SetParent(parent.transform, false);
             LayoutElement rowLe = UI.AddLE(row, preferredHeight: 34, flexibleHeight: 0);
 
-            HorizontalLayoutGroup h = UI.AddHLG(row, spacing: 10);
+            HorizontalLayoutGroup h = UI.AddHLG(row, spacing: UI.GapControl());
 
             Text lt = UI.CreateLabel(row, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
             LayoutElement labLe = UI.AddLE(lt.gameObject, preferredWidth: 22, flexibleWidth: 0);

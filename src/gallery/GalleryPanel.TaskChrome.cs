@@ -146,8 +146,6 @@ namespace VPB
                 || (!sticky && !armed);
 
             // Own-mode rail stays interactive (toggle/exit). Foreign sticky + armed → soft-disable.
-            SetTaskChromePeerEnabled(leftCreatorModeSideBtn, allowCreatorEnter || state == TaskChromeState.StickyCreator);
-            SetTaskChromePeerEnabled(rightCreatorModeSideBtn, allowCreatorEnter || state == TaskChromeState.StickyCreator);
             SetTaskChromePeerEnabled(leftRemoveModeSideBtn, allowRemoveEnter || state == TaskChromeState.StickyRemove);
             SetTaskChromePeerEnabled(rightRemoveModeSideBtn, allowRemoveEnter || state == TaskChromeState.StickyRemove);
 
@@ -167,12 +165,7 @@ namespace VPB
             bool enableApplyToggle = !suppress && !holdToLaunchEnabled;
             bool enableHoldToggle = !suppress;
 
-            SetTaskChromePeerEnabled(
-                rightApplyModeBtnImage != null ? rightApplyModeBtnImage.gameObject : null,
-                enableApplyToggle);
-            SetTaskChromePeerEnabled(
-                leftApplyModeBtnImage != null ? leftApplyModeBtnImage.gameObject : null,
-                enableApplyToggle);
+            SetTaskChromePeerEnabled(footerApplyModeBtn, enableApplyToggle);
             SetTaskChromePeerEnabled(footerHoldToLaunchToggleBtn, enableHoldToggle);
 
             // Restyle apply buttons when allowed (UpdateApplyModeButtonState owns colors).
@@ -184,8 +177,7 @@ namespace VPB
             else
             {
                 // Dim while sticky — avoid amber "armed" look fighting sticky banner.
-                DimApplyModeButtonVisual(rightApplyModeBtnImage);
-                DimApplyModeButtonVisual(leftApplyModeBtnImage);
+                DimApplyModeButtonVisual(footerApplyModeBtnImage);
                 if (footerHoldToLaunchToggleBtnImage != null)
                     footerHoldToLaunchToggleBtnImage.color = new Color(0f, 0f, 0f, 0.18f);
             }
@@ -331,6 +323,7 @@ namespace VPB
                 show(tboxScanWhitelistTemporaryBtn, false);
                 show(tboxCreatorStripSceneBtn, true);
                 show(tboxCreatorCompressCacheBtn, true);
+                show(tboxCreatorModeBtn, true);
                 show(_detailStripExpandBtnGO, false);
             }
             else if (state == TaskChromeState.StickyImport)
@@ -397,6 +390,7 @@ namespace VPB
             show(tboxCleanupBtn, true);
             show(tboxSelectAllBtn, true);
             show(tboxLoadRandomBtn, true);
+            show(tboxCreatorModeBtn, true);
         }
 
         private static void SetTaskChromePeerEnabled(GameObject go, bool enabled)

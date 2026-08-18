@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 namespace VPB
@@ -106,6 +106,22 @@ namespace VPB
             if (scale <= 0f) scale = 1f;
             if (minPt < 1) minPt = 1;
             return Mathf.Max(minPt, Mathf.RoundToInt(designControlHeightPx * scale * GalleryUiDesignTokens.GlyphFontHeightFactor));
+        }
+
+        public static float Slot(float designControlSizePx, float scale)
+        {
+            if (designControlSizePx <= 0f) designControlSizePx = GalleryUiDesignTokens.ButtonSizeRef;
+            if (scale <= 0f) scale = 1f;
+            return (designControlSizePx + GalleryUiDesignTokens.ControlRimGutterRef * 2f) * scale;
+        }
+
+        public static float BandHeight(int rows, float designControlSizePx, float rowGapRef, float scale)
+        {
+            if (scale <= 0f) scale = 1f;
+            if (rows < 1) rows = 1;
+            return GalleryUiDesignTokens.BandPadVRef * 2f * scale
+                 + Slot(designControlSizePx, scale) * rows
+                 + rowGapRef * scale * (rows - 1);
         }
 
         public RectOffset Pad(float left, float top, float right, float bottom)

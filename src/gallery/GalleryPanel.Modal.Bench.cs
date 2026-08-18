@@ -89,7 +89,7 @@ namespace VPB
             _benchModalRoot = UI.CreateModalChrome(backgroundBoxGO, "VPB_BenchModal", 660f * s, 760f * s, new Color(0.07f, 0.08f, 0.10f, 1f), HideBenchEditorModal, out panel);
             BenchAddPanelClickBlocker(panel.transform);
 
-            UI.AddVLG(panel, 10f * s, UI.Pad(16f, 16f, 14f, 12f, s));
+            UI.AddVLG(panel, UI.GapGroup(s), UI.PadDialog(s));
 
             // Header
             GameObject header = new GameObject("Header");
@@ -780,8 +780,8 @@ namespace VPB
         static void BenchAddRemovableRow(Transform parent, string label, int fontSize, float s, bool altStripe, UnityAction onRemove)
         {
             UI.CreateRemovableStripeRow(
-                parent, label, fontSize, 34f * s, 48f * s, 6f * s,
-                6f * s, UI.Pad(6, 4, 3, 3, s), altStripe, "×", onRemove, flexibleRowWidth: true);
+                parent, label, fontSize, 34f * s, 48f * s, UI.GapTight(s),
+                UI.GapTight(s), UI.PadHV(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef, s), altStripe, "×", onRemove, flexibleRowWidth: true);
         }
 
         static string BenchShortenListLabel(string entry, int maxLen = 52)

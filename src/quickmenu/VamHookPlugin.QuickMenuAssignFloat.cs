@@ -18,14 +18,14 @@ namespace VPB
         private static readonly Color QmAssignFloatFilterBg = GalleryUiColorTokens.SurfaceDarker;
         private static readonly Color QmAssignFloatRowBg = GalleryUiColorTokens.SurfaceDarker;
 
-        private const float QmAssignFloatGroupTabPadRef = 6f;
-        private const float QmAssignFloatGroupTabRowGapRef = 4f;
-        private const float QmAssignFloatGroupChipIconSizeRef = 16f;
-        private const float QmAssignFloatGroupChipIconGapRef = 4f;
-        private const float QmAssignFloatGroupChipPadLRef = 6f;
-        private const float QmAssignFloatGroupChipPadRRef = 8f;
-        private const float QmAssignFloatRowsSpacingRef = 2f;
-        private const float QmAssignFloatRowsPadRef = 6f;
+        private const float QmAssignFloatGroupTabPadRef = GalleryUiDesignTokens.TightGapRef;
+        private const float QmAssignFloatGroupTabRowGapRef = GalleryUiDesignTokens.TightGapRef;
+        private const float QmAssignFloatGroupChipIconSizeRef = GalleryUiDesignTokens.RegionGapRef;
+        private const float QmAssignFloatGroupChipIconGapRef = GalleryUiDesignTokens.TightGapRef;
+        private const float QmAssignFloatGroupChipPadLRef = GalleryUiDesignTokens.TightGapRef;
+        private const float QmAssignFloatGroupChipPadRRef = GalleryUiDesignTokens.ControlGapRef;
+        private const float QmAssignFloatRowsSpacingRef = GalleryUiDesignTokens.HairGapRef;
+        private const float QmAssignFloatRowsPadRef = GalleryUiDesignTokens.TightGapRef;
         private const float QmAssignFloatChromeScale = 1f;
 
         private const string QmAssignGroupAll = "all";
@@ -65,6 +65,7 @@ namespace VPB
             new QmAssignCatalogEntry(QuickMenuAssignableAction.ToggleImportSidebar, QmAssignGroupGallery),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.StarFilter, QmAssignGroupGallery),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.History, QmAssignGroupGallery),
+            new QmAssignCatalogEntry(QuickMenuAssignableAction.LayoutPresets, QmAssignGroupGallery),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.Random, QmAssignGroupRandom),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.RandomScenes, QmAssignGroupRandom),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.RandomSubScenes, QmAssignGroupRandom),
@@ -372,7 +373,7 @@ namespace VPB
                 footerRT.sizeDelta = new Vector2(0f, footerH);
             }
             UI.AddHLG(
-                m_QmAssignFloatFooter, spacing: 6f * s, padding: UI.Pad(8, 8, 4, 4, s),
+                m_QmAssignFloatFooter, spacing: UI.GapTight(s), padding: UI.PadFloatFooter(s),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -1099,6 +1100,7 @@ namespace VPB
                 case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.qmbutton.show_hidden", "Show Hidden");
                 case QuickMenuAssignableAction.FpsCounter: return VPBTranslation.T("hook.qmbutton.fps", "FPS Counter");
                 case QuickMenuAssignableAction.History: return VPBTranslation.T("hook.qmbutton.history", "History");
+                case QuickMenuAssignableAction.LayoutPresets: return VPBTranslation.T("hook.qmassign.layout_presets", "Layout Presets");
                 case QuickMenuAssignableAction.PerfMode: return VPBTranslation.T("hook.qmbutton.perf_mode", "Perf Mode");
                 case QuickMenuAssignableAction.RemoveAllClothing: return VPBTranslation.T("hook.qmbutton.remove_all_clothing", "Remove All Clothing");
                 case QuickMenuAssignableAction.RemoveAllHair: return VPBTranslation.T("hook.qmbutton.remove_all_hair", "Remove All Hair");

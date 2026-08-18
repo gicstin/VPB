@@ -26,7 +26,7 @@ namespace VPB
         private const float GridCtxPanelWidthRef = 300f;
         private const float GridCtxAccelColRef = 28f;
         /// <summary>Inset from row right edge to accelerator column right edge.</summary>
-        private const float GridCtxAccelPadRef = 18f;
+        private const float GridCtxAccelPadRef = GalleryUiDesignTokens.RegionGapRef;
 
         private struct GridCtxHotkey
         {

@@ -238,13 +238,11 @@ namespace VPB
                 resizer.onResizedVec2 = (val) => {
                     if (VPBConfig.Instance != null) {
                         // Right dock: update width+height. Top dock: update height only (width anchored full).
-                        string dock = "Right";
-                        try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
-                        if (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase))
-                            VPBConfig.Instance.DesktopCustomWidth = val.x;
-                        VPBConfig.Instance.DesktopCustomHeight = val.y;
-                        if (VPBConfig.Instance.DesktopFixedHeightMode == 0 && val.y > 0.05f) {
-                            VPBConfig.Instance.DesktopFixedHeightMode = 1;
+                        if (EffectiveDockSide == GalleryDockSide.Right)
+                            DockWidthFree = ClampDockWidthFreeAgainstOpposite(GalleryDockSide.Right, val.x);
+                        DockCustomHeight = val.y;
+                        if (DockHeightMode == 0 && val.y > 0.05f) {
+                            DockHeightMode = 1;
                             UpdateFooterHeightState();
                         }
                         UpdateLayout();
@@ -295,13 +293,11 @@ namespace VPB
                 resizer.onResizedVec2 = (val) => {
                     if (VPBConfig.Instance != null) {
                         // Right/Top dock: height only (width anchored full). Left dock: anchorMax.x → "right inset".
-                        string dock = "Left";
-                        try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Left"; }
-                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
-                            VPBConfig.Instance.DesktopCustomWidth = 1f - val.x;
-                        VPBConfig.Instance.DesktopCustomHeight = val.y;
-                        if (VPBConfig.Instance.DesktopFixedHeightMode == 0 && val.y > 0.05f) {
-                            VPBConfig.Instance.DesktopFixedHeightMode = 1;
+                        if (EffectiveDockSide == GalleryDockSide.Left)
+                            DockWidthFree = ClampDockWidthFreeAgainstOpposite(GalleryDockSide.Left, 1f - val.x);
+                        DockCustomHeight = val.y;
+                        if (DockHeightMode == 0 && val.y > 0.05f) {
+                            DockHeightMode = 1;
                             UpdateFooterHeightState();
                         }
                         UpdateLayout();

@@ -185,7 +185,7 @@ namespace VPB
             float filterTopInset = 0f;
             try { filterTopInset = ActiveFilterChromeTopInsetPx(paneScale); } catch { }
             try { filterTopInset += ModeSemanticsBannerTopInsetPx(paneScale); } catch { }
-            float topOffset = -GalleryUiDesignTokens.SideTabTopOffsetRef * paneScale - filterTopInset;
+            float topOffset = -SidePanelFilterRowTopRef * paneScale - filterTopInset;
             float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top
             ApplySideTabFilterRowVerticalLayout(paneScale);
 
@@ -302,7 +302,7 @@ namespace VPB
                 && !ContentTypeSuppressesSideSearch(active.Value)
                 && !ContentTypeSuppressesSideSort(active.Value);
             float searchW = (GalleryUiDesignTokens.SideTabColumnWidthRef - GalleryUiDesignTokens.SideTabMainSearchSortReserveRef) * s;
-            if (!showSort) searchW += GalleryUiDesignTokens.SideTabMainSearchSortReserveRef * s;
+            if (!showSort) searchW += sortSz + gap;
             float y = SidePanelFilterRowYForSide(isLeft, s);
 
             if (isLeft)
@@ -374,7 +374,7 @@ namespace VPB
         /// <summary>Bottom inset for category/creator/tag tab scroll rects — keeps lists above footer + info/tbox bar.</summary>
         private float SideTabScrollBottomInsetY()
         {
-            return GalleryMainAreaBottomInset() + GalleryUiDesignTokens.SideTabScrollBottomPadRef;
+            return GalleryMainAreaBottomInset() + GalleryUiDesignTokens.SideTabScrollBottomPadRef * ChromeScale;
         }
 
         /// <summary>Small gap at the horizontal split only (upper pane — not footer clearance).</summary>
@@ -688,6 +688,20 @@ namespace VPB
             Color color = followUser ? UI.AccentBlue : UI.ChromeMid;
             Sprite spr = followUser ? galleryFollowOnSprite : galleryFollowOffSprite;
 
+            if (_titleBarFollowBtnIconImage != null && spr != null)
+            {
+                UI.SetIconSprite(_titleBarFollowBtnIconImage, spr);
+                _titleBarFollowBtnIconImage.enabled = true;
+                if (_titleBarFollowBtnText != null) _titleBarFollowBtnText.gameObject.SetActive(false);
+            }
+            else if (_titleBarFollowBtnText != null)
+            {
+                _titleBarFollowBtnText.gameObject.SetActive(true);
+                _titleBarFollowBtnText.text = text;
+            }
+            if (_titleBarFollowBtnImage != null)
+                _titleBarFollowBtnImage.color = followUser ? UI.AccentBlue : GalleryUiColorTokens.ChromeIconWell;
+
             if (rightFollowBtnIconImage != null && spr != null)
             {
                 UI.SetIconSprite(rightFollowBtnIconImage, spr);
@@ -715,6 +729,8 @@ namespace VPB
             }
 
             if (leftFollowBtnImage != null) leftFollowBtnImage.color = color;
+
+            SyncTitleFollowButtonVisibility();
         }
 
         public void UpdateSideButtonPositions()
@@ -749,6 +765,7 @@ namespace VPB
             UpdateListPositions(leftSideButtons, topY, spacing, groupGap, isLeftRail: true);
             try { PlaceSideRailOverflowButtons(topY, spacing, groupGap, scale); } catch { }
             try { SyncSideRailOpenFacetChrome(); } catch { }
+            try { SyncSideRailFacetCaptions(); } catch { }
 
             try
             {
@@ -761,8 +778,8 @@ namespace VPB
                 {
                     float removeHorizGap = 3f * scale;
 
-                    RectTransform leftBaseRT = leftRemoveAllHairBtn != null ? leftRemoveAllHairBtn.GetComponent<RectTransform>() : null;
-                    RectTransform rightBaseRT = rightRemoveAllHairBtn != null ? rightRemoveAllHairBtn.GetComponent<RectTransform>() : null;
+                    RectTransform leftBaseRT = null;
+                    RectTransform rightBaseRT = null;
 
                     int visibleCount = 0;
                     for (int i = 0; i < leftRemoveHairSubmenuButtons.Count; i++)
@@ -829,8 +846,8 @@ namespace VPB
                     float removeHorizGap = 3f * scale;
                     float colGap = 10f;
 
-                    RectTransform leftBaseRT = leftRemoveAllClothingBtn != null ? leftRemoveAllClothingBtn.GetComponent<RectTransform>() : null;
-                    RectTransform rightBaseRT = rightRemoveAllClothingBtn != null ? rightRemoveAllClothingBtn.GetComponent<RectTransform>() : null;
+                    RectTransform leftBaseRT = null;
+                    RectTransform rightBaseRT = null;
 
                     int visibleCount = 0;
                     for (int i = 0; i < leftRemoveClothingSubmenuButtons.Count; i++)
@@ -946,8 +963,8 @@ namespace VPB
                 {
                     float removeHorizGap = 3f * scale;
 
-                    RectTransform leftBaseRT = leftRemoveAtomBtn != null ? leftRemoveAtomBtn.GetComponent<RectTransform>() : null;
-                    RectTransform rightBaseRT = rightRemoveAtomBtn != null ? rightRemoveAtomBtn.GetComponent<RectTransform>() : null;
+                    RectTransform leftBaseRT = null;
+                    RectTransform rightBaseRT = null;
 
                     int visibleCount = 0;
                     for (int i = 0; i < leftRemoveAtomSubmenuButtons.Count; i++)
@@ -1085,9 +1102,8 @@ namespace VPB
         {
             if (!isFixedLocally) return false;
             if (VPBConfig.Instance == null) return false;
-            string dock = "Right";
-            try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
-            return string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
+            try { return EffectiveDockSide == GalleryDockSide.Top; }
+            catch { return false; }
         }
 
         /// <summary>
@@ -1319,14 +1335,7 @@ namespace VPB
 
         private SideButtonLayoutEntry[] GetSideButtonsLayout()
         {
-            string title = currentCategoryTitle ?? "";
-            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
-
             int idxFloating = -1;
-            int idxClone = -1;
             int idxFollow = -1;
             int idxCategory = -1;
             int idxCreator = -1;
@@ -1334,13 +1343,7 @@ namespace VPB
             int idxHistory = -1;
             int idxUserTags = -1;
             int idxSceneImport = -1;
-            int idxTarget = -1;
-            int idxApplyMode = -1;
             int idxRemoveMode = -1;
-            int idxCreatorMode = -1;
-            int idxRemoveHair = 15;
-            int idxRemoveClothing = 14;
-            int idxRemoveAtom = -1;
             int idxSave = -1;
             try
             {
@@ -1354,17 +1357,18 @@ namespace VPB
                         return refList.FindIndex(rt => rt != null && rt.GetComponentInChildren<Text>(true) == t);
                     }
 
-
                     idxCategory = FindIndexByTextRef(rightCategoryBtnText != null ? rightCategoryBtnText : leftCategoryBtnText);
-                    // Absent when hide setting (never created) — same FindIndex miss as missing Category.
                     idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
                     idxPath = FindIndexByTextRef(rightPathBtnText != null ? rightPathBtnText : leftPathBtnText);
-                    // idxTarget: target button moved to toolbox, no longer a side button
-                    idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
-                    idxFloating = FindIndexByTextRef(rightDesktopModeBtnText != null ? rightDesktopModeBtnText : leftDesktopModeBtnText);
                     idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
 
-                    idxClone    = FindIndexByTextRef(rightCloneBtnText    != null ? rightCloneBtnText    : leftCloneBtnText);
+                    GameObject dockGo = rightDockAnchorBtnImage != null ? rightDockAnchorBtnImage.gameObject : null;
+                    if (dockGo == null && leftDockAnchorBtnImage != null) dockGo = leftDockAnchorBtnImage.gameObject;
+                    if (dockGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == dockGo);
+                        if (i >= 0) idxFloating = i;
+                    }
 
                     GameObject utGo = rightUserTagsSideBtn != null ? rightUserTagsSideBtn : leftUserTagsSideBtn;
                     if (utGo != null)
@@ -1380,37 +1384,11 @@ namespace VPB
                         if (i >= 0) idxSceneImport = i;
                     }
 
-                    if (rightRemoveAllHairBtn != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == rightRemoveAllHairBtn);
-                        if (i >= 0) idxRemoveHair = i;
-                    }
-
-                    if (rightRemoveAllClothingBtn != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == rightRemoveAllClothingBtn);
-                        if (i >= 0) idxRemoveClothing = i;
-                    }
-
-                    GameObject removeAtomGo = rightRemoveAtomBtn != null ? rightRemoveAtomBtn : leftRemoveAtomBtn;
-                    if (removeAtomGo != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == removeAtomGo);
-                        if (i >= 0) idxRemoveAtom = i;
-                    }
-
                     GameObject removeModeGo = rightRemoveModeSideBtn != null ? rightRemoveModeSideBtn : leftRemoveModeSideBtn;
                     if (removeModeGo != null)
                     {
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == removeModeGo);
                         if (i >= 0) idxRemoveMode = i;
-                    }
-
-                    GameObject creatorModeGo = rightCreatorModeSideBtn != null ? rightCreatorModeSideBtn : leftCreatorModeSideBtn;
-                    if (creatorModeGo != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == creatorModeGo);
-                        if (i >= 0) idxCreatorMode = i;
                     }
 
                     GameObject saveGo = rightSaveBtnGO != null ? rightSaveBtnGO : leftSaveBtnGO;
@@ -1436,30 +1414,16 @@ namespace VPB
 
             var layout = new List<SideButtonLayoutEntry>()
             {
-                // ── Layout zone ──────────────────────────────────────────────
-                new SideButtonLayoutEntry(idxFloating, 0, zone), // Floating / Fixed
-                new SideButtonLayoutEntry(idxClone, 0, 0),
+                new SideButtonLayoutEntry(idxFloating, 0, zone),
                 new SideButtonLayoutEntry(idxFollow, 0, 0),
-
-                // ── Browse facets ────────────────────────────────────────────
-                new SideButtonLayoutEntry(idxSceneImport, 0, zone), // Import (Scenes only)
-                new SideButtonLayoutEntry(idxUserTags, 0, showSceneImport ? 0 : zone), // Tags — keep zone gap when Import hidden
+                new SideButtonLayoutEntry(idxSceneImport, 0, zone),
+                new SideButtonLayoutEntry(idxUserTags, 0, showSceneImport ? 0 : zone),
                 new SideButtonLayoutEntry(idxCategory, 0, 0),
                 new SideButtonLayoutEntry(idxCreator, 0, 0),
                 new SideButtonLayoutEntry(idxPath, 0, 0),
                 new SideButtonLayoutEntry(idxHistory, 0, 0),
-
-                // ── Tools ────────────────────────────────────────────────────
-                new SideButtonLayoutEntry(idxRemoveMode, 0, zone), // Remove Item Mode
-                new SideButtonLayoutEntry(idxCreatorMode, 0, 0), // Creator Mode (scene tools)
-                new SideButtonLayoutEntry(idxApplyMode, 0, 0),
+                new SideButtonLayoutEntry(idxRemoveMode, 0, zone),
                 new SideButtonLayoutEntry(idxSave, 0, 0),
-                new SideButtonLayoutEntry(idxTarget, 0, 0), // legacy index (usually -1)
-
-                // Category-context remove lists (same tools family, slight sub-gap)
-                new SideButtonLayoutEntry(idxRemoveClothing, 0, 2),
-                new SideButtonLayoutEntry(idxRemoveAtom, 0, 0),
-                new SideButtonLayoutEntry(idxRemoveHair, 0, 0),
             };
 
             return layout.ToArray();
@@ -1684,7 +1648,7 @@ namespace VPB
 
         private void UpdateRemoveHairButtonLabels(int optionCount)
         {
-            UpdateRemoveButtonLabels(leftRemoveAllHairBtn, rightRemoveAllHairBtn, "Unequip\nHair", optionCount);
+            UpdateRemoveButtonLabels(null, null, "Unequip\nHair", optionCount);
         }
 
         private void ApplyHairPreview(Atom target, string itemUid)
@@ -1927,12 +1891,6 @@ namespace VPB
                 if (showClothingMode) UpdateKeepClothingButtonState();
                 try { RefreshTboxFlexButtonLayout(); } catch { }
             }
-            if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(false);
-            if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(false);
-            if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(false);
-            if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(false);
-            if (rightRemoveAtomBtn != null) rightRemoveAtomBtn.SetActive(false);
-            if (leftRemoveAtomBtn != null) leftRemoveAtomBtn.SetActive(false);
             if (rightSaveBtnGO != null) rightSaveBtnGO.SetActive(showSave);
             if (leftSaveBtnGO != null) leftSaveBtnGO.SetActive(showSave);
 
@@ -2100,75 +2058,11 @@ namespace VPB
             return (visibleCount - 1) * spacing + gapUnits * gap;
         }
 
-        /// <summary>Square icon chrome on side rails: SideButtonSquareRef when loaded sprites exist.</summary>
+        /// <summary>Facet rail chips are square icon wells.</summary>
         private bool UsesSquareChromeSideButton(RectTransform rt, List<RectTransform> list)
         {
-            if (rt == null || list == null) return false;
-            int idx = list.IndexOf(rt);
-            if (idx < 0) return false;
-            bool isRight = ReferenceEquals(list, rightSideButtons);
-            if (idx < GalleryLeadingIconButtonCount)
-            {
-                if (isRight)
-                {
-                    return (idx == 0 && rightDesktopModeBtnIconImage != null)
-                        || (idx == 1 && rightFollowBtnIconImage != null)
-                        || (idx == 2 && rightCloneBtnIconImage != null);
-                }
-                return (idx == 0 && leftDesktopModeBtnIconImage != null)
-                    || (idx == 1 && leftFollowBtnIconImage != null)
-                    || (idx == 2 && leftCloneBtnIconImage != null);
-            }
-            GameObject go = rt.gameObject;
-            if (rightSaveBtnGO != null && go == rightSaveBtnGO) return rightSaveBtnIconImage != null;
-            if (leftSaveBtnGO != null && go == leftSaveBtnGO) return leftSaveBtnIconImage != null;
-            if (isRight)
-            {
-                if (rightSceneImportSideBtn != null && go == rightSceneImportSideBtn) return true;
-                if (rightRemoveModeSideBtn != null && go == rightRemoveModeSideBtn) return true;
-                if (rightCreatorModeSideBtn != null && go == rightCreatorModeSideBtn) return true;
-                if (rightUserTagsSideBtn != null && go == rightUserTagsSideBtn) return true;
-                if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
-                    return true;
-                if (galleryCreatorSprite != null && rightCreatorBtnIconImage != null && rightCreatorBtnImage != null && go == rightCreatorBtnImage.gameObject)
-                    return true;
-                if (galleryPathSprite != null && rightPathBtnIconImage != null && rightPathBtnImage != null && go == rightPathBtnImage.gameObject)
-                    return true;
-                if (rightHistoryBtnImage != null && go == rightHistoryBtnImage.gameObject)
-                    return true;
-                if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && rightApplyModeBtnIconImage != null && rightApplyModeBtnImage != null && go == rightApplyModeBtnImage.gameObject)
-                    return true;
-                if (galleryRemoveSprite != null && rightRemoveAtomBtnIconImage != null && rightRemoveAtomBtn != null && go == rightRemoveAtomBtn)
-                    return true;
-                if (galleryRemoveSprite != null && rightRemoveAllClothingBtnIconImage != null && rightRemoveAllClothingBtn != null && go == rightRemoveAllClothingBtn)
-                    return true;
-                if (galleryRemoveSprite != null && rightRemoveAllHairBtnIconImage != null && rightRemoveAllHairBtn != null && go == rightRemoveAllHairBtn)
-                    return true;
-            }
-            else
-            {
-                if (leftSceneImportSideBtn != null && go == leftSceneImportSideBtn) return true;
-                if (leftRemoveModeSideBtn != null && go == leftRemoveModeSideBtn) return true;
-                if (leftCreatorModeSideBtn != null && go == leftCreatorModeSideBtn) return true;
-                if (leftUserTagsSideBtn != null && go == leftUserTagsSideBtn) return true;
-                if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
-                    return true;
-                if (galleryCreatorSprite != null && leftCreatorBtnIconImage != null && leftCreatorBtnImage != null && go == leftCreatorBtnImage.gameObject)
-                    return true;
-                if (galleryPathSprite != null && leftPathBtnIconImage != null && leftPathBtnImage != null && go == leftPathBtnImage.gameObject)
-                    return true;
-                if (leftHistoryBtnImage != null && go == leftHistoryBtnImage.gameObject)
-                    return true;
-                if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && leftApplyModeBtnIconImage != null && leftApplyModeBtnImage != null && go == leftApplyModeBtnImage.gameObject)
-                    return true;
-                if (galleryRemoveSprite != null && leftRemoveAtomBtnIconImage != null && leftRemoveAtomBtn != null && go == leftRemoveAtomBtn)
-                    return true;
-                if (galleryRemoveSprite != null && leftRemoveAllClothingBtnIconImage != null && leftRemoveAllClothingBtn != null && go == leftRemoveAllClothingBtn)
-                    return true;
-                if (galleryRemoveSprite != null && leftRemoveAllHairBtnIconImage != null && leftRemoveAllHairBtn != null && go == leftRemoveAllHairBtn)
-                    return true;
-            }
-            return false;
+            if (rt == null) return false;
+            return rt.Find("Icon") != null;
         }
 
         /// <summary>Right rail: hug inner edge toward gallery. Left rail: hug inner edge toward gallery.</summary>

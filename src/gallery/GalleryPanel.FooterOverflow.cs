@@ -11,7 +11,7 @@ namespace VPB
     {
         // Footer overflow: hide chips one-by-one until packs fit; extreme = only “…”.
 
-        private const float FooterOverflowGapRef = 10f;
+        private const float FooterOverflowGapRef = GalleryUiDesignTokens.ControlGapRef;
 
         private GameObject _footerOverflowBtnGO;
         private RectTransform _footerOverflowBtnRT;
@@ -72,10 +72,12 @@ namespace VPB
         private void ApplyFooterModeButtonVisibility()
         {
             bool fixedMode = isFixedLocally;
+            bool vr = false;
+            try { vr = XrUtils.IsVrActive(); } catch { }
             SetFooterOverflowTargetActive(footerFollowAngleBtn, !fixedMode && !IsFooterOverflowCollapsed(footerFollowAngleBtn));
             SetFooterOverflowTargetActive(footerFollowDistanceBtn, !fixedMode && !IsFooterOverflowCollapsed(footerFollowDistanceBtn));
             SetFooterOverflowTargetActive(footerFollowHeightBtn, !fixedMode && !IsFooterOverflowCollapsed(footerFollowHeightBtn));
-            SetFooterOverflowTargetActive(footerDockBtn, fixedMode && !IsFooterOverflowCollapsed(footerDockBtn));
+            SetFooterOverflowTargetActive(footerDockBtn, fixedMode && !vr && !IsFooterOverflowCollapsed(footerDockBtn));
             SetFooterOverflowTargetActive(footerHeightBtn, fixedMode && !IsFooterOverflowCollapsed(footerHeightBtn));
             SetFooterOverflowTargetActive(footerAutoHideBtn, fixedMode && !IsFooterOverflowCollapsed(footerAutoHideBtn));
         }
@@ -85,16 +87,17 @@ namespace VPB
         {
             into.Clear();
             bool fixedMode = isFixedLocally;
+            bool isVR = false;
+            try { isVR = XrUtils.IsVrActive(); } catch { }
             if (fixedMode)
             {
                 if (footerAutoHideBtn != null) into.Add(footerAutoHideBtn);
                 if (footerHeightBtn != null) into.Add(footerHeightBtn);
-                if (footerDockBtn != null) into.Add(footerDockBtn);
+                if (!isVR && footerDockBtn != null) into.Add(footerDockBtn);
             }
             if (footerLayoutBtn != null) into.Add(footerLayoutBtn);
             if (footerHoldToLaunchToggleBtn != null) into.Add(footerHoldToLaunchToggleBtn);
-            bool isVR = false;
-            try { isVR = XrUtils.IsVrActive(); } catch { }
+            if (footerApplyModeBtn != null) into.Add(footerApplyModeBtn);
             if (isVR && footerWatchToggleBtn != null) into.Add(footerWatchToggleBtn);
             if (footerMenuGateBtn != null) into.Add(footerMenuGateBtn);
             if (!fixedMode)
@@ -293,6 +296,19 @@ namespace VPB
                     tipKey: "gallery.tooltip.hold_to_launch_toggle",
                     tipDefault: "Hold trigger/button on item to apply/launch (see Settings for duration)");
             }
+            else if (go == footerApplyModeBtn)
+            {
+                bool oneClick = ItemApplyMode == ApplyMode.SingleClick;
+                AddFooterOverflowMenuRow(
+                    panel,
+                    oneClick
+                        ? VPBTranslation.T("gallery.apply.two_click", "2-Click")
+                        : VPBTranslation.T("gallery.apply.one_click", "1-Click"),
+                    () => { CloseFooterOverflowMenu(); ToggleApplyMode(); },
+                    oneClick, icon: icon,
+                    tipKey: "gallery.tooltip.apply_mode",
+                    tipDefault: "Toggle 1-click vs 2-click apply.");
+            }
             else if (go == footerLayoutBtn)
             {
                 bool listLayout = layoutMode == GalleryLayoutMode.List;
@@ -313,12 +329,13 @@ namespace VPB
             else if (go == footerDockBtn)
             {
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_dock", "Dock side"),
-                    () => { CloseFooterOverflowMenu(); CycleDesktopFixedDockSide(); }, icon: icon,
-                    tipKey: "gallery.tooltip.dock_side", tipDefault: "Dock side (Left/Right/Top)");
+                    () => { CloseFooterOverflowMenu(); ToggleDockAnchorMenu(footerDockBtn, DockMenuPlacement.Above); }, icon: icon,
+                    tipKey: "gallery.tooltip.dock_side",
+                    tipDefault: "Dock this pane — or a clone of it — to the top or the opposite edge.");
             }
             else if (go == footerHeightBtn)
             {
-                bool fixedHeight = VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode > 0;
+                bool fixedHeight = VPBConfig.Instance != null && DockHeightMode > 0;
                 AddFooterOverflowMenuRow(
                     panel,
                     fixedHeight
@@ -332,7 +349,7 @@ namespace VPB
             }
             else if (go == footerAutoHideBtn)
             {
-                bool autoHide = VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedAutoCollapse;
+                bool autoHide = VPBConfig.Instance != null && DockAutoHide;
                 AddFooterOverflowMenuRow(
                     panel,
                     autoHide

@@ -10,10 +10,10 @@ namespace VPB
     public partial class GalleryPanel
     {
         private const float FilterChipRowHeightRef = 32f;
-        private const float FilterChipRowVerticalMarginRef = 6f;
-        private const float FilterChipHorizontalPaddingRef = 4f;
-        private const float FilterChipRowSpacingRef = 4f;
-        private const float FilterChipColumnSpacingRef = 6f;
+        private const float FilterChipRowVerticalMarginRef = GalleryUiDesignTokens.FilterChipRowMarginRef;
+        private const float FilterChipHorizontalPaddingRef = GalleryUiDesignTokens.TightGapRef;
+        private const float FilterChipRowSpacingRef = GalleryUiDesignTokens.TightGapRef;
+        private const float FilterChipColumnSpacingRef = GalleryUiDesignTokens.TightGapRef;
 
         private GameObject _activeFilterChipBarGO;
         private RectTransform _activeFilterChipScrollContentRT;
@@ -299,8 +299,8 @@ namespace VPB
 
             AddFilterChipRoundedBg(chip, Color.white);
 
-            int padLeft = Mathf.RoundToInt(10f * s);
-            int padV = Mathf.Max(1, Mathf.RoundToInt(2f * s));
+            int padLeft = Mathf.RoundToInt(GalleryUiDesignTokens.ControlGapRef * s);
+            int padV = Mathf.Max(1, Mathf.RoundToInt(GalleryUiDesignTokens.HairGapRef * s));
             float innerH = Mathf.Max(16f, chipH - padV * 2f);
 
             UI.AddHLG(chip,
@@ -382,8 +382,8 @@ namespace VPB
             if (bg != null)
                 bg.color = new Color(accent.r, accent.g, accent.b, isCompactAction ? 0.94f : 0.96f);
 
-            int padLeft = Mathf.RoundToInt(10f * s);
-            int padV = Mathf.Max(1, Mathf.RoundToInt(2f * s));
+            int padLeft = Mathf.RoundToInt(GalleryUiDesignTokens.ControlGapRef * s);
+            int padV = Mathf.Max(1, Mathf.RoundToInt(GalleryUiDesignTokens.HairGapRef * s));
             float innerH = Mathf.Max(16f, chipH - padV * 2f);
 
             HorizontalLayoutGroup hlg = chip.GetComponent<HorizontalLayoutGroup>();

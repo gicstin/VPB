@@ -14,13 +14,13 @@ namespace VPB
     {
         private const float PanelMaxHeightRef = 500f;
         private const float ScrollBarWidthRef = GalleryUiDesignTokens.QuickFiltersScrollBarWidthRef;
-        private const float RowTextPadLeftRef = 12f;
-        private const float RowTextPadRightRef = 8f;
-        private const float SplitterHeightRef = 8f;
+        private const float RowTextPadLeftRef = GalleryUiDesignTokens.Space4Ref;
+        private const float RowTextPadRightRef = GalleryUiDesignTokens.BandPadRef;
+        private const float SplitterHeightRef = GalleryUiDesignTokens.BandPadRef;
         private const float HeaderPadRef = GalleryUiDesignTokens.FloatSearchRowPadRef;
-        private const float HeaderSortGapRef = 6f;
+        private const float HeaderSortGapRef = GalleryUiDesignTokens.ControlGapRef;
         /// <summary>Icon pad on ButtonSizeRef squares — matches side-rail / sort chips (glyph fills hit).</summary>
-        private const float RowActionIconPadRef = 5f;
+        private const float RowActionIconPadRef = GalleryUiDesignTokens.TightGapRef;
         private const float SoftDeleteUndoSeconds = 5f;
 
         // Match Settings float chrome (neutral greys).
@@ -257,7 +257,7 @@ namespace VPB
             collapsePaletteGO = UI.CreateChildRT(titleBarGO, "CollapsePalette", AnchorPresets.middleCenter,
                 new Vector2(0f, chromeSz), Vector2.zero);
             UI.AddHLG(
-                collapsePaletteGO, spacing: 2f, padding: UI.Pad(0, 0, 0, 0),
+                collapsePaletteGO, spacing: UI.GapHair(), padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -519,7 +519,7 @@ namespace VPB
                 footerRT.sizeDelta = new Vector2(0f, footerH);
             }
             UI.AddHLG(
-                footerGO, spacing: 4f, padding: UI.Pad(6, 6, 4, 4),
+                footerGO, spacing: UI.GapTight(), padding: UI.PadFloatFooter(),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
@@ -885,10 +885,10 @@ namespace VPB
             float splitH = SplitterHeightRef * s;
             float textPadL = RowTextPadLeftRef * s;
             float textPadR = RowTextPadRightRef * s;
-            float iconSq = rowH;
-            float iconPadR = 4f * s;
-            float iconGap = 4f * s;
-            float actionGap = 6f * s;
+            float iconSq = GalleryUiDesignTokens.ButtonSizeRef * s;
+            float iconPadR = GalleryUiDesignTokens.BandPadRef * s;
+            float iconGap = GalleryUiDesignTokens.ControlRowGapRef * s;
+            float actionGap = GalleryUiDesignTokens.ControlGapRef * s;
             int rowCount = 0;
             int splitterCount = 0;
 
@@ -1118,7 +1118,7 @@ namespace VPB
                 if (footerHlg != null)
                 {
                     footerHlg.spacing = 4f * s;
-                    footerHlg.padding = UI.Pad(6, 6, 4, 4, s);
+                    footerHlg.padding = UI.PadFloatFooter(s);
                 }
                 ScaleChromeIconBtn(floatDockBtnGO, sortSq, s);
                 ScaleChromeIconBtn(floatUndoBtnGO, sortSq, s);
@@ -1460,7 +1460,7 @@ namespace VPB
             row.AddComponent<RectTransform>().sizeDelta = new Vector2(rowW, rowH);
             UI.AddHLG(
                 row,
-                spacing: 6f,
+                spacing: UI.GapTight(),
                 padding: UI.Pad(0, 0, 0, 0),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true,
@@ -2678,6 +2678,12 @@ namespace VPB
                 foreach (Text t in containerGO.GetComponentsInChildren<Text>(true))
                     VPBUiFont.ApplyTo(t);
             }
+        }
+
+        /// <summary>Re-reads persisted float geometry after a layout preset rewrites the config slot.</summary>
+        internal void ReloadGeometryFromConfig()
+        {
+            LoadGeometryFromConfig();
         }
 
         private void LoadGeometryFromConfig()

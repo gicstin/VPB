@@ -502,7 +502,7 @@ namespace VPB
 
             GameObject blockGO = new GameObject("IconLineBlock");
             blockGO.transform.SetParent(_inAppHelpBodyHost, false);
-            VerticalLayoutGroup blockVlg = UI.AddVLG(blockGO, spacing: 4f);
+            VerticalLayoutGroup blockVlg = UI.AddVLG(blockGO, spacing: UI.GapTight());
             ContentSizeFitter blockCsf = blockGO.AddComponent<ContentSizeFitter>();
             blockCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             LayoutElement blockLe = UI.AddLE(blockGO, flexibleWidth: 1f);
@@ -512,7 +512,7 @@ namespace VPB
 
             GameObject linkRowGO = new GameObject("LinkRow");
             linkRowGO.transform.SetParent(blockGO.transform, false);
-            HorizontalLayoutGroup linkHlg = UI.AddHLG(linkRowGO, spacing: 6f, padding: UI.Pad(14, 0, 0, 0), childControlWidth: false, childForceExpandWidth: false);
+            HorizontalLayoutGroup linkHlg = UI.AddHLG(linkRowGO, spacing: UI.GapTight(), padding: UI.Pad(GalleryUiDesignTokens.GroupGapRef, 0, 0, 0), childControlWidth: false, childForceExpandWidth: false);
             ContentSizeFitter linkCsf = linkRowGO.AddComponent<ContentSizeFitter>();
             linkCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             LayoutElement linkRowLe = UI.AddLE(linkRowGO, flexibleWidth: 1f);

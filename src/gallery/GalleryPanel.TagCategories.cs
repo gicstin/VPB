@@ -220,12 +220,7 @@ namespace VPB
             UI.AddVLG(
                 panel,
                 spacing: GalleryUiDesignTokens.PopupMenuRowSpacingRef * s,
-                padding: UI.Pad(
-                    GalleryUiDesignTokens.PopupMenuPaddingRef,
-                    GalleryUiDesignTokens.PopupMenuPaddingRef,
-                    GalleryUiDesignTokens.PopupMenuPaddingRef + 2f,
-                    GalleryUiDesignTokens.PopupMenuPaddingRef,
-                    s));
+                padding: UI.PadPopup(s));
             ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
@@ -240,7 +235,7 @@ namespace VPB
 
             // Title bar hairline group — match tag-menu header weight.
             GameObject titleRow = UI.CreateChildRT(panel, "TitleRow");
-            UI.AddHLG(titleRow, spacing: 4f * s, childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false);
+            UI.AddHLG(titleRow, spacing: UI.GapTight(s), childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false);
             float titleH = DetailStripTagMenuChromeBtnRef * s;
             UI.AddLE(titleRow, minHeight: titleH, preferredHeight: titleH, flexibleWidth: 1f);
 

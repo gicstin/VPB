@@ -643,6 +643,7 @@ namespace VPB
             try { VpbPerfController.Shutdown(); } catch { }
             try { UI.ClearIconSpriteCache(); } catch { }
             try { DAZClothingHook.ResetTransientState(); } catch { }
+            try { GalleryLayoutPresetStore.ResetForTeardown(); } catch { }
             try
             {
                 var sc = SuperController.singleton;
@@ -1003,6 +1004,17 @@ namespace VPB
                     ToggleGalleryVisibility();
                 else if (UIKey.TestKeyDown() && !ShouldSuppressPluginHotkey(UIKey) && !UIKey.IsSame(GalleryKey))
                     ToggleGalleryVisibility();
+
+                // Alt+L — layout presets. Pane Update skips when canvas is off, so this is the
+                // no-visible-pane path (quick menu / gallery hidden).
+                if (!IsTypingInTextInput()
+                    && !Input.GetKey(KeyCode.LeftControl) && !Input.GetKey(KeyCode.RightControl)
+                    && (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
+                    && Input.GetKeyDown(KeyCode.L)
+                    && (Gallery.singleton == null || !Gallery.singleton.IsVisible))
+                {
+                    try { GalleryPanel.OpenLayoutPresetsFloatAnywhere(); } catch { }
+                }
             }
 
             if (m_Inited && IsFileManagerInited)
@@ -1533,6 +1545,7 @@ namespace VPB
                 m_QmIconRedo   = UI.LoadIconSprite("arrow-forward-up", tint);
                 m_QmIconHub    = UI.LoadIconSprite("world-search", tint);
                 m_QmIconCleanup = UI.LoadIconSprite("wash-gentle", tint);
+                m_QmIconLayoutPresets = UI.LoadIconSprite("layout-board-split", tint);
                 m_QmIconReplace = UI.LoadIconSprite("replace", tint);
                 m_QmIconAdd     = UI.LoadIconSprite("layout-grid-add", tint);
                 m_QmIconTargetAtom = UI.LoadIconSprite("focus-2", tint);

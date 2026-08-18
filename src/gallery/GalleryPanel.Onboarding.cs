@@ -23,7 +23,7 @@ namespace VPB
 
             var colGO = UI.CreateChildRT(_emptyGridStateGO, "Column", AnchorPresets.middleCenter, new Vector2(460f, 140f));
 
-            var vlg = UI.AddVLG(colGO, spacing: 12f, childAlignment: TextAnchor.MiddleCenter);
+            var vlg = UI.AddVLG(colGO, spacing: UI.GapGroup(), childAlignment: TextAnchor.MiddleCenter);
 
             _emptyGridStateMessage = UI.CreateLabel(colGO, "", GalleryUiDesignTokens.FontBodyRef, new Color(0.75f, 0.75f, 0.78f, 1f), TextAnchor.MiddleCenter, verticalWrap: VerticalWrapMode.Overflow, raycastTarget: false, name: "Message");
             var msgLE = UI.AddLE(_emptyGridStateMessage.gameObject, preferredHeight: 52f);

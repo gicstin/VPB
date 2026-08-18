@@ -20,7 +20,7 @@ namespace VPB
         private const int DetailStripMaxTagsInlineHard = 12;
         private const float DetailStripTagFilterPopupWidthRef = 320f;
         private const float DetailStripTagFilterPopupMaxHRef = 320f;
-        private const float DetailStripTagFilterPopupPadRef = 10f;
+        private const float DetailStripTagFilterPopupPadRef = GalleryUiDesignTokens.ControlGapRef;
         /// <summary>Meta wrap rows. Was 3 — at high ChromeScale wider glyphs dropped Version/Gender/Flags/dates.</summary>
         private const int DetailStripMetaMaxRows = 6;
         /// <summary>φ ≈ 1.618 — width / height.</summary>
@@ -32,7 +32,7 @@ namespace VPB
         private const float DetailStripTagMenuMaxWidthRef = 1400f;
         private const float DetailStripTagMenuMaxHeightRef = 1000f;
         private const float DetailStripTagMenuScrollHeightRef = 248f;
-        private const float DetailStripTagMenuColGapRef = 8f;
+        private const float DetailStripTagMenuColGapRef = GalleryUiDesignTokens.ControlGapRef;
         private const float DetailStripTagMenuSectionLabelHRef = 22f;
         private const float DetailStripTagMenuHeaderHRef = 36f;
         /// <summary>Sort / title X square — match gallery <see cref="GalleryUiDesignTokens.ButtonSizeRef"/>.</summary>
@@ -521,7 +521,8 @@ namespace VPB
             if (_detailStripGO == null) return 0f;
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            return DetailStripRowHeight(s) + TboxBtnRowGapScaled();
+            // No extra row-gap — BandPadV on the button band is the seam.
+            return DetailStripRowHeight(s);
         }
 
         private void DetailStripEnsure()
@@ -805,7 +806,7 @@ namespace VPB
             // No HLG pad — preview uses full strip edge; gap to text via spacing only.
             UI.AddHLG(
                 strip,
-                spacing: 8f * s,
+                spacing: UI.GapControl(s),
                 padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.UpperLeft,
                 childForceExpandWidth: false,
@@ -842,7 +843,7 @@ namespace VPB
             // Small left pad so collapse hover rim is not clipped by RectMask2D at thumb seam.
             // Main gap to thumb stays HLG spacing on strip.
             float bandGap = DetailStripBandGap(s);
-            UI.AddVLG(textCol, spacing: bandGap, padding: UI.Pad(2, 8, 4, 4, s),
+            UI.AddVLG(textCol, spacing: bandGap, padding: UI.Pad(GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, s),
                 childAlignment: TextAnchor.UpperLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: true, childForceExpandHeight: false);
@@ -852,7 +853,7 @@ namespace VPB
 
             // Title left + subtle 5-star rating right.
             _detailStripTitleRowGO = UI.CreateChildRT(textCol, "TitleRow", AnchorPresets.hStretchTop);
-            UI.AddHLG(_detailStripTitleRowGO, spacing: 6f * s, padding: UI.Pad(0, 0, 0, 0, s),
+            UI.AddHLG(_detailStripTitleRowGO, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false, childForceExpandHeight: true);
             UI.AddLE(_detailStripTitleRowGO, preferredHeight: lineH, minHeight: lineH, flexibleWidth: 1f, minWidth: 0f);
             DetailStripNormalizeRowRect(_detailStripTitleRowGO);
@@ -879,7 +880,7 @@ namespace VPB
             // Status badges sit left of stars (not over thumb).
             _detailStripBadgeRowGO = UI.CreateChildRT(_detailStripTitleRowGO, "Badges", AnchorPresets.middleRight, new Vector2(80f * s, lineH));
             UI.AddLE(_detailStripBadgeRowGO, preferredHeight: lineH, minHeight: lineH, flexibleWidth: 0f);
-            UI.AddHLG(_detailStripBadgeRowGO, spacing: 3f * s, padding: UI.Pad(0, 0, 0, 0, s),
+            UI.AddHLG(_detailStripBadgeRowGO, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false, childForceExpandHeight: true);
             ContentSizeFitter badgeFit = _detailStripBadgeRowGO.AddComponent<ContentSizeFitter>();
             badgeFit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -911,7 +912,7 @@ namespace VPB
             for (int ri = 0; ri < DetailStripMetaMaxRows; ri++)
             {
                 GameObject row = UI.CreateChildRT(_detailStripMetaHost, "MetaRow" + ri, AnchorPresets.hStretchTop);
-                UI.AddHLG(row, spacing: 8f * s, padding: UI.Pad(0, 0, 0, 0, s),
+                UI.AddHLG(row, spacing: UI.GapControl(s), padding: UI.Pad(0, 0, 0, 0, s),
                     childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false, childForceExpandHeight: true);
                 UI.AddLE(row, preferredHeight: hitH, minHeight: hitH, flexibleWidth: 1f);
                 DetailStripNormalizeRowRect(row);
@@ -939,7 +940,7 @@ namespace VPB
             for (int ari = 0; ari < DetailStripActionMaxRows; ari++)
             {
                 GameObject arow = UI.CreateChildRT(_detailStripActionsRowGO, "ActionRow" + ari, AnchorPresets.hStretchTop);
-                UI.AddHLG(arow, spacing: 8f * s, padding: UI.Pad(0, 0, 0, 0, s),
+                UI.AddHLG(arow, spacing: UI.GapControl(s), padding: UI.Pad(0, 0, 0, 0, s),
                     childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false, childForceExpandHeight: true);
                 UI.AddLE(arow, preferredHeight: hitH, minHeight: hitH, flexibleWidth: 1f);
                 DetailStripNormalizeRowRect(arow);
@@ -1044,7 +1045,7 @@ namespace VPB
                 minWidth: sideW, preferredWidth: sideW,
                 minHeight: 0f, preferredHeight: 0f,
                 flexibleWidth: 0f, flexibleHeight: 0f);
-            UI.AddVLG(sideCol, spacing: bandGap, padding: UI.Pad(10, 8, 6, 6, s),
+            UI.AddVLG(sideCol, spacing: bandGap, padding: UI.PadHV(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, s),
                 childAlignment: TextAnchor.UpperLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: true, childForceExpandHeight: false);
@@ -1332,7 +1333,7 @@ namespace VPB
             if (s <= 0f) s = 1f;
 
             GameObject row = UI.CreateChildRT(parent, "TagsRow", AnchorPresets.hStretchTop);
-            UI.AddHLG(row, spacing: 4f * s, padding: UI.Pad(0, 0, 0, 0, s),
+            UI.AddHLG(row, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false, childForceExpandHeight: true);
             UI.AddLE(row, preferredHeight: lineH, minHeight: lineH, flexibleWidth: 1f, minWidth: 0f);
 
@@ -1382,7 +1383,7 @@ namespace VPB
         private void DetailStripCreateTagClipboardActions(GameObject row, float s, float lineH, float hitH)
         {
             _detailStripTagClipboardActionsGO = UI.CreateChildRT(row, "TagClipboardActions", AnchorPresets.hStretchTop);
-            UI.AddHLG(_detailStripTagClipboardActionsGO, spacing: 4f * s, padding: UI.Pad(0, 0, 0, 0, s),
+            UI.AddHLG(_detailStripTagClipboardActionsGO, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false, childForceExpandHeight: true);
             UI.AddLE(_detailStripTagClipboardActionsGO, preferredHeight: lineH, minHeight: lineH,
                 flexibleWidth: 0f, flexibleHeight: 0f);
@@ -1687,7 +1688,7 @@ namespace VPB
         {
             if (s <= 0f) s = 1f;
             if (_detailStripExpandBtnGO == null || !_detailStripExpandBtnGO.activeSelf) return 0f;
-            return DetailStripExpandButtonWidth(s) + 10f * s;
+            return DetailStripExpandButtonWidth(s) + GalleryUiDesignTokens.ControlGapRef * s;
         }
 
         private void DetailStripEnsureExpandButton()
@@ -1714,7 +1715,9 @@ namespace VPB
                 rt.anchorMax = new Vector2(0f, 1f);
                 rt.pivot = new Vector2(0f, 1f);
                 rt.sizeDelta = new Vector2(btnW, innerH);
-                rt.anchoredPosition = new Vector2(8f * s, -2f * s);
+                rt.anchoredPosition = new Vector2(
+                    GalleryUiDesignTokens.BandPadHRef * s,
+                    -GalleryUiDesignTokens.BandContentInsetVRef * s);
             }
 
             Button btn = _detailStripExpandBtnGO.AddComponent<Button>();
@@ -1730,8 +1733,8 @@ namespace VPB
 
             UI.AddHLG(
                 _detailStripExpandBtnGO,
-                spacing: 6f * s,
-                padding: UI.Pad(8, 10, 0, 0, s),
+                spacing: UI.GapTight(s),
+                padding: UI.RowPad(s),
                 childAlignment: TextAnchor.MiddleCenter,
                 childForceExpandWidth: false,
                 childForceExpandHeight: true);
@@ -1878,7 +1881,7 @@ namespace VPB
             float innerH = TboxActionButtonInnerHeight();
             float iconSz = 16f * s;
             float btnW = DetailStripExpandButtonWidth(s);
-            float pad = 8f * s;
+            float pad = GalleryUiDesignTokens.BandPadHRef * s;
 
             if (tboxButtonsLayerRT != null && _detailStripExpandBtnGO.transform.parent != tboxButtonsLayerRT)
                 _detailStripExpandBtnGO.transform.SetParent(tboxButtonsLayerRT, false);
@@ -1890,14 +1893,14 @@ namespace VPB
                 rt.anchorMax = new Vector2(0f, 1f);
                 rt.pivot = new Vector2(0f, 1f);
                 rt.sizeDelta = new Vector2(btnW, innerH);
-                rt.anchoredPosition = new Vector2(pad, -2f * s);
+                rt.anchoredPosition = new Vector2(pad, -GalleryUiDesignTokens.BandContentInsetVRef * s);
             }
 
             HorizontalLayoutGroup hlg = _detailStripExpandBtnGO.GetComponent<HorizontalLayoutGroup>();
             if (hlg != null)
             {
                 hlg.spacing = 6f * s;
-                hlg.padding = UI.Pad(8, 10, 0, 0, s);
+                hlg.padding = UI.RowPad(s);
             }
             if (_detailStripExpandBtnLE != null)
             {
@@ -1940,15 +1943,14 @@ namespace VPB
         {
             if (tboxButtonsFlexRootRT == null) return;
             if (s <= 0f) s = 1f;
-            tboxButtonsFlexRootRT.offsetMin = new Vector2(8f * s, tboxButtonsFlexRootRT.offsetMin.y);
-            if (tboxButtonsFlexRootRT.offsetMax.x > -1f)
-                tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f * s, tboxButtonsFlexRootRT.offsetMax.y);
+            UI.ApplyBandInset(tboxButtonsFlexRootRT, s);
 
             float detailsPad = DetailStripExpandLeftReserve(s);
             bool clothingTop = tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf;
             // Clothing sits above action rows when active — it shares the Details vertical band.
-            float clothingLeft = detailsPad > 0f ? detailsPad : 8f * s;
-            DetailStripSetHlgLeftPad(tboxClothingModeRowHLG, clothingTop ? clothingLeft : 8f * s, -1);
+            float bandPadH = GalleryUiDesignTokens.BandPadHRef * s;
+            float clothingLeft = detailsPad > 0f ? detailsPad : bandPadH;
+            DetailStripSetHlgLeftPad(tboxClothingModeRowHLG, clothingTop ? clothingLeft : bandPadH, -1);
             DetailStripSetHlgLeftPad(tboxBtnRow0HLG, (!clothingTop && detailsPad > 0f) ? detailsPad : 0f, 0);
             DetailStripSetHlgLeftPad(tboxBtnRow1HLG, 0f, 0);
             DetailStripSetHlgLeftPad(tboxBtnRow2HLG, 0f, 0);
@@ -2582,7 +2584,7 @@ namespace VPB
             float hitH = DetailStripHitHeight(s);
             RectOffset zeroPad = UI.Pad(0, 0, 0, 0, s);
 
-            DetailStripSetLayoutGroup(_detailStripGO, 8f * s, UI.Pad(0, 0, 0, 0, s));
+            DetailStripSetLayoutGroup(_detailStripGO, UI.GapControl(s), UI.Pad(0, 0, 0, 0, s));
 
             if (_detailStripThumbGO != null)
             {
@@ -2612,7 +2614,7 @@ namespace VPB
 
             if (_detailStripSideColGO != null)
             {
-                DetailStripSetLayoutGroup(_detailStripSideColGO, DetailStripBandGap(s), UI.Pad(10, 8, 6, 6, s));
+                DetailStripSetLayoutGroup(_detailStripSideColGO, DetailStripBandGap(s), UI.PadHV(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, s));
                 float sideMin = GalleryUiDesignTokens.FooterDetailStripSideMinColWidthRef * s;
                 if (_detailStripSideColLE != null)
                 {
@@ -2830,7 +2832,7 @@ namespace VPB
             if (s <= 0f) s = 1f;
             GameObject row = _detailStripTags.transform.parent.gameObject;
             DetailStripSetRowHeight(row, lineH);
-            DetailStripSetLayoutGroup(row, 4f * s, UI.Pad(0, 0, 0, 0, s));
+            DetailStripSetLayoutGroup(row, UI.GapTight(s), UI.Pad(0, 0, 0, 0, s));
             LayoutElement rowLe = row.GetComponent<LayoutElement>();
             if (rowLe != null)
             {
@@ -3049,8 +3051,8 @@ namespace VPB
             if (textColTr == null) return;
             // Extra pad on the thumb seam so collapse hover rim is not clipped.
             RectOffset pad = DetailStripThumbOnRight()
-                ? UI.Pad(8, 2, 4, 4, s)
-                : UI.Pad(2, 8, 4, 4, s);
+                ? UI.Pad(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, s)
+                : UI.Pad(GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, s);
             DetailStripSetLayoutGroup(textColTr.gameObject, DetailStripBandGap(s), pad);
         }
 
@@ -7228,7 +7230,7 @@ namespace VPB
             {
                 panelVlg.childForceExpandHeight = false;
                 panelVlg.childControlHeight = true;
-                panelVlg.padding = UI.Pad(8f, 8f, 10f, 8f);
+                panelVlg.padding = UI.PadControl();
                 panelVlg.spacing = 6f;
             }
 
@@ -7320,7 +7322,7 @@ namespace VPB
             UI.AddHLG(
                 _detailStripTagMenuFilterRowGO,
                 spacing: 0f,
-                padding: UI.Pad(8f, 8f, 4f, 4f),
+                padding: UI.PadFloatFooter(),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true,
                 childControlHeight: true,
@@ -7513,8 +7515,8 @@ namespace VPB
             UI.AddImage(_detailStripTagMenuSearchRowGO, GalleryUiColorTokens.SurfaceDarker);
             UI.AddHLG(
                 _detailStripTagMenuSearchRowGO,
-                spacing: 6f,
-                padding: UI.Pad(8f, 8f, 4f, 4f),
+                spacing: UI.GapTight(),
+                padding: UI.PadFloatFooter(),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true,
                 childControlHeight: true,
@@ -7815,7 +7817,7 @@ namespace VPB
             GameObject col = UI.CreateChildRT(columnsGO, name + "Col");
             UI.AddVLG(
                 col,
-                spacing: 2f,
+                spacing: UI.GapHair(),
                 padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.UpperLeft,
                 childForceExpandWidth: true,
@@ -7827,7 +7829,7 @@ namespace VPB
             GameObject header = UI.CreateChildRT(col, "Header");
             UI.AddHLG(
                 header,
-                spacing: 4f,
+                spacing: UI.GapTight(),
                 padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true,
@@ -8799,7 +8801,7 @@ namespace VPB
             VerticalLayoutGroup panelVlg = _detailStripTagMenuPanelGO.GetComponent<VerticalLayoutGroup>();
             if (panelVlg != null)
             {
-                panelVlg.padding = UI.Pad(8f, 8f, 10f, 8f, s);
+                panelVlg.padding = UI.PadControl(s);
                 panelVlg.spacing = 6f * s;
             }
 
@@ -8876,7 +8878,7 @@ namespace VPB
                 }
                 HorizontalLayoutGroup filterHlg = _detailStripTagMenuFilterRowGO.GetComponent<HorizontalLayoutGroup>();
                 if (filterHlg != null)
-                    filterHlg.padding = UI.Pad(8f, 8f, 4f, 4f, s);
+                    filterHlg.padding = UI.PadFloatFooter(s);
             }
 
             if (_detailStripTagMenuTipText != null)
@@ -8935,7 +8937,7 @@ namespace VPB
                     rowHlg.childForceExpandHeight = false;
                     rowHlg.childControlHeight = true;
                     rowHlg.spacing = 6f * s;
-                    rowHlg.padding = UI.Pad(8f, 8f, 4f, 4f, s);
+                    rowHlg.padding = UI.PadFloatFooter(s);
                 }
                 _detailStripTagMenuSearchRowGO.transform.SetAsLastSibling();
             }

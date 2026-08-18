@@ -543,7 +543,7 @@ namespace VPB
             Image bg = AddImportSidebarRoundedBg(header, ImportSidebarHeaderBg);
 
             UI.AddHLG(
-                header, spacing: 4f, padding: UI.Pad(2, 4, 2, 2),
+                header, spacing: UI.GapTight(), padding: UI.Pad(GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.HairGapRef),
                 childAlignment: TextAnchor.MiddleCenter,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: true);

@@ -57,21 +57,21 @@ namespace VPB
         /// <summary>Match gallery footer info row height (FontBody at ChromeScale 1).</summary>
         private const float BannerHeightProgressRef = GalleryUiDesignTokens.FooterInfoRowHeightRef;
         private const float BannerHeightSummaryRef = 268f;
-        private const float BannerTopInsetRef = 8f;
+        private const float BannerTopInsetRef = GalleryUiDesignTokens.ControlGapRef;
         /// <summary>Discrete 2px meter — not full-row underlay.</summary>
-        private const float BarHeightRef = 2f;
-        private const float ContentAboveBarGapRef = 4f;
-        private const float TextRowPadTopRef = 2f;
-        private const float TextRowSideInsetRef = 10f;
+        private const float BarHeightRef = GalleryUiDesignTokens.HairGapRef;
+        private const float ContentAboveBarGapRef = GalleryUiDesignTokens.TightGapRef;
+        private const float TextRowPadTopRef = GalleryUiDesignTokens.HairGapRef;
+        private const float TextRowSideInsetRef = GalleryUiDesignTokens.ControlGapRef;
         private const float CancelButtonWidthRef = 84f;
         private const float CancelButtonHeightRef = 28f;
         private const float VersionSlotWidthRef = 148f;
-        private const float VersionTitleGapRef = 10f;
+        private const float VersionTitleGapRef = GalleryUiDesignTokens.ControlGapRef;
         private const float CancelSlotWidthRef = 94f;
         private const float SummaryHeaderHeightRef = 40f;
         private const float SummaryFooterHeightRef = 48f;
-        private const float SummaryPadHRef = 20f;
-        private const float SummaryColGapRef = 24f;
+        private const float SummaryPadHRef = GalleryUiDesignTokens.SectionGapRef;
+        private const float SummaryColGapRef = GalleryUiDesignTokens.SectionGapRef;
         private const float SummaryColSepWidthRef = 1f;
         private const float OkButtonWidthRef = 100f;
         private const float OkButtonHeightRef = GalleryUiDesignTokens.ButtonSizeRef;

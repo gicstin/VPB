@@ -439,7 +439,7 @@ namespace VPB
             _tryOnBarGO = bar;
             Image barBg = UI.AddImage(bar, new Color(0.08f, 0.08f, 0.10f, 0.96f));
 
-            HorizontalLayoutGroup row = UI.AddHLG(bar, spacing: 8f * s, padding: UI.Pad(12, 12, 8, 8, s), childForceExpandWidth: false, childForceExpandHeight: true);
+            HorizontalLayoutGroup row = UI.AddHLG(bar, spacing: UI.GapControl(s), padding: UI.PadHV(GalleryUiDesignTokens.GroupGapRef, GalleryUiDesignTokens.ControlGapRef, s), childForceExpandWidth: false, childForceExpandHeight: true);
 
             // Label (takes the remaining width).
             Text label = UI.CreateLabel(bar, "", GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef), new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, name: "Label");

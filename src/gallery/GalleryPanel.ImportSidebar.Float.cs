@@ -307,7 +307,7 @@ namespace VPB
                 footerRT.sizeDelta = new Vector2(0f, footerH);
             }
             UI.AddHLG(
-                importSidebarFloatFooterGO, spacing: 6f, padding: UI.Pad(8, 8, 4, 4),
+                importSidebarFloatFooterGO, spacing: UI.GapTight(), padding: UI.PadFloatFooter(),
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);

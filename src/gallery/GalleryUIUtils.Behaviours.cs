@@ -477,7 +477,7 @@ namespace VPB
         public Color selectedRimColor;
         /// <summary>Idle control edge when <see cref="showIdleRim"/>. Muted fill still reads as a button (Norman).</summary>
         public Color idleRimColor = GalleryUiColorTokens.RimIdle;
-        public float borderSize = 2f;
+        public float borderSize = GalleryUiDesignTokens.ControlRimThicknessRef;
         /// <summary>When true, border effect is rendered inward (negative outline offset).</summary>
         public bool inward = false;
         public bool isSelected = false;

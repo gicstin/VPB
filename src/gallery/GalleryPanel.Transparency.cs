@@ -170,7 +170,11 @@ namespace VPB
                 paneCanvasAlpha = Mathf.Max(0.1f, VPBConfig.Instance.GalleryOpacity);
 
             bool enableFade = VPBConfig.Instance.EnableGalleryFade;
-            if (enableFade && !ShouldShowSideButtonsAfterFadeDelay())
+            bool vr = false;
+            try { vr = VPB.src.util.XrUtils.IsVrActive(); } catch { }
+            if (vr)
+                forceShowSideButtons = true;
+            else if (enableFade && !ShouldShowSideButtonsAfterFadeDelay())
                 sideButtonsCanvasAlpha = 0f;
         }
     }
