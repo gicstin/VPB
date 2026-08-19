@@ -1749,6 +1749,7 @@ namespace VPB
                 case QuickMenuAssignableAction.CoreSettingsButton:
                 {
                     var p = QuickMenuGetTargetPanel();
+                    if (p == null) p = GalleryPanel.EnsureFloatHostPane();
                     if (p == null) { OpenGallery(); p = QuickMenuGetTargetPanel(); }
                     if (p != null) p.OpenSettingsSideTab();
                     break;

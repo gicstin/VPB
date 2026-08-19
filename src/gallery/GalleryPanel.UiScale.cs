@@ -658,13 +658,18 @@ namespace VPB
 
         private static void ScaleButtonIconPadding(RectTransform btnRT, float scale)
         {
+            ScaleButtonIconPadding(btnRT, scale, GalleryUiDesignTokens.SearchIconButtonPadRef);
+        }
+
+        private static void ScaleButtonIconPadding(RectTransform btnRT, float scale, float padRef)
+        {
             if (btnRT == null) return;
             Transform icon = btnRT.Find("Icon");
             if (icon == null) return;
             RectTransform irt = icon as RectTransform;
             if (irt == null) return;
-            float pad = GalleryUiDesignTokens.SearchIconButtonPadRef * scale;
-            irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
+
+            UI.SizeButtonIcon(irt, btnRT, padRef * scale);
         }
 
         private void RescaleAllSearchInputsInternal(GalleryUiMetrics metrics)
@@ -900,7 +905,7 @@ namespace VPB
                     Text t = rt.GetComponentInChildren<Text>(true);
                     if (t != null)
                         GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
-                    ScaleButtonIconPadding(rt, scale);
+                    ScaleButtonIconPadding(rt, scale, GalleryUiDesignTokens.SideButtonIconPadRef);
                 }
                 for (int i = 0; i < leftSideButtons.Count; i++)
                 {
@@ -913,7 +918,7 @@ namespace VPB
                     Text t = rt.GetComponentInChildren<Text>(true);
                     if (t != null)
                         GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
-                    ScaleButtonIconPadding(rt, scale);
+                    ScaleButtonIconPadding(rt, scale, GalleryUiDesignTokens.SideButtonIconPadRef);
                 }
             }
 
@@ -968,11 +973,15 @@ namespace VPB
                 if (t != null) t.fontSize = subFontSize;
             }
 
-            if (!updatePositions) return;
-            if (topDock)
-                ApplyTopDockSideButtonsLayout(scale);
+            if (updatePositions)
+            {
+                if (topDock)
+                    ApplyTopDockSideButtonsLayout(scale);
+                else
+                    UpdateSideButtonPositions();
+            }
             else
-                UpdateSideButtonPositions();
+                try { SyncSideRailFacetCaptions(); } catch { }
         }
 
         /// <summary>Scales grid labels from cell size.</summary>

@@ -151,6 +151,7 @@ namespace VPB
                         // side-rail selected tints / custom hover colors (that caused a 0.5s pulse).
                         bool wantInward = forceInward || IsUnderImportSidebarScrollViewport(s.transform);
                         ApplyHoverBorderPolicyIfChanged(hb, border, wantInward, assignDefaultColor: added);
+                        EnableChromeIdleRim(hb);
                     }
                 }
 
@@ -2058,10 +2059,15 @@ namespace VPB
         public static void EnableChromeIdleRim(UIHoverBorder hb)
         {
             if (hb == null || hb.hoverBorderGO != null) return;
-            if (hb.showIdleRim) return;
+            bool was = hb.showIdleRim;
             hb.showIdleRim = true;
             hb.idleRimColor = GalleryUiColorTokens.RimIdle;
-            try { hb.ApplyBorderSettings(); } catch { }
+            try
+            {
+                if (!was) hb.ApplyBorderSettings();
+                else hb.SyncIndicatorVisibility();
+            }
+            catch { }
         }
 
         /// <summary>
@@ -2219,7 +2225,7 @@ namespace VPB
                         UI.SetIconSprite(iconImg, spr);
                         RectTransform irt = existing as RectTransform;
                         if (irt != null)
-                            irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
+                            SizeButtonIcon(irt, go.GetComponent<RectTransform>(), pad);
                     }
                 }
                 else
@@ -2249,7 +2255,7 @@ namespace VPB
                 if (irt != null)
                 {
                     float pad = GalleryUiDesignTokens.FloatChromeIconPadRef * (scale > 0f ? scale : 1f);
-                    irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
+                    SizeButtonIcon(irt, rt, pad);
                 }
             }
             EnsureFloatChromeHoverBorder(go, inward: true);
@@ -2939,10 +2945,19 @@ namespace VPB
             img.preserveAspect = true;
             img.raycastTarget = false;
             RectTransform rt = iconGO.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.sizeDelta = new Vector2(-padding * 2, -padding * 2);
-            rt.anchoredPosition = Vector2.zero;
+            SizeButtonIcon(rt, buttonGO.GetComponent<RectTransform>(), padding);
+        }
+
+        /// <summary>Stretch-inset to the painted rect. Do not bake sizeDelta — buttons start at Unity 100² / LE / VR world.</summary>
+        internal static void SizeButtonIcon(RectTransform iconRT, RectTransform buttonRT, float padding)
+        {
+            if (iconRT == null) return;
+            if (padding < 0f) padding = 0f;
+            iconRT.anchorMin = Vector2.zero;
+            iconRT.anchorMax = Vector2.one;
+            iconRT.pivot = new Vector2(0.5f, 0.5f);
+            iconRT.sizeDelta = new Vector2(-padding * 2f, -padding * 2f);
+            iconRT.anchoredPosition = Vector2.zero;
         }
 
         /// <summary>Updates or creates the Icon child from atlas role <paramref name="iconRole"/> using bar glyph tint.</summary>
@@ -2965,6 +2980,7 @@ namespace VPB
                 if (img != null)
                 {
                     UI.SetIconSprite(img, s);
+                    SizeButtonIcon(iconTr as RectTransform, buttonGO.GetComponent<RectTransform>(), padding);
                     return true;
                 }
             }
@@ -2987,6 +3003,7 @@ namespace VPB
                 if (img != null)
                 {
                     UI.SetIconSprite(img, s);
+                    SizeButtonIcon(iconTr as RectTransform, buttonGO.GetComponent<RectTransform>(), padding);
                     return true;
                 }
             }

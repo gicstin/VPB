@@ -642,7 +642,11 @@ namespace VPB
         public static void MarkCreateGalleryPaneRequested()
         {
             _pendingCreatePaneStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            _createPaneTakeMenuAnchor = true;
         }
+
+        /// <summary>Create-gallery (QM/hotkey) docks the new pane to the VaM menu. Closing a free pane does not reclaim the slot.</summary>
+        private static bool _createPaneTakeMenuAnchor;
 
         internal static System.Diagnostics.Stopwatch TakePendingCreatePaneStopwatch()
         {
@@ -669,6 +673,7 @@ namespace VPB
             p.Init();
             // Force floating mode for clones
             p.SetFixedLocally(false);
+            p.ReleaseVamMenuAnchor();
             
             p.SetCategories(original.categories);
             
@@ -811,7 +816,12 @@ namespace VPB
 
             GameObject go = new GameObject("GalleryPanel_New");
             GalleryPanel p = go.AddComponent<GalleryPanel>();
-            p.Init(); // Undocked
+            p.Init(); // Undocked unless first pane, or Create Gallery claims the menu slot.
+            if (_createPaneTakeMenuAnchor)
+            {
+                _createPaneTakeMenuAnchor = false;
+                p.ClaimVamMenuAnchor();
+            }
             
             p.SetCategories(categories);
 

@@ -238,6 +238,9 @@ namespace VPB
         public bool ImportOnLeft;
         public bool ImportFloating;
 
+        /// <summary>See <see cref="VPBConfig.GalleryFloatsOnlyMode"/>.</summary>
+        public bool FloatsOnly;
+
         /// <summary>Grid columns 1–12. 0 = unset (legacy presets keep the pane's current count).</summary>
         public int GridColumnCount;
 
@@ -268,6 +271,7 @@ namespace VPB
             n["io"].AsBool = ImportOpen;
             n["il"].AsBool = ImportOnLeft;
             n["if"].AsBool = ImportFloating;
+            n["fo"].AsBool = FloatsOnly;
             n["gc"].AsInt = GridColumnCount;
 
             var arr = new JSONArray();
@@ -318,6 +322,7 @@ namespace VPB
             if (n["io"] != null) p.ImportOpen = n["io"].AsBool;
             if (n["il"] != null) p.ImportOnLeft = n["il"].AsBool;
             if (n["if"] != null) p.ImportFloating = n["if"].AsBool;
+            if (n["fo"] != null) p.FloatsOnly = n["fo"].AsBool;
             if (n["gc"] != null) p.GridColumnCount = n["gc"].AsInt;
 
             JSONNode arr = n["fl"];
@@ -558,7 +563,8 @@ namespace VPB
                     sb.Append(p.ImportOpen ? '1' : '0');
                     sb.Append(p.ImportOnLeft ? '1' : '0');
                     sb.Append(p.ImportFloating ? '1' : '0').Append(',');
-                    sb.Append(p.Collapsed ? '1' : '0').Append(',');
+                    sb.Append(p.Collapsed ? '1' : '0');
+                    sb.Append(p.FloatsOnly ? '1' : '0').Append(',');
                     sb.Append(p.GridColumnCount).Append(',');
 
                     if (p.Floats != null)

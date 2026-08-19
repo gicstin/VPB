@@ -233,7 +233,7 @@ namespace VPB
             {
                 foreach (var p in Gallery.singleton.Panels)
                 {
-                    if (p != null && p.IsVisible)
+                    if (p != null && p.HasLiveCanvas)
                     {
                         _panelsHiddenForSave.Add(p);
                         p.Hide();
@@ -251,6 +251,11 @@ namespace VPB
                 {
                     var p = _panelsHiddenForSave[i];
                     if (p == null) continue;
+                    if (p.IsFloatsOnly)
+                    {
+                        try { p.RestoreFloatsOnlyHostAfterCapture(); } catch { }
+                        continue;
+                    }
                     try
                     {
                         string t = p.GetTitle();
@@ -500,7 +505,7 @@ namespace VPB
                 if (p == null) continue;
                 try
                 {
-                    if (p.IsVisible)
+                    if (p.HasLiveCanvas)
                     {
                         p.Hide();
                     }
@@ -1165,6 +1170,13 @@ namespace VPB
             AddTooltip(footerWatchToggleBtn, "gallery.tooltip.vr_watch_toggle", "Show/hide VR wrist watch (look at inner wrist)");
             footerWatchToggleBtn.SetActive(false);
 
+            footerFloatsOnlyBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"F", 20, 0, 0, AnchorPresets.middleCenter, ToggleFloatsOnlyMode);
+            footerFloatsOnlyBtnImage = footerFloatsOnlyBtn.GetComponent<Image>();
+            footerFloatsOnlyOffSprite = UI.LoadIconSprite("layout-sidebar", Color.white);
+            footerFloatsOnlyOnSprite  = UI.LoadIconSprite("layout-sidebar-right-collapse", Color.white);
+            { Sprite init = footerFloatsOnlyOffSprite ?? footerFloatsOnlyOnSprite; if (init != null) { UI.AddIconToButton(footerFloatsOnlyBtn, init); footerFloatsOnlyIconImage = footerFloatsOnlyBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            AddTooltip(footerFloatsOnlyBtn, "gallery.tooltip.floats_only", "Hide this pane and keep its floating windows (open the gallery to bring it back)");
+
             // Sidebar toggle lives on the side-rail Scene Import button (above Tags); no footer button.
 
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
@@ -1265,6 +1277,7 @@ namespace VPB
             AddHoverDelegate(gridSizePlusBtn);
             AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase columns (Ctrl+scroll wheel over gallery)");
             AddHoverDelegate(footerMenuGateBtn);
+            AddHoverDelegate(footerFloatsOnlyBtn);
             AddHoverDelegate(footerHoldToLaunchToggleBtn);
             AddHoverDelegate(footerApplyModeBtn);
             AddHoverDelegate(footerBackBtn);
@@ -1311,7 +1324,7 @@ namespace VPB
             }
             var footerBtnGOs = new GameObject[] {
                 footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
-                footerMenuGateBtn, footerWatchToggleBtn,
+                footerMenuGateBtn, footerWatchToggleBtn, footerFloatsOnlyBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerHoldToLaunchToggleBtn,
                 footerApplyModeBtn,

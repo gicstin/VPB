@@ -28,11 +28,12 @@ namespace VPB
 
         // Thumbnails are the gallery's own 1:1 plates, so the widget is sized from a square side plus
         // chrome rather than from an arbitrary box the image would have to stretch into.
-        private const float QmPreviewDeskThumb = 138f;
-        private const float QmPreviewWatchThumb = 150f;
+        private const float QmPreviewDeskThumb = 300f;
+        private const float QmPreviewWatchThumb = 300f;
+        private const float QmPreviewScreenPad = 8f;
         private const float QmPreviewDeskGap = 6f;
         private const int QmPreviewDeskFont = 14;
-        private const int QmPreviewWatchFont = 13;
+        private const int QmPreviewWatchFont = 16;
         private const float QmPreviewPad = 6f;
         private const float QmPreviewLabelH = 18f;
         private const float QmPreviewSubLabelH = 15f;
@@ -78,6 +79,7 @@ namespace VPB
         private RawImage m_QmPreviewWatchImg;
         private Text m_QmPreviewWatchLabel;
         private Text m_QmPreviewWatchSubLabel;
+        private Vector3[] m_QmPreviewWorldCorners;
 
         private static bool QuickMenuRandomPreviewEnabled()
         {
@@ -456,20 +458,113 @@ namespace VPB
                 QmPreviewWatchThumb, QmPreviewWatchFont,
                 out m_QmPreviewWatchGo, out m_QmPreviewWatchRt, out m_QmPreviewWatchBg, out m_QmPreviewWatchImg,
                 out m_QmPreviewWatchLabel, out m_QmPreviewWatchSubLabel);
-            // Sits under the tip panel, which itself hangs under the bezel.
-            if (m_QmPreviewWatchRt != null) m_QmPreviewWatchRt.pivot = new Vector2(0.5f, 1f);
+            if (m_QmPreviewWatchRt != null)
+            {
+                m_QmPreviewWatchRt.pivot = new Vector2(0.5f, 0f);
+                QuickMenuApplyPreviewVrTilt(m_QmPreviewWatchRt);
+            }
         }
 
-        /// <summary>
-        /// Desktop quick-actions grid is bottom-left HUD chrome. Park the card above the tooltip
-        /// bar (same X), growing upward — not under the buttons.
-        /// </summary>
+        /// <summary>Park the card above the tooltip bar (same X), growing up — not under the buttons.</summary>
         private void QuickMenuPositionDeskPreview()
         {
             if (m_QmPreviewDeskRt == null || m_QmTooltipRT == null) return;
             m_QmPreviewDeskRt.pivot = new Vector2(0.5f, 0f);
             float tipTop = m_QmTooltipRT.anchoredPosition.y + m_QmTooltipRT.sizeDelta.y;
             m_QmPreviewDeskRt.anchoredPosition = new Vector2(m_QmTooltipRT.anchoredPosition.x, tipTop + QmPreviewDeskGap);
+
+            if (QuickMenuIsVrActive())
+            {
+                QuickMenuApplyPreviewVrTilt(m_QmPreviewDeskRt);
+                return;
+            }
+
+            m_QmPreviewDeskRt.localRotation = Quaternion.identity;
+            QuickMenuClampDeskPreviewToScreen();
+        }
+
+        /// <summary>Pane pose vs mainHUD: Y180 then −X tilt. HUD canvas is already (32,180,0) — stacking −tilt overshoots.
+        /// Desk undoes canvas local; watch already faces the eye so it only applies extra −X.</summary>
+        private void QuickMenuApplyPreviewVrTilt(RectTransform rt)
+        {
+            if (rt == null) return;
+            float tiltDeg = 0f;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    tiltDeg = VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg);
+            }
+            catch { tiltDeg = 0f; }
+
+            Quaternion paneLocalToHud = Quaternion.Euler(0f, 180f, 0f);
+            if (tiltDeg > 0.001f)
+                paneLocalToHud = paneLocalToHud * Quaternion.Euler(-tiltDeg, 0f, 0f);
+
+            if (rt == m_QmPreviewDeskRt && m_QuickMenuCanvas != null)
+            {
+                rt.localRotation = Quaternion.Inverse(m_QuickMenuCanvas.transform.localRotation) * paneLocalToHud;
+                return;
+            }
+
+            rt.localRotation = tiltDeg > 0.001f
+                ? Quaternion.Euler(-tiltDeg, 0f, 0f)
+                : Quaternion.identity;
+        }
+
+        /// <summary>Nudge desktop card onto the monitor. Avoid ScreenToWorldPoint (frustum spam on HUD edges).</summary>
+        private void QuickMenuClampDeskPreviewToScreen()
+        {
+            RectTransform rt = m_QmPreviewDeskRt;
+            if (rt == null) return;
+            RectTransform parent = rt.parent as RectTransform;
+            if (parent == null) return;
+            if (Screen.width < 8 || Screen.height < 8) return;
+
+            Camera cam = null;
+            try { cam = m_QuickMenuCanvas != null ? m_QuickMenuCanvas.worldCamera : null; } catch { cam = null; }
+            if (cam == null) cam = Camera.main;
+            if (cam == null) return;
+
+            if (m_QmPreviewWorldCorners == null) m_QmPreviewWorldCorners = new Vector3[4];
+            rt.GetWorldCorners(m_QmPreviewWorldCorners);
+
+            float minX = float.PositiveInfinity, maxX = float.NegativeInfinity;
+            float minY = float.PositiveInfinity, maxY = float.NegativeInfinity;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 sp = RectTransformUtility.WorldToScreenPoint(cam, m_QmPreviewWorldCorners[i]);
+                if (sp.z < 0f) return;
+                if (sp.x < minX) minX = sp.x;
+                if (sp.x > maxX) maxX = sp.x;
+                if (sp.y < minY) minY = sp.y;
+                if (sp.y > maxY) maxY = sp.y;
+            }
+
+            float left = QmPreviewScreenPad;
+            float right = Screen.width - QmPreviewScreenPad;
+            float bottom = QmPreviewScreenPad;
+            float top = Screen.height - QmPreviewScreenPad;
+            float w = maxX - minX;
+            float h = maxY - minY;
+            float x0 = minX;
+            float y0 = minY;
+            if (x0 < left) x0 = left;
+            if (x0 + w > right) x0 = right - w;
+            if (x0 < left) x0 = left;
+            if (y0 < bottom) y0 = bottom;
+            if (y0 + h > top) y0 = top - h;
+            if (y0 < bottom) y0 = bottom;
+
+            float dx = x0 - minX;
+            float dy = y0 - minY;
+            if (dx * dx + dy * dy < 0.25f) return;
+
+            Vector2 pivotScreen = RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                parent, pivotScreen + new Vector2(dx, dy), cam, out local))
+                return;
+            rt.anchoredPosition = local;
         }
 
         internal void QuickMenuClearWatchRandomPreviewRefs()
@@ -510,6 +605,7 @@ namespace VPB
             if (go == null) return;
 
             if (showDesk) QuickMenuPositionDeskPreview();
+            else QuickMenuApplyPreviewVrTilt(m_QmPreviewWatchRt);
             if (!go.activeSelf)
             {
                 go.SetActive(true);

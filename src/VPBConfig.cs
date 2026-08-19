@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
@@ -832,6 +832,8 @@ namespace VPB
         public bool GalleryPluginsFloatCslistOnly = false;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
+        /// <summary>Hide pane body, keep canvas so Settings / Plugins / Quick Filters / Import floats stay up. Show clears it.</summary>
+        public bool GalleryFloatsOnlyMode = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
         public bool GalleryAnchorToVamMenu = true;
         /// <summary>VR menu-anchor only: gallery pane pitch (deg). Pivot bottom edge; top tips toward user. 0..20.</summary>
@@ -857,7 +859,7 @@ namespace VPB
         public const float QuickMenuVrWatchScaleMulMax = 1.5f;
         /// <summary>Per-axis limit of the wrist-locked rotation trim, in degrees.</summary>
         public const float QuickMenuVrWatchFaceRotationMaxDeg = 180f;
-        public static readonly Vector3 QuickMenuVrWatchFaceRotationDefault = Vector3.zero;
+        public static readonly Vector3 QuickMenuVrWatchFaceRotationDefault = new Vector3(-60f, 0f, 0f);
         public const float QuickMenuVrWatchGlanceDwellDefault = 0.18f;
         public const float QuickMenuVrWatchGlanceDwellMax = 1f;
         public const float QuickMenuVrWatchShoulderBlendDefault = 0f;
@@ -886,7 +888,7 @@ namespace VPB
         /// <summary>Local position offset of the watch canvas on the controller (X flipped on right hand).</summary>
         public Vector3 QuickMenuVrWatchOffset = QuickMenuVrWatchOffsetDefault;
         /// <summary>Euler trim (deg) on the face's own axes, on top of the fixed wrist rotation.
-        /// Only used while <see cref="QuickMenuVrWatchFaceUser"/> is off — billboarding overrides it.</summary>
+        /// Default rest pitch is -60 X. Only used while <see cref="QuickMenuVrWatchFaceUser"/> is off — billboarding overrides it.</summary>
         public Vector3 QuickMenuVrWatchFaceRotation = QuickMenuVrWatchFaceRotationDefault;
         /// <summary>True after the first-run wrist-watch cue has finished.</summary>
         public bool QuickMenuVrWatchOnboardingSeen = false;
@@ -900,6 +902,8 @@ namespace VPB
         public bool QuickMenuVrWatchButtonsMigrated;
         /// <summary>True after one-time migrate of old 1.0 default scale to <see cref="QuickMenuVrWatchScaleMulDefault"/>.</summary>
         public bool QuickMenuVrWatchScaleMulV2;
+        /// <summary>True after one-time adopt of wrist-locked rest pitch (-60 X) from the old 0,0,0 default.</summary>
+        public bool QuickMenuVrWatchFaceRestPitchV2;
         /// <summary>Hold the watch world pose while the opposite controller reaches for it.</summary>
         public bool QuickMenuVrWatchFreezeOnApproach = true;
         /// <summary>Squeeze the grip on the watch hand to pin the face in place / return it to the wrist.</summary>
@@ -980,6 +984,9 @@ namespace VPB
                 Mathf.Abs(QuickMenuVrWatchScaleMul - 1f) < 1e-5f)
                 QuickMenuVrWatchScaleMul = QuickMenuVrWatchScaleMulDefault;
             QuickMenuVrWatchScaleMulV2 = true;
+            if (!QuickMenuVrWatchFaceRestPitchV2 && QuickMenuVrWatchFaceRotation.sqrMagnitude < 1e-4f)
+                QuickMenuVrWatchFaceRotation = QuickMenuVrWatchFaceRotationDefault;
+            QuickMenuVrWatchFaceRestPitchV2 = true;
             EnsureWatchExtraActions();
             EnsureWatchButtonPages();
             MigrateWatchExtrasIntoPages();
@@ -2173,6 +2180,7 @@ namespace VPB
                         if (node["GalleryPluginsFloatCslistOnly"] != null)
                             GalleryPluginsFloatCslistOnly = node["GalleryPluginsFloatCslistOnly"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
+                        if (node["GalleryFloatsOnlyMode"] != null) GalleryFloatsOnlyMode = node["GalleryFloatsOnlyMode"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
                         if (node["GalleryVrMenuAnchorTiltDeg"] != null)
                             GalleryVrMenuAnchorTiltDeg = ClampGalleryVrMenuAnchorTiltDeg(node["GalleryVrMenuAnchorTiltDeg"].AsFloat);
@@ -2225,6 +2233,7 @@ namespace VPB
                         }
                         if (node["QuickMenuVrWatchOnboardingSeen"] != null) QuickMenuVrWatchOnboardingSeen = node["QuickMenuVrWatchOnboardingSeen"].AsBool;
                         if (node["QuickMenuVrWatchScaleMulV2"] != null) QuickMenuVrWatchScaleMulV2 = node["QuickMenuVrWatchScaleMulV2"].AsBool;
+                        if (node["QuickMenuVrWatchFaceRestPitchV2"] != null) QuickMenuVrWatchFaceRestPitchV2 = node["QuickMenuVrWatchFaceRestPitchV2"].AsBool;
                         if (node["QuickMenuVrWatchExtraActions"] != null)
                         {
                             JSONNode ex = node["QuickMenuVrWatchExtraActions"];
@@ -2658,6 +2667,7 @@ namespace VPB
                 node["GalleryPluginsFloatLatestOnly"].AsBool = GalleryPluginsFloatLatestOnly;
                 node["GalleryPluginsFloatCslistOnly"].AsBool = GalleryPluginsFloatCslistOnly;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
+                node["GalleryFloatsOnlyMode"].AsBool = GalleryFloatsOnlyMode;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
                 node["GalleryVrMenuAnchorTiltDeg"].AsFloat = ClampGalleryVrMenuAnchorTiltDeg(GalleryVrMenuAnchorTiltDeg);
                 JSONClass o = new JSONClass();
@@ -2687,6 +2697,7 @@ namespace VPB
                 node["QuickMenuVrWatchFaceRotation"] = fr;
                 node["QuickMenuVrWatchOnboardingSeen"].AsBool = QuickMenuVrWatchOnboardingSeen;
                 node["QuickMenuVrWatchScaleMulV2"].AsBool = QuickMenuVrWatchScaleMulV2;
+                node["QuickMenuVrWatchFaceRestPitchV2"].AsBool = QuickMenuVrWatchFaceRestPitchV2;
                 node["QuickMenuVrWatchFreezeOnApproach"].AsBool = QuickMenuVrWatchFreezeOnApproach;
                 node["QuickMenuVrWatchGripPin"].AsBool = QuickMenuVrWatchGripPin;
                 node["QuickMenuVrWatchShoulderBlend"].AsFloat = QuickMenuVrWatchShoulderBlend;

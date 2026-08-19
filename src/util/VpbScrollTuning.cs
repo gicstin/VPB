@@ -6,6 +6,7 @@ namespace VPB
     internal static class VpbScrollTuning
     {
         internal const float VamScrollUnitsPerNotch = 100f;
+        internal const float WatchPreviewUnitsPerNotch = 180f; // farther than gallery/QM before next item
         internal const float VamNativeScrollSensitivity = 1f;
 
         private static bool VrActive
@@ -33,14 +34,20 @@ namespace VPB
 
         internal static int TakeNotches(ref float accumulator, float scrollDeltaY)
         {
+            return TakeNotches(ref accumulator, scrollDeltaY, VamScrollUnitsPerNotch);
+        }
+
+        internal static int TakeNotches(ref float accumulator, float scrollDeltaY, float unitsPerNotch)
+        {
             if (float.IsNaN(scrollDeltaY) || float.IsInfinity(scrollDeltaY)) return 0;
             if ((accumulator > 0f && scrollDeltaY < 0f) || (accumulator < 0f && scrollDeltaY > 0f))
                 accumulator = 0f;
 
             accumulator += scrollDeltaY;
-            int notches = (int)(accumulator / VamScrollUnitsPerNotch);
+            float unit = unitsPerNotch > 1f ? unitsPerNotch : VamScrollUnitsPerNotch;
+            int notches = (int)(accumulator / unit);
             if (notches == 0) return 0;
-            accumulator -= notches * VamScrollUnitsPerNotch;
+            accumulator -= notches * unit;
             return notches;
         }
     }

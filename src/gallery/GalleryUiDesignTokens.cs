@@ -248,6 +248,7 @@
         public const float SideButtonWidthRef = 120f;
         public const float SideButtonHeightRef = ButtonSizeRef;
         public const float SideButtonSquareRef = ButtonSizeRef;
+        public const float SideButtonIconPadRef = SearchIconButtonPadRef;
         public const float SideButtonContainerWidthRef = 130f;
         public const float SideButtonContainerOffsetRef = 140f;
         public const float SideButtonSpacingRef = ButtonSizeRef + TightGapRef;

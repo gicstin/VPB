@@ -516,6 +516,7 @@
     <Compile Include="src\gallery\GalleryPanel.ContextBar.cs" />
     <Compile Include="src\gallery\GalleryPanel.TitleBarOverflow.cs" />
     <Compile Include="src\gallery\GalleryPanel.FooterOverflow.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FloatsOnly.cs" />
     <Compile Include="src\gallery\GalleryPanel.SideRailOverflow.cs" />
     <Compile Include="src\gallery\GalleryPanel.SaveMenuPopup.cs" />
     <Compile Include="src\gallery\GalleryPanel.TagCategories.cs" />

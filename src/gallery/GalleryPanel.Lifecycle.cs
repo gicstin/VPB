@@ -14,6 +14,7 @@ namespace VPB
         {
             VpbPerfDiag.LogTransition("GalleryPanel.Close", null);
             try { PersistCurrentBrowsePlace(); } catch { }
+            ReleaseVamMenuAnchor();
             if (Gallery.singleton != null)
             {
                 Gallery.singleton.RemovePanel(this);
@@ -275,7 +276,7 @@ namespace VPB
             float btnWidth = GalleryUiDesignTokens.SideButtonWidthRef;
             float btnHeight = GalleryUiDesignTokens.SideButtonHeightRef;
             float sideIconBtn = GalleryUiDesignTokens.SideButtonSquareRef;
-            const float sideIconPad = 6f;
+            float sideIconPad = GalleryUiDesignTokens.SideButtonIconPadRef;
             int btnFontSize = GalleryUiDesignTokens.FontBodyRef;
             float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
             float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
@@ -317,7 +318,7 @@ namespace VPB
             float btnWidth = GalleryUiDesignTokens.SideButtonWidthRef;
             float btnHeight = GalleryUiDesignTokens.SideButtonHeightRef;
             float sideIconBtn = GalleryUiDesignTokens.SideButtonSquareRef;
-            const float sideIconPad = 6f;
+            float sideIconPad = GalleryUiDesignTokens.SideButtonIconPadRef;
             int btnFontSize = GalleryUiDesignTokens.FontBodyRef;
             float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
             float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
@@ -415,6 +416,7 @@ namespace VPB
 
         void OnDestroy()
         {
+            ReleaseVamMenuAnchor();
             StopCo(ref _categoryQuickApplyCoroutine);
             try { _filterRandomizeGen++; } catch { }
             StopCo(ref _filterRandomizeCo);

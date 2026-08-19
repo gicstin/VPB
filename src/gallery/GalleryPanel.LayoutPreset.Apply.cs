@@ -212,6 +212,13 @@ namespace VPB
                         try { target.ApplyQuickFilterState(state.Filter, false, true); }
                         catch (Exception ex) { LogUtil.LogError("[VPB][Layout] filters: " + ex.Message); }
                     }
+
+                    // After ApplyPaneCategory (Show clears the mode). Dock-shape presets are edges only.
+                    if (!preset.DockShapeOnly)
+                    {
+                        try { target.ApplyPaneFloatsOnly(state); }
+                        catch (Exception ex) { LogUtil.LogError("[VPB][Layout] floats-only: " + ex.Message); }
+                    }
                 }
 
                 yield return null;
@@ -379,6 +386,8 @@ namespace VPB
 
         internal void ApplyPaneGeometry(LayoutPaneState pane)
         {
+            SetVamMenuAnchorOptIn(pane.AnchoredToVamMenu);
+
             if (isFixedLocally)
             {
                 SetCollapsed(pane.Collapsed);

@@ -38,6 +38,7 @@ namespace VPB
         private const float QuickMenuWatchGlanceMaxDistSqr = 4f;
         private const float QuickMenuWatchGlanceLookMaxDistSqr = 0.64f;
         private const float QuickMenuWatchTutorialSec = 6f;
+        private const float QuickMenuWatchPosePreviewSec = 2.5f;
         private const float QuickMenuWatchFadeSec = 0.12f;
         private const float QuickMenuWatchFadeScaleFrom = 0.88f;
         // Reach radii for freeze-on-approach, squared. 0.25 m/0.35 m (the old values) fire when the
@@ -89,7 +90,7 @@ namespace VPB
         private const int QuickMenuWatchCueFont = 16;
         private const int QuickMenuWatchTipFont = 17;
         private const float QuickMenuWatchTipW = 320f;
-        private const float QuickMenuWatchTipH = 62f;
+        private const float QuickMenuWatchTipH = 118f;
         private const float QuickMenuWatchTipGap = 10f;
         private const int QuickMenuWatchSheetLabelFont = 11;
         private const int QuickMenuWatchSheetHeaderFont = 14;
@@ -245,6 +246,7 @@ namespace VPB
         private bool m_WatchIsLeft;
         private byte m_WatchSessionHand;
         private float m_WatchTutorialUntil;
+        private float m_WatchPosePreviewUntil;
         private bool m_WatchStatusNeedRebuild = true;
         private string m_WatchStatusShown = "";
         private string m_WatchHoverStatus;
@@ -282,12 +284,12 @@ namespace VPB
         private bool m_WatchCfgLabels;
         private bool m_WatchCfgHoldConfirm = true;
         private float m_WatchCfgGlanceDwell = VPBConfig.QuickMenuVrWatchGlanceDwellDefault;
-        private float m_WatchCfgScaleMul = 1f;
+        private float m_WatchCfgScaleMul = VPBConfig.QuickMenuVrWatchScaleMulDefault;
         private float m_WatchCfgToward = 0.04f;
         private Vector3 m_WatchCfgOffset = VPBConfig.QuickMenuVrWatchOffsetDefault;
-        private Vector3 m_WatchCfgFaceRotEuler;
-        private Quaternion m_WatchCfgFaceRot = Quaternion.identity;
-        private bool m_WatchCfgFaceRotActive;
+        private Vector3 m_WatchCfgFaceRotEuler = VPBConfig.QuickMenuVrWatchFaceRotationDefault;
+        private Quaternion m_WatchCfgFaceRot = Quaternion.Euler(VPBConfig.QuickMenuVrWatchFaceRotationDefault);
+        private bool m_WatchCfgFaceRotActive = true;
         private string m_WatchCfgHandRaw;
         private string m_WatchCfgShowRaw;
         private bool m_WatchAssignmentsLoaded;
@@ -621,7 +623,8 @@ namespace VPB
             QuickMenuTickWatchGripPin(sc, now);
 
             bool wantShow;
-            if (m_WatchCalibrating || tutorial || m_WatchWorldLocked || m_WatchEditMode)
+            if (m_WatchCalibrating || tutorial || m_WatchWorldLocked || m_WatchEditMode
+                || (m_WatchPosePreviewUntil > 0f && now < m_WatchPosePreviewUntil))
                 wantShow = true;
             else
             {
@@ -676,7 +679,7 @@ namespace VPB
             QuickMenuSyncWatchHudEditState();
             QuickMenuRefreshWatchStatus();
             QuickMenuSyncWatchAssignLiveIcons();
-            QuickMenuSetWatchCueShown(tutorial);
+            QuickMenuSetWatchCueShown(false);
         }
 
         private void QuickMenuEnsureWatchParent()
@@ -716,8 +719,23 @@ namespace VPB
             if (c == null) return;
 
             m_WatchCfgVisible = c.QuickMenuVrWatchVisible;
-            m_WatchCfgFaceUser = c.QuickMenuVrWatchFaceUser;
-            m_WatchCfgShoulderBlend = Mathf.Clamp01(c.QuickMenuVrWatchShoulderBlend);
+            bool faceUser = c.QuickMenuVrWatchFaceUser;
+            float shoulder = Mathf.Clamp01(c.QuickMenuVrWatchShoulderBlend);
+            float scaleMul = Mathf.Clamp(c.QuickMenuVrWatchScaleMul,
+                VPBConfig.QuickMenuVrWatchScaleMulMin, VPBConfig.QuickMenuVrWatchScaleMulMax);
+            float toward = c.QuickMenuVrWatchTowardUserDist;
+            Vector3 offset = c.QuickMenuVrWatchOffset;
+            Vector3 faceRot = c.QuickMenuVrWatchFaceRotation;
+
+            bool poseDirty = faceUser != m_WatchCfgFaceUser
+                || shoulder != m_WatchCfgShoulderBlend
+                || scaleMul != m_WatchCfgScaleMul
+                || toward != m_WatchCfgToward
+                || offset != m_WatchCfgOffset
+                || faceRot != m_WatchCfgFaceRotEuler;
+
+            m_WatchCfgFaceUser = faceUser;
+            m_WatchCfgShoulderBlend = shoulder;
             m_WatchCfgRememberHand = c.QuickMenuVrWatchRememberHand;
             m_WatchCfgFreeze = c.QuickMenuVrWatchFreezeOnApproach;
 
@@ -728,22 +746,28 @@ namespace VPB
                 m_WatchGripHeldSince = -1f;
                 // Cue and pin tooltip both name the gesture.
                 if (m_WatchCueText != null) m_WatchCueText.text = QuickMenuWatchCueTextValue();
+                m_WatchTipSrc = null;
                 QuickMenuRefreshWatchChromeTips();
             }
             m_WatchCfgHoldConfirm = c.QuickMenuVrWatchHoldConfirm;
             m_WatchCfgGlanceDwell = c.QuickMenuVrWatchGlanceDwell;
-            m_WatchCfgScaleMul = Mathf.Clamp(c.QuickMenuVrWatchScaleMul,
-                VPBConfig.QuickMenuVrWatchScaleMulMin, VPBConfig.QuickMenuVrWatchScaleMulMax);
-            m_WatchCfgToward = c.QuickMenuVrWatchTowardUserDist;
-            m_WatchCfgOffset = c.QuickMenuVrWatchOffset;
+            m_WatchCfgScaleMul = scaleMul;
+            m_WatchCfgToward = toward;
+            m_WatchCfgOffset = offset;
 
             // Euler -> quaternion once per edit, not once per frame: this runs every Update.
-            Vector3 faceRot = c.QuickMenuVrWatchFaceRotation;
             if (faceRot != m_WatchCfgFaceRotEuler)
             {
                 m_WatchCfgFaceRotEuler = faceRot;
                 m_WatchCfgFaceRotActive = faceRot.sqrMagnitude > 1e-6f;
                 m_WatchCfgFaceRot = m_WatchCfgFaceRotActive ? Quaternion.Euler(faceRot) : Quaternion.identity;
+            }
+
+            if (poseDirty)
+            {
+                m_WatchFrozen = false;
+                m_WatchLastAppliedScale = -1f;
+                m_WatchPosePreviewUntil = Time.unscaledTime + QuickMenuWatchPosePreviewSec;
             }
 
             bool labels = c.QuickMenuVrWatchLabels;
@@ -1162,7 +1186,7 @@ namespace VPB
             drag.owner = this;
 
             m_WatchStatusText = UI.CreateLabel(root, "", QuickMenuWatchStatusFont, GalleryUiColorTokens.TextPrimary,
-                TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                TextAnchor.MiddleCenter, HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate,
                 false, false, AnchorPresets.middleCenter, new Vector2(140f, QuickMenuWatchStatusH),
                 Vector2.zero, "Status");
             if (m_WatchStatusText != null)
@@ -1739,16 +1763,18 @@ namespace VPB
         {
             if (m_WatchCanvasRT == null) return;
             float bezelH = m_WatchCanvasRT.sizeDelta.y;
-            if (m_WatchCueRt != null)
-            {
-                m_WatchCueRt.sizeDelta = new Vector2(QuickMenuWatchTipW, 56f);
-                m_WatchCueRt.anchoredPosition = new Vector2(0f, bezelH * 0.5f + QuickMenuWatchTipGap + 28f);
-            }
             float tipTop = -(bezelH * 0.5f + QuickMenuWatchTipGap);
             if (m_WatchTipRt != null)
+            {
+                m_WatchTipRt.sizeDelta = new Vector2(QuickMenuWatchTipW, QuickMenuWatchTipH);
                 m_WatchTipRt.anchoredPosition = new Vector2(0f, tipTop);
+            }
             if (m_QmPreviewWatchRt != null)
-                m_QmPreviewWatchRt.anchoredPosition = new Vector2(0f, tipTop - QuickMenuWatchTipH - QuickMenuWatchTipGap);
+            {
+                m_QmPreviewWatchRt.pivot = new Vector2(0.5f, 0f);
+                m_QmPreviewWatchRt.anchoredPosition = new Vector2(0f, bezelH * 0.5f + QuickMenuWatchTipGap);
+                QuickMenuApplyPreviewVrTilt(m_QmPreviewWatchRt);
+            }
         }
 
         private void QuickMenuSyncWatchExpandIcon()
@@ -2120,6 +2146,7 @@ namespace VPB
         private void QuickMenuReplayWatchCue()
         {
             m_WatchTutorialUntil = Time.unscaledTime + QuickMenuWatchTutorialSec;
+            m_WatchTipSrc = null;
         }
 
         private void QuickMenuToggleWatchWorldLock()
@@ -2542,30 +2569,17 @@ namespace VPB
             if (m_WatchFaceMode == QuickMenuWatchFaceMode.Expanded)
             {
                 m_WatchStatusSb.Append(" · ").Append(m_WatchCurrentPage + 1).Append('/').Append(QuickMenuPageCount);
-                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.pagesuffix", " sides"));
             }
 
-            m_WatchStatusSb.Append(" · ");
             if (m_QuickMenuEditMode)
-                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.hud_edit_short", "HUD EDIT"));
-            else if (m_WatchEditMode)
-                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.edit", "EDIT"));
-            else if (m_WatchWorldLocked)
-                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.locked", "locked"));
-            else
             {
-                switch (m_WatchCfgShowWhen)
-                {
-                    case QuickMenuVrWatchShowWhen.Always:
-                        m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.always", "always"));
-                        break;
-                    case QuickMenuVrWatchShowWhen.Menu:
-                        m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.menu", "menu"));
-                        break;
-                    default:
-                        m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.glance", "glance"));
-                        break;
-                }
+                m_WatchStatusSb.Append(" · ");
+                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.hud_edit_short", "HUD"));
+            }
+            else if (m_WatchEditMode)
+            {
+                m_WatchStatusSb.Append(" · ");
+                m_WatchStatusSb.Append(VPBTranslation.T("hook.watch.status.edit", "EDIT"));
             }
 
             string s = m_WatchStatusSb.ToString();
@@ -2581,6 +2595,12 @@ namespace VPB
             if (m_WatchTipGo == null || m_WatchTipText == null) return;
 
             string src = m_WatchHoverStatus;
+            if (string.IsNullOrEmpty(src)
+                && m_WatchTutorialUntil > 0f
+                && Time.unscaledTime < m_WatchTutorialUntil)
+            {
+                src = m_WatchCueText != null ? m_WatchCueText.text : QuickMenuWatchCueTextValue();
+            }
             bool show = !string.IsNullOrEmpty(src);
             if (m_WatchTipGo.activeSelf != show) m_WatchTipGo.SetActive(show);
             if (!show)
@@ -2592,7 +2612,7 @@ namespace VPB
             if (!string.Equals(src, m_WatchTipSrc, System.StringComparison.Ordinal))
             {
                 m_WatchTipSrc = src;
-                m_WatchTipFlat = src.IndexOf('\n') >= 0 ? src.Replace("\n", "  ·  ") : src;
+                m_WatchTipFlat = src;
             }
             if (!string.Equals(m_WatchTipShown, m_WatchTipFlat, System.StringComparison.Ordinal))
             {
@@ -3100,11 +3120,12 @@ namespace VPB
     }
 
     internal sealed class VrWatchSlotHover : MonoBehaviour,
-        IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
+        IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler, IScrollHandler
     {
         public VamHookPlugin owner;
         public int hudSlotIdx;
         private int m_Token;
+        private float _notchAccum;
 
         public void OnPointerEnter(PointerEventData eventData)
         {
@@ -3134,6 +3155,15 @@ namespace VPB
             if (owner != null) owner.QuickMenuWatchEndPress();
         }
 
+        public void OnScroll(PointerEventData eventData)
+        {
+            if (owner == null || eventData == null) return;
+            int notches = VpbScrollTuning.TakeNotches(
+                ref _notchAccum, eventData.scrollDelta.y, VpbScrollTuning.WatchPreviewUnitsPerNotch);
+            if (notches == 0) return;
+            try { owner.QuickMenuBeginWatchHudRandomPreview(hudSlotIdx); } catch { }
+        }
+
         private void OnDisable()
         {
             if (owner != null)
@@ -3146,11 +3176,12 @@ namespace VPB
     }
 
     internal sealed class VrWatchAssignHover : MonoBehaviour,
-        IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
+        IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler, IScrollHandler
     {
         public VamHookPlugin owner;
         public int slotIdx;
         private int m_Token;
+        private float _notchAccum;
 
         public void OnPointerEnter(PointerEventData eventData)
         {
@@ -3178,6 +3209,15 @@ namespace VPB
         public void OnPointerUp(PointerEventData eventData)
         {
             if (owner != null) owner.QuickMenuWatchEndPress();
+        }
+
+        public void OnScroll(PointerEventData eventData)
+        {
+            if (owner == null || eventData == null) return;
+            int notches = VpbScrollTuning.TakeNotches(
+                ref _notchAccum, eventData.scrollDelta.y, VpbScrollTuning.WatchPreviewUnitsPerNotch);
+            if (notches == 0) return;
+            try { owner.QuickMenuBeginWatchAssignRandomPreview(slotIdx); } catch { }
         }
 
         private void OnDisable()

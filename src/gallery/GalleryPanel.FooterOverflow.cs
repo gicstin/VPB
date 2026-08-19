@@ -100,6 +100,7 @@ namespace VPB
             if (footerApplyModeBtn != null) into.Add(footerApplyModeBtn);
             if (isVR && footerWatchToggleBtn != null) into.Add(footerWatchToggleBtn);
             if (footerMenuGateBtn != null) into.Add(footerMenuGateBtn);
+            if (footerFloatsOnlyBtn != null) into.Add(footerFloatsOnlyBtn);
             if (!fixedMode)
             {
                 if (footerFollowHeightBtn != null) into.Add(footerFollowHeightBtn);
@@ -281,6 +282,13 @@ namespace VPB
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_menu_gate", "VaM menu gate"),
                     () => { CloseFooterOverflowMenu(); ToggleVamMenuGateMode(); }, on, icon: icon,
                     tipKey: "gallery.tooltip.vam_menu_gate", tipDefault: "Show only when VaM menu is visible");
+            }
+            else if (go == footerFloatsOnlyBtn)
+            {
+                AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_floats_only", "Floating windows only"),
+                    () => { CloseFooterOverflowMenu(); ToggleFloatsOnlyMode(); }, _floatsOnly, icon: icon,
+                    tipKey: "gallery.tooltip.floats_only",
+                    tipDefault: "Hide this pane and keep its floating windows (open the gallery to bring it back)");
             }
             else if (go == footerWatchToggleBtn)
             {

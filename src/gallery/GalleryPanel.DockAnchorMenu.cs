@@ -134,8 +134,9 @@ namespace VPB
             {
                 try
                 {
+                    // Menu RightOf the button = left rail; clone onto that side.
                     if (Gallery.singleton != null && Gallery.singleton.PanelCount < Gallery.MaxPanels)
-                        Gallery.singleton.ClonePanel(this, true);
+                        Gallery.singleton.ClonePanel(this, placement != DockMenuPlacement.RightOf);
                 }
                 catch { }
                 return;

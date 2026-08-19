@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,6 +13,18 @@ namespace VPB
         public Action OnRelease;
         public void OnPointerUp(PointerEventData eventData) { try { OnRelease?.Invoke(); } catch { } }
         public void OnEndDrag(PointerEventData eventData) { try { OnRelease?.Invoke(); } catch { } }
+    }
+
+    /// <summary>Pointer-down, not Button.onClick — VR laser + ScrollRect drag often cancels click.
+    /// Do not add IDragHandler: steals list drag and drops idle-rim restore on pointer-exit.</summary>
+    internal sealed class SettingsPointerDownAction : MonoBehaviour, IPointerDownHandler
+    {
+        public Action OnDown;
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            try { if (OnDown != null) OnDown(); } catch { }
+        }
     }
 
     public partial class GalleryPanel
@@ -600,6 +612,7 @@ namespace VPB
             public float GalleryScanWlTempBorderColorB;
             public float GalleryScanWlTempBorderColorA;
             public bool GalleryOnlyWhenVamMenuVisible;
+            public bool GalleryFloatsOnlyMode;
             public bool GalleryAnchorToVamMenu;
             public float GalleryVrMenuAnchorTiltDeg;
             public string GalleryCategoryQuickOrder;
@@ -1704,6 +1717,14 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "vr.floatsOnly", GroupKey = "vr",
+                Label = VPBTranslation.T("settings.gallery.floats_only", "Floating windows only (hide gallery pane)"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery.floats_only", "Hide the gallery pane itself — including the one anchored to the VaM menu in VR — while Settings, Plugins, Quick Filters and Import stay on screen. Opening the gallery turns this back off."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryFloatsOnlyMode,
+                SetBool = v => SetFloatsOnlyAllPanes(v)
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "vr.anchor", GroupKey = "vr", Label = VPBTranslation.T("settings.gallery.vam_menu_anchor", "Anchor to VaM Menu in VR"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery.vam_menu_anchor", "Anchor pane relative to VaM menu in VR."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryAnchorToVamMenu,
@@ -1779,7 +1800,7 @@ namespace VPB
                 Key = "vr.watchRotX", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_rot_x", "Watch tilt X (pitch)"),
                 Tooltip = VPBTranslation.T("settings.tip.vr.watch_rotation", "Degrees added to the face's own axes on top of the wrist rotation. X tips the top toward or away from you, Y swings it left/right, Z rolls it. Not mirrored when the watch changes hands. Hidden while Watch faces player is on, which aims the face for you."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchFaceRotation.x,
-                SetFloat = v => { var r = VPBConfig.Instance.QuickMenuVrWatchFaceRotation; r.x = v; VPBConfig.Instance.QuickMenuVrWatchFaceRotation = r; },
+                SetFloat = v => { var r = VPBConfig.Instance.QuickMenuVrWatchFaceRotation; r.x = VPBConfig.ClampWatchFaceRotationDeg(v); VPBConfig.Instance.QuickMenuVrWatchFaceRotation = r; },
                 Min = -VPBConfig.QuickMenuVrWatchFaceRotationMaxDeg, Max = VPBConfig.QuickMenuVrWatchFaceRotationMaxDeg,
                 Step = 1f, Decimals = 0, AllowNegative = true,
                 RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible && !VPBConfig.Instance.QuickMenuVrWatchFaceUser
@@ -1788,7 +1809,7 @@ namespace VPB
                 Key = "vr.watchRotY", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_rot_y", "Watch tilt Y (yaw)"),
                 Tooltip = VPBTranslation.T("settings.tip.vr.watch_rotation", "Degrees added to the face's own axes on top of the wrist rotation. X tips the top toward or away from you, Y swings it left/right, Z rolls it. Not mirrored when the watch changes hands. Hidden while Watch faces player is on, which aims the face for you."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchFaceRotation.y,
-                SetFloat = v => { var r = VPBConfig.Instance.QuickMenuVrWatchFaceRotation; r.y = v; VPBConfig.Instance.QuickMenuVrWatchFaceRotation = r; },
+                SetFloat = v => { var r = VPBConfig.Instance.QuickMenuVrWatchFaceRotation; r.y = VPBConfig.ClampWatchFaceRotationDeg(v); VPBConfig.Instance.QuickMenuVrWatchFaceRotation = r; },
                 Min = -VPBConfig.QuickMenuVrWatchFaceRotationMaxDeg, Max = VPBConfig.QuickMenuVrWatchFaceRotationMaxDeg,
                 Step = 1f, Decimals = 0, AllowNegative = true,
                 RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible && !VPBConfig.Instance.QuickMenuVrWatchFaceUser
@@ -1797,7 +1818,7 @@ namespace VPB
                 Key = "vr.watchRotZ", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_rot_z", "Watch tilt Z (roll)"),
                 Tooltip = VPBTranslation.T("settings.tip.vr.watch_rotation", "Degrees added to the face's own axes on top of the wrist rotation. X tips the top toward or away from you, Y swings it left/right, Z rolls it. Not mirrored when the watch changes hands. Hidden while Watch faces player is on, which aims the face for you."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchFaceRotation.z,
-                SetFloat = v => { var r = VPBConfig.Instance.QuickMenuVrWatchFaceRotation; r.z = v; VPBConfig.Instance.QuickMenuVrWatchFaceRotation = r; },
+                SetFloat = v => { var r = VPBConfig.Instance.QuickMenuVrWatchFaceRotation; r.z = VPBConfig.ClampWatchFaceRotationDeg(v); VPBConfig.Instance.QuickMenuVrWatchFaceRotation = r; },
                 Min = -VPBConfig.QuickMenuVrWatchFaceRotationMaxDeg, Max = VPBConfig.QuickMenuVrWatchFaceRotationMaxDeg,
                 Step = 1f, Decimals = 0, AllowNegative = true,
                 RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible && !VPBConfig.Instance.QuickMenuVrWatchFaceUser
@@ -2215,6 +2236,7 @@ namespace VPB
                 GalleryScanWlTempBorderColorB = VPBConfig.Instance.GalleryScanWlTempBorderColorB,
                 GalleryScanWlTempBorderColorA = VPBConfig.Instance.GalleryScanWlTempBorderColorA,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
+                GalleryFloatsOnlyMode = VPBConfig.Instance.GalleryFloatsOnlyMode,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
                 LayoutPresetRevertBarSeconds = VPBConfig.Instance.LayoutPresetRevertBarSeconds,
                 LayoutPresetSuggestOnModeSwitch = VPBConfig.Instance.LayoutPresetSuggestOnModeSwitch,
@@ -2582,18 +2604,38 @@ namespace VPB
             Image img = AddSettingsControlRoundedBg(go, bg);
             Button b = go.AddComponent<Button>();
             b.targetGraphic = img;
-            if (onClick != null) b.onClick.AddListener(() => onClick());
+            if (onClick != null)
+            {
+                var down = go.AddComponent<SettingsPointerDownAction>();
+                down.OnDown = onClick;
+            }
             UI.NeutralizeSelectableColorTint(b);
 
             float uiS = InternalSettingsChromeScale();
             float chipH = GalleryUiDesignTokens.ButtonSizeRef * uiS;
 
-            LayoutElement le = UI.AddLE(go, minWidth: width * uiS, minHeight: chipH, preferredWidth: width * uiS, preferredHeight: chipH, flexibleWidth: 0f);
+            float bw = width * uiS;
+            UI.AddLE(go, minWidth: bw, minHeight: chipH, preferredWidth: bw, preferredHeight: chipH, flexibleWidth: 0f);
+            RectTransform rt = go.GetComponent<RectTransform>();
+            if (rt != null)
+                rt.sizeDelta = new Vector2(bw, chipH);
             UI.EnsureFloatChromeHoverBorder(go, inward: true);
 
             Text t = UI.CreateLabel(go, label, GalleryUiDesignTokens.SettingsListRowDetailFontRef, Color.white, TextAnchor.MiddleCenter, name: "Text");
+            if (t != null) t.raycastTarget = false;
             GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
             return go;
+        }
+
+        private static void SettleSettingsRowLayout(Transform detailsTr, Transform listRowTr, bool settleLayout)
+        {
+            if (!settleLayout) return;
+            try
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(listRowTr as RectTransform);
+            }
+            catch { }
         }
 
         /// <param name="settleLayout">Force the control row to lay out now. Needed when re-binding a row
@@ -2671,6 +2713,7 @@ namespace VPB
                     def.SetBool(true);
                     RefreshInternalSettingsListRows(true);
                 });
+                SettleSettingsRowLayout(detailsTr, listRowTr, settleLayout);
                 return;
             }
 
@@ -2874,6 +2917,7 @@ namespace VPB
 
                 slider.onValueChanged.AddListener(v =>
                 {
+                    v = SnapSettingsSliderValue(v, def.Min, def.Max, step, decimals);
                     if (input != null) input.text = v.ToString(fmt);
                     syncStepperEnabled();
                     // Deferred sliders (e.g. UI scale) only show the live value while dragging; applying
@@ -2908,6 +2952,7 @@ namespace VPB
                     applyDiscreteValue(parsed);
                 });
                 syncStepperEnabled();
+                SettleSettingsRowLayout(detailsTr, listRowTr, true);
                 return;
             }
 
@@ -3176,6 +3221,8 @@ namespace VPB
             VPBConfig.Instance.GalleryScanWlTempBorderColorB = b.GalleryScanWlTempBorderColorB;
             VPBConfig.Instance.GalleryScanWlTempBorderColorA = b.GalleryScanWlTempBorderColorA;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
+            // Live pane state — rewriting config alone would leave the gallery dark with the pref off.
+            SetFloatsOnlyAllPanes(b.GalleryFloatsOnlyMode);
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
             VPBConfig.Instance.LayoutPresetRevertBarSeconds = b.LayoutPresetRevertBarSeconds;
             VPBConfig.Instance.LayoutPresetSuggestOnModeSwitch = b.LayoutPresetSuggestOnModeSwitch;

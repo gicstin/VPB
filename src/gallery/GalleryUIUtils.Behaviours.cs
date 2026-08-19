@@ -612,7 +612,10 @@ namespace VPB
             if (rimRoot == null) return;
             bool rimsOn = UI.ChromeButtonRimsEnabled();
             bool showSelected = isSelected && (rimsOn || selectedRimColor.a <= 0.01f);
-            bool show = hovering || showSelected || (rimsOn && showIdleRim && HoverAllowed());
+            bool showHover = hovering && HoverAllowed();
+            // Idle grey rim stays on disabled chips (min/max stepper) — only yellow hover is gated.
+            bool showIdle = rimsOn && showIdleRim;
+            bool show = showHover || showSelected || showIdle;
             if (rimRoot.activeSelf != show) rimRoot.SetActive(show);
         }
 

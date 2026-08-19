@@ -1811,6 +1811,14 @@ namespace VPB
                 _topSearchBaseIsClean = false;
             }
 
+            // Inactive parent → recycling grid viewport 0. Defer until Show.
+            if (_floatsOnly)
+            {
+                refreshOnNextShow = true;
+                CompletePaneLoadTimingIfPending("(floats-only)");
+                return;
+            }
+
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
             {

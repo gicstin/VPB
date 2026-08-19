@@ -132,6 +132,12 @@ namespace VPB
                 return;
             }
 
+            if (_floatsOnly)
+            {
+                FloatsOnlyUpdateTick();
+                return;
+            }
+
             try { GalleryVrThumbstickScroll.TickOncePerFrame(); } catch { }
             try { DetailStripScrubTick(); } catch { }
 

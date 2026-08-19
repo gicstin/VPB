@@ -1208,7 +1208,7 @@ namespace VPB
                 float btnWidth = GalleryUiDesignTokens.SideButtonWidthRef;
                 float btnHeight = GalleryUiDesignTokens.SideButtonHeightRef;
                 float sideIconBtn = GalleryUiDesignTokens.SideButtonSquareRef;
-                const float sideIconPad = 6f;
+                float sideIconPad = GalleryUiDesignTokens.SideButtonIconPadRef;
                 float spacing = GalleryUiDesignTokens.SideButtonSpacingRef;
                 float groupGap = 10f;
                 float startY = 320f;
@@ -2075,6 +2075,10 @@ namespace VPB
 
             try { CreateTitleSearchChipHost(); } catch { }
             try { CreateActiveFilterChipBar(); } catch { }
+
+            try { ClaimVamMenuAnchorIfFree(); } catch { }
+            try { AdoptFloatsOnlyFromConfig(); } catch { }
+            try { UpdateFooterFloatsOnlyState(); } catch { }
         }
 
         private void AddSubmenuSideHoverTrigger(GameObject go, bool isLeft)

@@ -159,7 +159,8 @@ namespace VPB
         
         private float lastClickTime = 0f;
         
-        public bool IsVisible => canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled;
+        /// <summary>Gallery body on screen. Floats-only keeps the canvas alive as a host, so it is not visible.</summary>
+        public bool IsVisible => canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled && !_floatsOnly;
         public bool IsSubtreeActive => backgroundBoxGO != null && backgroundBoxGO.activeSelf;
         public bool HasLoadedContent => hasLoadedContent;
         public bool IsStartupInitialRefreshInProgress => refreshCoroutine != null && !hasLoadedContent;
@@ -1065,20 +1066,49 @@ namespace VPB
         private string _fpsLastAppliedText = null;
 
         // Follow Mode Fields
+        /// <summary>Owner for life. First-live-pane lookup let clones inherit the slot when the owner closed.</summary>
+        private static GalleryPanel s_vamMenuAnchorOwner;
+        private bool _vamMenuAnchorOptIn;
+
+        internal bool VamMenuAnchorOptIn
+        {
+            get { return _vamMenuAnchorOptIn; }
+        }
+
+        internal void ClaimVamMenuAnchorIfFree()
+        {
+            if (s_vamMenuAnchorOwner != null && s_vamMenuAnchorOwner != this) return;
+            s_vamMenuAnchorOwner = this;
+            _vamMenuAnchorOptIn = true;
+        }
+
+        internal void ClaimVamMenuAnchor()
+        {
+            if (s_vamMenuAnchorOwner != null && s_vamMenuAnchorOwner != this)
+                s_vamMenuAnchorOwner.ReleaseVamMenuAnchor();
+            s_vamMenuAnchorOwner = this;
+            _vamMenuAnchorOptIn = true;
+        }
+
+        internal void ReleaseVamMenuAnchor()
+        {
+            _vamMenuAnchorOptIn = false;
+            if (s_vamMenuAnchorOwner == this) s_vamMenuAnchorOwner = null;
+        }
+
+        internal void SetVamMenuAnchorOptIn(bool on)
+        {
+            if (on) ClaimVamMenuAnchorIfFree();
+            else ReleaseVamMenuAnchor();
+        }
+
         public static GalleryPanel GetAnchoredInstance()
         {
-            if (Gallery.singleton == null) return null;
-            var pl = Gallery.singleton.Panels;
-            if (pl == null) return null;
-            for (int i = 0; i < pl.Count; i++)
-            {
-                var p = pl[i];
-                if (p != null && p.canvas != null && !p._userHidden)
-                {
-                    return p;
-                }
-            }
-            return null;
+            var p = s_vamMenuAnchorOwner;
+            if (p == null || p.canvas == null) return null;
+            // Hidden/floats-only still owns the slot so another pane cannot steal it.
+            if (p._userHidden || p._floatsOnly || !p._vamMenuAnchorOptIn) return null;
+            return p;
         }
         private bool followUser = true;
         private float lastFollowUpdateTime = 0f;
@@ -1566,6 +1596,12 @@ namespace VPB
         private Image footerWatchToggleIconImage;
         private Sprite footerWatchToggleOnSprite;
         private Sprite footerWatchToggleOffSprite;
+
+        private GameObject footerFloatsOnlyBtn;
+        private Image footerFloatsOnlyBtnImage;
+        private Image footerFloatsOnlyIconImage;
+        private Sprite footerFloatsOnlyOnSprite;
+        private Sprite footerFloatsOnlyOffSprite;
 
         private bool _userHidden = false;
         private bool _hiddenByMenuGate = false;

@@ -734,6 +734,7 @@ namespace VPB
             bool needsInit = canvas == null;
             LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
             _userHidden = false;
+            ClearFloatsOnlyForShow();
 
             if (_benchPickModeActive && !BenchPickModeAllowsShowRequest(title))
             {
@@ -1168,7 +1169,7 @@ namespace VPB
 
             // Robust cold-boot fix: if first refresh got deferred while menu-gated hidden,
             // ensure we run (or schedule) initial refresh on any transition to visible.
-            if (visible && Application.isPlaying && !hasLoadedContent && refreshCoroutine == null)
+            if (visible && Application.isPlaying && !hasLoadedContent && refreshCoroutine == null && !_floatsOnly)
             {
                 // Only auto-Show when no category was selected yet.
                 // Empty path is VALID for ALL VAR / Everything / All — do not treat as unset
@@ -1259,6 +1260,7 @@ namespace VPB
         private bool ShouldContentSubtreeBeActive()
         {
             if (canvas == null || !canvas.enabled) return false;
+            if (_floatsOnly) return false;
             if (isCollapsed && hasLoadedContent) return false;
             return true;
         }
@@ -1339,6 +1341,18 @@ namespace VPB
         private void ApplyVamMenuGateVisibility()
         {
             if (VPBConfig.Instance == null || canvas == null) return;
+
+            // Floats sit in world space — menu-gating the host canvas would take them down with the menu.
+            if (_floatsOnly)
+            {
+                if (_hiddenByMenuGate && !_userHidden)
+                {
+                    SetCanvasVisible(true);
+                    _hiddenByMenuGate = false;
+                }
+                return;
+            }
+
             bool isVR = XrUtils.IsVrActive();
 
             // The anchor-based gate only applies to the specific panel that is anchored.

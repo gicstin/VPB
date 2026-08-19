@@ -149,6 +149,7 @@ namespace VPB
                     case "scanWlTempBorder.onThumbnail": d.SetDefault(fd.GalleryScanWlTempBorderOnThumbnail); break;
 
                     case "vr.menuGate": d.SetDefault(fd.GalleryOnlyWhenVamMenuVisible); break;
+                    case "vr.floatsOnly": d.SetDefault(fd.GalleryFloatsOnlyMode); break;
                     case "vr.anchor": d.SetDefault(fd.GalleryAnchorToVamMenu); break;
                     case "vr.anchorTilt": d.SetDefault(VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(fd.GalleryVrMenuAnchorTiltDeg)); break;
                     case "vr.watchVisible": d.SetDefault(fd.QuickMenuVrWatchVisible); break;

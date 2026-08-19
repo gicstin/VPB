@@ -93,8 +93,7 @@ namespace VPB
             RectTransform bgRT = GetBackgroundRT();
             if (bgRT != null && !isFixedLocally) p.SizeRef = bgRT.sizeDelta;
 
-            VPBConfig cfg = VPBConfig.Instance;
-            p.AnchoredToVamMenu = cfg != null && cfg.GalleryAnchorToVamMenu;
+            p.AnchoredToVamMenu = _vamMenuAnchorOptIn;
             p.FollowUser = GetFollowMode();
 
             p.CategoryTitle = GetTitle() ?? "";
@@ -107,6 +106,7 @@ namespace VPB
             p.ImportOpen = importSidebarOpenIntent;
             p.ImportOnLeft = importSidebarOnLeft;
             p.ImportFloating = importSidebarDetached;
+            p.FloatsOnly = _floatsOnly;
             p.GridColumnCount = gridColumnCount;
 
             try { CaptureFloatStates(p.Floats); }

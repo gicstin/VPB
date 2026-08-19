@@ -1,7 +1,6 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
-using VPB.src.util;
 
 namespace VPB
 {
@@ -135,101 +134,44 @@ namespace VPB
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>VR: short caption on facet chips (no hover tooltip). Desktop: icon only.</summary>
         private void SyncSideRailFacetCaptions()
         {
-            bool vr = false;
-            try { vr = XrUtils.IsVrActive(); } catch { }
-
-            ApplySideRailFacetCaption(leftUserTagsSideBtn, VPBTranslation.T("gallery.side.usertags_short", "Tag"), vr);
-            ApplySideRailFacetCaption(rightUserTagsSideBtn, VPBTranslation.T("gallery.side.usertags_short", "Tag"), vr);
-            ApplySideRailFacetCaption(
-                leftCategoryBtnImage != null ? leftCategoryBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.side.category_short", "Cat"), vr);
-            ApplySideRailFacetCaption(
-                rightCategoryBtnImage != null ? rightCategoryBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.side.category_short", "Cat"), vr);
-            ApplySideRailFacetCaption(
-                leftCreatorBtnImage != null ? leftCreatorBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.side.creator_short", "Auth"), vr);
-            ApplySideRailFacetCaption(
-                rightCreatorBtnImage != null ? rightCreatorBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.side.creator_short", "Auth"), vr);
-            ApplySideRailFacetCaption(
-                leftPathBtnImage != null ? leftPathBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.side.path_short", "Path"), vr);
-            ApplySideRailFacetCaption(
-                rightPathBtnImage != null ? rightPathBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.side.path_short", "Path"), vr);
-            ApplySideRailFacetCaption(
-                leftHistoryBtnImage != null ? leftHistoryBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.side.history_short", "Hist"), vr);
-            ApplySideRailFacetCaption(
-                rightHistoryBtnImage != null ? rightHistoryBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.side.history_short", "Hist"), vr);
-            ApplySideRailFacetCaption(leftSceneImportSideBtn, VPBTranslation.T("gallery.side.scene_import_short", "Import"), vr);
-            ApplySideRailFacetCaption(rightSceneImportSideBtn, VPBTranslation.T("gallery.side.scene_import_short", "Import"), vr);
-            ApplySideRailFacetCaption(
-                leftFollowBtnImage != null ? leftFollowBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.follow.follow", "Follow"), vr);
-            ApplySideRailFacetCaption(
-                rightFollowBtnImage != null ? rightFollowBtnImage.gameObject : null,
-                VPBTranslation.T("gallery.follow.follow", "Follow"), vr);
-            ApplySideRailFacetCaption(leftRemoveModeSideBtn, VPBTranslation.T("gallery.side.remove_mode_short", "Eraser"), vr);
-            ApplySideRailFacetCaption(rightRemoveModeSideBtn, VPBTranslation.T("gallery.side.remove_mode_short", "Eraser"), vr);
-            ApplySideRailFacetCaption(leftSaveBtnGO, VPBTranslation.T("gallery.side.save", "Save"), vr);
-            ApplySideRailFacetCaption(rightSaveBtnGO, VPBTranslation.T("gallery.side.save", "Save"), vr);
-            ApplySideRailFacetCaption(
-                leftDockAnchorBtnImage != null ? leftDockAnchorBtnImage.gameObject : null,
-                vr ? VPBTranslation.T("gallery.side.clone", "Clone") : VPBTranslation.T("gallery.side.dock_anchor", "Dock"), vr);
-            ApplySideRailFacetCaption(
-                rightDockAnchorBtnImage != null ? rightDockAnchorBtnImage.gameObject : null,
-                vr ? VPBTranslation.T("gallery.side.clone", "Clone") : VPBTranslation.T("gallery.side.dock_anchor", "Dock"), vr);
+            ApplySideRailIconOnly(leftUserTagsSideBtn);
+            ApplySideRailIconOnly(rightUserTagsSideBtn);
+            ApplySideRailIconOnly(leftCategoryBtnImage != null ? leftCategoryBtnImage.gameObject : null);
+            ApplySideRailIconOnly(rightCategoryBtnImage != null ? rightCategoryBtnImage.gameObject : null);
+            ApplySideRailIconOnly(leftCreatorBtnImage != null ? leftCreatorBtnImage.gameObject : null);
+            ApplySideRailIconOnly(rightCreatorBtnImage != null ? rightCreatorBtnImage.gameObject : null);
+            ApplySideRailIconOnly(leftPathBtnImage != null ? leftPathBtnImage.gameObject : null);
+            ApplySideRailIconOnly(rightPathBtnImage != null ? rightPathBtnImage.gameObject : null);
+            ApplySideRailIconOnly(leftHistoryBtnImage != null ? leftHistoryBtnImage.gameObject : null);
+            ApplySideRailIconOnly(rightHistoryBtnImage != null ? rightHistoryBtnImage.gameObject : null);
+            ApplySideRailIconOnly(leftSceneImportSideBtn);
+            ApplySideRailIconOnly(rightSceneImportSideBtn);
+            ApplySideRailIconOnly(leftFollowBtnImage != null ? leftFollowBtnImage.gameObject : null);
+            ApplySideRailIconOnly(rightFollowBtnImage != null ? rightFollowBtnImage.gameObject : null);
+            ApplySideRailIconOnly(leftRemoveModeSideBtn);
+            ApplySideRailIconOnly(rightRemoveModeSideBtn);
+            ApplySideRailIconOnly(leftSaveBtnGO);
+            ApplySideRailIconOnly(rightSaveBtnGO);
+            ApplySideRailIconOnly(leftDockAnchorBtnImage != null ? leftDockAnchorBtnImage.gameObject : null);
+            ApplySideRailIconOnly(rightDockAnchorBtnImage != null ? rightDockAnchorBtnImage.gameObject : null);
         }
 
-        private void ApplySideRailFacetCaption(GameObject go, string shortLabel, bool vr)
+        private void ApplySideRailIconOnly(GameObject go)
         {
             if (go == null) return;
             Text t = go.GetComponentInChildren<Text>(true);
-            if (t == null) return;
-
-            if (!vr)
+            if (t != null)
             {
                 if (string.IsNullOrEmpty(t.text)) t.text = " ";
                 if (t.gameObject.activeSelf) t.gameObject.SetActive(false);
-                return;
             }
-
-            if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
-            t.text = shortLabel ?? "";
-            t.alignment = TextAnchor.LowerCenter;
-            t.horizontalOverflow = HorizontalWrapMode.Overflow;
-            t.verticalOverflow = VerticalWrapMode.Truncate;
-            t.color = Color.white;
-            t.raycastTarget = false;
-            float s = ChromeScale <= 0f ? 1f : ChromeScale;
-            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
-
-            RectTransform trt = t.rectTransform;
-            if (trt != null)
-            {
-                trt.anchorMin = new Vector2(0f, 0f);
-                trt.anchorMax = new Vector2(1f, 0.38f);
-                trt.offsetMin = Vector2.zero;
-                trt.offsetMax = Vector2.zero;
-                trt.pivot = new Vector2(0.5f, 0f);
-            }
-
             Transform iconT = go.transform.Find("Icon");
             RectTransform irt = iconT as RectTransform;
-            if (irt != null)
-            {
-                float pad = GalleryUiDesignTokens.SearchIconButtonPadRef * s;
-                irt.anchorMin = Vector2.zero;
-                irt.anchorMax = Vector2.one;
-                irt.offsetMin = new Vector2(pad, pad + 9f * s);
-                irt.offsetMax = new Vector2(-pad, -pad);
-            }
+            if (irt == null) return;
+            float s = ChromeScale <= 0f ? 1f : ChromeScale;
+            UI.SizeButtonIcon(irt, go.GetComponent<RectTransform>(), GalleryUiDesignTokens.SideButtonIconPadRef * s);
         }
     }
 }

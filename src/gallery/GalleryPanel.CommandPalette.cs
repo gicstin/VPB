@@ -294,6 +294,8 @@ namespace VPB
             AddCommandPaletteEntry("clone_pane", "gallery.cmd.clone_pane", "Clone pane", "", GView, "duplicate window copy",
                 () => { try { if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true); } catch { } },
                 () => Gallery.singleton != null && Gallery.singleton.PanelCount < Gallery.MaxPanels);
+            AddCommandPaletteEntry("floats_only", "gallery.cmd.floats_only", "Floating windows only (hide pane)", "", GView, "hide gallery pane vr vam menu keep floats windows",
+                () => { try { ToggleFloatsOnlyMode(); } catch { } });
             AddCommandPaletteEntry("save_menu", "gallery.cmd.save_menu", "Save…", "", GView, "preset save scene appearance floppy",
                 () => { try { ToggleSaveMenuPopup(false); } catch { } });
             AddCommandPaletteEntry("flip_rail", "gallery.cmd.flip_rail", "Flip side rail", "", GView, "left right auto facet",
