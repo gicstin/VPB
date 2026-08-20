@@ -586,7 +586,7 @@ namespace VPB
             }
             UI.AddLE(floatBtn, preferredWidth: chromeSz * 1.6f, preferredHeight: chromeSz, flexibleWidth: 0f);
             AddTooltip(floatBtn, "gallery.import.tip.detach",
-                "Detach as floating window (move / resize). Alt+I toggles.");
+                "Detach as floating window (move / resize). Toggle float{hint:import_sidebar}");
 
             importSidebarHeaderBtn = header.AddComponent<Button>();
             importSidebarHeaderBtn.targetGraphic = bg;
@@ -799,7 +799,7 @@ namespace VPB
                     AddTooltip(go, "gallery.import.sidebar_gated_tip",
                         "Import needs Scenes — click to switch category and restore");
                 else if (importSidebarDetached && importSidebarOpenIntent)
-                    AddTooltip(go, "gallery.import.tip.float_toggle", "Scene Import floating — click to close; Alt+I toggles float");
+                    AddTooltip(go, "gallery.import.tip.float_toggle", "Scene Import floating — click to close. Toggle float{hint:import_sidebar}");
                 else
                     AddTooltip(go, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
             }

@@ -48,6 +48,7 @@ namespace VPB
                 HubKey = parsedHub;
                 ClearConsoleKey = parsedClear;
                 UIKey = parsedGallery;
+                PublishGlobalHotkeyKeysToGate();
 
                 if (Settings.Instance != null)
                 {
@@ -91,6 +92,7 @@ namespace VPB
                 HubKey = KeyUtil.Parse(Settings.Instance.HubKey?.Value ?? "Ctrl+H");
                 ClearConsoleKey = KeyUtil.Parse(Settings.Instance.ClearConsoleKey?.Value ?? "F2");
                 UIKey = KeyUtil.Parse(Settings.Instance.UIKey?.Value ?? Settings.Instance.GalleryKey?.Value ?? "Ctrl+G");
+                PublishGlobalHotkeyKeysToGate();
             }
             catch { }
         }
@@ -108,7 +110,7 @@ namespace VPB
         private static string SanitizePluginHotkeyConfig(string value, string fallback)
         {
             if (KeyUtil.UsesDisallowedHotkeyKey(value)) return fallback ?? "";
-            return string.IsNullOrEmpty(value) ? (fallback ?? "") : value;
+            return value ?? "";
         }
     }
 }

@@ -309,7 +309,7 @@ namespace VPB
                 {
                     summaryLines.Add(VPBTranslation.T(
                         "gallery.delete.warn_current_scene",
-                        "Includes the currently loaded scene. Files move to DeletedPackages/DeletedScenes; scene stays in memory until you load another. Ctrl+Z undoes the move."));
+                        "Includes the currently loaded scene. Files move to DeletedPackages/DeletedScenes; scene stays in memory until you load another. Undo restores the move{hint:undo}."));
                     summaryLines.Add("");
                 }
                 if (toDelete.Count > 0)
@@ -594,7 +594,7 @@ namespace VPB
             {
                 summaryLines.Add(VPBTranslation.T(
                     "gallery.delete.warn_current_scene",
-                    "Includes the currently loaded scene. Files move to DeletedPackages/DeletedScenes; scene stays in memory until you load another. Ctrl+Z undoes the move."));
+                    "Includes the currently loaded scene. Files move to DeletedPackages/DeletedScenes; scene stays in memory until you load another. Undo restores the move{hint:undo}."));
                 summaryLines.Add("");
             }
 
@@ -662,7 +662,9 @@ namespace VPB
 
             if (fail == 0)
             {
-                ShowTemporaryStatus("Deleted " + string.Join(" and ", parts.ToArray()) + ". Ctrl+Z undoes.", 2.5f);
+                ShowTemporaryStatus(string.Format(
+                    VPBTranslation.T("gallery.delete.moved_with_undo", "Deleted {0}. Undo to restore{hint:undo}."),
+                    string.Join(" and ", parts.ToArray())), 2.5f);
                 return;
             }
 

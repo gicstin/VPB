@@ -40,7 +40,13 @@ namespace VPB
                 case "search": return VPBTranslation.T("settings.section.search", "Search");
                 case "options": return VPBTranslation.T("settings.section.options", "Options");
                 case "visibility": return VPBTranslation.T("settings.section.visibility", "Visibility");
-                case "plugin_hotkeys": return VPBTranslation.T("settings.section.hotkeys", "Hotkeys");
+                case "keys_rules": return VPBTranslation.T("settings.section.keys_rules", "When shortcuts are active");
+                case "plugin_hotkeys": return VPBTranslation.T("settings.section.keys_global", "Global (work anywhere)");
+                case "keys_chrome": return VPBTranslation.T("settings.section.keys_chrome", "Gallery window");
+                case "keys_browse": return VPBTranslation.T("settings.section.keys_browse", "Browse & search");
+                case "keys_selection": return VPBTranslation.T("settings.section.keys_selection", "Selection");
+                case "keys_tools": return VPBTranslation.T("settings.section.keys_tools", "Scene tools");
+                case "keys_world": return VPBTranslation.T("settings.section.keys_world", "World navigation");
                 case "plugin_quickmenu": return VPBTranslation.T("settings.section.quickmenu", "Quick menu");
                 case "plugin_zstd": return VPBTranslation.T("settings.section.zstd", "Texture cache");
                 case "plugin_scan_whitelist": return VPBTranslation.T("settings.section.scan_whitelist", "Scan whitelist");
@@ -70,6 +76,16 @@ namespace VPB
                 return true;
             if (!string.IsNullOrEmpty(def.Key) && def.Key.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
+            if (def.ControlType == InternalSettingControlType.Hotkey && def.GetString != null)
+            {
+                try
+                {
+                    string bound = def.GetString();
+                    if (!string.IsNullOrEmpty(bound) && bound.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+                catch { }
+            }
             return false;
         }
 

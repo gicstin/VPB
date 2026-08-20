@@ -1,6 +1,6 @@
 # VBP Gallery Help
 
-Tip: press **?** or **F1** to open **Hotkeys** (Esc closes). Title-bar help button opens the full searchable panel. Colored icon links in the text show a preview when you hover them.
+Tip: press **{key:help_alt}** or **{key:help}** to open **Hotkeys** (Esc closes). Title-bar help button opens the full searchable panel. Colored icon links in the text show a preview when you hover them.
 
 ## Filtering
 
@@ -33,7 +33,7 @@ Tap the **colored header bar** at the top of a side column to collapse that list
 - Empty draft: **Ctrl+Backspace** removes last chip. **ESC** closes search without clearing chips.
 - Bare words, tags, badges, loaded/starred, **AND** / **OR** / **IF** — full syntax in **Advanced search** (help nav).
 - **Side-column search** — filters only the **open list** (categories / creators / tags / paths), not the grid.
-- {{icon:filter|Filter presets}} — funnel icon; save the current filter setup or load a saved preset. **Alt+F** toggles the **floating** presets window (detaches if needed; **hide keeps float position**). Top of list: **Save Preset** | **Update** (when a preset is active) | **Merge to New**, then **Float as Window** when docked. Search presets by name; **sort** cycles Manual / A→Z / Z→A / Pinned first. Float chrome: **chevron** collapses body (collapsed title shows **pinned Dice** shortcuts) / expands; **X** hides and keeps float; footer **Dock** reattaches under the title chip; footer **Undo** appears briefly after deleting a preset (**U** also undoes). Title-bar funnel still toggles visibility. **Merge to New** enters select mode (2–6 presets); **Create** names the result from selected names joined with `+` — **click** applies all member filters as one OR browse; **dice** loads a random item from each member in order, then restores your view. Side **Replace/Add** applies once per clothing/hair family when dice runs a merged set. Pinned presets sit at the top and appear in title **…** as **Apply:** / **Rnd:**. Recent applies appear as **Recent:**. Row **●** marks the active preset; **●*** means filters drifted — use **Update** (or **Ctrl+S**). **More** (edit icon / right-click) shows **pin**, **inline rename**, and **delete** (Confirm / Cancel on the row; Esc cancels; soft-undo for a few seconds). Dice **randomizes** without closing the list. Keyboard while open: **↑↓** select, **Enter** apply, **D** dice, **Ctrl+S** save/update, **Esc** cancel mode then hide.
+- {{icon:filter|Filter presets}} — funnel icon; save the current filter setup or load a saved preset. **{key:filter_presets}** toggles the **floating** presets window (detaches if needed; **hide keeps float position**). Top of list: **Save Preset** | **Update** (when a preset is active) | **Merge to New**, then **Float as Window** when docked. Search presets by name; **sort** cycles Manual / A→Z / Z→A / Pinned first. Float chrome: **chevron** collapses body (collapsed title shows **pinned Dice** shortcuts) / expands; **X** hides and keeps float; footer **Dock** reattaches under the title chip; footer **Undo** appears briefly after deleting a preset (**U** also undoes). Title-bar funnel still toggles visibility. **Merge to New** enters select mode (2–6 presets); **Create** names the result from selected names joined with `+` — **click** applies all member filters as one OR browse; **dice** loads a random item from each member in order, then restores your view. Side **Replace/Add** applies once per clothing/hair family when dice runs a merged set. Pinned presets sit at the top and appear in title **…** as **Apply:** / **Rnd:**. Recent applies appear as **Recent:**. Row **●** marks the active preset; **●*** means filters drifted — use **Update** (or **Ctrl+S**). **More** (edit icon / right-click) shows **pin**, **inline rename**, and **delete** (Confirm / Cancel on the row; Esc cancels; soft-undo for a few seconds). Dice **randomizes** without closing the list. Keyboard while open: **↑↓** select, **Enter** apply, **D** dice, **Ctrl+S** save/update, **Esc** cancel mode then hide.
 - **Creator filter** (title bar) — multi-select authors to limit the **grid** (or **…** overflow when narrow). Rail {{icon:creator|Creator}} opens the **creator list**.
 - **Category** — title name/menu = **quick switch**; rail {{icon:category|Category}} opens the **full category list**.
 - **Source filter** — All, Local, or VAR packages.
@@ -65,9 +65,9 @@ Title-bar search is a **universal filter**. Bare words match name/path/creator/u
 - **Shift+Enter** — commit draft to **Exclude** (bare → broad exclude `-term`; `#tag` → `-#tag`).
 - Paste a full query (`#wet -nsfw -#old @Acid`) and press **Enter** — tokens explode into chips.
 - **Exclude** row stays visible whenever any chip exists (hint: *Drop chip here to exclude*).
-- **X** left of Include/Exclude — clears **all** search chips (and draft). Same as search-field clear. **Ctrl+Z** within 5s undoes.
-- **Ctrl+F** — focus title search (opens compact popup if needed) and select draft text. Brief highlight cues open. Popup stays until **Esc**, click outside (not chip rows), or click the compact search icon again. **In Settings**, Ctrl+F focuses the side-rail settings filter instead (no popup over the list).
-- **Tab** / **↓** (in search) — leave search and focus the grid (arrows work; draft and chips kept). **Tab** from the grid returns to search. **↑** on the first grid item also returns to search. **In Settings**, Tab/↓ from the filter focuses the settings list; Tab / ↑ from the first row returns to the filter; **Enter** / **Space** toggles the selected setting (Shift+Enter cycles backward).
+- **X** left of Include/Exclude — clears **all** search chips (and draft). Same as search-field clear. **{key:undo}** within 5s undoes.
+- **{key:focus_search}** — focus title search (opens compact popup if needed) and select draft text. Brief highlight cues open. Popup stays until **Esc**, click outside (not chip rows), or click the compact search icon again. **In Settings**, the same key focuses the side-rail settings filter instead (no popup over the list).
+- **Tab** / **↓** (in search) — leave search and focus the grid (arrows work; draft and chips kept). **Tab** from the grid returns to search. **↑** on the first grid item also returns to search. **In Settings**, Tab/↓ from the filter focuses the settings list; Tab / ↑ from the first row returns to the filter; the **Apply selection** binding (**{key:apply}**) toggles the selected setting.
 - **Drag** a chip onto **Exclude** / **Include** to change polarity (tags and bare terms). Chip **×** removes it.
 - **Ctrl+Backspace** on an empty draft removes the last chip. **ESC** closes the search field without clearing chips. Search **X** clears all search chips.
 - Drag a tag from the **Tags** side list (or detail tag chip) onto Include/Exclude to add a search chip (does not apply the tag to items).
@@ -135,7 +135,7 @@ Use **Edit** in the Tags column header to open the tag editor **Database** mode 
 
 - **Left-click** — open import sidebar on the same side as the button.
 - **Right-click** — open it on the **opposite** side.
-- Header **float** chip / **Alt+I** — detach as a **resizable floating window** (position and size remembered). **X** / **Esc** hide and keep float; footer **Dock** reattaches as the side column and **stays open**. Floating Import does not push the grid inset.
+- Header **float** chip / **{key:import_sidebar}** — detach as a **resizable floating window** (position and size remembered). **X** / **Esc** hide and keep float; footer **Dock** reattaches as the side column and **stays open**. Floating Import does not push the grid inset.
 
 ### Import sidebar steps
 1. Select **exactly one scene** in the grid (multi-select blocks import).
@@ -161,7 +161,7 @@ Select rows, then use the **toolbox** at the bottom for cleanup actions: filter 
 - **Click** — select one row (clears others unless Ctrl or Shift is held).
 - **Ctrl+click** — add or remove a row from selection.
 - **Shift+click** — select a range from the last anchor.
-- **Ctrl+A** — select all visible rows.
+- **{key:select_all}** — select all visible rows.
 - **Escape** — clear selection when no menu/mode claimed Esc (see Hotkeys).
 
 Select one or more rows to expand the **toolbox** at the bottom (hover the bar if it is collapsed).
@@ -225,7 +225,7 @@ A **tip strip** under the title bar shows basics until you dismiss it (×).
 - Side lists open from rail buttons in three clusters: **Layout** (float/follow/clone), **Browse** (import/tags/category/creator/path/history), **Tools** (remove/apply/save). Thin separators mark zones when side-button gaps are on.
 - Open facet shows a brighter selection rim (plus header label on the column).
 - **Right-click** a rail button to open that panel on the opposite edge.
-- {{icon:settings|Settings}} side tab — appearance, layout, browse, input, hotkeys, performance, plugin options. **Ctrl+F** filters this list; **Tab** / **↓** moves into rows; **Enter** / **Space** toggles.
+- {{icon:settings|Settings}} side tab — appearance, layout, browse, input, hotkeys, performance, plugin options. **{key:focus_search}** filters this list; **Tab** / **↓** moves into rows; the **Apply selection** binding toggles.
 
 ### Footer utilities
 - **U / R** — Undo / Redo
@@ -262,48 +262,58 @@ Use {{icon:undo|Undo}} / **Redo** in the footer after supported edits.
 
 ## Hotkeys
 
-Press **?** or **F1** anytime the gallery is focused to jump here. **Esc** closes this panel. Change the show/hide gallery key in **Settings → Hotkeys**.
+Press **{key:help_alt}** or **{key:help}** anytime the gallery is focused to jump here. **Esc** closes this panel.
+
+**Every key below is rebindable.** Open **Settings → Shortcuts** to see the whole list in one place: click a binding chip (or **SET**) and press the keys you want, or press **CLEAR** to switch that one shortcut off. Rows that share a key are flagged in red, and hovering the chip names the other action. Bindings match modifiers exactly, so a Ctrl+Z binding never fires on Ctrl+Shift+Z. **Esc** is the one key that is not rebindable — it is the universal way out of every menu and mode.
+
+Three rules at the top of that page decide when shortcuts are live at all:
+
+- **Only while the VaM window is focused** (on by default) — VaM keeps running in the background, so keys typed in another app could otherwise reach the plugin. Always bypassed in VR, where the session legitimately runs unfocused.
+- **Only while a gallery pane is on screen** (on by default) — with the panes hidden, everything goes quiet except the hotkeys that *open* something (Show/Hide Panes, Create Gallery Pane, Open Hub Browser), so you can always get back in.
+- **0–9 jump to category** — turn off if you want the number row for something else.
+
+A bare key assigned to a global hotkey (say **Space** on Show/Hide Panes) is reserved: it will not also trigger a gallery shortcut on the same press.
 
 ### Gallery chrome
-- **Ctrl+V** (default) — show / hide gallery (configurable)
-- **?** / **F1** — open / close this Hotkeys sheet
-- **Ctrl+Shift+P** — command palette (also footer left chip next to Undo/Redo). Type to filter commands + categories; ↑↓ / Enter / Esc. Groups: Edit, Browse, Modes, Selection, Packages, View, Help. Recent list on open. Grey rows = unavailable (need selection / mode).
+- **{key:plugin.gallery}** — show / hide gallery (configurable in **Settings → Shortcuts → Global**)
+- **{key:help}** / **{key:help_alt}** — open / close this Hotkeys sheet
+- **{key:command_palette}** — command palette (also footer left chip next to Undo/Redo). Type to filter commands + categories; ↑↓ / Enter / Esc. Groups: Edit, Browse, Modes, Selection, Packages, View, Help. Recent list on open. Grey rows = unavailable (need selection / mode).
 - **Esc** — close help/menus/search, then exit Scene Tools / Scene Eraser / Try-On (revert) / Cleanup / Import, else clear selection (ladder: innermost first)
-- **Ctrl+Alt+= / Ctrl+Alt+-** — gallery UI scale up / down (also keypad +/-; separate from grid zoom). New installs auto-pick a desktop starting scale from screen height; desktop chrome also multiplies by VaM Monitor UI Scale.
+- **{key:ui_scale_up}** / **{key:ui_scale_down}** — gallery UI scale up / down (keypad variants have their own rows; separate from grid zoom). New installs auto-pick a desktop starting scale from screen height; desktop chrome also multiplies by VaM Monitor UI Scale.
 - **Ctrl + mouse wheel** — grid columns (+ / − in footer too)
 
 ### Browse and search
-- **Ctrl+F** — focus title search (opens compact popup if needed). **In Settings**, focuses the side-rail settings filter (no popup over the list).
-- **Tab** / **↓** (in search) — focus grid for arrow selection (keeps draft/chips). **Tab** from grid returns to search. **↑** on first item returns to search. **In Settings**, Tab/↓ from filter → list; Tab / ↑ from first row → filter; **Enter** / **Space** toggles the selected setting.
-- **Alt+F** — open / close floating filter presets (hide keeps float; Dock reattaches)
-- **Alt+I** — open / close floating Scene Import (detach if needed; hide keeps float; Dock reattaches as side panel and stays open)
+- **{key:focus_search}** — focus title search (opens compact popup if needed). **In Settings**, focuses the side-rail settings filter (no popup over the list).
+- **Tab** / **↓** (in search) — focus grid for arrow selection (keeps draft/chips). **Tab** from grid returns to search. **↑** on first item returns to search. **In Settings**, Tab/↓ from filter → list; Tab / ↑ from first row → filter; the **Apply selection** binding (**{key:apply}**) toggles the selected setting.
+- **{key:filter_presets}** — open / close floating filter presets (hide keeps float; Dock reattaches)
+- **{key:import_sidebar}** — open / close floating Scene Import (detach if needed; hide keeps float; Dock reattaches as side panel and stays open)
 - Filter presets open: **↑↓** / **Enter** / **D** / **Ctrl+S** / **Esc** / **U** (soft-delete undo)
 - **Enter** — commit draft search to an Include chip
 - **Shift+Enter** — commit draft to Exclude
 - **Esc** (in search) — close search field without clearing chips
-- **Ctrl+Z** — undo clear-all search chips (within 5s)
+- **{key:undo}** — undo clear-all search chips (within 5s)
 
 ### Selection
-- **Arrow keys** — move selection in the grid (Shift = range, Ctrl = add)
-- **Enter** / **Space** — apply selection
-- **Ctrl+A** — select all visible items
-- **Delete / Backspace** — delete eligible selection (History: remove from history)
+- **Arrow keys** — move selection in the grid (Shift = range, Ctrl = add). Not rebindable.
+- **Apply selection** — currently **{key:apply}** / **{key:apply_alt}**. Ships **unassigned**: Space and Enter are left free so they cannot load a scene by accident. Assign either slot in **Settings → Shortcuts → Selection**. Double-click / click in the grid always applies regardless.
+- **{key:select_all}** — select all visible items
+- **{key:delete}** / **{key:delete_alt}** — delete eligible selection (History: remove from history)
 - Context menu **1–9** — run numbered actions while the menu is open
 - **0–9** — jump to numbered category (same order as the category quick-switch menu)
 
 ### Undo / redo
-- **Ctrl+Z** — undo (footer Undo stays pinned; tooltip names next action; also undoes recent History remove / search clear within 5s)
-- **Ctrl+Y** / **Ctrl+Shift+Z** — redo
-- **Ctrl+R** — refresh History browse (History category only)
+- **{key:undo}** — undo (footer Undo stays pinned; tooltip names next action; also undoes recent History remove / search clear within 5s)
+- **{key:redo}** / **{key:redo_alt}** — redo
+- **{key:history_refresh}** — refresh History browse (History category only)
 
 ### Scene Tools (not Creators list)
-- **Ctrl+Shift+K** — toggle Scene Tools
-- **Ctrl+Shift+S** — open / close Strip Scene keep picker
+- **{key:scene_tools}** — toggle Scene Tools
+- **{key:strip_scene}** — open / close Strip Scene keep picker
 - While Strip Scene is open: **?** help · **/** filter · **↑↓** nav · **Space** toggle · **←→** expand · **F2** rename · **Enter** strip · **Esc** back
 - Status bar shows sticky modes (Scene Eraser · Scene Tools · Try-On · Import · Cleanup · …); soft toasts append after the mode line. **Esc** exits tool modes listed there.
 
 ### Scene Eraser
-- Side-rail eraser / **Ctrl+Shift+E** — point and click to erase scene items; **Esc** exits
+- Side-rail eraser / **{key:scene_eraser}** — point and click to erase scene items; **Esc** exits
 - Pointer popup says **Erase …** (scene edit). Wearable side lists say **Unequip**. Toolbox **Delete** is disk only.
 
 ### Try-On

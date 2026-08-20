@@ -92,7 +92,7 @@ namespace VPB
                 icon: UI.GetButtonIconSprite(_titleBarLayoutPresetsBtnRT != null ? _titleBarLayoutPresetsBtnRT.gameObject : null)
                     ?? UI.LoadIconSprite("layout-board-split", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.layout_presets",
-                tipDefault: "Layout presets — save and restore window arrangements. Alt+L.");
+                tipDefault: "Layout presets — save and restore window arrangements{hint:layout_presets}");
 
             // Session recent applies (recognition).
             try
@@ -218,7 +218,7 @@ namespace VPB
                 creatorModeActive,
                 icon: UI.LoadIconSprite("geometry", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.creator_mode",
-                tipDefault: "Scene Tools — sticky scene authoring (Strip Scene, …). Not the Creators author list. Ctrl+Shift+K. Esc exits.");
+                tipDefault: "Scene Tools{hint:scene_tools} — sticky scene authoring (Strip Scene, …). Not the Creators author list. Esc exits.");
         }
 
         private void AddOverflowMenuRow(

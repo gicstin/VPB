@@ -383,6 +383,8 @@
     <Compile Include="src\hook\PluginSignatureBridge.cs" />
     <Compile Include="src\VpbSaveCacheSupport.cs" />
     <Compile Include="src\KeyUtil.cs" />
+    <Compile Include="src\VpbShortcutMap.cs" />
+    <Compile Include="src\VpbShortcutText.cs" />
     <Compile Include="src\LogUtil.cs" />
     <Compile Include="src\MessageDef.cs" />
     <Compile Include="src\MessageKit\MessageKit.cs" />
@@ -455,6 +457,7 @@
     <Compile Include="src\gallery\GalleryPanel.SettingsNav.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPerf.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPlugin.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsShortcuts.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsReset.cs" />
     <Compile Include="src\gallery\GalleryPanel.CompressCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.FooterPluginInfo.cs" />

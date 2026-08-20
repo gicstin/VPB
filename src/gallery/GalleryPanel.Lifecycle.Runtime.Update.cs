@@ -707,7 +707,12 @@ namespace VPB
         /// </summary>
         private bool TryHandleGalleryUiScaleHotkey()
         {
-            if (!GalleryUiScaleHotkey.TryNudgeFromKeyboard())
+            int dir = 0;
+            if (VpbShortcutMap.Down(VpbShortcut.UiScaleUp) || VpbShortcutMap.Down(VpbShortcut.UiScaleUpAlt)) dir = 1;
+            else if (VpbShortcutMap.Down(VpbShortcut.UiScaleDown) || VpbShortcutMap.Down(VpbShortcut.UiScaleDownAlt)) dir = -1;
+            if (dir == 0) return false;
+
+            if (!GalleryUiScaleHotkey.TryNudge(dir))
                 return false;
 
             try
@@ -727,43 +732,40 @@ namespace VPB
             if (IsPluginHotkeyCaptureActive())
                 return;
 
-            // Ctrl+F — focus title search (expanded Settings float → settings filter). Works with another InputField selected.
-            bool ctrlEarly = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-            bool shiftEarly = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-            if (ctrlEarly && Input.GetKeyDown(KeyCode.F))
+            // Focus title search (expanded Settings float → settings filter). Works with another InputField selected.
+            if (VpbShortcutMap.Down(VpbShortcut.FocusSearch))
             {
                 try { FocusTitleSearchFromHotkey(); } catch { }
                 return;
             }
 
-            // Ctrl+Shift+P — command palette (works even with search focused).
-            if (ctrlEarly && shiftEarly && Input.GetKeyDown(KeyCode.P))
+            // Command palette (works even with search focused).
+            if (VpbShortcutMap.Down(VpbShortcut.CommandPalette))
             {
                 try { ToggleCommandPalette(); } catch { }
                 return;
             }
-            // Alt+F — floating filter presets (not Ctrl+F search). Before InputField gate.
-            bool altEarly = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
-            if (!ctrlEarly && altEarly && Input.GetKeyDown(KeyCode.F))
+            // Floating filter presets. Before InputField gate.
+            if (VpbShortcutMap.Down(VpbShortcut.FilterPresets))
             {
                 try { ToggleFloatingQuickFilters(); } catch { }
                 return;
             }
-            // Alt+I — floating Scene Import (detach if needed; hide keeps float).
-            if (!ctrlEarly && altEarly && Input.GetKeyDown(KeyCode.I))
+            // Floating Scene Import (detach if needed; hide keeps float).
+            if (VpbShortcutMap.Down(VpbShortcut.ImportSidebar))
             {
                 try { ToggleFloatingImportSidebar(); } catch { }
                 return;
             }
-            // Alt+L — layout presets manager.
-            if (!ctrlEarly && altEarly && Input.GetKeyDown(KeyCode.L))
+            // Layout presets manager.
+            if (VpbShortcutMap.Down(VpbShortcut.LayoutPresets))
             {
                 try { ToggleLayoutPresetsFloat(); } catch { }
                 return;
             }
-            if (ctrlEarly && Input.GetKeyDown(KeyCode.Z))
+            if (VpbShortcutMap.Down(VpbShortcut.Undo))
             {
-                // Search clear lives on main Undo stack — allow Ctrl+Z while title-search field focused.
+                // Search clear lives on main Undo stack — allow Undo while title-search field focused.
                 try
                 {
                     if (IsSearchClearUndoTop())
@@ -951,17 +953,14 @@ namespace VPB
             if (TryHandleClearSelectionEsc())
                 return;
 
-            if (IsVisible && TryConsumeCategoryQuickNumberKey())
+            if (IsVisible && VPBConfig.Instance.CategoryNumberKeysEnabled && TryConsumeCategoryQuickNumberKey())
                 return;
 
-            // Ctrl+Alt+= / Ctrl+Alt+- — UI chrome scale (not Ctrl+scroll grid zoom).
+            // UI chrome scale (not Ctrl+scroll grid zoom).
             if (TryHandleGalleryUiScaleHotkey())
                 return;
 
-            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-
-            if (ctrl && Input.GetKeyDown(KeyCode.R))
+            if (VpbShortcutMap.Down(VpbShortcut.HistoryRefresh))
             {
                 if (activeContentType == ContentType.History)
                 {
@@ -969,54 +968,46 @@ namespace VPB
                     return;
                 }
             }
-            if (ctrl && Input.GetKeyDown(KeyCode.Z))
-            {
-                // Ctrl+Shift+Z — Redo; Ctrl+Z — footer Undo (History/search also on this stack).
-                if (shift)
-                {
-                    try { Redo(); } catch { }
-                    return;
-                }
-                try { Undo(); } catch { }
-                return;
-            }
-            if (ctrl && Input.GetKeyDown(KeyCode.Y))
+            if (VpbShortcutMap.Down(VpbShortcut.Redo) || VpbShortcutMap.Down(VpbShortcut.RedoAlt))
             {
                 try { Redo(); } catch { }
                 return;
             }
+            if (VpbShortcutMap.Down(VpbShortcut.Undo))
+            {
+                try { Undo(); } catch { }
+                return;
+            }
 
-            // Ctrl+Shift+K — toggle Scene Tools (side-rail parity).
-            if (ctrl && shift && Input.GetKeyDown(KeyCode.K))
+            // Toggle Scene Tools (side-rail parity).
+            if (VpbShortcutMap.Down(VpbShortcut.SceneTools))
             {
                 try { ToggleCreatorMode(); } catch { }
                 return;
             }
 
-            // Ctrl+Shift+E — toggle Scene Eraser.
-            if (ctrl && shift && Input.GetKeyDown(KeyCode.E))
+            // Toggle Scene Eraser.
+            if (VpbShortcutMap.Down(VpbShortcut.SceneEraser))
             {
                 try { ToggleRemoveMode(false, false); } catch { }
                 return;
             }
 
-            // Ctrl+Shift+S — direct open/close Strip Scene window.
-            if (ctrl && shift && Input.GetKeyDown(KeyCode.S))
+            // Direct open/close Strip Scene window.
+            if (VpbShortcutMap.Down(VpbShortcut.StripScene))
             {
                 try { HotkeyOpenStripSceneDirect(); } catch { }
                 return;
             }
 
-            bool a = Input.GetKeyDown(KeyCode.A);
-            bool del = Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace);
-
-            if (ctrl && a)
+            if (VpbShortcutMap.Down(VpbShortcut.SelectAll))
             {
-                TrySelectAllCurrentGalleryView("ctrl+a");
+                TrySelectAllCurrentGalleryView("select-all");
                 return;
             }
 
-            if (del)
+            if (VpbShortcutMap.Down(VpbShortcut.DeleteSelection)
+                || VpbShortcutMap.Down(VpbShortcut.DeleteSelectionAlt))
             {
                 if (selectedFiles != null && selectedFiles.Count > 0)
                 {
@@ -1032,14 +1023,15 @@ namespace VPB
                 return;
             }
 
-            // Enter / Space — apply selection (keyboard expert path). Before arrow early-out.
-            if (Input.GetKeyDown(KeyCode.Return)
-                || Input.GetKeyDown(KeyCode.KeypadEnter)
-                || Input.GetKeyDown(KeyCode.Space))
+            // Apply selection (keyboard expert path). Before arrow early-out.
+            if (VpbShortcutMap.Down(VpbShortcut.Apply) || VpbShortcutMap.Down(VpbShortcut.ApplyAlt))
             {
                 try { TryKeyboardApplySelection(); } catch { }
                 return;
             }
+
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 
             bool arrowHeld =
                 Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.DownArrow) ||

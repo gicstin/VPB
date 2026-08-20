@@ -454,11 +454,11 @@ namespace VPB
             {
                 if (enter) SetStatus(VPBTranslation.T(
                     "gallery.import.tip.detach",
-                    "Detach as floating window (move / resize). Alt+I toggles."));
+                    "Detach as floating window (move / resize). Toggle float{hint:import_sidebar}"));
                 else SetStatus(null);
             };
             AddTooltip(btn, "gallery.import.tip.detach",
-                "Detach as floating window (move / resize). Alt+I toggles.");
+                "Detach as floating window (move / resize). Toggle float{hint:import_sidebar}");
 
             // Built while docked; hide if already restoring as float.
             btn.SetActive(!importSidebarDetached);

@@ -454,7 +454,7 @@ namespace VPB
                 case QuickMenuAssignableAction.Redo: return VPBTranslation.T("hook.qmbutton.redo", "Redo");
                 case QuickMenuAssignableAction.Hub: return VPBTranslation.T("hook.qmbutton.hub", "Hub");
                 case QuickMenuAssignableAction.Cleanup: return VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup");
-                case QuickMenuAssignableAction.CreatorMode: return VPBTranslation.T("hook.qmtooltip.creator_mode", "Scene Tools — sticky scene authoring tools. Ctrl+Shift+K. Esc exits.");
+                case QuickMenuAssignableAction.CreatorMode: return VPBTranslation.T("hook.qmtooltip.creator_mode", "Scene Tools{hint:scene_tools} — sticky scene authoring tools. Esc exits.");
                 case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add");
                 case QuickMenuAssignableAction.CompressCache: return VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache");
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide");

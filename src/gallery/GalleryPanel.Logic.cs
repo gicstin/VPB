@@ -3731,9 +3731,9 @@ namespace VPB
         {
             int n = undoStack != null ? undoStack.Count : 0;
             if (n <= 0)
-                return VPBTranslation.T("gallery.tooltip.undo_empty", "Nothing to undo (Ctrl+Z)");
+                return VPBTranslation.T("gallery.tooltip.undo_empty", "Nothing to undo{hint:undo}");
             return string.Format(
-                VPBTranslation.T("gallery.tooltip.undo_next", "Undo: {0} (Ctrl+Z)"),
+                VPBTranslation.T("gallery.tooltip.undo_next", "Undo: {0}{hint:undo}"),
                 PeekUndoLabel());
         }
 
@@ -3741,9 +3741,9 @@ namespace VPB
         {
             int n = redoStack != null ? redoStack.Count : 0;
             if (n <= 0)
-                return VPBTranslation.T("gallery.tooltip.redo_empty", "Nothing to redo (Ctrl+Y)");
+                return VPBTranslation.T("gallery.tooltip.redo_empty", "Nothing to redo{hint:redo,redo_alt}");
             return string.Format(
-                VPBTranslation.T("gallery.tooltip.redo_next", "Redo: {0} (Ctrl+Y / Ctrl+Shift+Z)"),
+                VPBTranslation.T("gallery.tooltip.redo_next", "Redo: {0}{hint:redo,redo_alt}"),
                 PeekRedoLabel());
         }
 

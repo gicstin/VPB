@@ -524,7 +524,7 @@ namespace VPB
                     if (quickFiltersToggleBtnIconImage != null) quickFiltersToggleBtnIconImage.color = UI.BarIconGlyphTint;
                 }
             }
-            AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets — Alt+F toggles floating window; Float detaches; Dock reattaches");
+            AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets — Float detaches; Dock reattaches. Toggle floating window{hint:filter_presets}");
 
             GameObject layoutPresetsBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, " ", 16, 0, 0, AnchorPresets.middleCenter, ToggleLayoutPresetsFloat);
             layoutPresetsBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
@@ -558,7 +558,7 @@ namespace VPB
                     layoutPresetsToggleBtnText.gameObject.SetActive(true);
                 }
             }
-            AddTooltip(layoutPresetsBtn, "gallery.tooltip.layout_presets", "Layout presets — save and restore window arrangements. Alt+L.");
+            AddTooltip(layoutPresetsBtn, "gallery.tooltip.layout_presets", "Layout presets — save and restore window arrangements{hint:layout_presets}");
 
             // Register inner pane button scale actions (title bar)
             { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.TitleBarHeightRef * s); }); }

@@ -25,13 +25,21 @@ namespace VPB
             bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
             if (!ctrl || !alt) return false;
 
-            float delta = 0f;
+            int dir = 0;
             if (Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.KeypadPlus))
-                delta = 0.1f;
+                dir = 1;
             else if (Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus))
-                delta = -0.1f;
+                dir = -1;
             else
                 return false;
+
+            return TryNudge(dir);
+        }
+
+        public static bool TryNudge(int dir)
+        {
+            if (dir == 0) return false;
+            float delta = dir > 0 ? 0.1f : -0.1f;
 
             int frame = Time.frameCount;
             if (s_HandledFrame == frame)

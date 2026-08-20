@@ -37,6 +37,7 @@ namespace VPB
                 _pluginDraftHubKey = "";
                 _pluginDraftClearConsoleKey = "";
             }
+            ShortcutSettingsBeginSession();
             CancelPluginHotkeyCapture(false);
         }
 
@@ -58,6 +59,8 @@ namespace VPB
                 snap.PluginDownscale8kTo4k = s?.Downscale8kTo4kBeforeZstdCache != null && s.Downscale8kTo4kBeforeZstdCache.Value;
             }
             catch { }
+            try { snap.ShortcutPatterns = VpbShortcutMap.CapturePatterns(); }
+            catch { snap.ShortcutPatterns = null; }
             try { snap.PluginScanWhitelistEnabled = ScanWhitelistManager.Instance.IsEnabled; }
             catch { snap.PluginScanWhitelistEnabled = false; }
         }
@@ -89,7 +92,19 @@ namespace VPB
             _pluginDraftCreateGalleryKey = b.PluginCreateGalleryKey ?? "";
             _pluginDraftHubKey = b.PluginHubKey ?? "";
             _pluginDraftClearConsoleKey = b.PluginClearConsoleKey ?? "";
+            try
+            {
+                if (b.ShortcutPatterns != null)
+                {
+                    VpbShortcutMap.ApplyPatterns(b.ShortcutPatterns);
+                    VpbShortcutMap.SaveToConfig();
+                }
+                _shortcutDrafts = VpbShortcutMap.CapturePatterns();
+                _shortcutConflictDirty = true;
+            }
+            catch { }
             try { VamHookPlugin.singleton?.ApplyGalleryPluginHotkeysFromSettings(); } catch { }
+            NotifyShortcutBindingsChanged();
         }
 
         private bool CommitPluginSettingsFromDrafts(bool showErrors)
@@ -107,13 +122,17 @@ namespace VPB
                 if (showErrors) ShowTemporaryStatus(err ?? VPBTranslation.T("hook.settings.error.invalid_hotkey", "Invalid setting. Example hotkey: Ctrl+Shift+V"), 4f);
                 return false;
             }
+            try { CommitShortcutDrafts(); } catch { }
             try { Settings.SaveConfig(); } catch { }
+            NotifyShortcutBindingsChanged();
             return true;
         }
 
         private void AppendPluginInternalSettingDefinitions(List<InternalSettingDefinition> defs)
         {
             if (defs == null) return;
+
+            AppendShortcutRuleSettingDefinitions(defs);
 
             defs.Add(new InternalSettingDefinition
             {
@@ -155,6 +174,8 @@ namespace VPB
                 GetString = () => _pluginDraftClearConsoleKey ?? "",
                 SetString = v => _pluginDraftClearConsoleKey = v ?? ""
             });
+
+            AppendShortcutBindingSettingDefinitions(defs);
 
             int downscaleActive = 0;
             try { downscaleActive = TextureUtil.GetDownscaledActiveCount(); } catch { }
@@ -376,6 +397,13 @@ namespace VPB
 
         private void ApplyPluginHotkeyDraft(string rowKey, string pattern)
         {
+            int shortcutIndex;
+            if (TryGetShortcutRowIndex(rowKey, out shortcutIndex))
+            {
+                SetShortcutDraft(shortcutIndex, pattern);
+                return;
+            }
+
             if (string.Equals(rowKey, "plugin.hotkey.gallery", StringComparison.OrdinalIgnoreCase))
                 _pluginDraftGalleryKey = pattern;
             else if (string.Equals(rowKey, "plugin.hotkey.create_gallery", StringComparison.OrdinalIgnoreCase))
@@ -384,10 +412,15 @@ namespace VPB
                 _pluginDraftHubKey = pattern;
             else if (string.Equals(rowKey, "plugin.hotkey.clear_console", StringComparison.OrdinalIgnoreCase))
                 _pluginDraftClearConsoleKey = pattern;
+            _shortcutConflictDirty = true;
         }
 
         private string GetPluginHotkeyDraftDisplay(string rowKey)
         {
+            int shortcutIndex;
+            if (TryGetShortcutRowIndex(rowKey, out shortcutIndex))
+                return GetShortcutDraft(shortcutIndex);
+
             if (string.Equals(rowKey, "plugin.hotkey.gallery", StringComparison.OrdinalIgnoreCase)) return _pluginDraftGalleryKey ?? "";
             if (string.Equals(rowKey, "plugin.hotkey.create_gallery", StringComparison.OrdinalIgnoreCase)) return _pluginDraftCreateGalleryKey ?? "";
             if (string.Equals(rowKey, "plugin.hotkey.hub", StringComparison.OrdinalIgnoreCase)) return _pluginDraftHubKey ?? "";
@@ -400,25 +433,39 @@ namespace VPB
             string rowKey = def.Key ?? "";
             string display = GetPluginHotkeyDraftDisplay(rowKey);
             bool capturing = string.Equals(_pluginHotkeyCaptureRowKey, rowKey, StringComparison.OrdinalIgnoreCase);
+            bool unassigned = string.IsNullOrEmpty(display);
+            bool conflict = !capturing && !unassigned && ShortcutPatternHasConflict(display);
+
             string displayText = capturing
                 ? VPBTranslation.T("settings.hotkey.press_key", "Press key…")
-                : (string.IsNullOrEmpty(display) ? VPBTranslation.T("settings.hotkey.unassigned", "—") : display);
+                : (unassigned ? VPBTranslation.T("settings.hotkey.unassigned", "Off") : VpbShortcutText.PrettyPattern(display));
 
             GameObject host = new GameObject("SettingsHotkeyHost");
             host.transform.SetParent(controls, false);
             float chipH = GalleryUiDesignTokens.ButtonSizeRef * paneScale;
             LayoutElement hle = UI.AddLE(host, minWidth: 120f * paneScale, minHeight: chipH, preferredWidth: 220f * paneScale, preferredHeight: chipH, flexibleWidth: 1f);
 
-            Image bg = AddSettingsControlRoundedBg(host, capturing ? new Color(0.35f, 0.35f, 0.15f, 1f) : UI.ChromeDarker);
+            Color chipBg = UI.ChromeDarker;
+            if (capturing) chipBg = new Color(0.35f, 0.35f, 0.15f, 1f);
+            else if (conflict) chipBg = new Color(0.40f, 0.20f, 0.16f, 1f);
+
+            Image bg = AddSettingsControlRoundedBg(host, chipBg);
             Button hit = host.AddComponent<Button>();
             hit.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(hit);
 
-            Text it = UI.CreateLabel(host, displayText, GalleryUiDesignTokens.SettingsListRowDetailFontRef, capturing ? new Color(1f, 0.95f, 0.6f, 1f) : Color.white, TextAnchor.MiddleCenter, richText: false, name: "Text");
+            Color chipText = Color.white;
+            if (capturing) chipText = new Color(1f, 0.95f, 0.6f, 1f);
+            else if (conflict) chipText = new Color(1f, 0.72f, 0.62f, 1f);
+            else if (unassigned) chipText = new Color(1f, 1f, 1f, 0.45f);
+
+            Text it = UI.CreateLabel(host, displayText, GalleryUiDesignTokens.SettingsListRowDetailFontRef, chipText, TextAnchor.MiddleCenter, richText: false, name: "Text");
             GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.SettingsListRowDetailFontRef, paneScale, GalleryUiDesignTokens.FontMinRef);
 
             string capturedKey = rowKey;
+            string capturedPattern = display;
             hit.onClick.AddListener(() => BeginPluginHotkeyCapture(capturedKey));
+            AddDynamicTooltip(host, () => BuildHotkeyChipTooltip(capturedKey, capturedPattern));
 
             if (capturing)
             {
@@ -433,7 +480,27 @@ namespace VPB
                 {
                     BeginPluginHotkeyCapture(capturedKey);
                 });
+                if (!unassigned)
+                {
+                    CreateMiniButton(controls, VPBTranslation.T("settings.hotkey.clear", "CLEAR"), 64f, new Color(0.38f, 0.30f, 0.22f, 1f), () =>
+                    {
+                        ApplyPluginHotkeyDraft(capturedKey, "");
+                        RefreshInternalSettingsListRows(true);
+                    });
+                }
             }
+        }
+
+        private string BuildHotkeyChipTooltip(string rowKey, string pattern)
+        {
+            if (string.IsNullOrEmpty(pattern))
+                return VPBTranslation.T("settings.hotkey.tip.unassigned",
+                    "This shortcut is off. Click, or press SET, then press the keys you want.");
+
+            string conflict = BuildShortcutConflictTooltip(rowKey, pattern);
+            string baseTip = VPBTranslation.T("settings.hotkey.tip.assigned",
+                "Click to record a new key. CLEAR turns this shortcut off.");
+            return string.IsNullOrEmpty(conflict) ? baseTip : conflict + "\n" + baseTip;
         }
 
         internal bool TryCommitPluginSettingsOnSave()

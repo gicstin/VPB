@@ -437,7 +437,7 @@ namespace VPB
             var compactIconImg = _titleSearchCompactGO.transform.Find("Icon")?.GetComponent<Image>();
             if (compactIconImg != null) compactIconImg.color = Color.white;
             _titleSearchCompactRT = crt;
-            try { AddTooltip(_titleSearchCompactGO, "gallery.search.shortcuts_tip", "Ctrl+F focus · Tab/↓ grid · Enter chip · Shift+Enter exclude"); } catch { }
+            try { AddTooltip(_titleSearchCompactGO, "gallery.search.shortcuts_tip", "{key:focus_search} focus · Tab/↓ grid · Enter chip · Shift+Enter exclude"); } catch { }
             AddRightClickDelegate(_titleSearchCompactGO, ClearTitleBarSearch);
         }
 
@@ -447,7 +447,7 @@ namespace VPB
             try
             {
                 AddTooltip(field.gameObject, "gallery.search.shortcuts_tip",
-                    "Ctrl+F focus · Tab/↓ grid · Enter chip · Shift+Enter exclude");
+                    "{key:focus_search} focus · Tab/↓ grid · Enter chip · Shift+Enter exclude");
             }
             catch { }
             try
@@ -487,7 +487,7 @@ namespace VPB
             try
             {
                 ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Ctrl+Z undoes."),
+                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Undo to restore{hint:undo}."),
                     2.5f);
             }
             catch { }

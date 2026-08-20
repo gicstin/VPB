@@ -1748,7 +1748,7 @@ namespace VPB
                 catch { }
 
                 if (failed == 0)
-                    ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.cleanup.done_ok", "Cleanup moved {0} item(s). Ctrl+Z undoes moves."), moved), 2f);
+                    ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.cleanup.done_ok", "Cleanup moved {0} item(s). Undo to restore{hint:undo}."), moved), 2f);
                 else
                     ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.cleanup.done_partial", "Cleanup moved {0} item(s), {1} failed. See log."), moved, failed), 3f);
             });

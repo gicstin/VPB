@@ -150,6 +150,12 @@ namespace VPB
             _commandPaletteCatalog.Clear();
         }
 
+        private static string ScHint(VpbShortcut id)
+        {
+            try { return VpbShortcutMap.GetPattern(id); }
+            catch { return ""; }
+        }
+
         private void EnsureCommandPaletteCatalog()
         {
             if (_commandPaletteCatalog.Count > 0) return;
@@ -164,15 +170,15 @@ namespace VPB
             const string GHelp = "Help";
 
             // --- Edit ---
-            AddCommandPaletteEntry("undo", "gallery.cmd.undo", "Undo", "Ctrl+Z", GEdit, "revert back",
+            AddCommandPaletteEntry("undo", "gallery.cmd.undo", "Undo", ScHint(VpbShortcut.Undo), GEdit, "revert back",
                 () => { try { Undo(); } catch { } },
                 CmdPaletteHasUndo);
-            AddCommandPaletteEntry("redo", "gallery.cmd.redo", "Redo", "Ctrl+Y", GEdit, "forward",
+            AddCommandPaletteEntry("redo", "gallery.cmd.redo", "Redo", ScHint(VpbShortcut.Redo), GEdit, "forward",
                 () => { try { Redo(); } catch { } },
                 CmdPaletteHasRedo);
 
             // --- Browse ---
-            AddCommandPaletteEntry("search", "gallery.cmd.focus_search", "Focus search", "Ctrl+F", GBrowse, "find filter title query",
+            AddCommandPaletteEntry("search", "gallery.cmd.focus_search", "Focus search", ScHint(VpbShortcut.FocusSearch), GBrowse, "find filter title query",
                 () => { try { FocusTitleSearchInput(); } catch { } });
             AddCommandPaletteEntry("clear_filters", "gallery.cmd.clear_filters", "Clear browse filters", "", GBrowse, "reset chips qf tags",
                 () =>
@@ -180,7 +186,7 @@ namespace VPB
                     try { ClearAllBrowseFiltersKeepCategory(); }
                     catch { try { RefreshFiles(true); } catch { } }
                 });
-            AddCommandPaletteEntry("filter_presets", "gallery.cmd.filter_presets", "Filter presets", "Alt+F", GBrowse, "quick filters qf saved",
+            AddCommandPaletteEntry("filter_presets", "gallery.cmd.filter_presets", "Filter presets", ScHint(VpbShortcut.FilterPresets), GBrowse, "quick filters qf saved",
                 () =>
                 {
                     try
@@ -194,18 +200,18 @@ namespace VPB
                 () => { try { SetCategoryQuickMenuVisible(true); } catch { } });
             AddCommandPaletteEntry("refresh", "gallery.cmd.refresh", "Refresh browse", "", GBrowse, "reload files scan",
                 () => { try { RefreshFiles(true); } catch { } });
-            AddCommandPaletteEntry("refresh_history", "gallery.cmd.refresh_history", "Refresh History", "Ctrl+R", GBrowse, "usage recent",
+            AddCommandPaletteEntry("refresh_history", "gallery.cmd.refresh_history", "Refresh History", ScHint(VpbShortcut.HistoryRefresh), GBrowse, "usage recent",
                 () => { try { RefreshHistoryBrowsePreferLight(true); } catch { } },
                 CmdPaletteIsHistoryBrowse);
             AddCommandPaletteEntry("load_random", "gallery.cmd.load_random", "Load random (filtered view)", "", GBrowse, "dice chance pick",
                 () => { try { LoadRandom(); } catch { } });
 
             // --- Modes ---
-            AddCommandPaletteEntry("scene_tools", "gallery.cmd.scene_tools", "Toggle Scene Tools", "Ctrl+Shift+K", GModes, "creator strip keep atoms",
+            AddCommandPaletteEntry("scene_tools", "gallery.cmd.scene_tools", "Toggle Scene Tools", ScHint(VpbShortcut.SceneTools), GModes, "creator strip keep atoms",
                 () => { try { ToggleCreatorMode(); } catch { } });
-            AddCommandPaletteEntry("scene_eraser", "gallery.cmd.scene_eraser", "Toggle Scene Eraser", "Ctrl+Shift+E", GModes, "remove delete atoms erase",
+            AddCommandPaletteEntry("scene_eraser", "gallery.cmd.scene_eraser", "Toggle Scene Eraser", ScHint(VpbShortcut.SceneEraser), GModes, "remove delete atoms erase",
                 () => { try { ToggleRemoveMode(false, false); } catch { } });
-            AddCommandPaletteEntry("import", "gallery.cmd.import", "Toggle Import sidebar", "Alt+I", GModes, "scene import atoms",
+            AddCommandPaletteEntry("import", "gallery.cmd.import", "Toggle Import sidebar", ScHint(VpbShortcut.ImportSidebar), GModes, "scene import atoms",
                 () => { try { ToggleImportSidebar(); } catch { } });
             AddCommandPaletteEntry("cleanup", "gallery.cmd.cleanup", "Open Cleanup", "", GModes, "orphans unused",
                 () => { try { TboxOpenCleanupView(); } catch { } });
@@ -224,24 +230,24 @@ namespace VPB
                 () => { try { ToggleApplyMode(); } catch { } });
             AddCommandPaletteEntry("hold_launch", "gallery.cmd.hold_launch", "Toggle Hold-to-launch", "", GModes, "press hold",
                 () => { try { ToggleHoldToLaunch(); } catch { } });
-            AddCommandPaletteEntry("strip", "gallery.cmd.strip_scene", "Strip Scene window", "Ctrl+Shift+S", GModes, "keep recipe",
+            AddCommandPaletteEntry("strip", "gallery.cmd.strip_scene", "Strip Scene window", ScHint(VpbShortcut.StripScene), GModes, "keep recipe",
                 () => { try { HotkeyOpenStripSceneDirect(); } catch { } });
 
             // --- Selection ---
-            AddCommandPaletteEntry("apply", "gallery.cmd.apply", "Apply selection", "Enter", GSel, "load wear use",
+            AddCommandPaletteEntry("apply", "gallery.cmd.apply", "Apply selection", ScHint(VpbShortcut.Apply), GSel, "load wear use",
                 () => { try { TryKeyboardApplySelection(); } catch { } },
                 () => CmdPaletteHasSelection() || !string.IsNullOrEmpty(selectedPath));
             AddCommandPaletteEntry("clear_selection", "gallery.cmd.clear_selection", "Clear selection", "Esc", GSel, "deselect none",
                 () => { try { ClearSelection(); } catch { } },
                 CmdPaletteHasSelection);
-            AddCommandPaletteEntry("select_all", "gallery.cmd.select_all", "Select all visible", "Ctrl+A", GSel, "everything multi",
+            AddCommandPaletteEntry("select_all", "gallery.cmd.select_all", "Select all visible", ScHint(VpbShortcut.SelectAll), GSel, "everything multi",
                 () => { try { SelectAll(); } catch { } });
-            AddCommandPaletteEntry("remove_history", "gallery.cmd.remove_history", "Remove from History", "Delete", GSel, "forget usage",
+            AddCommandPaletteEntry("remove_history", "gallery.cmd.remove_history", "Remove from History", ScHint(VpbShortcut.DeleteSelection), GSel, "forget usage",
                 () => { try { TboxRemoveSelectedFromHistory(); } catch { } },
                 () => CmdPaletteIsHistoryBrowse() && CmdPaletteHasSelection());
 
             // --- Packages ---
-            AddCommandPaletteEntry("delete_packages", "gallery.cmd.delete_packages", "Delete selected packages/scenes", "Delete", GPkg, "disk remove trash",
+            AddCommandPaletteEntry("delete_packages", "gallery.cmd.delete_packages", "Delete selected packages/scenes", ScHint(VpbShortcut.DeleteSelection), GPkg, "disk remove trash",
                 () => { try { TboxDeleteSelectedPackages(); } catch { } },
                 CmdPaletteHasSelection);
             AddCommandPaletteEntry("hide_packages", "gallery.cmd.hide_packages", "Hide selected packages", "", GPkg, "conceal",
@@ -275,9 +281,9 @@ namespace VPB
             // --- View ---
             AddCommandPaletteEntry("layout", "gallery.cmd.layout", "Toggle Grid / List layout", "", GView, "rows columns",
                 () => { try { ToggleLayoutMode(); } catch { } });
-            AddCommandPaletteEntry("ui_scale_up", "gallery.cmd.ui_scale_up", "UI scale up", "Ctrl+Alt+=", GView, "chrome bigger zoom",
+            AddCommandPaletteEntry("ui_scale_up", "gallery.cmd.ui_scale_up", "UI scale up", ScHint(VpbShortcut.UiScaleUp), GView, "chrome bigger zoom",
                 () => { try { NudgeGalleryUiScaleFromPalette(0.1f); } catch { } });
-            AddCommandPaletteEntry("ui_scale_down", "gallery.cmd.ui_scale_down", "UI scale down", "Ctrl+Alt+-", GView, "chrome smaller",
+            AddCommandPaletteEntry("ui_scale_down", "gallery.cmd.ui_scale_down", "UI scale down", ScHint(VpbShortcut.UiScaleDown), GView, "chrome smaller",
                 () => { try { NudgeGalleryUiScaleFromPalette(-0.1f); } catch { } });
             AddCommandPaletteEntry("grid_cols_more", "gallery.cmd.grid_cols_more", "More grid columns", "Ctrl+wheel", GView, "zoom out denser",
                 () => { try { AdjustGridColumns(1); } catch { } });
@@ -289,7 +295,7 @@ namespace VPB
                 () => { try { ApplyLastLayoutSnapshot(); } catch { } });
             AddCommandPaletteEntry("layout_revert", "gallery.cmd.layout_revert", "Undo layout change", "", GView, "revert layout back arrangement",
                 () => { try { RevertLayoutToSnapshot(); } catch { } });
-            AddCommandPaletteEntry("layout_presets", "gallery.cmd.layout_presets", "Layout presets…", "Alt+L", GView, "named layout preset manager window arrangement",
+            AddCommandPaletteEntry("layout_presets", "gallery.cmd.layout_presets", "Layout presets…", ScHint(VpbShortcut.LayoutPresets), GView, "named layout preset manager window arrangement",
                 () => { try { ToggleLayoutPresetsFloat(); } catch { } });
             AddCommandPaletteEntry("clone_pane", "gallery.cmd.clone_pane", "Clone pane", "", GView, "duplicate window copy",
                 () => { try { if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true); } catch { } },
@@ -312,8 +318,10 @@ namespace VPB
             AddCommandPaletteLayoutPresetEntries(GView);
             AddCommandPaletteEntry("settings", "gallery.cmd.settings", "Open Settings", "", GView, "prefs options config",
                 () => { try { OpenSettingsSideTab(); } catch { } });
-            AddCommandPaletteEntry("settings_interaction", "gallery.cmd.settings_interaction", "Settings → Interaction / Hotkeys", "", GView, "try-on apply hold bindings keys chords",
+            AddCommandPaletteEntry("settings_interaction", "gallery.cmd.settings_interaction", "Settings → Interaction", "", GView, "try-on apply hold click drag",
                 () => { try { OpenSettingsGroup("interaction"); } catch { } });
+            AddCommandPaletteEntry("settings_shortcuts", "gallery.cmd.settings_shortcuts", "Settings → Shortcuts", "", GView, "hotkeys keys bindings rebind chords disable space enter conflict",
+                () => { try { OpenSettingsGroup("shortcuts"); } catch { } });
             AddCommandPaletteEntry("settings_perf", "gallery.cmd.settings_perf", "Settings → Performance", "", GView, "fps cache",
                 () => { try { OpenSettingsGroup("performance"); } catch { } });
             AddCommandPaletteEntry("settings_browsing", "gallery.cmd.settings_browsing", "Settings → Browsing", "", GView, "lists tags search",
@@ -334,7 +342,7 @@ namespace VPB
                 () => _removeModeActive);
 
             // --- Help ---
-            AddCommandPaletteEntry("help", "gallery.cmd.help", "Open help (Hotkeys)", "F1 / ?", GHelp, "shortcuts chords",
+            AddCommandPaletteEntry("help", "gallery.cmd.help", "Open help (Hotkeys)", ScHint(VpbShortcut.Help), GHelp, "shortcuts chords",
                 () => { try { OpenInAppHelpToSection("hotkeys"); } catch { try { ToggleInAppHelpPanel(); } catch { } } });
             AddCommandPaletteEntry("help_filtering", "gallery.cmd.help_filtering", "Help: Filtering", "", GHelp, "search chips",
                 () => { try { OpenInAppHelpToSection("filtering"); } catch { } });
@@ -346,7 +354,7 @@ namespace VPB
                 () => { try { OpenInAppHelpToSection("selection"); } catch { } });
             AddCommandPaletteEntry("help_advanced", "gallery.cmd.help_advanced", "Help: Advanced", "", GHelp, "power",
                 () => { try { OpenInAppHelpToSection("advanced"); } catch { } });
-            AddCommandPaletteEntry("palette_hint", "gallery.cmd.palette_hint", "Command palette (this)", "Ctrl+Shift+P", GHelp, "commands fuzzy",
+            AddCommandPaletteEntry("palette_hint", "gallery.cmd.palette_hint", "Command palette (this)", ScHint(VpbShortcut.CommandPalette), GHelp, "commands fuzzy",
                 () =>
                 {
                     ShowTemporaryStatus(

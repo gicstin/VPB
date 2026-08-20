@@ -1101,6 +1101,10 @@ namespace VPB
         public bool TryOnModeEnabled = false;
         /// <summary>When ON, the E/C keys move the navigation rig up/down in world (complements WASD). On by default.</summary>
         public bool VerticalMoveKeysEnabled = true;
+        public JSONClass ShortcutBindings = new JSONClass();
+        public bool ShortcutsRequireWindowFocus = true;
+        public bool ShortcutsNeedVisiblePane = true;
+        public bool CategoryNumberKeysEnabled = true;
         /// <summary>When HoldToLaunch is enabled, drag&drop is forced off; this stores the prior setting for restore.</summary>
         public bool HoldToLaunchPrevEnableDragDrop = false;
         /// <summary>Seconds pointer must stay pressed on item before hold-to-launch fires (when HoldToLaunch is on).</summary>
@@ -1832,6 +1836,10 @@ namespace VPB
             HoldToLaunchEnabled = false;
             TryOnModeEnabled = false;
             VerticalMoveKeysEnabled = true;
+            ShortcutBindings = new JSONClass();
+            ShortcutsRequireWindowFocus = true;
+            ShortcutsNeedVisiblePane = true;
+            CategoryNumberKeysEnabled = true;
             HoldToLaunchPrevEnableDragDrop = false;
             HoldToLaunchHoldSeconds = 1f;
             QuickMenuButtonsVersion = 1;
@@ -2296,6 +2304,10 @@ namespace VPB
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["TryOnModeEnabled"] != null) TryOnModeEnabled = node["TryOnModeEnabled"].AsBool;
                         if (node["VerticalMoveKeysEnabled"] != null) VerticalMoveKeysEnabled = node["VerticalMoveKeysEnabled"].AsBool;
+                        if (node["ShortcutBindings"] != null) ShortcutBindings = node["ShortcutBindings"].AsObject;
+                        if (node["ShortcutsRequireWindowFocus"] != null) ShortcutsRequireWindowFocus = node["ShortcutsRequireWindowFocus"].AsBool;
+                        if (node["ShortcutsNeedVisiblePane"] != null) ShortcutsNeedVisiblePane = node["ShortcutsNeedVisiblePane"].AsBool;
+                        if (node["CategoryNumberKeysEnabled"] != null) CategoryNumberKeysEnabled = node["CategoryNumberKeysEnabled"].AsBool;
                         if (node["HoldToLaunchPrevEnableDragDrop"] != null) HoldToLaunchPrevEnableDragDrop = node["HoldToLaunchPrevEnableDragDrop"].AsBool;
                         if (node["HoldToLaunchHoldSeconds"] != null)
                             HoldToLaunchHoldSeconds = Mathf.Clamp(node["HoldToLaunchHoldSeconds"].AsFloat, 0.2f, 1f);
@@ -2439,6 +2451,7 @@ namespace VPB
 
             // First-run pane scale (deferred if Screen.height still 0). Existing cfgs grandfather.
             try { TryEnsureGalleryUiScaleAutoSeeded(); } catch { }
+            try { VpbShortcutMap.LoadFromConfig(this); } catch { }
         }
 
         public void Save()
@@ -2742,6 +2755,11 @@ namespace VPB
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["TryOnModeEnabled"].AsBool = TryOnModeEnabled;
                 node["VerticalMoveKeysEnabled"].AsBool = VerticalMoveKeysEnabled;
+                try { VpbShortcutMap.SaveToConfig(); } catch { }
+                if (ShortcutBindings != null) node["ShortcutBindings"] = ShortcutBindings;
+                node["ShortcutsRequireWindowFocus"].AsBool = ShortcutsRequireWindowFocus;
+                node["ShortcutsNeedVisiblePane"].AsBool = ShortcutsNeedVisiblePane;
+                node["CategoryNumberKeysEnabled"].AsBool = CategoryNumberKeysEnabled;
                 node["HoldToLaunchPrevEnableDragDrop"].AsBool = HoldToLaunchPrevEnableDragDrop;
                 node["HoldToLaunchHoldSeconds"].AsFloat = Mathf.Clamp(HoldToLaunchHoldSeconds, 0.2f, 1f);
                 node["BaMigrationPromptDismissed"].AsBool = BaMigrationPromptDismissed;

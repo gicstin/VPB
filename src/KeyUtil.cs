@@ -78,6 +78,13 @@ namespace VPB
 		};
 		}
 
+		internal static KeyCode TryParseKeyToken(string val)
+		{
+			if (string.IsNullOrEmpty(val)) return KeyCode.None;
+			try { return ParseKeyCode(val.Trim()); }
+			catch { return KeyCode.None; }
+		}
+
 		private static KeyCode ParseKeyCode(string val)
 		{
 			if (string.IsNullOrEmpty(val)) return KeyCode.None;
@@ -113,6 +120,7 @@ namespace VPB
 
 		public bool TestKeyUp()
 		{
+			if (key == KeyCode.None) return false;
 			if (Input.GetKeyUp(key))
 			{
 				return TestSupports();
@@ -122,6 +130,7 @@ namespace VPB
 
 		public bool TestKeyDown()
 		{
+			if (key == KeyCode.None) return false;
 			if (Input.GetKeyDown(key))
 			{
 				return TestSupports();

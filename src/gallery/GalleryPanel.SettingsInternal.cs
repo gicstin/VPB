@@ -160,7 +160,8 @@ namespace VPB
             new[] { "vr",              "vr" },
             new[] { "browsing",        "lists", "cat_general", "tags", "search" },
             new[] { "cat_visibility",  "cat_visibility" },
-            new[] { "interaction",     "interaction", "plugin_hotkeys", "plugin_quickmenu" },
+            new[] { "interaction",     "interaction", "plugin_quickmenu" },
+            new[] { "shortcuts",       "keys_rules", "plugin_hotkeys", "keys_chrome", "keys_browse", "keys_selection", "keys_tools", "keys_world" },
             new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
             new[] { "maintenance",     "helpers", "updater", "ba_migration", "plugin_bench" },
         };
@@ -192,6 +193,7 @@ namespace VPB
                 case "browsing":        return VPBTranslation.T("settings.group.tab.browsing", "Browsing");
                 case "cat_visibility":  return VPBTranslation.T("settings.group.category_visibility", "Category visibility");
                 case "interaction":     return VPBTranslation.T("settings.group.tab.interaction", "Interaction");
+                case "shortcuts":       return VPBTranslation.T("settings.group.tab.shortcuts", "Shortcuts");
                 case "performance":     return VPBTranslation.T("settings.group.tab.performance", "Performance");
                 case "maintenance":     return VPBTranslation.T("settings.group.tab.maintenance", "Maintenance");
                 default:                return key;
@@ -330,6 +332,7 @@ namespace VPB
                 case "browsing":        return "list-search";
                 case "cat_visibility":  return "eye";
                 case "interaction":     return "hand-finger";
+                case "shortcuts":       return "hexagon-letter-k";
                 case "performance":     return "gauge";
                 case "maintenance":     return "tools";
                 default:                return null;
@@ -625,6 +628,10 @@ namespace VPB
             public string PluginClearConsoleKey;
             public bool PluginDownscale8kTo4k;
             public bool PluginScanWhitelistEnabled;
+            public string[] ShortcutPatterns;
+            public bool ShortcutsRequireWindowFocus;
+            public bool ShortcutsNeedVisiblePane;
+            public bool CategoryNumberKeysEnabled;
             public string BlockInGameMessages;
             public bool HideMissingDependencyLogs;
             public bool ClearInGameLogsOnSceneLaunch;
@@ -2171,6 +2178,9 @@ namespace VPB
                 GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 GalleryCollapseOnSceneLaunch = VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
                 VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
+                ShortcutsRequireWindowFocus = VPBConfig.Instance.ShortcutsRequireWindowFocus,
+                ShortcutsNeedVisiblePane = VPBConfig.Instance.ShortcutsNeedVisiblePane,
+                CategoryNumberKeysEnabled = VPBConfig.Instance.CategoryNumberKeysEnabled,
                 RequireDragHoldBeforeMove = VPBConfig.Instance.RequireDragHoldBeforeMove,
                 DragHoldThreshold = VPBConfig.Instance.DragHoldThreshold,
                 HoldToLaunchHoldSeconds = VPBConfig.Instance.HoldToLaunchHoldSeconds,
@@ -3156,6 +3166,9 @@ namespace VPB
             VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.GalleryCollapseOnSceneLaunch = b.GalleryCollapseOnSceneLaunch;
             VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;
+            VPBConfig.Instance.ShortcutsRequireWindowFocus = b.ShortcutsRequireWindowFocus;
+            VPBConfig.Instance.ShortcutsNeedVisiblePane = b.ShortcutsNeedVisiblePane;
+            VPBConfig.Instance.CategoryNumberKeysEnabled = b.CategoryNumberKeysEnabled;
             VPBConfig.Instance.RequireDragHoldBeforeMove = b.RequireDragHoldBeforeMove;
             VPBConfig.Instance.DragHoldThreshold = b.DragHoldThreshold;
             VPBConfig.Instance.HoldToLaunchHoldSeconds = b.HoldToLaunchHoldSeconds;

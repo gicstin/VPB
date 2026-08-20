@@ -703,8 +703,8 @@ namespace VPB
         }
 
         /// <summary>
-        /// Esc closes help. F1 / ? / Shift+/ toggles Hotkeys sheet. Returns true if consumed.
-        /// Call Esc/F1 before InputField gate; call ? after gate so typing is not stolen.
+        /// Esc closes help. Help / HelpAlt bindings toggle the Hotkeys sheet. Returns true if consumed.
+        /// Call Esc/Help before InputField gate; call HelpAlt after gate so typing is not stolen.
         /// </summary>
         private bool TryHandleInAppHelpKeyboard(bool allowQuestionKey)
         {
@@ -714,11 +714,10 @@ namespace VPB
                 return true;
             }
 
-            bool f1 = Input.GetKeyDown(KeyCode.F1);
+            bool f1 = VpbShortcutMap.Down(VpbShortcut.Help);
             bool question = allowQuestionKey
-                && (Input.GetKeyDown(KeyCode.Question)
-                    || (Input.GetKeyDown(KeyCode.Slash)
-                        && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))));
+                && (VpbShortcutMap.Down(VpbShortcut.HelpAlt)
+                    || (Input.GetKeyDown(KeyCode.Question) && VpbShortcutGate.PaneShortcutsAllowed()));
 
             if (!f1 && !question) return false;
 

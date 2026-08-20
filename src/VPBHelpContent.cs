@@ -171,7 +171,7 @@ namespace VPB
                 string path = Path.Combine(_helpDir, id + ".md");
                 if (File.Exists(path))
                 {
-                    try { return File.ReadAllText(path, Encoding.UTF8); }
+                    try { return VpbShortcutText.Resolve(File.ReadAllText(path, Encoding.UTF8)); }
                     catch { }
                 }
             }
@@ -180,11 +180,11 @@ namespace VPB
                 string enPath = Path.Combine(_helpDir, "en.md");
                 if (File.Exists(enPath))
                 {
-                    try { return File.ReadAllText(enPath, Encoding.UTF8); }
+                    try { return VpbShortcutText.Resolve(File.ReadAllText(enPath, Encoding.UTF8)); }
                     catch { }
                 }
             }
-            return MinimalBuiltInEnglishMarkdown();
+            return VpbShortcutText.Resolve(MinimalBuiltInEnglishMarkdown());
         }
 
         private static string NormalizeLocale(string localeId)

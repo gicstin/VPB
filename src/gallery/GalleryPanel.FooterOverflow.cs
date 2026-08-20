@@ -417,19 +417,19 @@ namespace VPB
             {
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_command_palette", "Command palette"),
                     () => { CloseFooterOverflowMenu(); ToggleCommandPalette(); }, icon: icon,
-                    tipKey: "gallery.tooltip.command_palette", tipDefault: "Command palette (Ctrl+Shift+P)");
+                    tipKey: "gallery.tooltip.command_palette", tipDefault: "Command palette{hint:command_palette}");
             }
             else if (go == footerUndoBtnGO)
             {
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_undo", "Undo"),
                     () => { CloseFooterOverflowMenu(); Undo(); }, icon: icon,
-                    tipKey: "gallery.tooltip.undo", tipDefault: "Undo last change (Ctrl+Z)");
+                    tipKey: "gallery.tooltip.undo", tipDefault: "Undo last change{hint:undo}");
             }
             else if (go == footerRedoBtnGO)
             {
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_redo", "Redo"),
                     () => { CloseFooterOverflowMenu(); Redo(); }, icon: icon,
-                    tipKey: "gallery.tooltip.redo", tipDefault: "Redo (Ctrl+Y / Ctrl+Shift+Z)");
+                    tipKey: "gallery.tooltip.redo", tipDefault: "Redo{hint:redo,redo_alt}");
             }
         }
 

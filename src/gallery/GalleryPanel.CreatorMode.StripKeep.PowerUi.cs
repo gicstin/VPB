@@ -1587,7 +1587,7 @@ namespace VPB
             Text help = UI.CreateLabel(_stripKeepShortcutHelpGO,
                 VPBTranslation.T(
                     "gallery.creator.strip_shortcuts",
-                    "Ctrl+Shift+S toggle · / filter · ? help · ↑↓ nav · Space toggle · ←→ expand · F2 rename · Enter strip · Esc back · More: possess + rename"),
+                    "{key:strip_scene} toggle · / filter · ? help · ↑↓ nav · Space toggle · ←→ expand · F2 rename · Enter strip · Esc back · More: possess + rename"),
                 font, new Color(0.75f, 0.78f, 0.82f, 1f), TextAnchor.MiddleLeft,
                 raycastTarget: false, name: "HelpText");
             GalleryUiMetrics.ApplyFont(help, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);

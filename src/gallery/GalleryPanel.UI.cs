@@ -1289,7 +1289,7 @@ namespace VPB
             AddHoverDelegate(footerRedoBtnGO);
             AddDynamicTooltip(footerRedoBtnGO, BuildRedoTooltip);
             AddHoverDelegate(footerCommandPaletteBtnGO);
-            AddTooltip(footerCommandPaletteBtnGO, "gallery.tooltip.command_palette", "Command palette (Ctrl+Shift+P)");
+            AddTooltip(footerCommandPaletteBtnGO, "gallery.tooltip.command_palette", "Command palette{hint:command_palette}");
             AddHoverDelegate(footerHubBtnGO);
             AddTooltip(footerHubBtnGO, "gallery.tooltip.hub", "Hub browse / dev Hub panel");
             AddHoverDelegate(footerFollowAngleBtn);

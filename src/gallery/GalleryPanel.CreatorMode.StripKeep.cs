@@ -1544,7 +1544,7 @@ namespace VPB
                 ShowTemporaryStatus(
                     VPBTranslation.T(
                         "gallery.creator.strip_soft_confirm",
-                        "Strip removes atoms — Confirm / Enter again. Ctrl+Z restores scene after."),
+                        "Strip removes atoms — Confirm / Enter again. Undo restores the scene after{hint:undo}."),
                     2.5f);
                 return;
             }

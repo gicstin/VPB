@@ -89,7 +89,7 @@ namespace VPB
                 clearHb.borderSize = 2f;
                 try { clearHb.ApplyBorderSettings(); } catch { }
             }
-            try { AddTooltip(_titleSearchChipClearAllGO, "gallery.search.clear_all_tip", "Clear all search. Ctrl+Z undoes."); } catch { }
+            try { AddTooltip(_titleSearchChipClearAllGO, "gallery.search.clear_all_tip", "Clear all search. Undo to restore{hint:undo}."); } catch { }
 
             _titleSearchChipRowsColGO = new GameObject("TitleSearchChipRows");
             _titleSearchChipRowsColGO.transform.SetParent(_titleSearchChipHostGO.transform, false);
@@ -375,7 +375,7 @@ namespace VPB
             try
             {
                 ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Ctrl+Z undoes."),
+                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Undo to restore{hint:undo}."),
                     2.5f);
             }
             catch { }

@@ -301,6 +301,11 @@ namespace VPB
 
         public static string T(string key, string englishDefault)
         {
+            return VpbShortcutText.Resolve(TRaw(key, englishDefault));
+        }
+
+        public static string TRaw(string key, string englishDefault)
+        {
             if (string.IsNullOrEmpty(key)) return englishDefault ?? "";
             if (_map.Count > 0 && _map.TryGetValue(key, out string s) && !string.IsNullOrEmpty(s))
                 return s;

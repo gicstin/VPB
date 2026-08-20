@@ -161,6 +161,7 @@ namespace VPB
         
         /// <summary>Gallery body on screen. Floats-only keeps the canvas alive as a host, so it is not visible.</summary>
         public bool IsVisible => canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled && !_floatsOnly;
+        public bool HasOnScreenUi => canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled;
         public bool IsSubtreeActive => backgroundBoxGO != null && backgroundBoxGO.activeSelf;
         public bool HasLoadedContent => hasLoadedContent;
         public bool IsStartupInitialRefreshInProgress => refreshCoroutine != null && !hasLoadedContent;

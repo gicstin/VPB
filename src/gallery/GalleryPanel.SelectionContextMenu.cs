@@ -1239,7 +1239,7 @@ namespace VPB
             );
             tboxRemoveHistoryBtn.name = "Tbox_RemoveHistory";
             TboxConfigureActionButtonFlex(tboxRemoveHistoryBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxRemoveHistoryBtn, "gallery.tooltip.tbox_remove_history", "Remove selected entries from History (does not delete packages or files). Delete / Backspace. Ctrl+Z undoes.");
+            AddTooltip(tboxRemoveHistoryBtn, "gallery.tooltip.tbox_remove_history", "Remove selected entries from History (does not delete packages or files){hint:delete,delete_alt}. Undoable{hint:undo}.");
             try
             {
                 var rhIcon = UI.LoadIconSprite("playlist-x", new Color(0.92f, 0.82f, 0.55f, 1f));
@@ -1262,7 +1262,7 @@ namespace VPB
             );
             tboxSelectAllBtn.name = "Tbox_SelectAll";
             TboxConfigureActionButtonFlex(tboxSelectAllBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxSelectAllBtn, "gallery.tooltip.select_all", "Select all (Ctrl+A)");
+            AddTooltip(tboxSelectAllBtn, "gallery.tooltip.select_all", "Select all{hint:select_all}");
             try
             {
                 var selectAllIcon = UI.LoadIconSprite("select-all", new Color(0.78f, 0.78f, 0.78f, 1f));
@@ -2899,7 +2899,7 @@ namespace VPB
 
             ShowTemporaryStatus(
                 string.Format(
-                    VPBTranslation.T("gallery.history.removed_n_with_undo", "Removed {0} from History. Ctrl+Z undoes."),
+                    VPBTranslation.T("gallery.history.removed_n_with_undo", "Removed {0} from History. Undo to restore{hint:undo}."),
                     keys.Count),
                 3f);
         }

@@ -563,7 +563,7 @@ namespace VPB
             undoHover.OnHoverChange += (enter) =>
             {
                 if (panel == null) return;
-                if (enter) panel.SetStatus(VPBTranslation.T("gallery.tooltip.undo", "Undo last change (Ctrl+Z)"));
+                if (enter) panel.SetStatus(VPBTranslation.T("gallery.tooltip.undo", "Undo last change{hint:undo}"));
                 else panel.SetStatus(null);
             };
 
@@ -577,7 +577,7 @@ namespace VPB
             redoHover.OnHoverChange += (enter) =>
             {
                 if (panel == null) return;
-                if (enter) panel.SetStatus(VPBTranslation.T("gallery.tooltip.redo", "Redo (Ctrl+Y / Ctrl+Shift+Z)"));
+                if (enter) panel.SetStatus(VPBTranslation.T("gallery.tooltip.redo", "Redo{hint:redo,redo_alt}"));
                 else panel.SetStatus(null);
             };
 

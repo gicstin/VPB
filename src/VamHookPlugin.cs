@@ -388,6 +388,7 @@ namespace VPB
             ClearConsoleKey = KeyUtil.Parse(Settings.Instance.ClearConsoleKey.Value);
             BoneViewKey = KeyUtil.Parse(Settings.Instance.BoneViewKey.Value);
             ToggleFixedGalleryKey = KeyUtil.Parse(Settings.Instance.ToggleFixedGalleryKey.Value);
+            PublishGlobalHotkeyKeysToGate();
             m_UIScale = Settings.Instance.UIScale.Value;
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
@@ -777,15 +778,52 @@ namespace VPB
             return IsTypingInTextInput();
         }
 
-        private static bool ShouldSuppressPluginHotkey(KeyUtil ku)
+        private static bool ShouldSuppressPluginHotkey(KeyUtil ku, bool opensUi = false)
         {
             if (IsGalleryPluginHotkeyCaptureActive()) return true;
+            if (!VpbShortcutGate.GlobalHotkeyAllowed(opensUi)) return true;
             return ShouldSuppressBareKeyHotkey(ku);
         }
 
         internal static bool ShouldSuppressBenchHotkey(KeyUtil ku)
         {
             return ShouldSuppressPluginHotkey(ku);
+        }
+
+        private void PublishGlobalHotkeyKeysToGate()
+        {
+            try
+            {
+                if (s_GlobalHotkeyKeyBuf == null) s_GlobalHotkeyKeyBuf = new KeyCode[6];
+                int n = 0;
+                n = AppendGlobalHotkeyKey(GalleryKey, n);
+                n = AppendGlobalHotkeyKey(UIKey, n);
+                n = AppendGlobalHotkeyKey(CreateGalleryKey, n);
+                n = AppendGlobalHotkeyKey(HubKey, n);
+                n = AppendGlobalHotkeyKey(ClearConsoleKey, n);
+                VpbShortcutGate.SetGlobalHotkeyKeys(s_GlobalHotkeyKeyBuf, n);
+
+                VpbShortcutText.SetGlobalPattern("plugin.gallery", GalleryKey != null ? GalleryKey.keyPattern : "");
+                VpbShortcutText.SetGlobalPattern("plugin.create_gallery", CreateGalleryKey != null ? CreateGalleryKey.keyPattern : "");
+                VpbShortcutText.SetGlobalPattern("plugin.hub", HubKey != null ? HubKey.keyPattern : "");
+                VpbShortcutText.SetGlobalPattern("plugin.clear_console", ClearConsoleKey != null ? ClearConsoleKey.keyPattern : "");
+            }
+            catch { }
+        }
+
+        private static KeyCode[] s_GlobalHotkeyKeyBuf;
+
+        private static int AppendGlobalHotkeyKey(KeyUtil ku, int count)
+        {
+            if (ku == null || ku.key == KeyCode.None) return count;
+            if (ku.supportKeys != null && ku.supportKeys.Count > 0) return count;
+            if (count >= s_GlobalHotkeyKeyBuf.Length) return count;
+            for (int i = 0; i < count; i++)
+            {
+                if (s_GlobalHotkeyKeyBuf[i] == ku.key) return count;
+            }
+            s_GlobalHotkeyKeyBuf[count] = ku.key;
+            return count + 1;
         }
 
         private static void DumpVisibleGalleryAtomSelection(string tag)
@@ -864,12 +902,11 @@ namespace VPB
 
             // Don't hijack text entry (E/C are letters) or modifier combos (e.g. Ctrl+C copy).
             if (IsTypingInTextInput() || IsGalleryPluginHotkeyCaptureActive()) return;
-            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) return;
-            if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) return;
+            if (!VpbShortcutGate.WindowFocusAllowed()) return;
 
             int dir = 0;
-            if (Input.GetKey(KeyCode.E)) dir += 1;
-            if (Input.GetKey(KeyCode.C)) dir -= 1;
+            if (VpbShortcutMap.Held(VpbShortcut.NavUp)) dir += 1;
+            if (VpbShortcutMap.Held(VpbShortcut.NavDown)) dir -= 1;
             if (dir == 0) return;
 
             float scale = 1f;
@@ -996,22 +1033,21 @@ namespace VPB
             // Hotkeys
             if (m_Inited)
             {
-                if (CreateGalleryKey.TestKeyDown() && !ShouldSuppressPluginHotkey(CreateGalleryKey))
+                if (CreateGalleryKey.TestKeyDown() && !ShouldSuppressPluginHotkey(CreateGalleryKey, true))
                 {
                     OpenCreateGallery();
                 }
-                if (GalleryKey.TestKeyDown() && !ShouldSuppressPluginHotkey(GalleryKey))
+                if (GalleryKey.TestKeyDown() && !ShouldSuppressPluginHotkey(GalleryKey, true))
                     ToggleGalleryVisibility();
-                else if (UIKey.TestKeyDown() && !ShouldSuppressPluginHotkey(UIKey) && !UIKey.IsSame(GalleryKey))
+                else if (UIKey.TestKeyDown() && !ShouldSuppressPluginHotkey(UIKey, true) && !UIKey.IsSame(GalleryKey))
                     ToggleGalleryVisibility();
 
-                // Alt+L — layout presets. Pane Update skips when canvas is off, so this is the
+                // Layout presets. Pane Update skips when canvas is off, so this is the
                 // no-visible-pane path (quick menu / gallery hidden).
                 if (!IsTypingInTextInput()
-                    && !Input.GetKey(KeyCode.LeftControl) && !Input.GetKey(KeyCode.RightControl)
-                    && (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
-                    && Input.GetKeyDown(KeyCode.L)
-                    && (Gallery.singleton == null || !Gallery.singleton.IsVisible))
+                    && VpbShortcutGate.GlobalHotkeyAllowed(true)
+                    && (Gallery.singleton == null || !Gallery.singleton.IsVisible)
+                    && VpbShortcutMap.DownIgnoringPaneGate(VpbShortcut.LayoutPresets))
                 {
                     try { GalleryPanel.OpenLayoutPresetsFloatAnywhere(); } catch { }
                 }
@@ -1019,7 +1055,7 @@ namespace VPB
 
             if (m_Inited && IsFileManagerInited)
             {
-                if (HubKey.TestKeyDown() && !ShouldSuppressPluginHotkey(HubKey))
+                if (HubKey.TestKeyDown() && !ShouldSuppressPluginHotkey(HubKey, true))
                 {
                     OpenHubBrowse();
                 }
