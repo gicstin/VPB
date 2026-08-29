@@ -435,6 +435,7 @@ namespace VPB
             VpbCatalogRefreshHook.PatchAll(m_Harmony);
             ThirdPartyFixHook.PatchAll(m_Harmony);
             StateMachineDiagnostic.PatchAll(m_Harmony);
+            VpbNetTriggerRelay.PatchAll(m_Harmony);
 
             // Zstd support is now handled by ZstdNet (auto-initialized)
 
@@ -538,6 +539,9 @@ namespace VPB
             VamScanFilter.DiscoverVamInternals();
             var _ = ScanWhitelistManager.Instance; // eager init
 
+            // Reap a broker orphaned by a previous crash. Reads a pid file; never launches anything.
+            try { VpbNetBrokerLink.ReapOrphans(); } catch { }
+
             // Migrate legacy VPB hide markers to native VaM-compatible format
             System.Threading.ThreadPool.QueueUserWorkItem((state) => {
                 try { PackageHidePrefs.MigrateAllLegacyHideMarkers(); } catch { }
@@ -640,6 +644,15 @@ namespace VPB
         void OnDestroy()
         {
             try { VpbProgressService.ShutdownForQuit(); } catch { }
+            try { VpbNetPresence.Stop("plugin unload"); } catch { }
+            try { VpbNetSessionUi.Destroy(); } catch { }
+            try { VpbNetAskUi.Destroy(); } catch { }
+            try { VpbNetAlertUi.Destroy(); } catch { }
+            try { VpbNetSceneLaunchGuard.Shutdown(); } catch { }
+            try { VpbNetRulesUi.Destroy(); } catch { }
+            try { VpbNetRecordReplay.Stop(); } catch { }
+            try { VpbNetOverlay.Destroy(); } catch { }
+            try { VpbNetBrokerLink.Stop("plugin unload"); } catch { }
             try { VpbRandomHistory.Flush(); } catch { }
             try { VpbPerfController.Shutdown(); } catch { }
             try { UI.ClearIconSpriteCache(); } catch { }
@@ -683,6 +696,8 @@ namespace VPB
         {
             // Runs before OnDestroy during player quit — kill Win32 pump + zstd writers early.
             try { VpbProgressService.ShutdownForQuit(); } catch { }
+            try { VpbNetPresence.Stop("VaM quit"); } catch { }
+            try { VpbNetBrokerLink.Stop("VaM quit"); } catch { }
             try { VpbRandomHistory.Flush(); } catch { }
         }
         // Called on (hard) restart as well.
@@ -934,6 +949,7 @@ namespace VPB
             UpdateUpdater();
             VpbPerfTelemetry.EmitSnapshotIfDue();
             VpbPerfDiag.EmitFrameSummaryIfDue();
+            VpbNetRuntime.Tick();
             if (m_PendingGc)
             {
                 // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle

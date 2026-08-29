@@ -34,3 +34,30 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+-------------------------------------------------------------------------------
+Steamworks SDK redistributable — https://partner.steamgames.com/doc/sdk
+-------------------------------------------------------------------------------
+
+BepInEx/plugins/VpbNet/steam_api64.dll is Valve Corporation's unmodified 64-bit
+Steamworks API redistributable, shipped from the Steamworks SDK's
+redistributable_bin/win64 folder. It is Valve's software, not VPB's, and is
+distributed here under the terms of the Steamworks SDK Access Agreement, which
+permits redistribution of the redistributable binaries alongside an application
+that uses them. No source is available and none is offered.
+
+Copyright (c) Valve Corporation. All rights reserved.
+Steam and Steamworks are trademarks and/or registered trademarks of Valve
+Corporation in the U.S. and/or other countries.
+
+It is used only when a multiplayer session is set to Net.Transport = steam, and
+it is loaded at runtime by the separate VpbNet.exe broker process. Nothing loads
+it when multiplayer is off, and nothing in VPB's own process links against it.
+
+Steam sessions identify themselves with Steam app id 480 ("Spacewar"), Valve's
+public Steamworks sample application, which any signed-in Steam account may use
+without owning or purchasing anything. VPB is not a registered Steamworks
+application, is not affiliated with or endorsed by Valve Corporation, and is not
+and will not be distributed on Steam. The app id is a configuration value
+(Net.SteamAppId), not a fixed part of the protocol.

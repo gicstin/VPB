@@ -137,7 +137,9 @@ if (Test-Path -LiteralPath $turboSrc) {
     }
 }
 
-$assetDirs = @('vpb_translations', 'vpb_fonts', 'vpb_themes', 'vpb_help')
+# VpbNet carries the multiplayer broker plus the steam_api64.dll it loads at runtime; the build
+# republishes it into vam_patch before compiling, so this pushes the fresh one into VaM.
+$assetDirs = @('vpb_translations', 'vpb_fonts', 'vpb_themes', 'vpb_help', 'VpbNet')
 foreach ($name in $assetDirs) {
     if (-not $vamPathOk) { break }
     $srcDir = Join-Path $patchPlugins $name

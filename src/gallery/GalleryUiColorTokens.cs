@@ -92,11 +92,21 @@ namespace VPB
         public static readonly Color AccentSelected = new Color(0.34f, 0.40f, 0.46f, 1f);
         /// <summary>Primary confirm CTA (Save / Apply) — reserved; do not reuse on rows.</summary>
         public static readonly Color AccentConfirm = new Color(0.26f, 0.46f, 0.32f, 1f);
+        /// <summary>Session/ready status dot — warm bright green, not the muted confirm fill.</summary>
+        public static readonly Color AccentLive = new Color(0.52f, 0.88f, 0.38f, 1f);
         /// <summary>Destructive fill — avoid dark-red-on-dark (Johnson).</summary>
         public static readonly Color AccentDanger = new Color(0.62f, 0.28f, 0.28f, 1f);
         public static readonly Color AccentDangerStrong = new Color(0.72f, 0.26f, 0.24f, 1f);
         public static readonly Color AccentNew = new Color(0.26f, 0.40f, 0.34f, 1f);
         public static readonly Color AccentFacetGeneric = new Color(0.36f, 0.36f, 0.40f, 1f);
+
+        // Session rule fills. Muted: blocked is the default, not an error.
+        public static readonly Color RuleBlocked = new Color(0.36f, 0.20f, 0.20f, 1f);
+        public static readonly Color RuleAsk = new Color(0.36f, 0.30f, 0.16f, 1f);
+        public static readonly Color RuleAllowed = new Color(0.22f, 0.36f, 0.28f, 1f);
+        public static readonly Color RuleBlockedText = new Color(0.94f, 0.80f, 0.80f, 1f);
+        public static readonly Color RuleAskText = new Color(0.95f, 0.87f, 0.66f, 1f);
+        public static readonly Color RuleAllowedText = new Color(0.78f, 0.94f, 0.84f, 1f);
 
         // ── Sticky mode ambient (stronger than idle chrome — change blindness) ─
         public static readonly Color ModeToolBanner = new Color(0.20f, 0.28f, 0.34f, 0.97f);
@@ -122,6 +132,10 @@ namespace VPB
         public static readonly Color FacetHistoryAccent = new Color(0.54f, 0.34f, 0.54f, 1f);
         public static readonly Color FacetSceneImport = new Color(0.64f, 0.52f, 0.24f, 1f);
         public static readonly Color FacetHub = new Color(0.28f, 0.46f, 0.36f, 1f);
+        /// <summary>MP session toggle — cyan so it does not hide in grey footer chrome.</summary>
+        public static readonly Color FacetMultiplayer = new Color(0.16f, 0.40f, 0.48f, 1f);
+        /// <summary>Session window visible — brighter cyan than idle.</summary>
+        public static readonly Color FacetMultiplayerOn = new Color(0.20f, 0.52f, 0.60f, 1f);
         public static readonly Color FacetLicense = new Color(0.46f, 0.46f, 0.28f, 1f);
         public static readonly Color FacetUserTagsSide = new Color(0.24f, 0.40f, 0.42f, 1f);
 

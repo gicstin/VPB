@@ -421,6 +421,10 @@ namespace VPB
         private Text footerHubBtnText;
         private Image footerHubBtnImage;
         private GameObject footerHubBtnGO;
+        private Text footerNetSessionBtnText;
+        private Image footerNetSessionBtnImage;
+        private Image footerNetSessionBtnIcon;
+        private GameObject footerNetSessionBtnGO;
 
         private Text leftCategoryBtnText;
         private Image leftCategoryBtnImage;

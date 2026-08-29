@@ -223,7 +223,9 @@ namespace VPB
                 foreach (Atom a in SuperController.singleton.GetAtoms())
                 {
                     if (a == null) continue;
-                    if (a.type == "Person") importSidebarTargetCandidates.Add(a);
+                    if (a.type != "Person") continue;
+                    if (VpbNetAvatarGuard.IsPeerAvatar(a)) continue;
+                    importSidebarTargetCandidates.Add(a);
                 }
             }
             int n = importSidebarTargetCandidates.Count;

@@ -1051,6 +1051,23 @@ namespace VPB
             });
             { var s = UI.LoadIconSprite("world-search", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerHubBtnGO, s); }
 
+            footerNetSessionBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.FooterSessionBtnWidthRef, GalleryUiDesignTokens.ButtonSizeRef,
+                VPBTranslation.T("gallery.footer.session_abbrev", "Play"), 14, 0, 0, AnchorPresets.middleCenter,
+                () => { try { VpbNetSessionUi.Toggle(); } catch { } });
+            footerNetSessionBtnGO.name = "FooterNetSessionBtn";
+            footerNetSessionBtnImage = footerNetSessionBtnGO.GetComponent<Image>();
+            footerNetSessionBtnText = footerNetSessionBtnGO.GetComponentInChildren<Text>(true);
+            if (footerNetSessionBtnImage != null)
+                footerNetSessionBtnImage.color = GalleryUiColorTokens.FacetMultiplayer;
+            {
+                Sprite playSpr = UI.LoadIconSprite("users", UI.BarIconGlyphTint)
+                    ?? UI.LoadIconSprite("users-group", UI.BarIconGlyphTint);
+                if (playSpr != null)
+                    footerNetSessionBtnIcon = UI.AddLeadingIconKeepLabel(
+                        footerNetSessionBtnGO, playSpr, 16f, GalleryUiDesignTokens.ControlGapRef);
+            }
+            UpdateNetSessionToggleButton();
+
             // Follow Quick Toggles
             footerFollowAngleBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
@@ -1292,6 +1309,9 @@ namespace VPB
             AddTooltip(footerCommandPaletteBtnGO, "gallery.tooltip.command_palette", "Command palette{hint:command_palette}");
             AddHoverDelegate(footerHubBtnGO);
             AddTooltip(footerHubBtnGO, "gallery.tooltip.hub", "Hub browse / dev Hub panel");
+            AddHoverDelegate(footerNetSessionBtnGO);
+            AddTooltip(footerNetSessionBtnGO, "gallery.tooltip.net_session",
+                "Play with a friend. Live session stays as a bar — Leave on the panel ends it.");
             AddHoverDelegate(footerFollowAngleBtn);
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
@@ -1311,15 +1331,41 @@ namespace VPB
                 var pT = footerCommandPaletteBtnGO != null ? footerCommandPaletteBtnGO.GetComponentInChildren<Text>() : null;
                 var hRT = footerHubBtnGO != null ? footerHubBtnGO.GetComponent<RectTransform>() : null;
                 var hT = footerHubBtnText;
+                var nRT = footerNetSessionBtnGO != null ? footerNetSessionBtnGO.GetComponent<RectTransform>() : null;
+                var nT = footerNetSessionBtnText;
+                var nIcon = footerNetSessionBtnIcon;
+                var nHlg = footerNetSessionBtnGO != null
+                    ? footerNetSessionBtnGO.GetComponent<HorizontalLayoutGroup>() : null;
                 innerPaneScaleActions.Add(s => {
                     if (uRT != null) uRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (rRT != null) rRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (pRT != null) pRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (hRT != null) hRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
+                    if (nRT != null) nRT.sizeDelta = new Vector2(GalleryUiDesignTokens.FooterSessionBtnWidthRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
+                    if (nHlg != null)
+                    {
+                        float pad = GalleryUiDesignTokens.ControlGapRef * s;
+                        float v = GalleryUiDesignTokens.TightGapRef * s;
+                        nHlg.spacing = pad;
+                        nHlg.padding = UI.Pad(pad, pad, v, v);
+                    }
+                    if (nIcon != null)
+                    {
+                        LayoutElement ile = nIcon.GetComponent<LayoutElement>();
+                        if (ile == null && nIcon.gameObject != null)
+                            ile = nIcon.gameObject.GetComponent<LayoutElement>();
+                        if (ile != null)
+                        {
+                            float sz = 16f * s;
+                            ile.minWidth = ile.preferredWidth = sz;
+                            ile.minHeight = ile.preferredHeight = sz;
+                        }
+                    }
                     GalleryUiMetrics.ApplyFont(uT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(rT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(pT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(hT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    GalleryUiMetrics.ApplyFont(nT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
             var footerBtnGOs = new GameObject[] {

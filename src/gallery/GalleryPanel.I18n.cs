@@ -152,6 +152,8 @@ namespace VPB
             if (leftPathBtnIconImage == null && leftPathBtnText != null)
                 leftPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
             RefreshGoText(footerHubBtnGO, "gallery.side.hub", "Hub");
+            RefreshGoText(footerNetSessionBtnGO, "gallery.footer.session_abbrev", "Play");
+            try { UpdateNetSessionToggleButton(); } catch { }
             try { UpdateTargetDropdownUI(); } catch { }
 
             // Buttons that store Text refs directly

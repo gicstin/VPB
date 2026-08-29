@@ -129,6 +129,31 @@ namespace VPB
             }
         }
 
+        public static bool LoadSceneAs(string normalizedPath, bool merge, bool editMode)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(normalizedPath)) return false;
+                SuperController sc = SuperController.singleton;
+                if (sc == null) return false;
+
+                EnsureLoadMethodsCached(sc);
+
+                if (s_LoadInternalMethod == null) return LoadScene(normalizedPath, merge);
+
+                if (!merge)
+                {
+                    try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
+                }
+                s_LoadInternalMethod.Invoke(sc, new object[] { normalizedPath, merge, editMode });
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static string GetTempScenesDir()
         {
             return "Saves/scene/VPB_TempScenes";

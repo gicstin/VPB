@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -1446,38 +1446,68 @@ namespace VPB
             ApplyClothingToAtom(target, FileEntry.Uid, mode);
         }
 
-        public void LoadPose(Atom target, bool suppressRoot = true)
+        /// <summary>
+        /// Applies a pose. Returns true only when a single-person pose actually landed on
+        /// <paramref name="target"/>: a pose built for two is not one body's business, so it is
+        /// handed to the cast window instead and this reports false.
+        /// <paramref name="interactive"/> false refuses a two-person pose outright rather than
+        /// asking - the peer's side of a session has nobody to ask.
+        /// </summary>
+        public bool LoadPose(Atom target, bool suppressRoot = true, bool interactive = true)
         {
             if (target == null)
             {
                 LogUtil.LogWarning("[VPB] LoadPose: No target atom provided.");
-                return;
+                return false;
             }
             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "pose"); } catch { }
 
             string normalizedPath = UI.NormalizePath(FileEntry.Path);
             LogUtil.Log($"[VPB] LoadPose: Applying {FileEntry.Name} to {target.uid} (SuppressRoot: {suppressRoot})");
 
-            if (ScanWhitelistManager.Instance.IsEnabled)
-            {
-                try { SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, normalizedPath); }
-                catch { }
-            }
-
             // Use LoadJSONWithFallback instead of SuperController.LoadJSON directly:
             // some .var packages have spaces in their name (e.g. "infiniteya.Pose Pack.1")
             // which VAM's native LoadJSON cannot resolve from a UID path, but VPB can read
             // directly from the ZipFile stream via FileEntry.OpenStreamReader().
             JSONNode node = UI.LoadJSONWithFallback(normalizedPath, FileEntry);
-            if (node == null) return;
+            if (node == null) return false;
             JSONClass presetJSON = node.AsObject;
 
-            // Duo pose: has PeopleCount >= 2 with Person1/Person2/atoms fields
-            if (presetJSON["PeopleCount"] != null && presetJSON["PeopleCount"].AsInt >= 2)
+            // A pose built for two describes two bodies. Which body takes which half is a
+            // question, not a guess - the cast window asks it, here and across a session alike.
+            if (VpbDualPose.LooksDual(presetJSON))
             {
-                LogUtil.Log($"[VPB] LoadPose: Detected duo pose (PeopleCount={presetJSON["PeopleCount"].Value}), delegating to ApplyDualPose.");
-                ApplyDualPose(target, presetJSON);
-                return;
+                string dualWhy;
+                VpbDualPoseFile dual = VpbDualPose.Parse(
+                    VpbDualPose.EntryReference(FileEntry) ?? normalizedPath, presetJSON, out dualWhy);
+                if (dual != null)
+                {
+                    if (!interactive)
+                    {
+                        LogUtil.LogWarning("[VPB] LoadPose: " + FileEntry.Name
+                            + " is a two-person pose and nobody can be asked who takes which half here;"
+                            + " not applying it.");
+                        return false;
+                    }
+                    LogUtil.Log("[VPB] LoadPose: two-person pose, asking who takes which half.");
+                    VpbDualPoseModal.Show(dual, target);
+                    return false;
+                }
+                LogUtil.LogWarning("[VPB] LoadPose: " + FileEntry.Name
+                    + " looked like a two-person pose but " + (dualWhy ?? "could not be split")
+                    + "; applying it as a single pose.");
+            }
+
+            // After the two-person branch, not before it. A pose saved in raw atom format names
+            // every package the whole Person was wearing, and registering those took nine seconds
+            // and 115 packages on the first pose of a session - long enough for the other machine
+            // to decide this one had died and tear the session down, which is exactly why the
+            // FIRST two-person pose never reached the other side and the second always did. A
+            // two-person pose is restored physical-only and never touches one of those references.
+            if (ScanWhitelistManager.Instance.IsEnabled)
+            {
+                try { SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, normalizedPath); }
+                catch { }
             }
 
             // Detect if this is a scene file and extract the first Person atom's pose
@@ -1491,7 +1521,7 @@ namespace VPB
                 else
                 {
                     LogUtil.LogWarning("[VPB] LoadPose: Scene file does not contain a Person atom.");
-                    return;
+                    return false;
                 }
             }
 
@@ -1519,17 +1549,18 @@ namespace VPB
                 target.Restore(presetJSON, true, false, false);
                 target.LateRestore(presetJSON, true, false, false);
                 target.PostRestore(true, false);
-                return;
+                return true;
             }
 
             FileEntry entry = FileEntry ?? VPB.FileManager.GetFileEntry(normalizedPath);
             if (entry == null)
             {
                 LogUtil.LogWarning($"[VPB] LoadPose: could not resolve FileEntry for {normalizedPath}");
-                return;
+                return false;
             }
             VpbImport.LoadPreset(entry, target, VpbResourceType.Pose, ClothingApplyMode.Replace,
                                  presetJC: presetJSON, suppressRoot: suppressRoot);
+            return true;
         }
         
         private void CleanPresets(JSONArray presets)

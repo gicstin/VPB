@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Import Project="VPB.local.props" Condition="Exists('VPB.local.props')" />
@@ -290,6 +290,88 @@
     <Compile Include="src\util\VpbPerfTelemetry.cs" />
     <Compile Include="src\util\VpbPerfDiag.cs" />
     <Compile Include="src\util\VpbFrameRate.cs" />
+    <Compile Include="protocol\VpbNetIpc.cs" />
+    <Compile Include="protocol\VpbNetProtocol.cs" />
+    <Compile Include="protocol\VpbNetClock.cs" />
+    <Compile Include="protocol\VpbNetSnapshotBuffer.cs" />
+    <Compile Include="protocol\VpbNetSnapshotSelfTest.cs" />
+    <Compile Include="protocol\VpbNetEvent.cs" />
+    <Compile Include="protocol\VpbNetEventSelfTest.cs" />
+    <Compile Include="protocol\VpbNetSession.cs" />
+    <Compile Include="protocol\VpbNetSessionSelfTest.cs" />
+    <Compile Include="protocol\VpbNetKeyframe.cs" />
+    <Compile Include="protocol\VpbNetKeyframeSelfTest.cs" />
+    <Compile Include="protocol\VpbNetDiagnostics.cs" />
+    <Compile Include="protocol\VpbNetDiagnosticsSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRig.cs" />
+    <Compile Include="protocol\VpbNetRules.cs" />
+    <Compile Include="protocol\VpbNetRulesSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRigSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRoomCode.cs" />
+    <Compile Include="protocol\VpbNetRedact.cs" />
+    <Compile Include="protocol\VpbNetRedactSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRoomCodeSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRoomBook.cs" />
+    <Compile Include="protocol\VpbNetRoomBookSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRendezvous.cs" />
+    <Compile Include="protocol\VpbNetRendezvousSelfTest.cs" />
+    <Compile Include="protocol\VpbNetInviteCode.cs" />
+    <Compile Include="protocol\VpbNetInviteCodeSelfTest.cs" />
+    <Compile Include="protocol\VpbNetContract.cs" />
+    <Compile Include="protocol\VpbNetOffer.cs" />
+    <Compile Include="protocol\VpbNetOfferSelfTest.cs" />
+    <Compile Include="protocol\VpbNetContractSelfTest.cs" />
+    <Compile Include="protocol\VpbNetStorable.cs" />
+    <Compile Include="protocol\VpbNetStorableSelfTest.cs" />
+    <Compile Include="protocol\VpbNetFidelity.cs" />
+    <Compile Include="protocol\VpbNetFidelitySelfTest.cs" />
+    <Compile Include="protocol\VpbNetProp.cs" />
+    <Compile Include="protocol\VpbNetPropSelfTest.cs" />
+    <Compile Include="protocol\VpbNetAvatar.cs" />
+    <Compile Include="protocol\VpbNetSteam.cs" />
+    <Compile Include="protocol\VpbNetSteamSelfTest.cs" />
+    <Compile Include="protocol\VpbNetAvatarSelfTest.cs" />
+    <Compile Include="src\net\VpbNetContentCatalog.cs" />
+    <Compile Include="src\net\VpbNetContentResolver.cs" />
+    <Compile Include="src\net\VpbNetContentSync.cs" />
+    <Compile Include="src\net\VpbNetContentUi.cs" />
+    <Compile Include="src\net\VpbNetPeerLook.cs" />
+    <Compile Include="src\net\VpbNetRulebook.cs" />
+    <Compile Include="src\net\VpbNetTransportChoice.cs" />
+    <Compile Include="src\net\VpbNetRuleCatalog.cs" />
+    <Compile Include="src\net\VpbNetUiKit.cs" />
+    <Compile Include="src\net\VpbNetRulesUi.cs" />
+    <Compile Include="src\net\VpbNetAskUi.cs" />
+    <Compile Include="src\net\VpbNetAlertUi.cs" />
+    <Compile Include="src\net\VpbNetPoseRing.cs" />
+    <Compile Include="src\net\VpbNetPoseSampler.cs" />
+    <Compile Include="src\net\VpbNetPoseApplier.cs" />
+    <Compile Include="src\net\VpbNetOverlay.cs" />
+    <Compile Include="src\net\VpbNetPresence.cs" />
+    <Compile Include="src\net\VpbNetSessionUi.cs" />
+    <Compile Include="src\net\VpbNetSceneLaunchGuard.cs" />
+    <Compile Include="src\net\VpbNetSteamFlow.cs" />
+    <Compile Include="src\net\VpbNetRoomBookStore.cs" />
+    <Compile Include="src\net\VpbNetFrameRing.cs" />
+    <Compile Include="src\net\VpbNetBrokerLink.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsDev.cs" />
+    <Compile Include="src\net\VpbNetPoseClip.cs" />
+    <Compile Include="src\net\VpbNetRecordReplay.cs" />
+    <Compile Include="src\net\VpbNetControllerSet.cs" />
+    <Compile Include="src\net\VpbNetFidelityRig.cs" />
+    <Compile Include="src\net\VpbNetRuntime.cs" />
+    <Compile Include="src\net\VpbNetTriggerRelay.cs" />
+    <Compile Include="src\net\VpbNetPropSync.cs" />
+    <Compile Include="src\net\VpbNetAtomParamSync.cs" />
+    <Compile Include="src\net\VpbNetAvatarRoster.cs" />
+    <Compile Include="src\net\VpbNetAvatarLock.cs" />
+    <Compile Include="src\net\VpbNetAvatarGuard.cs" />
+    <Compile Include="src\net\VpbNetBodyGuard.cs" />
+    <Compile Include="src\net\VpbNetBusy.cs" />
+    <Compile Include="src\net\VpbNetCollisionGuard.cs" />
+    <Compile Include="src\net\VpbNetPresetRelay.cs" />
+    <Compile Include="src\net\VpbNetDualPoseRelay.cs" />
+    <Compile Include="src\net\VpbNetPerfHarness.cs" />
     <Compile Include="src\perf\VpbPerfSnapshot.cs" />
     <Compile Include="src\perf\VpbPerfController.cs" />
     <Compile Include="src\hook\VpbPerfHairHook.cs" />
@@ -320,6 +402,8 @@
     <Compile Include="src\bench\SceneLoadBenchSnapshot.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.Bench.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.MergeOutfit.cs" />
+    <Compile Include="src\gallery\VpbDualPose.cs" />
+    <Compile Include="src\gallery\VpbDualPoseModal.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.RemapAtomUids.cs" />
     <Compile Include="src\gallery\GalleryPanel.BenchPickMode.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
@@ -427,6 +511,7 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.FacetTally.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.SceneAtomCache.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.FilterPresets.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.NetScenePath.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PluginsCatalog.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PkgNewest.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PkgLicense.cs" />
@@ -455,6 +540,7 @@
     <Compile Include="src\gallery\GalleryPanel.SettingsMaintenance.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsFloat.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsNav.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsNetRules.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPerf.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPlugin.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsShortcuts.cs" />
@@ -655,6 +741,7 @@
     <Compile Include="src\hook\FileManagement\VarFileEntryStream.cs" />
     <Compile Include="src\hook\FileManagement\VarFileEntryStreamReader.cs" />
     <Compile Include="src\hook\FileManagement\VarPackage.cs" />
+    <Compile Include="src\hook\FileManagement\VarPackage.SceneJsonScanSelfTest.cs" />
     <Compile Include="src\hook\FileManagement\VarPackageGroup.cs" />
     <Compile Include="src\hook\FileManagement\PackageReferenceVersionResolver.cs" />
     <Compile Include="src\hook\FileManagement\VamScanFilter.cs" />
@@ -718,16 +805,42 @@
     </PropertyGroup>
     <Exec Command="python &quot;$(_IAProjDir)\scripts\build_icon_atlas.py&quot;" WorkingDirectory="$(_IAProjDir)" ContinueOnError="WarnAndContinue" />
   </Target>
+  <ItemGroup>
+    <VpbNetBrokerSource Include="tools\VpbNet\**\*.cs" Exclude="tools\VpbNet\bin\**;tools\VpbNet\obj\**" />
+    <VpbNetBrokerSource Include="tools\VpbNet\VpbNet.csproj" />
+    <VpbNetBrokerSource Include="protocol\*.cs" />
+    <VpbNetBrokerSource Include="scripts\BuildVpbNetBroker.ps1" />
+  </ItemGroup>
+  <!--
+    Publishes the multiplayer broker and stages vam_patch/BepInEx/plugins/VpbNet/VpbNet.exe, so a
+    plugin build and the exe that ships beside it can never drift apart. The broker and the plugin
+    compile the same /protocol sources against two different runtimes; a one-sided rebuild is a
+    wire-format mismatch at session start.
+
+    Inputs/Outputs mean an untouched broker costs nothing. A missing dotnet SDK or a failed
+    publish is a warning, not an error: the committed exe is still valid. Set
+    SkipVpbNetBroker=true to skip.
+  -->
+  <Target Name="BuildVpbNetBroker" BeforeTargets="BeforeCompile"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVpbNetBroker)' != 'true'"
+          Inputs="@(VpbNetBrokerSource)" Outputs="$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VpbNet\VpbNet.exe">
+    <PropertyGroup>
+      <_BNProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_BNProjDir>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BNProjDir)\scripts\BuildVpbNetBroker.ps1&quot; -ProjectDir &quot;$(_BNProjDir)&quot;" WorkingDirectory="$(_BNProjDir)" ContinueOnError="WarnAndContinue" />
+  </Target>
   <!--
     Keeps the vpb_icons rows in vam_patch/patch_manifest.json in sync with the shipped icon pack.
     Set SkipVPBPatchManifestSync=true to skip (e.g. CI). Design-time builds are skipped.
   -->
-  <Target Name="SyncPatchManifestVpbIcons" BeforeTargets="BeforeCompile" DependsOnTargets="BuildVPBIconAtlas" Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBPatchManifestSync)' != 'true'">
+  <Target Name="SyncPatchManifestVpbIcons" BeforeTargets="BeforeCompile" DependsOnTargets="BuildVPBIconAtlas;BuildVpbNetBroker" Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBPatchManifestSync)' != 'true'">
     <PropertyGroup>
       <_SMProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_SMProjDir>
     </PropertyGroup>
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbThemes.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
+    <!-- Runs unconditionally, unlike the publish above: it also repairs rows when only steam_api64.dll changed. -->
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbNet.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" ContinueOnError="WarnAndContinue" />
   </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

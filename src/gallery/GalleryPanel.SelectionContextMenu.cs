@@ -38,6 +38,7 @@ namespace VPB
         // Debug-only: dumps the selected row's thumbnail pipeline to Cache/VPB/_thumbdebug/. Visible when TextureLogLevel >= 2.
         private GameObject tboxThumbDebugBtn;
         private GameObject tboxOpenHubBtn;
+        private GameObject tboxHostSessionBtn;
         private GameObject tboxOverwriteSceneBtn;
         private GameObject tboxSuppressScaleBtn;
         private GameObject tboxReplaceBtn;
@@ -220,6 +221,7 @@ namespace VPB
             one(tboxLoadDepsBtn);
             one(tboxCacheTexturesBtn);
             one(tboxOpenHubBtn);
+            one(tboxHostSessionBtn);
             one(tboxCopyPkgNamesBtn);
             one(tboxOverwriteSceneBtn);
             one(tboxSuppressScaleBtn);
@@ -274,6 +276,7 @@ namespace VPB
             d(tboxLoadDepsBtn);
             d(tboxCacheTexturesBtn);
             d(tboxOpenHubBtn);
+            d(tboxHostSessionBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxOverwriteSceneBtn);
             d(tboxSuppressScaleBtn);
@@ -402,6 +405,7 @@ namespace VPB
             if (vis(tboxLoadDepsBtn)) ltr.Add(tboxLoadDepsBtn);
             if (vis(tboxCacheTexturesBtn)) ltr.Add(tboxCacheTexturesBtn);
             if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
+            if (vis(tboxHostSessionBtn)) ltr.Add(tboxHostSessionBtn);
             if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
             if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
             if (vis(tboxOverwriteSceneBtn)) ltr.Add(tboxOverwriteSceneBtn);
@@ -1122,6 +1126,29 @@ namespace VPB
             }
             catch { }
             tboxOpenHubBtn.SetActive(false);
+
+            tboxHostSessionBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxHostSessionForSelection
+            );
+            tboxHostSessionBtn.name = "Tbox_HostSession";
+            TboxConfigureActionButtonFlex(tboxHostSessionBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxHostSessionBtn, "gallery.tooltip.tbox_host_session",
+                "Load this scene and host a session in it");
+            try
+            {
+                var hostIcon = UI.LoadIconSprite("plug-connected", Color.white);
+                if (hostIcon != null) UI.AddIconToButton(tboxHostSessionBtn, hostIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxHostSessionBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.host_session", "Host");
+                }
+            }
+            catch { }
+            tboxHostSessionBtn.SetActive(false);
 
             tboxLoadDepsBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -2317,6 +2344,7 @@ namespace VPB
                 show(tboxCacheTexturesBtn, false);
                 show(tboxThumbDebugBtn, false);
                 show(tboxOpenHubBtn, false);
+                show(tboxHostSessionBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
                 show(tboxOverwriteSceneBtn, false);
                 show(tboxSuppressScaleBtn, false);
@@ -2404,6 +2432,7 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxLoadDepsBtn, false);
                 SetTboxButtonEnabledVisual(tboxCacheTexturesBtn, false);
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
+                SetTboxButtonEnabledVisual(tboxHostSessionBtn, false);
                 show(tboxOverwriteSceneBtn, false);
 
                 try { RefreshSceneImportSideButtonVisibility(); } catch { }
@@ -2576,6 +2605,16 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, canOpenHub);
             }
 
+            // Host Session: hide when Net.Enabled is off.
+            bool canHostSession = VpbNetRuntime.IsEnabled
+                && selectedFiles != null && selectedFiles.Count == 1
+                && TboxSelectionIsScene();
+            if (tboxHostSessionBtn != null)
+            {
+                tboxHostSessionBtn.SetActive(canHostSession);
+                SetTboxButtonEnabledVisual(tboxHostSessionBtn, canHostSession);
+            }
+
             show(tboxRemoveHistoryBtn, historyBrowse);
             if (tboxRemoveHistoryBtn != null)
                 SetTboxButtonEnabledVisual(
@@ -2600,6 +2639,109 @@ namespace VPB
             try { UpdateSideButtonPositions(); } catch { }
             try { RefreshTboxGridRateControlState(); } catch { }
             RefreshTboxFlexButtonLayout();
+        }
+
+        private bool TboxSelectionIsScene()
+        {
+            try
+            {
+                if (selectedFiles == null || selectedFiles.Count != 1) return false;
+                var f = selectedFiles[0];
+                if (f == null) return false;
+                string path = f.Uid;
+                if (string.IsNullOrEmpty(path)) path = f.Path;
+                if (string.IsNullOrEmpty(path)) return false;
+                if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+                return path.IndexOf("/Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch { return false; }
+        }
+
+        // Load first — hosting first would advertise the outgoing scene.
+        private void TboxHostSessionForSelection()
+        {
+            try
+            {
+                if (!TboxSelectionIsScene())
+                {
+                    ShowTemporaryStatus("Select a single scene to host.");
+                    return;
+                }
+
+                var f = selectedFiles[0];
+                string path = f.Uid;
+                if (string.IsNullOrEmpty(path)) path = f.Path;
+
+                string loadPath = null;
+                try { loadPath = UI.NormalizePath(path); }
+                catch { loadPath = path; }
+                if (string.IsNullOrEmpty(loadPath))
+                {
+                    ShowTemporaryStatus("That scene has no loadable path.");
+                    return;
+                }
+
+                if (SuperController.singleton == null)
+                {
+                    ShowTemporaryStatus("VaM is not ready.");
+                    return;
+                }
+
+                // Leave first so a live peer sees a drop, not a silent scene change.
+                try { VpbNetSceneLaunchGuard.AllowNext(); } catch { }
+                try { VpbNetPresence.Leave(); } catch { }
+
+                bool ok = false;
+                try { ok = SceneLoadingUtils.LoadScene(loadPath, true); }
+                catch { ok = false; }
+                if (!ok)
+                {
+                    ShowTemporaryStatus("Could not load that scene. See log.");
+                    return;
+                }
+
+                StartCoroutine(TboxHostAfterSceneLoad());
+            }
+            catch
+            {
+                ShowTemporaryStatus("Could not host that scene. See log.");
+            }
+        }
+
+        // Wait for load so Host() binds new-scene atoms.
+        private System.Collections.IEnumerator TboxHostAfterSceneLoad()
+        {
+            const float TimeoutSeconds = 120f;
+            float deadline = Time.realtimeSinceStartup + TimeoutSeconds;
+
+            yield return null;
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                bool loading = true;
+                try { loading = LogUtil.IsSceneLoadActive() || LogUtil.IsSceneLoading(); }
+                catch { loading = false; }
+                if (!loading) break;
+                yield return null;
+            }
+
+            if (Time.realtimeSinceStartup >= deadline)
+            {
+                try { ShowTemporaryStatus("Scene is still loading; session not started."); }
+                catch { }
+                yield break;
+            }
+
+            try
+            {
+                VpbNetPresence.Host();
+                ShowTemporaryStatus("Hosting this scene. Share the invite from the session panel.");
+            }
+            catch
+            {
+                try { ShowTemporaryStatus("Scene loaded but hosting failed. See log."); }
+                catch { }
+            }
         }
 
         private void TboxAfterGridRateChanged()

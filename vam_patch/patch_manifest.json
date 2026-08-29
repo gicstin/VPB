@@ -160,6 +160,18 @@
         "IsDirectory":  true
     },
     {
+        "RelativePath":  "BepInEx/plugins/VpbNet",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VpbNet/steam_api64.dll",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VpbNet/VpbNet.exe",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/zstd",
         "IsDirectory":  true
     },

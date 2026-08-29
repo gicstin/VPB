@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -96,24 +96,11 @@ namespace VPB
                         _dualPoseNode = JSON.Parse(content);
                         if (_dualPoseNode != null)
                         {
-                            // Check PeopleCount (string or int)
-                            if (_dualPoseNode["PeopleCount"] != null)
-                            {
-                                int count = _dualPoseNode["PeopleCount"].AsInt;
-                                if (count >= 2)
-                                {
-                                    _isDualPose = true;
-                                    LogUtil.Log($"[DragDropDebug] Detected Dual Pose: PeopleCount={count} in {FileEntry.Name}");
-                                }
-                                else
-                                {
-                                    LogUtil.Log($"[DragDropDebug] Not Dual Pose: PeopleCount={count} in {FileEntry.Name}");
-                                }
-                            }
-                            else
-                            {
-                                 // LogUtil.Log($"[DragDropDebug] Not Dual Pose: No PeopleCount in {FileEntry.Name}");
-                            }
+                            // Same test the grid click path uses: a PeopleCount header, a Person2
+                            // field, or simply two people in the file.
+                            _isDualPose = VpbDualPose.LooksDual(_dualPoseNode.AsObject);
+                            if (_isDualPose.Value)
+                                LogUtil.Log($"[DragDropDebug] Detected two-person pose in {FileEntry.Name}");
                         }
                     }
                 }

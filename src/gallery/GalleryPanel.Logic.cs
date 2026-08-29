@@ -4112,6 +4112,20 @@ namespace VPB
             }
         }
 
+        private void PinTargetToClaimedAvatar()
+        {
+            Atom mine = null;
+            try { mine = VpbNetAvatarGuard.MyAvatar(); } catch { }
+            if (mine == null) return;
+
+            for (int i = 0; i < personAtoms.Count; i++)
+            {
+                if (personAtoms[i] != mine) continue;
+                targetDropdownValue = i;
+                return;
+            }
+        }
+
         public void RefreshTargetDropdown()
         {
             string currentSelectionUid = null;
@@ -4140,6 +4154,8 @@ namespace VPB
                             bool include = subSceneMode
                                 ? SceneUtils.IsSubSceneAtom(a)
                                 : (cuaMode ? SceneUtils.IsCustomUnityAssetAtom(a) : SceneUtils.IsPersonLikeAtom(a));
+                            if (include && !subSceneMode && !cuaMode && VpbNetAvatarGuard.IsPeerAvatar(a))
+                                include = false;
                             if (include)
                             {
                                 string uid = a.uid;
@@ -4177,6 +4193,8 @@ namespace VPB
             {
                 targetDropdownValue = 0;
             }
+
+            if (!subSceneMode && !cuaMode) PinTargetToClaimedAvatar();
 
             UpdateTargetDropdownUI();
 

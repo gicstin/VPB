@@ -54,6 +54,9 @@ namespace VPB
                 case "updater": return VPBTranslation.T("settings.section.updater", "Updater");
                 case "ba_migration": return VPBTranslation.T("settings.section.ba_migration", "BrowserAssistant");
                 case "plugin_bench": return VPBTranslation.T("settings.section.bench", "Benchmark");
+                case "net_rules": return VPBTranslation.T("settings.section.net_rules", "Session");
+                case "dev_net": return VPBTranslation.T("settings.section.dev_net", "Multiplayer link");
+                case "dev_clip": return VPBTranslation.T("settings.section.dev_clip", "Pose record & replay");
                 default: return "";
             }
         }
@@ -73,6 +76,8 @@ namespace VPB
             if (!string.IsNullOrEmpty(def.Label) && def.Label.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
             if (!string.IsNullOrEmpty(def.Tooltip) && def.Tooltip.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (!string.IsNullOrEmpty(def.SearchText) && def.SearchText.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
             if (!string.IsNullOrEmpty(def.Key) && def.Key.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;

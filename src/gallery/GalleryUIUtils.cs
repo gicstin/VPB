@@ -39,7 +39,18 @@ namespace VPB
         // Interactive accents: selected = muted cool-grey, green = confirm CTA, red = destructive.
         public static readonly Color AccentBlue = GalleryUiColorTokens.AccentSelected;
         public static readonly Color AccentGreen = GalleryUiColorTokens.AccentConfirm;
+        /// <summary>Session/ready dots — warmer than AccentConfirm.</summary>
+        public static readonly Color AccentLive = GalleryUiColorTokens.AccentLive;
         public static readonly Color AccentRed = GalleryUiColorTokens.AccentDanger;
+        // Session-rule segmented fills + label colours.
+        public static readonly Color RuleBlocked = GalleryUiColorTokens.RuleBlocked;
+        public static readonly Color RuleAsk = GalleryUiColorTokens.RuleAsk;
+        public static readonly Color RuleAllowed = GalleryUiColorTokens.RuleAllowed;
+        public static readonly Color WarnSurface = GalleryUiColorTokens.ActiveWarnHeader;
+        public static readonly Color WarnText = GalleryUiColorTokens.ActiveWarnText;
+        public static readonly Color RuleBlockedText = GalleryUiColorTokens.RuleBlockedText;
+        public static readonly Color RuleAskText = GalleryUiColorTokens.RuleAskText;
+        public static readonly Color RuleAllowedText = GalleryUiColorTokens.RuleAllowedText;
 
         /// <summary>Background of centered modal panels (formerly inline new Color(0.06,0.06,0.08,1)).</summary>
         public static readonly Color ModalPanel = GalleryUiColorTokens.ModalSurface;
@@ -430,6 +441,15 @@ namespace VPB
         public static void LoadSceneFile(FileEntry entry, GalleryPanel panel)
         {
             if (entry == null) return;
+
+            if (VpbNetSceneLaunchGuard.Blocking)
+            {
+                FileEntry heldEntry = entry;
+                GalleryPanel heldPanel = panel;
+                if (VpbNetSceneLaunchGuard.HoldSceneLaunch(SceneLoadBannerName(entry), entry.Uid, false,
+                        delegate { LoadSceneFile(heldEntry, heldPanel); }))
+                    return;
+            }
 
             // Guard against duplicate triggers in the same click/frame burst.
             if (!TryBeginSceneLoadThrottle())
@@ -2958,6 +2978,60 @@ namespace VPB
             iconRT.pivot = new Vector2(0.5f, 0.5f);
             iconRT.sizeDelta = new Vector2(-padding * 2f, -padding * 2f);
             iconRT.anchoredPosition = Vector2.zero;
+        }
+
+        /// <summary>Icon + label. AddIconToButton hides the label; Play needs both in VR.</summary>
+        public static Image AddLeadingIconKeepLabel(GameObject buttonGO, Sprite icon, float iconSize, float padH)
+        {
+            if (buttonGO == null || icon == null) return null;
+
+            Text t = buttonGO.GetComponentInChildren<Text>(true);
+            if (t != null)
+            {
+                t.gameObject.SetActive(true);
+                t.alignment = TextAnchor.MiddleLeft;
+                t.raycastTarget = false;
+                LayoutElement tle = t.GetComponent<LayoutElement>();
+                if (tle == null) tle = t.gameObject.AddComponent<LayoutElement>();
+                tle.minWidth = 0f;
+                tle.preferredWidth = -1f;
+                tle.flexibleWidth = 0f;
+                tle.minHeight = 0f;
+                tle.flexibleHeight = 1f;
+            }
+
+            HorizontalLayoutGroup hlg = buttonGO.GetComponent<HorizontalLayoutGroup>();
+            if (hlg == null)
+            {
+                float padV = GalleryUiDesignTokens.TightGapRef;
+                hlg = AddHLG(buttonGO, padH, Pad(padH, padH, padV, padV),
+                    TextAnchor.MiddleCenter, true, true, false, true);
+            }
+
+            Transform existing = buttonGO.transform.Find("Icon");
+            GameObject iconGO;
+            Image img;
+            if (existing != null)
+            {
+                iconGO = existing.gameObject;
+                img = existing.GetComponent<Image>();
+            }
+            else
+            {
+                iconGO = new GameObject("Icon");
+                iconGO.transform.SetParent(buttonGO.transform, false);
+                iconGO.transform.SetAsFirstSibling();
+                img = AddImage(iconGO, Color.white, false);
+            }
+            if (img == null) return null;
+            SetIconSprite(img, icon);
+            img.preserveAspect = true;
+            img.raycastTarget = false;
+            img.color = Color.white;
+            AddLE(iconGO, minWidth: iconSize, minHeight: iconSize,
+                preferredWidth: iconSize, preferredHeight: iconSize,
+                flexibleWidth: 0f, flexibleHeight: 0f);
+            return img;
         }
 
         /// <summary>Updates or creates the Icon child from atlas role <paramref name="iconRole"/> using bar glyph tint.</summary>
