@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace VPB
@@ -26,6 +27,10 @@ namespace VPB
         static int _restores;
         static float _nextLog;
         static float _nextSweep;
+        static bool _fullWarned;
+        static bool _holdWholeScene;
+        static string _seatA = string.Empty;
+        static string _seatB = string.Empty;
 
         public static bool ForcedOff { get { return _forcedOff; } }
         public static bool LoadHeld { get { return _loadHold; } }
@@ -52,6 +57,27 @@ namespace VPB
             set { _enabled = value; }
         }
 
+        // Only the two seated avatars are session-driven; the rest of the scene keeps its own physics.
+        public static void SetSeats(string seatA, string seatB)
+        {
+            _seatA = seatA == null ? string.Empty : seatA;
+            _seatB = seatB == null ? string.Empty : seatB;
+        }
+
+        static bool IsSeated(Atom a)
+        {
+            if (a == null) return false;
+            if (_seatA.Length == 0 && _seatB.Length == 0) return false;
+
+            string uid;
+            try { uid = a.uid; }
+            catch { return false; }
+            if (string.IsNullOrEmpty(uid)) return false;
+
+            return string.Equals(uid, _seatA, StringComparison.Ordinal)
+                || string.Equals(uid, _seatB, StringComparison.Ordinal);
+        }
+
         public static void Suspend(Atom a, int frames, string why)
         {
             if (a == null || frames <= 0) return;
@@ -68,19 +94,27 @@ namespace VPB
             if (frames > _left[slot]) _left[slot] = frames;
         }
 
-        // Hold open for the whole load — a 90-frame countdown expires before new Persons land.
         public static void SetLoadHold(bool on)
+        {
+            SetLoadHold(on, true);
+        }
+
+        // Hold open for the whole load — a 90-frame countdown expires before new Persons land.
+        // wholeScene: a scene load moves every body, so hold them all. A preset apply moves only
+        // the avatar it lands on, and switching physics off under four bystanders is not ours to do.
+        public static void SetLoadHold(bool on, bool wholeScene)
         {
             if (on)
             {
                 bool first = !_loadHold;
                 _loadHold = true;
+                if (wholeScene) _holdWholeScene = true;
 
                 float now = Time.realtimeSinceStartup;
                 if (!first && now < _nextSweep) return;
                 _nextSweep = now + SweepSeconds;
 
-                int n = HoldEveryAvatar();
+                int n = HoldAvatars(!_holdWholeScene);
                 if (!first) return;
                 LogUtil.LogWarning("[VPB.Net] collisions off on " + n
                     + " person(s) while content loads - they come back "
@@ -93,7 +127,8 @@ namespace VPB
             _nextSweep = 0f;
 
             // Sweep again before settle — freshly loaded bodies never went through Acquire.
-            HoldEveryAvatar();
+            HoldAvatars(!_holdWholeScene);
+            _holdWholeScene = false;
             for (int i = 0; i < MaxTracked; i++)
             {
                 if (_atom[i] == null) continue;
@@ -124,7 +159,7 @@ namespace VPB
 
             if (off)
             {
-                int n = HoldEveryAvatar();
+                int n = HoldAvatars(false);
                 LogUtil.LogWarning("[VPB.Net] collisions are OFF on " + n
                     + " person(s) and stay off until you press it again."
                     + " Use this while you throw poses at each other, then put it back on.");
@@ -146,7 +181,11 @@ namespace VPB
         {
             _forcedOff = false;
             _loadHold = false;
+            _holdWholeScene = false;
             _nextSweep = 0f;
+            _fullWarned = false;
+            _seatA = string.Empty;
+            _seatB = string.Empty;
             for (int i = 0; i < MaxTracked; i++)
             {
                 if (_atom[i] == null) continue;
@@ -154,7 +193,7 @@ namespace VPB
             }
         }
 
-        static int HoldEveryAvatar()
+        static int HoldAvatars(bool seatedOnly)
         {
             int n = 0;
             try { VpbNetAvatarRoster.Poll(); }
@@ -163,6 +202,7 @@ namespace VPB
             {
                 Atom a = VpbNetAvatarRoster.AtomAt(i);
                 if (a == null) continue;
+                if (seatedOnly && !IsSeated(a)) continue;
                 if (SlotOf(a) >= 0) { n++; continue; }
                 if (Acquire(a) < 0) continue;
                 _suspends++;
@@ -180,14 +220,24 @@ namespace VPB
                 slot = i;
                 break;
             }
-            if (slot < 0) return -1;
+            if (slot < 0)
+            {
+                if (!_fullWarned)
+                {
+                    _fullWarned = true;
+                    LogUtil.LogWarning("[VPB.Net] more than " + MaxTracked
+                        + " people needed collisions held at once, so the extras kept theirs on."
+                        + " If bodies are being thrown around, this is why.");
+                }
+                return -1;
+            }
 
             _atom[slot] = a;
             _prior[slot] = Read(a);
             _left[slot] = 0;
 
-            // Mid-load collisionEnabled is not the scene's intent.
-            _midLoad[slot] = _loadHold;
+            // Mid-load collisionEnabled is not the scene's intent, but only for a body we drive.
+            _midLoad[slot] = _loadHold && IsSeated(a);
 
             Write(a, false);
             return slot;

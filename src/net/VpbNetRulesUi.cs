@@ -35,6 +35,7 @@ namespace VPB
             public VpbNetUiKit.Chip Ask;
             public VpbNetUiKit.Chip Allowed;
             public Text Peer;
+            public Text Note;
         }
 
         static readonly List<RuleRow> _rows = new List<RuleRow>(12);
@@ -362,6 +363,10 @@ namespace VPB
 
             VpbNetUiKit.Line(row, e.Short, VpbNetUiKit.FontCaption, UI.TextDim,
                 VpbNetUiKit.LineRef, s, false);
+
+            r.Note = VpbNetUiKit.Line(row, string.Empty, VpbNetUiKit.FontCaption,
+                UI.WarnText, VpbNetUiKit.LineRef, s, true);
+            VpbNetUiKit.Show(r.Note.gameObject, false);
             VpbNetUiKit.BindTip(row, e.Tip, _tip);
 
             GameObject segs = VpbNetUiKit.Row(row, VpbNetUiKit.ButtonRef, s);
@@ -378,6 +383,22 @@ namespace VPB
             StretchSeg(r.Allowed);
 
             _rows.Add(r);
+        }
+
+        // Only the host arbitrates seats, so this row does nothing on the joining side.
+        static void SyncInertNote(RuleRow r)
+        {
+            if (r == null || r.Note == null) return;
+
+            bool inert = r.Domain == VpbNetRuleDomain.AvatarClaim
+                && VpbNetPresence.PeerUp
+                && !VpbNetPresence.AsHost;
+
+            VpbNetUiKit.Show(r.Note.gameObject, inert);
+            if (!inert) return;
+
+            r.Note.text = VPBTranslation.T("net_rules.inert.claim",
+                "You joined this room, so this one is theirs to answer, not yours.");
         }
 
         static void StretchSeg(VpbNetUiKit.Chip c)
@@ -454,6 +475,7 @@ namespace VPB
                 SetSegment(r.Blocked, level == VpbNetRuleLevel.Blocked, UI.RuleBlocked, UI.RuleBlockedText);
                 SetSegment(r.Ask, level == VpbNetRuleLevel.Ask, UI.RuleAsk, UI.RuleAskText);
                 SetSegment(r.Allowed, level == VpbNetRuleLevel.Allowed, UI.RuleAllowed, UI.RuleAllowedText);
+                SyncInertNote(r);
 
                 if (r.Peer == null) continue;
                 if (!published)

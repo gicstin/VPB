@@ -60,6 +60,11 @@ namespace VPB
 
         static GameObject _idlePane;
         static GameObject _livePane;
+        static GameObject _gatesPane;
+        static Text _gateScene;
+        static Text _gateMine;
+        static Text _gateTheirs;
+        static Text _gateCap;
 
         static GameObject _setupBody;
         static VpbNetUiKit.Chip _setupChip;
@@ -110,6 +115,9 @@ namespace VPB
         static VpbNetUiKit.Chip _kickChip;
         static VpbNetUiKit.Chip _resyncChip;
         static VpbNetUiKit.Chip _inviteChip;
+        const float InviteErrorSeconds = 12f;
+        static string _inviteError;
+        static float _inviteErrorUntil;
 
         static float _nextInviteProbe;
         static bool _canInvite;
@@ -500,9 +508,28 @@ namespace VPB
         {
             _livePane = VpbNetUiKit.Pane(body, "Live", s);
 
+            _gatesPane = VpbNetUiKit.Pane(_livePane, "Gates", s);
+            VpbNetUiKit.SectionHeader(_gatesPane,
+                VPBTranslation.T("net_session.gates", "Before you can play"), s, true);
+            _gateScene = VpbNetUiKit.Line(_gatesPane, string.Empty, VpbNetUiKit.FontCaption,
+                UI.TextDim, VpbNetUiKit.LineRef, s, true);
+            _gateMine = VpbNetUiKit.Line(_gatesPane, string.Empty, VpbNetUiKit.FontCaption,
+                UI.TextDim, VpbNetUiKit.LineRef, s, true);
+            _gateTheirs = VpbNetUiKit.Line(_gatesPane, string.Empty, VpbNetUiKit.FontCaption,
+                UI.TextDim, VpbNetUiKit.LineRef, s, true);
+            _gateCap = VpbNetUiKit.Line(_gatesPane,
+                VPBTranslation.T("net_session.gates.cap",
+                    "A room holds two people. Watching still uses one of the two places."),
+                VpbNetUiKit.FontCaption, UI.TextMuted, VpbNetUiKit.LineRef, s, true);
+
             _peoplePane = VpbNetUiKit.Pane(_livePane, "People", s);
             VpbNetUiKit.SectionHeader(_peoplePane,
                 VPBTranslation.T("net_session.people", "Players"), s, true);
+            VpbNetUiKit.Line(_peoplePane,
+                VPBTranslation.T("net_session.people.hint",
+                    "Names here are the people in the scene, not the people playing."
+                    + " Nothing about either of you is sent or shown."),
+                VpbNetUiKit.FontCaption, UI.TextDim, VpbNetUiKit.LineRef, s, true);
             BuildPersonRow(_peoplePane, s, out _youDot, out _youName, out _youRide);
             BuildPersonRow(_peoplePane, s, out _themDot, out _themName, out _themRide);
 
@@ -584,7 +611,21 @@ namespace VPB
 
         static void InviteClicked()
         {
-            VpbNetPresence.InviteToCurrentScene();
+            string reason;
+            if (VpbNetPresence.InviteToCurrentScene(out reason))
+            {
+                _inviteError = null;
+                _inviteErrorUntil = 0f;
+            }
+            else
+            {
+                _inviteError = string.IsNullOrEmpty(reason)
+                    ? VPBTranslation.T("net_session.invite_failed",
+                        "They were not invited - nothing was sent.")
+                    : reason;
+                _inviteErrorUntil = Time.realtimeSinceStartup + InviteErrorSeconds;
+                LogUtil.LogWarning("[VPB.Net] invite not sent: " + _inviteError);
+            }
             _nextRefresh = 0f;
             _nextInviteProbe = 0f;
         }
@@ -806,6 +847,7 @@ namespace VPB
             SyncStatus();
             if (live)
             {
+                SyncGates();
                 SyncPeople();
                 SyncRoomLive();
                 SyncWorld();
@@ -942,10 +984,39 @@ namespace VPB
                 VpbNetSessionState st = VpbNetPresence.State;
                 if (VpbNetPresence.PeerUp && st == VpbNetSessionState.Running)
                 {
-                    if (!VpbNetPresence.ScenesMatch)
+                    if (VpbNetRulebook.HasPending)
                     {
-                        _sb.Append(VPBTranslation.T("net_session.hint.scene",
-                            "Both sides must load the same scene before you can control a Person."));
+                        int waiting = VpbNetRulebook.PendingCount;
+                        _sb.Append(waiting > 1
+                            ? VPBTranslation.T("net_session.status.asks",
+                                "They are waiting on you to answer ") + waiting
+                                + VPBTranslation.T("net_session.status.asks_tail", " requests")
+                            : VPBTranslation.T("net_session.status.ask",
+                                "They are waiting on you to answer a request"));
+                        dot = UI.WarnText;
+                        text = UI.WarnText;
+                        banner = UI.WarnSurface;
+                    }
+                    else if (VpbNetPresence.PendingAvatar.Length > 0)
+                    {
+                        _sb.Append(VPBTranslation.T("net_session.status.claim_wait",
+                            "Waiting for them to let you play as "))
+                            .Append(VpbNetPresence.PendingAvatar);
+                        dot = UI.AccentBlue;
+                        text = UI.TextPrimary;
+                        banner = UI.AccentBlue;
+                    }
+                    else if (VpbNetPresence.AvatarClaimDenied
+                        && !string.IsNullOrEmpty(VpbNetPresence.ClaimDenyReason))
+                    {
+                        _sb.Append(VpbNetPresence.ClaimDenyReason);
+                        dot = UI.WarnText;
+                        text = UI.WarnText;
+                        banner = UI.WarnSurface;
+                    }
+                    else if (!VpbNetPresence.ScenesMatch)
+                    {
+                        AppendSceneMismatch();
                         dot = UI.WarnText;
                         text = UI.WarnText;
                         banner = UI.WarnSurface;
@@ -1004,6 +1075,9 @@ namespace VPB
             if (_statusFill != null) _statusFill.color = banner;
 
             _sb.Length = 0;
+            if (_inviteErrorUntil > Time.realtimeSinceStartup && !string.IsNullOrEmpty(_inviteError))
+                Append(_sb, _inviteError);
+            else _inviteError = null;
             if (!string.IsNullOrEmpty(VpbNetPresence.ContentWarning))
                 Append(_sb, VpbNetPresence.ContentWarning);
             if (!string.IsNullOrEmpty(VpbNetPresence.ReasonText)
@@ -1013,6 +1087,32 @@ namespace VPB
                 Append(_sb, VpbNetPresence.Hint);
 
             SetLine(_hintLine, _sb.Length > 0 ? _sb.ToString() : null);
+        }
+
+        // Naming both sides saves asking "what scene are you in?" over chat.
+        static void AppendSceneMismatch()
+        {
+            _sb.Append(VPBTranslation.T("net_session.hint.scene",
+                "Both sides must load the same scene before you can control a Person."));
+
+            string theirs = VpbNetPresence.HavePeerScene ? VpbNetPresence.PeerScene : null;
+            if (string.IsNullOrEmpty(theirs)) return;
+
+            _sb.Append(VPBTranslation.T("net_session.hint.scene_theirs", " They are in "))
+                .Append(LeafOf(theirs));
+
+            string mine = VpbNetPresence.LocalScene;
+            if (string.IsNullOrEmpty(mine)) return;
+            _sb.Append(VPBTranslation.T("net_session.hint.scene_mine", ", you are in "))
+                .Append(LeafOf(mine)).Append('.');
+        }
+
+        static string LeafOf(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return uid;
+            int slash = uid.LastIndexOf('/');
+            if (slash >= 0 && slash + 1 < uid.Length) return uid.Substring(slash + 1);
+            return uid;
         }
 
         static void Append(StringBuilder sb, string s)
@@ -1132,6 +1232,48 @@ namespace VPB
                     break;
             }
             return _sb.ToString();
+        }
+
+        // The three preconditions, in order, until all are met. Nobody could work this sequence out.
+        static void SyncGates()
+        {
+            bool peer = VpbNetPresence.PeerUp;
+            bool scenes = VpbNetPresence.ScenesMatch;
+            bool mine = !string.IsNullOrEmpty(VpbNetPresence.MyAvatar);
+            bool theirs = !string.IsNullOrEmpty(VpbNetPresence.PeerAvatar);
+
+            bool show = peer && !(scenes && mine && theirs);
+            VpbNetUiKit.Show(_gatesPane, show);
+            if (!show) return;
+
+            SetGate(_gateScene, scenes,
+                VPBTranslation.T("net_session.gate.scene_ok", "Both of you are in the same scene"),
+                VPBTranslation.T("net_session.gate.scene_todo",
+                    "Load the same scene on both machines - use Bring them here, or load theirs yourself"));
+
+            SetGate(_gateMine, mine,
+                VPBTranslation.T("net_session.gate.mine_ok", "You are playing as ")
+                    + Shorten(VpbNetPresence.MyAvatar),
+                scenes
+                    ? VPBTranslation.T("net_session.gate.mine_todo",
+                        "Pick the person you want to play as, below")
+                    : VPBTranslation.T("net_session.gate.mine_wait",
+                        "Then pick the person you want to play as"));
+
+            SetGate(_gateTheirs, theirs,
+                VPBTranslation.T("net_session.gate.theirs_ok", "They are playing as ")
+                    + Shorten(VpbNetPresence.PeerAvatar),
+                VPBTranslation.T("net_session.gate.theirs_todo",
+                    "They are watching - until they pick someone, you will not see them on anybody"));
+
+            if (_gateCap != null) VpbNetUiKit.Show(_gateCap.gameObject, !theirs);
+        }
+
+        static void SetGate(Text t, bool done, string okText, string todoText)
+        {
+            if (t == null) return;
+            SetText(t, (done ? "[x]  " : "[ ]  ") + (done ? okText : todoText));
+            t.color = done ? UI.RuleAllowedText : UI.TextPrimary;
         }
 
         static void SyncPeople()
@@ -1899,6 +2041,11 @@ namespace VPB
             _hintLine = null;
             _idlePane = null;
             _livePane = null;
+            _gatesPane = null;
+            _gateScene = null;
+            _gateMine = null;
+            _gateTheirs = null;
+            _gateCap = null;
             _setupBody = null;
             _setupChip = null;
             _setupSummary = null;

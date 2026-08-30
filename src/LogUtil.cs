@@ -1132,44 +1132,14 @@ namespace VPB
             return false;
         }
 
+        // Called from FixedUpdate and from per-frame coroutine waits: no reflection, no allocation.
         internal static bool? TryGetSuperControllerLoading()
         {
             try
             {
-                if (SuperController.singleton == null)
-                {
-                    return null;
-                }
-
-                var tr = Traverse.Create(SuperController.singleton);
-
-                // Try common field/property names.
-                foreach (var name in new[] { "isLoading", "loading", "_isLoading", "_loading", "loadingUIActive", "isLoadingScene" })
-                {
-                    try
-                    {
-                        var v = tr.Property(name);
-                        if (v != null)
-                        {
-                            var obj = v.GetValue();
-                            if (obj is bool b1) return b1;
-                        }
-                    }
-                    catch { }
-
-                    try
-                    {
-                        var v = tr.Field(name);
-                        if (v != null)
-                        {
-                            var obj = v.GetValue();
-                            if (obj is bool b2) return b2;
-                        }
-                    }
-                    catch { }
-                }
-
-                return null;
+                SuperController sc = SuperController.singleton;
+                if (sc == null) return null;
+                return sc.isLoading;
             }
             catch
             {

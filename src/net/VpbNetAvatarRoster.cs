@@ -7,7 +7,7 @@ namespace VPB
 {
     public static class VpbNetAvatarRoster
     {
-        public const int MaxAvatars = 12;
+        public const int MaxAvatars = 32;
         const float RescanSeconds = 1f;
 
         static readonly List<string> _uids = new List<string>(MaxAvatars);
@@ -58,14 +58,25 @@ namespace VPB
                 if (a != null) return a;
             }
 
+            return Exists(uid);
+        }
+
+        public static Atom Exists(string uid)
+        {
+            Atom found = AnyAtom(uid);
+            if (found == null) return null;
+            return SceneUtils.IsPersonLikeAtom(found) ? found : null;
+        }
+
+        public static Atom AnyAtom(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return null;
+
             SuperController sc = SuperController.singleton;
             if (sc == null) return null;
 
-            Atom found = null;
-            try { found = sc.GetAtomByUid(uid); }
-            catch { }
-            if (found == null) return null;
-            return IsAvatar(found) ? found : null;
+            try { return sc.GetAtomByUid(uid); }
+            catch { return null; }
         }
 
         public static bool Contains(string uid)
@@ -75,7 +86,7 @@ namespace VPB
             {
                 if (string.Equals(_uids[i], uid, StringComparison.Ordinal)) return true;
             }
-            return false;
+            return Exists(uid) != null;
         }
 
         public static void Shutdown()

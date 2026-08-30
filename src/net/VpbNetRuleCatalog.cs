@@ -139,7 +139,7 @@ namespace VPB
                     VPBTranslation.T("net_rules.short.content_control",
                         "Downloads from the Hub, by name. No file crosses between your two PCs."),
                     VPBTranslation.T("settings.tip.net_rules.content_control",
-                        "Let a scene they pick fetch the packages you are missing, from the VaM Hub, so you can join without hunting for them. Only names cross the connection - no file ever travels between the two PCs - and every download comes from the Hub exactly as if you had pressed it yourself. What it costs is disk space and bandwidth, capped by the download limit in settings. Allowed by default, because a session where one side is missing the scene is not a session.")),
+                        "Let a scene they pick fetch the packages you are missing, from the VaM Hub, so you can join without hunting for them. Only names cross the connection - no file ever travels between the two PCs - and every download comes from the Hub exactly as if you had pressed it yourself. What it costs is disk space and bandwidth, capped by the download limit in settings. This is not permission to change your scene: they can only ever offer, and nothing loads until you press accept on the card. Allowed by default, because a session where one side is missing the scene is not a session.")),
             };
 
             int keep = 0;

@@ -2,8 +2,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using BepInEx.Configuration;
+using HarmonyLib;
 using UnityEngine;
 using VPB.src.util;
 using VpbNet;
@@ -158,15 +160,34 @@ namespace VPB
             }
         }
 
+        public static void AnnounceSceneAgain()
+        {
+            try { if (_runner != null) _runner.AnnounceSceneAgain(); }
+            catch { }
+        }
+
         public static bool InviteToScene(string scenePath, bool editMode)
         {
+            string reason;
+            return InviteToScene(scenePath, editMode, out reason);
+        }
+
+        public static bool InviteToScene(string scenePath, bool editMode, out string reason)
+        {
+            reason = null;
             try
             {
-                if (_runner == null) return false;
-                return _runner.InviteToScene(scenePath, editMode);
+                if (_runner == null)
+                {
+                    reason = VPBTranslation.T("net_content.fail.nosession",
+                        "No session is running.");
+                    return false;
+                }
+                return _runner.InviteToScene(scenePath, editMode, out reason);
             }
             catch (Exception e)
             {
+                reason = e.Message;
                 LogUtil.LogError("[VPB.Net] could not invite them to that scene: " + e.Message);
                 return false;
             }
@@ -184,14 +205,23 @@ namespace VPB
 
         public static bool InviteToCurrentScene()
         {
+            string reason;
+            return InviteToCurrentScene(out reason);
+        }
+
+        public static bool InviteToCurrentScene(out string reason)
+        {
+            reason = null;
             string path = InvitableScenePath;
             if (string.IsNullOrEmpty(path))
             {
+                reason = VPBTranslation.T("net_content.fail.unsaved",
+                    "This scene has no file on disk to point them at - save it under Saves/scene first.");
                 LogUtil.LogWarning("[VPB.Net] this scene cannot be named to the other machine,"
                     + " so they cannot be invited to it - save it under Saves/scene first");
                 return false;
             }
-            return InviteToScene(path, false);
+            return InviteToScene(path, false, out reason);
         }
 
         public static bool Wanted
@@ -623,12 +653,17 @@ namespace VPB
         const float ResolveRetrySeconds = 2f;
         const float AvatarPollSeconds = 0.5f;
         const float PendingClaimSeconds = 34f;
-        const float SceneRebaseGraceSeconds = 8f;
+        const float SceneRebaseCeilingSeconds = 60f;
+        const float SceneQuietSeconds = 4f;
+        const int SpawnAttemptsPerUid = 2;
+        const int SpawnBudgetPerScene = 4;
+        const float HealthLogSeconds = 5f;
 
         // 2s past load flags — VaM atoms still settling after loading clears.
         const float ThawSettleSeconds = 2f;
         const int ReRequestLimit = 3;
         const double KeyframeRetryMs = 1500.0;
+        const double KeyframeRetryCeilingMs = 20000.0;
         const double PeriodicResyncMs = 30000.0;
         const double ResyncMinIntervalMs = 1500.0;
         const double BrokerRetryMs = 2000.0;
@@ -640,7 +675,7 @@ namespace VPB
 
         // Burst copies of busy notice — SendBusy has no spaced retry, only random-loss cover.
         const int BusyBursts = 3;
-        const int KeyframeMaxAttempts = 20;
+        const int KeyframeMaxAttempts = 8;
         const float SettleSeconds = 2f;
         const float PropPollSeconds = 1f / 15f;
         const float ParamPollSeconds = 0.1f;
@@ -866,7 +901,19 @@ namespace VPB
         bool _peerSeatChoiceMade;
         bool _seatsNeedRebase;
         float _sceneRebaseUntil;
+        readonly Dictionary<string, int> _spawnFails = new Dictionary<string, int>(4, StringComparer.Ordinal);
+        int _spawnBudget = SpawnBudgetPerScene;
+        bool _spawnBudgetWarned;
+        int _sceneLoadSerialAtChange;
+        bool _sceneLoadSeen;
+        float _quietSince;
+        int _standIns;
+        int _freezeCycles;
+        float _nextHealthLog;
+        string _lastHealth = string.Empty;
+        readonly StringBuilder _healthSb = new StringBuilder(192);
         bool _syncFrozen;
+        bool _frozenBySceneLoad;
         float _thawAt;
         int _frozenDrops;
         int _reRequests;
@@ -1121,6 +1168,7 @@ namespace VPB
             _kfIn.Tick(_nowMs);
             _manifestIn.Tick(_nowMs);
             Publish();
+            MaybeLogHealth();
 
             if (_session.State == VpbNetSessionState.Dropped
                 || _session.State == VpbNetSessionState.Idle)
@@ -1249,7 +1297,7 @@ namespace VPB
                 else _empty++;
             }
 
-            VpbNetCollisionGuard.SetLoadHold(_syncFrozen);
+            VpbNetCollisionGuard.SetLoadHold(_syncFrozen, _frozenBySceneLoad);
             VpbNetCollisionGuard.Tick();
             VpbNetBodyGuard.Tick();
             StepSessionStats();
@@ -1260,6 +1308,11 @@ namespace VPB
         {
             if (VpbNetBusy.Active) return true;
             if (_peerId >= 0 && _session.PeerBusy) return true;
+            return SceneLoadInFlight();
+        }
+
+        static bool SceneLoadInFlight()
+        {
             try { return LogUtil.IsSceneLoadActive() || LogUtil.IsSceneLoading(); }
             catch { return false; }
         }
@@ -1272,8 +1325,15 @@ namespace VPB
             if (ContentLoadInFlight())
             {
                 _thawAt = now + ThawSettleSeconds;
+                _quietSince = now;
+
+                // Latched: the scene load can finish before the freeze does, and the whole-scene
+                // hold has to cover the settle that follows it.
+                if (SceneLoadInFlight()) _frozenBySceneLoad = true;
+
                 if (_syncFrozen) return;
                 _syncFrozen = true;
+                _freezeCycles++;
                 LogUtil.LogWarning("[VPB.Net] content is loading - the room is paused;"
                     + " nothing is driven on this side until both machines are standing still");
                 return;
@@ -1281,6 +1341,7 @@ namespace VPB
 
             if (!_syncFrozen || now < _thawAt) return;
             _syncFrozen = false;
+            _frozenBySceneLoad = false;
             _frozenDrops = 0;
             Thaw();
         }
@@ -1348,10 +1409,11 @@ namespace VPB
             if (_syncFrozen) return;
 
             TrackLocalScene();
+            TrackSceneSettled();
             int rosterBefore = VpbNetAvatarRoster.Revision;
             VpbNetAvatarRoster.Poll();
             if (VpbNetAvatarRoster.Revision != rosterBefore)
-                _avatarLock.Apply(_claims.SeatUid(MySeat), _peerId >= 0);
+                _avatarLock.Apply(_claims.SeatUid(MySeat), _claims.SeatUid(TheirSeat), _peerId >= 0);
 
             // No claims until both in same scene — else spawn a Person the peer hasn't loaded.
             if (!ScenesReady())
@@ -1410,10 +1472,22 @@ namespace VPB
                 return;
             }
 
-            _autoInvitedScene = _localScene;
-            if (VpbNetContentSync.BeginHostOffer(path, false, _nowMs))
+            // They already have it open; the gate disagreeing is a stale scene state, not a mismatch.
+            if (VpbNetContentContract.SameScenePath(_peerScene, path))
+            {
+                _autoInvitedScene = _localScene;
+                SendSceneState();
+                return;
+            }
+
+            // Mark only on success — a failed offer must not suppress every later retry.
+            string why;
+            if (VpbNetContentSync.BeginHostOffer(path, false, _nowMs, out why))
+            {
+                _autoInvitedScene = _localScene;
                 LogUtil.LogWarning("[VPB.Net] " + PeerLabel()
                     + " is in a different scene, so they were invited to this one");
+            }
         }
 
         void TrackLocalScene()
@@ -1436,8 +1510,33 @@ namespace VPB
             _autoClaimed = false;
             _desiredUid = string.Empty;
             _spawningAvatar = null;
-            _sceneRebaseUntil = Time.realtimeSinceStartup + SceneRebaseGraceSeconds;
+            _spawnFails.Clear();
+            _spawnBudget = SpawnBudgetPerScene;
+            _spawnBudgetWarned = false;
+            _sceneLoadSerialAtChange = SceneLoadSerial();
+            _sceneLoadSeen = false;
+            _quietSince = Time.realtimeSinceStartup;
+            _sceneRebaseUntil = Time.realtimeSinceStartup + SceneRebaseCeilingSeconds;
             SendSceneState();
+        }
+
+        static int SceneLoadSerial()
+        {
+            try { return LogUtil.GetSceneLoadTotalSerial(); }
+            catch { return 0; }
+        }
+
+        void TrackSceneSettled()
+        {
+            if (_sceneLoadSeen) return;
+            if (SceneLoadSerial() != _sceneLoadSerialAtChange
+                || Time.realtimeSinceStartup - _quietSince >= SceneQuietSeconds)
+                _sceneLoadSeen = true;
+        }
+
+        bool SceneSettled
+        {
+            get { return _sceneLoadSeen || Time.realtimeSinceStartup >= _sceneRebaseUntil; }
         }
 
         // Host-only seat rebase — joiner dropping locally would desync from incoming broadcast.
@@ -1448,7 +1547,7 @@ namespace VPB
             if (!_asHost)
             {
                 // Wait for host state; grace covers host whose scene never changed so never rebroadcasts.
-                if (Time.realtimeSinceStartup >= _sceneRebaseUntil) _seatsNeedRebase = false;
+                if (SceneSettled) _seatsNeedRebase = false;
                 return;
             }
 
@@ -1478,7 +1577,7 @@ namespace VPB
             bool ready = _peerId < 0
                 ? _localScene.Length > 0
                 : _havePeerScene && _localScene.Length > 0
-                    && string.Equals(_localScene, _peerScene, StringComparison.Ordinal);
+                    && VpbNetContentContract.SameScenePath(_localScene, _peerScene);
 
             if (ready == _scenesMatched)
             {
@@ -1507,6 +1606,11 @@ namespace VPB
                 SetParamSync(false);
             }
             return ready;
+        }
+
+        public void AnnounceSceneAgain()
+        {
+            SendSceneState();
         }
 
         void SendSceneState()
@@ -1564,8 +1668,10 @@ namespace VPB
                 catch { }
             }
 
-            // Lock grab handles on everyone you don't ride.
-            _avatarLock.Apply(mine, _peerId >= 0);
+            VpbNetCollisionGuard.SetSeats(mine, theirs);
+
+            // Lock grab handles on the person the peer rides; everyone else stays the user's.
+            _avatarLock.Apply(mine, theirs, _peerId >= 0);
         }
 
         void BindLocal(string uid)
@@ -1702,14 +1808,38 @@ namespace VPB
         {
             if (!_scenesMatched) return;
 
-            // Don't spawn stand-in during rebase grace — seat table still names last scene's Persons.
-            if (_seatsNeedRebase || Time.realtimeSinceStartup < _sceneRebaseUntil) return;
+            // Don't spawn stand-in until the scene load that changed this uid table has landed.
+            if (_seatsNeedRebase || !SceneSettled) return;
             if (_spawningAvatar != null && string.Equals(_spawningAvatar, uid, StringComparison.Ordinal)) return;
             if (!VpbNetAvatarAssignment.IsValidUid(uid) || uid.Length == 0) return;
+
+            int fails;
+            if (_spawnFails.TryGetValue(uid, out fails) && fails >= SpawnAttemptsPerUid) return;
+
+            // VaM's CreateUID renames rather than collides, so an owned uid can never be spawned.
+            if (VpbNetAvatarRoster.AnyAtom(uid) != null)
+            {
+                NoteSpawnFailed(uid, "the other player is riding " + uid
+                    + ", and this scene has something by that name that cannot be driven"
+                    + " (it is switched off, or it is not a Person)."
+                    + " Switch it on, or have them pick someone else");
+                return;
+            }
+
+            if (_spawnBudget <= 0)
+            {
+                if (_spawnBudgetWarned) return;
+                _spawnBudgetWarned = true;
+                LogUtil.LogWarning("[VPB.Net] no more stand-in people will be created here -"
+                    + " too many failed already in this scene. Load the same scene on both"
+                    + " machines and press Resync.");
+                return;
+            }
 
             SuperController sc = SuperController.singleton;
             if (sc == null) return;
 
+            _spawnBudget--;
             _spawningAvatar = uid;
             LogUtil.LogWarning("[VPB.Net] the other player is riding " + uid
                 + ", which this scene does not have; creating an empty Person by that name to drive");
@@ -1717,8 +1847,50 @@ namespace VPB
             catch (Exception e)
             {
                 _spawningAvatar = null;
-                LogUtil.LogWarning("[VPB.Net] could not create " + uid + ": " + e.Message);
+                NoteSpawnFailed(uid, "could not create " + uid + ": " + e.Message);
             }
+        }
+
+        void MaybeLogHealth()
+        {
+            if (_peerId < 0) return;
+
+            float now = Time.realtimeSinceStartup;
+            if (now < _nextHealthLog) return;
+            _nextHealthLog = now + HealthLogSeconds;
+
+            _healthSb.Length = 0;
+            _healthSb.Append("scene=").Append(_scenesMatched ? "match" : "differ");
+            _healthSb.Append(" settled=").Append(_sceneLoadSeen ? 1 : 0);
+            _healthSb.Append(" roster=").Append(VpbNetAvatarRoster.Count);
+            _healthSb.Append(" mine=").Append(SeatText(MySeat));
+            _healthSb.Append(" theirs=").Append(SeatText(TheirSeat));
+            _healthSb.Append(" standins=").Append(_standIns);
+            _healthSb.Append('/').Append(_spawnBudget);
+            _healthSb.Append(" freezes=").Append(_freezeCycles);
+            _healthSb.Append(" frozen=").Append(_syncFrozen ? 1 : 0);
+            _healthSb.Append(" collHeld=").Append(VpbNetCollisionGuard.Held);
+            _healthSb.Append(' ').Append(VpbNetCollisionGuard.Suspends);
+            _healthSb.Append('/').Append(VpbNetCollisionGuard.Restores);
+
+            string line = _healthSb.ToString();
+            if (string.Equals(line, _lastHealth, StringComparison.Ordinal)) return;
+            _lastHealth = line;
+            LogUtil.LogWarning("[VPB.Net][HEALTH] " + line);
+        }
+
+        string SeatText(int seat)
+        {
+            string uid = _claims.SeatUid(seat);
+            return uid.Length == 0 ? "-" : uid;
+        }
+
+        void NoteSpawnFailed(string uid, string why)
+        {
+            int fails;
+            _spawnFails.TryGetValue(uid, out fails);
+            _spawnFails[uid] = fails + 1;
+            if (fails == 0) LogUtil.LogWarning("[VPB.Net] " + why);
         }
 
         IEnumerator SpawnAvatarCo(SuperController sc, string uid)
@@ -1727,16 +1899,57 @@ namespace VPB
             try { add = sc.AddAtomByType("Person", uid, false, false, false); }
             catch (Exception e)
             {
-                LogUtil.LogWarning("[VPB.Net] AddAtomByType(Person) failed: " + e.Message);
+                NoteSpawnFailed(uid, "AddAtomByType(Person) failed: " + e.Message);
             }
             if (add != null) yield return sc.StartCoroutine(add);
 
             VpbNetAvatarRoster.Invalidate();
             VpbNetAvatarRoster.Poll();
-            if (VpbNetAvatarRoster.Find(uid) == null)
-                LogUtil.LogWarning("[VPB.Net] could not create a Person named " + uid
-                    + "; the other player's avatar will not show on this side");
+
+            if (VpbNetAvatarRoster.Find(uid) != null) _standIns++;
+            else
+            {
+                DiscardRenamedStandIn(sc, uid);
+                NoteSpawnFailed(uid, "could not create a Person named " + uid
+                    + " - VaM gave it a different name because something here already owns that one."
+                    + " The other player's avatar will not show on this side");
+            }
             _spawningAvatar = null;
+        }
+
+        static FieldInfo _lastAddedAtomField;
+        static bool _lastAddedAtomLookedUp;
+
+        void DiscardRenamedStandIn(SuperController sc, string uid)
+        {
+            if (!_lastAddedAtomLookedUp)
+            {
+                _lastAddedAtomLookedUp = true;
+                try { _lastAddedAtomField = AccessTools.Field(typeof(SuperController), "lastAddedAtom"); }
+                catch { _lastAddedAtomField = null; }
+            }
+            if (_lastAddedAtomField == null) return;
+
+            Atom stray = null;
+            try { stray = _lastAddedAtomField.GetValue(sc) as Atom; }
+            catch { }
+            if (stray == null) return;
+
+            string strayUid = null;
+            try { strayUid = stray.uid; }
+            catch { }
+            if (string.IsNullOrEmpty(strayUid)) return;
+            if (!strayUid.StartsWith(uid + "#", StringComparison.Ordinal)) return;
+            if (!SceneUtils.IsPersonLikeAtom(stray)) return;
+            if (!_claims.IsFree(strayUid)) return;
+
+            try { sc.RemoveAtom(stray); }
+            catch { return; }
+
+            VpbNetAvatarRoster.Invalidate();
+            VpbNetAvatarRoster.Poll();
+            LogUtil.LogWarning("[VPB.Net] removed the spare Person VaM named " + strayUid
+                + " - it was not the avatar the other player is riding");
         }
 
         // Triggers/props advertised always; object add/delete is a load-consent cap, not a rule.
@@ -2821,6 +3034,22 @@ namespace VPB
                 return;
             }
 
+            // Resync re-sends look state. It cannot seat anybody, which is what it gets pressed for.
+            if (!_scenesMatched)
+            {
+                LogUtil.LogWarning("[VPB.Net] nothing to resync yet - you are not both in the same"
+                    + " scene. Resync re-sends clothes, hair and shape; it cannot put either of you"
+                    + " on a person.");
+                return;
+            }
+            if (_claims.IsSpectator(MySeat) && _claims.IsSpectator(TheirSeat))
+            {
+                LogUtil.LogWarning("[VPB.Net] nothing to resync yet - neither of you is playing as"
+                    + " anyone, so there is no body to re-send. Pick a person on the session panel"
+                    + " first; Resync does not do that for you.");
+                return;
+            }
+
             // Don't re-press while a keyframe is in flight — newer gen abandons the one about to land.
             if (_nowMs - _lastResyncAskMs < ResyncMinIntervalMs)
             {
@@ -2870,9 +3099,12 @@ namespace VPB
             if (_peerId < 0 || !_gotJoin || !_rigOk) return;
             if ((_sharedCaps & VpbNetCapability.Keyframe) == 0) return;
             if (_keyframeSent && !_keyframeIncomplete) return;
+
+            // A retry cannot read clothing that a load is still writing; it would only burn an attempt.
+            if (_syncFrozen) return;
             if (_nowMs < _nextKeyframeMs) return;
 
-            _nextKeyframeMs = _nowMs + KeyframeRetryMs;
+            _nextKeyframeMs = _nowMs + KeyframeBackoffMs(_keyframeAttempts);
             SendKeyframe();
             _keyframeSent = true;
 
@@ -2902,6 +3134,13 @@ namespace VPB
             if (_keyframeAttempts == 1)
                 LogUtil.LogWarning("[VPB.Net] this avatar's clothing is not readable yet"
                     + " (tracked " + _localLook.ClothingTracked + " items); retrying the outfit send");
+        }
+
+        static double KeyframeBackoffMs(int attempts)
+        {
+            double ms = KeyframeRetryMs;
+            for (int i = 0; i < attempts && ms < KeyframeRetryCeilingMs; i++) ms *= 2.0;
+            return ms > KeyframeRetryCeilingMs ? KeyframeRetryCeilingMs : ms;
         }
 
         void SendKeyframe()
@@ -3004,10 +3243,22 @@ namespace VPB
             get { return _peerId >= 0 && (_sharedCaps & VpbNetCapability.Content) != 0; }
         }
 
-        public bool InviteToScene(string scenePath, bool editMode)
+        public bool InviteToScene(string scenePath, bool editMode, out string reason)
         {
-            if (!PeerTakesContent) return false;
-            return VpbNetContentSync.BeginHostOffer(scenePath, editMode, _nowMs);
+            reason = null;
+            if (_peerId < 0)
+            {
+                reason = VPBTranslation.T("net_content.fail.nopeer",
+                    "Nobody is connected, so there is nobody to invite.");
+                return false;
+            }
+            if (!PeerTakesContent)
+            {
+                reason = VPBTranslation.T("net_content.fail.refused",
+                    "Their session rules do not let this machine send them a scene to load.");
+                return false;
+            }
+            return VpbNetContentSync.BeginHostOffer(scenePath, editMode, _nowMs, out reason);
         }
 
         void SendSceneOffer(VpbNetOfferInfo offer)

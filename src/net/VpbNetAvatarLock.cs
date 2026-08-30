@@ -16,10 +16,13 @@ namespace VPB
             public bool[] Possessable;
         }
 
-        readonly Dictionary<string, Held> _held = new Dictionary<string, Held>(8, StringComparer.Ordinal);
-        readonly List<string> _scratch = new List<string>(8);
+        readonly Dictionary<string, Held> _held = new Dictionary<string, Held>(4, StringComparer.Ordinal);
+        readonly List<string> _scratch = new List<string>(4);
 
         bool _enabled = true;
+        string _lastMine = string.Empty;
+        string _lastTheirs = string.Empty;
+        bool _lastActive;
 
         public bool Enabled
         {
@@ -34,33 +37,55 @@ namespace VPB
 
         public int LockedCount { get { return _held.Count; } }
 
-        // Alone, everything stays grabbable. Locks only when there is someone to arbitrate with.
-        public void Apply(string myUid, bool active)
+        // Only the seat the other player rides is locked. Unclaimed Persons stay the user's to move.
+        public void Apply(string myUid, string peerUid, bool active)
         {
+            if (myUid == null) myUid = string.Empty;
+            if (peerUid == null) peerUid = string.Empty;
+
             if (!_enabled || !active)
             {
                 ReleaseAll();
                 return;
             }
 
-            if (myUid == null) myUid = string.Empty;
+            if (_lastActive
+                && string.Equals(myUid, _lastMine, StringComparison.Ordinal)
+                && string.Equals(peerUid, _lastTheirs, StringComparison.Ordinal)
+                && HeldIsCurrent(peerUid))
+                return;
 
-            for (int i = 0; i < VpbNetAvatarRoster.Count; i++)
-            {
-                string uid = VpbNetAvatarRoster.Uid(i);
-                if (string.IsNullOrEmpty(uid)) continue;
-
-                if (string.Equals(uid, myUid, StringComparison.Ordinal)) Release(uid);
-                else Lock(uid, VpbNetAvatarRoster.AtomAt(i));
-            }
+            _lastMine = myUid;
+            _lastTheirs = peerUid;
+            _lastActive = true;
 
             _scratch.Clear();
             foreach (KeyValuePair<string, Held> kv in _held)
             {
-                if (!VpbNetAvatarRoster.Contains(kv.Key)) _scratch.Add(kv.Key);
+                if (!string.Equals(kv.Key, peerUid, StringComparison.Ordinal)) _scratch.Add(kv.Key);
             }
             for (int i = 0; i < _scratch.Count; i++) Release(_scratch[i]);
             _scratch.Clear();
+
+            if (peerUid.Length == 0 || string.Equals(peerUid, myUid, StringComparison.Ordinal)) return;
+            Lock(peerUid, VpbNetAvatarRoster.Find(peerUid));
+        }
+
+        bool HeldIsCurrent(string peerUid)
+        {
+            if (peerUid.Length == 0) return _held.Count == 0;
+            if (_held.Count != 1) return false;
+
+            Held h;
+            if (!_held.TryGetValue(peerUid, out h)) return false;
+            return h != null && h.Atom != null;
+        }
+
+        void Forget()
+        {
+            _lastMine = string.Empty;
+            _lastTheirs = string.Empty;
+            _lastActive = false;
         }
 
         void Lock(string uid, Atom atom)
@@ -87,6 +112,7 @@ namespace VPB
             h.InteractableInPlay = new bool[all.Length];
             h.Possessable = new bool[all.Length];
 
+            bool dropped = false;
             for (int i = 0; i < all.Length; i++)
             {
                 FreeControllerV3 fc = all[i];
@@ -98,7 +124,7 @@ namespace VPB
                     h.InteractableInPlay[i] = fc.interactableInPlayMode;
                     h.Possessable[i] = fc.possessable;
 
-                    DropPossession(fc);
+                    if (DropPossession(fc)) dropped = true;
 
                     fc.canGrabPosition = false;
                     fc.canGrabRotation = false;
@@ -109,20 +135,29 @@ namespace VPB
             }
 
             _held[uid] = h;
-            LogUtil.LogWarning("[VPB.Net] " + uid + " is not yours to move; its controls are locked and it cannot be possessed here");
+
+            if (dropped)
+                LogUtil.LogWarning("[VPB.Net] you were possessing " + uid
+                    + ", and the other player has just taken it, so your possession was let go."
+                    + " Nobody else in this scene is locked - possess one of them instead.");
+            else
+                LogUtil.LogWarning("[VPB.Net] " + uid
+                    + " is the person the other player is riding; its controls are locked here."
+                    + " Everyone else in this scene stays yours to move.");
         }
 
-        static void DropPossession(FreeControllerV3 fc)
+        static bool DropPossession(FreeControllerV3 fc)
         {
             bool on = false;
             try { on = fc.possessed || fc.startedPossess; }
             catch { }
-            if (!on) return;
+            if (!on) return false;
 
             SuperController sc = SuperController.singleton;
-            if (sc == null) return;
+            if (sc == null) return false;
             try { sc.ClearPossess(false, fc); }
-            catch { }
+            catch { return false; }
+            return true;
         }
 
         void Release(string uid)
@@ -136,6 +171,7 @@ namespace VPB
 
         public void ReleaseAll()
         {
+            Forget();
             if (_held.Count == 0) return;
 
             foreach (KeyValuePair<string, Held> kv in _held) Restore(kv.Value);

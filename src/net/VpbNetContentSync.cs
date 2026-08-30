@@ -178,7 +178,26 @@ namespace VPB
         // LoadedSceneName has no extension — CurrentScenePath restores a loadable uid.
         public static bool BeginHostOffer(string scenePath, bool editMode, double nowMs)
         {
-            if (_sendOffer == null || string.IsNullOrEmpty(scenePath)) return false;
+            string reason;
+            return BeginHostOffer(scenePath, editMode, nowMs, out reason);
+        }
+
+        public static bool BeginHostOffer(string scenePath, bool editMode, double nowMs, out string reason)
+        {
+            reason = null;
+
+            if (_sendOffer == null)
+            {
+                reason = VPBTranslation.T("net_content.fail.nolink",
+                    "The session is not carrying content yet - wait for it to finish connecting.");
+                return false;
+            }
+            if (string.IsNullOrEmpty(scenePath))
+            {
+                reason = VPBTranslation.T("net_content.fail.nopath",
+                    "This scene has no file on disk to point them at - save it under Saves/scene first.");
+                return false;
+            }
 
             VpbNetContentResolver.Stop();
             VpbNetContentResolver.Reset();
@@ -210,6 +229,8 @@ namespace VPB
 
             if (!_offer.IsPresent)
             {
+                reason = VPBTranslation.T("net_content.fail.undescribable",
+                    "That scene cannot be described to the other machine, so they were not invited.");
                 LogUtil.LogWarning("[VPB.Net] that scene path cannot be described to the other machine,"
                     + " so they were not invited to it");
                 ClearOffer();
@@ -269,6 +290,16 @@ namespace VPB
         {
             if (!o.IsPresent) return;
             if (_haveOffer && !_mine && _offer.OfferId == o.OfferId) return;
+
+            // Being offered a scene we are standing in means their copy of our scene state is stale.
+            if (AlreadyInOfferedScene(o.ScenePath))
+            {
+                LogUtil.LogWarning("[VPB.Net] they offered " + VpbNetContentContract.TitleOf(o.ScenePath)
+                    + ", which is the scene already open here, so nothing was asked."
+                    + " Telling them again where this machine is.");
+                VpbNetPresence.AnnounceSceneAgain();
+                return;
+            }
 
             VpbNetContentResolver.Stop();
             VpbNetContentResolver.Reset();
@@ -500,6 +531,18 @@ namespace VPB
         public static void Dismiss()
         {
             _dismissed = true;
+        }
+
+        public static bool AlreadyInOfferedScene(string scenePath)
+        {
+            if (string.IsNullOrEmpty(scenePath)) return false;
+
+            string here = null;
+            try { here = VpbNetContentContract.CurrentSceneUid(); }
+            catch { here = null; }
+            if (string.IsNullOrEmpty(here)) return false;
+
+            return VpbNetContentContract.SameScenePath(here, scenePath);
         }
 
         static void LoadOffered()

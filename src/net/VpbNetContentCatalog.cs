@@ -174,6 +174,16 @@ namespace VPB
         }
 
         /// <summary>Offer path vs SceneState uid. Not ScenesMatch.</summary>
+        // No title fallback: two scenes both called "lovehotel" are not the same scene.
+        public static bool SameScenePath(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            string ka = SceneKey(a);
+            string kb = SceneKey(b);
+            if (ka.Length == 0 || kb.Length == 0) return false;
+            return string.Equals(ka, kb, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static bool SameSceneRef(string a, string b)
         {
             if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
