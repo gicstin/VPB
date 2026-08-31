@@ -3060,6 +3060,56 @@ namespace VPB
             }
         }
 
+        public void PrepareForAppearanceLoad()
+        {
+            CancelPendingTextureLoads();
+            ClearCandidates();
+        }
+
+        internal void GetMemoryTelemetry(
+            out int textureCacheCount,
+            out long textureCacheBytes,
+            out int decompressedCacheCount,
+            out long decompressedCacheBytes,
+            out int pendingCreateCount,
+            out long pendingCreateBytes,
+            out int inflightCount,
+            out int activePayloadWorkersCount,
+            out int pendingWritePathCount,
+            out int runtimeWriteQueueCount,
+            out int runtimeWriteActiveCount)
+        {
+            lock (textureCacheLock)
+            {
+                textureCacheCount = textureCache.Count;
+                textureCacheBytes = currentTextureCacheBytes;
+            }
+            lock (decompressedCacheLock)
+            {
+                decompressedCacheCount = decompressedCache.Count;
+                decompressedCacheBytes = currentMemoryUsage;
+            }
+            lock (pendingMainThreadLock)
+            {
+                pendingCreateCount = pendingMainThreadTextureCreateCount;
+                pendingCreateBytes = pendingMainThreadTextureCreateBytes;
+            }
+            lock (inflightLock)
+            {
+                inflightCount = inflightKeys.Count;
+            }
+            activePayloadWorkersCount = Thread.VolatileRead(ref activeTexturePayloadWorkers);
+            lock (pendingZstdWriteLock)
+            {
+                pendingWritePathCount = pendingZstdWrites.Count;
+            }
+            lock (runtimeZstdWriteQueueLock)
+            {
+                runtimeWriteQueueCount = runtimeZstdWriteQueue.Count;
+            }
+            runtimeWriteActiveCount = Thread.VolatileRead(ref activeRuntimeZstdWrites);
+        }
+
         public void TrackCandidate(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;

@@ -18,6 +18,11 @@ namespace VPB
         public static long TotalBytesAllocated = 0;
         public static long TotalBytesReused = 0;
 
+        public static long RetainedBytes
+        {
+            get { lock (lockObj) { return pooledBytes; } }
+        }
+
         // Round up to next power of 2
         private static int NextPowerOfTwo(int v)
         {

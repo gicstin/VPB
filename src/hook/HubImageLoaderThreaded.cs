@@ -54,6 +54,11 @@ namespace VPB
                 tex = null;
                 rawImageToLoad = null;
                 useWebCache = false;
+                if (webRequest != null)
+                {
+                    try { webRequest.Abort(); } catch { }
+                    try { webRequest.Dispose(); } catch { }
+                }
                 webRequest = null;
                 webRequestDone = false;
                 webRequestHadError = false;

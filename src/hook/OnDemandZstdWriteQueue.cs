@@ -62,6 +62,16 @@ namespace VPB
             get { return PendingCount <= 0; }
         }
 
+        internal static void GetTelemetryCounts(out int queuedJobs, out int activeWriters, out long payloadBytes)
+        {
+            lock (QueueLock)
+            {
+                queuedJobs = Thread.VolatileRead(ref s_Queued);
+                activeWriters = Thread.VolatileRead(ref s_ActiveWriters);
+                payloadBytes = s_PayloadBytes;
+            }
+        }
+
         internal static IEnumerator CoWaitForCapacity(int payloadBytes)
         {
             if (payloadBytes <= 0 || payloadBytes > MaxPendingPayloadBytes) yield break;

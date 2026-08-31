@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Profiling;
@@ -16,6 +17,39 @@ namespace VPB
 
         static float _nextEmitRealtime;
         static Snapshot _prev;
+        static bool _processMemoryFailureLogged;
+        static bool _nativeImageLoaderFieldsInitialized;
+        static FieldInfo _nativeTextureCacheField;
+        static FieldInfo _nativeImmediateTextureCacheField;
+        static FieldInfo _nativeThumbnailCacheField;
+        static FieldInfo _nativeTextureTrackedCacheField;
+        static FieldInfo _nativeTextureUseCountField;
+
+        [DllImport("kernel32.dll")]
+        static extern IntPtr GetCurrentProcess();
+
+        [DllImport("psapi.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GetProcessMemoryInfo(
+            IntPtr process,
+            ref ProcessMemoryCountersEx counters,
+            uint size);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct ProcessMemoryCountersEx
+        {
+            public uint cb;
+            public uint PageFaultCount;
+            public UIntPtr PeakWorkingSetSize;
+            public UIntPtr WorkingSetSize;
+            public UIntPtr QuotaPeakPagedPoolUsage;
+            public UIntPtr QuotaPagedPoolUsage;
+            public UIntPtr QuotaPeakNonPagedPoolUsage;
+            public UIntPtr QuotaNonPagedPoolUsage;
+            public UIntPtr PagefileUsage;
+            public UIntPtr PeakPagefileUsage;
+            public UIntPtr PrivateUsage;
+        }
 
         struct Snapshot
         {
@@ -42,6 +76,29 @@ namespace VPB
             public long monoHeap;
             public long allocHeap;
             public long managedHeap;
+            public bool processMemoryValid;
+            public long processWorkingSet;
+            public long processPrivateBytes;
+            public int nativeTextureCache;
+            public int nativeImmediateTextureCache;
+            public int nativeThumbnailCache;
+            public int nativeTextureTrackedCache;
+            public int nativeTextureUseCount;
+            public int ilmTextureCache;
+            public long ilmTextureCacheBytes;
+            public int ilmDecompressedCache;
+            public long ilmDecompressedCacheBytes;
+            public int ilmPendingCreates;
+            public long ilmPendingCreateBytes;
+            public int ilmInflight;
+            public int ilmActivePayloadWorkers;
+            public int ilmPendingWritePaths;
+            public int ilmRuntimeWriteQueue;
+            public int ilmRuntimeWriteActive;
+            public long byteArrayPoolRetainedBytes;
+            public int onDemandZstdQueued;
+            public int onDemandZstdActive;
+            public long onDemandZstdPayloadBytes;
             public int gen0;
             public int gen1;
             public int gen2;
@@ -171,6 +228,40 @@ namespace VPB
 
             try { s.dataToPathCount = GenericTextureHook.DataToPathCount; } catch { }
 
+            CaptureProcessMemory(ref s);
+            CaptureNativeImageLoaderCounts(ref s);
+
+            try
+            {
+                var imageManager = ImageLoadingMgr.singleton;
+                if (imageManager != null)
+                {
+                    imageManager.GetMemoryTelemetry(
+                        out s.ilmTextureCache,
+                        out s.ilmTextureCacheBytes,
+                        out s.ilmDecompressedCache,
+                        out s.ilmDecompressedCacheBytes,
+                        out s.ilmPendingCreates,
+                        out s.ilmPendingCreateBytes,
+                        out s.ilmInflight,
+                        out s.ilmActivePayloadWorkers,
+                        out s.ilmPendingWritePaths,
+                        out s.ilmRuntimeWriteQueue,
+                        out s.ilmRuntimeWriteActive);
+                }
+            }
+            catch { }
+
+            try { s.byteArrayPoolRetainedBytes = ByteArrayPool.RetainedBytes; } catch { }
+            try
+            {
+                OnDemandZstdWriteQueue.GetTelemetryCounts(
+                    out s.onDemandZstdQueued,
+                    out s.onDemandZstdActive,
+                    out s.onDemandZstdPayloadBytes);
+            }
+            catch { }
+
             try { s.monoHeap = Profiler.GetMonoUsedSizeLong(); } catch { }
             try { s.allocHeap = Profiler.GetTotalAllocatedMemoryLong(); } catch { }
             try { s.managedHeap = GC.GetTotalMemory(false); } catch { }
@@ -185,6 +276,78 @@ namespace VPB
             return s;
         }
 
+        static void CaptureProcessMemory(ref Snapshot snapshot)
+        {
+            try
+            {
+                ProcessMemoryCountersEx counters = new ProcessMemoryCountersEx();
+                uint size = (uint)Marshal.SizeOf(typeof(ProcessMemoryCountersEx));
+                counters.cb = size;
+                if (!GetProcessMemoryInfo(GetCurrentProcess(), ref counters, size))
+                {
+                    LogProcessMemoryFailure("Win32 error " + Marshal.GetLastWin32Error());
+                    return;
+                }
+
+                snapshot.processWorkingSet = (long)counters.WorkingSetSize.ToUInt64();
+                snapshot.processPrivateBytes = (long)counters.PrivateUsage.ToUInt64();
+                snapshot.processMemoryValid = true;
+            }
+            catch (Exception ex)
+            {
+                LogProcessMemoryFailure(ex.GetType().Name + ": " + ex.Message);
+            }
+        }
+
+        static void CaptureNativeImageLoaderCounts(ref Snapshot snapshot)
+        {
+            snapshot.nativeTextureCache = -1;
+            snapshot.nativeImmediateTextureCache = -1;
+            snapshot.nativeThumbnailCache = -1;
+            snapshot.nativeTextureTrackedCache = -1;
+            snapshot.nativeTextureUseCount = -1;
+
+            try
+            {
+                ImageLoaderThreaded loader = ImageLoaderThreaded.singleton;
+                if (loader == null) return;
+                EnsureNativeImageLoaderFields();
+                snapshot.nativeTextureCache = ReadCollectionCount(_nativeTextureCacheField, loader);
+                snapshot.nativeImmediateTextureCache = ReadCollectionCount(_nativeImmediateTextureCacheField, loader);
+                snapshot.nativeThumbnailCache = ReadCollectionCount(_nativeThumbnailCacheField, loader);
+                snapshot.nativeTextureTrackedCache = ReadCollectionCount(_nativeTextureTrackedCacheField, loader);
+                snapshot.nativeTextureUseCount = ReadCollectionCount(_nativeTextureUseCountField, loader);
+            }
+            catch { }
+        }
+
+        static void EnsureNativeImageLoaderFields()
+        {
+            if (_nativeImageLoaderFieldsInitialized) return;
+            _nativeImageLoaderFieldsInitialized = true;
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            Type type = typeof(ImageLoaderThreaded);
+            _nativeTextureCacheField = type.GetField("textureCache", flags);
+            _nativeImmediateTextureCacheField = type.GetField("immediateTextureCache", flags);
+            _nativeThumbnailCacheField = type.GetField("thumbnailCache", flags);
+            _nativeTextureTrackedCacheField = type.GetField("textureTrackedCache", flags);
+            _nativeTextureUseCountField = type.GetField("textureUseCount", flags);
+        }
+
+        static int ReadCollectionCount(FieldInfo field, object instance)
+        {
+            if (field == null || instance == null) return -1;
+            var collection = field.GetValue(instance) as System.Collections.ICollection;
+            return collection != null ? collection.Count : -1;
+        }
+
+        static void LogProcessMemoryFailure(string reason)
+        {
+            if (_processMemoryFailureLogged) return;
+            _processMemoryFailureLogged = true;
+            LogUtil.LogWarning("[VPB] Process memory telemetry unavailable: " + reason);
+        }
+
         static void Emit(Snapshot s, Snapshot p)
         {
             string msg = string.Format(
@@ -195,7 +358,13 @@ namespace VPB
                 " | panels={21} ({22}) scrollListeners={23} ({24})" +
                 " | poolFB={25} ({26}) poolNav={27} ({28}) btnImg={29} ({30}) activeBtns={31} ({32}) tabBtns={33} ({34}) pkgUid={35} ({36}) bufPath={37} ({38})" +
                 " | mono={39} alloc={40} managed={41}" +
-                " | gc[0/1/2]={42}/{43}/{44} (delta {45}/{46}/{47})",
+                " | gc[0/1/2]={42}/{43}/{44} (delta {45}/{46}/{47})" +
+                " | procWorking={48} ({49}) procPrivate={50} ({51})" +
+                " | ilmTex={52}/{53} ilmDecomp={54}/{55} ilmPending={56}/{57} ilmInflight={58} ilmWorkers={59}" +
+                " ilmWritePaths={60} ilmWriteQ={61} ilmWriteActive={62}" +
+                " | bytePool={63} odZstdQ={64} odZstdActive={65} odZstdMemPayload={66}" +
+                " | vamTex={67} ({68}) vamImm={69} ({70}) vamThumb={71} ({72})" +
+                " vamTracked={73} ({74}) vamUsed={75} ({76})",
                 Time.realtimeSinceStartup,
                 s.textureCache, Delta(s.textureCache, p.textureCache),
                 s.immediateTextureCache, Delta(s.immediateTextureCache, p.immediateTextureCache),
@@ -222,7 +391,23 @@ namespace VPB
                 s.gen0, s.gen1, s.gen2,
                 p.valid ? (s.gen0 - p.gen0) : 0,
                 p.valid ? (s.gen1 - p.gen1) : 0,
-                p.valid ? (s.gen2 - p.gen2) : 0);
+                p.valid ? (s.gen2 - p.gen2) : 0,
+                FormatProcessBytes(s.processWorkingSet, s.processMemoryValid),
+                DeltaProcessBytes(s.processWorkingSet, p.processWorkingSet, s.processMemoryValid, p.valid && p.processMemoryValid),
+                FormatProcessBytes(s.processPrivateBytes, s.processMemoryValid),
+                DeltaProcessBytes(s.processPrivateBytes, p.processPrivateBytes, s.processMemoryValid, p.valid && p.processMemoryValid),
+                s.ilmTextureCache, FormatBytes(s.ilmTextureCacheBytes),
+                s.ilmDecompressedCache, FormatBytes(s.ilmDecompressedCacheBytes),
+                s.ilmPendingCreates, FormatBytes(s.ilmPendingCreateBytes),
+                s.ilmInflight, s.ilmActivePayloadWorkers,
+                s.ilmPendingWritePaths, s.ilmRuntimeWriteQueue, s.ilmRuntimeWriteActive,
+                FormatBytes(s.byteArrayPoolRetainedBytes),
+                s.onDemandZstdQueued, s.onDemandZstdActive, FormatBytes(s.onDemandZstdPayloadBytes),
+                FormatCount(s.nativeTextureCache), DeltaCount(s.nativeTextureCache, p.nativeTextureCache, p.valid),
+                FormatCount(s.nativeImmediateTextureCache), DeltaCount(s.nativeImmediateTextureCache, p.nativeImmediateTextureCache, p.valid),
+                FormatCount(s.nativeThumbnailCache), DeltaCount(s.nativeThumbnailCache, p.nativeThumbnailCache, p.valid),
+                FormatCount(s.nativeTextureTrackedCache), DeltaCount(s.nativeTextureTrackedCache, p.nativeTextureTrackedCache, p.valid),
+                FormatCount(s.nativeTextureUseCount), DeltaCount(s.nativeTextureUseCount, p.nativeTextureUseCount, p.valid));
 
             LogUtil.LogWarning(msg);
         }
@@ -241,6 +426,34 @@ namespace VPB
             if (b >= 1024d * 1024d) return (b / (1024d * 1024d)).ToString("0.00") + "MB";
             if (b >= 1024d) return (b / 1024d).ToString("0.00") + "KB";
             return bytes.ToString() + "B";
+        }
+
+        static string FormatCount(int value)
+        {
+            return value >= 0 ? value.ToString() : "n/a";
+        }
+
+        static string DeltaCount(int now, int previous, bool previousValid)
+        {
+            return now >= 0 && previous >= 0 && previousValid ? Delta(now, previous) : "n/a";
+        }
+
+        static string DeltaBytes(long now, long previous, bool previousValid)
+        {
+            if (!previousValid) return "0B";
+            long delta = now - previous;
+            if (delta == 0) return "0B";
+            return delta > 0 ? "+" + FormatBytes(delta) : "-" + FormatBytes(-delta);
+        }
+
+        static string FormatProcessBytes(long bytes, bool valid)
+        {
+            return valid ? FormatBytes(bytes) : "n/a";
+        }
+
+        static string DeltaProcessBytes(long now, long previous, bool valid, bool previousValid)
+        {
+            return valid && previousValid ? DeltaBytes(now, previous, true) : "n/a";
         }
 
         // UnityEventBase has a private InvokableCallList m_Calls, which holds m_RuntimeCalls

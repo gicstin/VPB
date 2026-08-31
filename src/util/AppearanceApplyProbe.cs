@@ -232,7 +232,16 @@ namespace VPB.src.util
                         || string.Equals(id, "ClothingPresets", StringComparison.OrdinalIgnoreCase)) clothing++;
                     else if (id.StartsWith("hair:", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(id, "HairPresets", StringComparison.OrdinalIgnoreCase)) hair++;
-                    else if (string.Equals(id, "geometry", StringComparison.OrdinalIgnoreCase)) geometry++;
+                    else if (string.Equals(id, "geometry", StringComparison.OrdinalIgnoreCase))
+                    {
+                        geometry++;
+                        // VaM stores worn item selection inside DAZCharacterSelector's geometry
+                        // storable. Top-level clothingItem/hairItem storables only hold materials.
+                        var geometryClothing = s["clothing"] as SimpleJSON.JSONArray;
+                        var geometryHair = s["hair"] as SimpleJSON.JSONArray;
+                        if (geometryClothing != null) clothing += geometryClothing.Count;
+                        if (geometryHair != null) hair += geometryHair.Count;
+                    }
                     else if (string.Equals(id, "MorphPresets", StringComparison.OrdinalIgnoreCase)
                         || id.IndexOf("morph", StringComparison.OrdinalIgnoreCase) >= 0) morph++;
                 }

@@ -24,7 +24,8 @@ namespace VPB
             public readonly HashSet<DAZHairGroup> pendingHide = new HashSet<DAZHairGroup>();
             public readonly HashSet<DAZHairGroup> outgoingAtStart = new HashSet<DAZHairGroup>();
             public readonly Dictionary<string, bool> targetEnabled = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            public readonly HashSet<string> loadWatchers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public readonly Dictionary<DAZHairGroup, JSONStorableDynamic.OnLoaded> loadWatchers =
+                new Dictionary<DAZHairGroup, JSONStorableDynamic.OnLoaded>();
             public Coroutine finalizeCoroutine;
         }
 
@@ -218,7 +219,25 @@ namespace VPB
             {
                 try { SuperController.singleton.StopCoroutine(session.finalizeCoroutine); } catch { }
             }
+            ClearLoadWatchers(session);
             s_SessionsBySelectorId.Remove(id);
+        }
+
+        static void ClearLoadWatchers(HairSwapSession session)
+        {
+            if (session == null || session.loadWatchers.Count == 0) return;
+            foreach (var watcher in session.loadWatchers)
+            {
+                DAZHairGroup item = watcher.Key;
+                JSONStorableDynamic.OnLoaded callback = watcher.Value;
+                if (item == null || callback == null) continue;
+                try
+                {
+                    item.onLoadedHandlers = (JSONStorableDynamic.OnLoaded)Delegate.Remove(item.onLoadedHandlers, callback);
+                }
+                catch { }
+            }
+            session.loadWatchers.Clear();
         }
 
         static bool IsInsideRestore(DAZCharacterSelector selector)
@@ -376,6 +395,7 @@ namespace VPB
                 try { SuperController.singleton.StopCoroutine(session.finalizeCoroutine); } catch { }
                 session.finalizeCoroutine = null;
             }
+            ClearLoadWatchers(session);
 
             if (!session.swapActive)
             {
@@ -386,7 +406,6 @@ namespace VPB
             session.finalizeScheduled = false;
             session.incoming.Clear();
             session.pendingHide.Clear();
-            session.loadWatchers.Clear();
 
             if (fromGeometryDirect)
             {
@@ -552,7 +571,7 @@ namespace VPB
         {
             if (!Enabled || __instance == null) return true;
             var session = GetSession(__instance, create: false);
-            if (session != null && session.swapActive) return false;
+            if (session != null && session.swapActive && !session.executingVanilla) return false;
             return true;
         }
 
@@ -574,13 +593,20 @@ namespace VPB
             if (selector == null || item == null || session == null) return;
             if (item.ready) return;
 
-            string key = item.uid ?? item.GetInstanceID().ToString();
-            if (!session.loadWatchers.Add(key)) return;
+            if (session.loadWatchers.ContainsKey(item)) return;
 
             try
             {
-                JSONStorableDynamic.OnLoaded callback = () =>
+                JSONStorableDynamic.OnLoaded callback = null;
+                callback = () =>
                 {
+                    try
+                    {
+                        if (item != null)
+                            item.onLoadedHandlers = (JSONStorableDynamic.OnLoaded)Delegate.Remove(item.onLoadedHandlers, callback);
+                    }
+                    catch { }
+                    session.loadWatchers.Remove(item);
                     try
                     {
                         if (item != null && item.characterSelector != null)
@@ -591,6 +617,7 @@ namespace VPB
                     catch { }
                 };
                 item.onLoadedHandlers = (JSONStorableDynamic.OnLoaded)Delegate.Combine(item.onLoadedHandlers, callback);
+                session.loadWatchers[item] = callback;
             }
             catch { }
         }
@@ -742,6 +769,9 @@ namespace VPB
                     SetHairCollisions(item, false);
                     DisableHairItemDirect(selector, item);
                 }
+
+                // Replay unload blocked during swap so outgoing hair releases instances and AssetBundles.
+                if (toHide.Count > 0) selector.UnloadInactiveHairItems();
             }
             finally
             {

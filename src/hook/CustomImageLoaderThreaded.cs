@@ -75,6 +75,11 @@ namespace VPB
                 tex = null;
                 rawImageToLoad = null;
                 useWebCache = false;
+                if (webRequest != null)
+                {
+                    try { webRequest.Abort(); } catch { }
+                    try { webRequest.Dispose(); } catch { }
+                }
                 webRequest = null;
                 webRequestDone = false;
                 webRequestHadError = false;
@@ -1537,6 +1542,12 @@ namespace VPB
             return k;
         }
 
+		private static string ThumbnailPendingKey(string path, int turboJpegScaleDenom, bool unityDecodeOnly, bool skipCache)
+		{
+			string key = ThumbnailMemoryCacheKey(path, turboJpegScaleDenom, unityDecodeOnly);
+			return skipCache ? key + "|bypass" : key + "|normal";
+		}
+
         /// <summary>Live disk mtime for loose thumbs; FileEntry can stay stale after overwrite save.</summary>
         private static long GetLooseThumbnailLastWriteTime(string imgPath)
         {
@@ -1758,13 +1769,10 @@ namespace VPB
                     finally
                     {
                         TurboJpegNative.ReleaseThreadResources();
-                        if (!head.debugAbortIssued)
-                        {
-                            head.processed = true;
-                            head.working = false;
-                            System.Threading.Interlocked.Decrement(ref runningTasks);
-                            System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
-                        }
+                        head.processed = true;
+                        head.working = false;
+                        System.Threading.Interlocked.Decrement(ref runningTasks);
+                        System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
                         head.debugWorkerThread = null;
                     }
                 });
@@ -1896,6 +1904,9 @@ namespace VPB
 						if (qi != null)
 						{
 							try { qi.cancel = true; } catch { }
+							if (qi.isThumbnail && !string.IsNullOrEmpty(qi.imgPath))
+								DispatchPendingThumbnailCallbacks(qi);
+							pool.Return(qi);
 						}
 					}
 				}
@@ -2116,18 +2127,29 @@ namespace VPB
 			CacheThumbnail(ThumbnailMemoryCacheKey(path, turboJpegScaleDenom, unityDecodeOnly), tex);
 		}
 
-		private void CacheThumbnail(string cacheKey, Texture2D tex)
+		private Texture2D CacheThumbnail(string cacheKey, Texture2D tex)
 		{
-			if (thumbnailCache == null || string.IsNullOrEmpty(cacheKey) || tex == null) return;
-			if (!thumbnailCache.ContainsKey(cacheKey))
+			if (thumbnailCache == null || string.IsNullOrEmpty(cacheKey) || tex == null) return tex;
+			Texture2D existing;
+			if (thumbnailCache.TryGetValue(cacheKey, out existing) && existing != null)
 			{
-				thumbnailCache.Add(cacheKey, tex);
-				long bytes = EstimateThumbnailCacheBytes(tex);
-				thumbnailCacheSizes[cacheKey] = bytes;
-				thumbnailCacheBytes += bytes;
+				if (!object.ReferenceEquals(existing, tex)) UnityEngine.Object.Destroy(tex);
+				TouchThumbnailCacheLru(cacheKey);
+				return existing;
 			}
+			if (thumbnailCache.ContainsKey(cacheKey))
+			{
+				thumbnailCache.Remove(cacheKey);
+				RemoveThumbnailCacheSize(cacheKey);
+				RemoveThumbnailCacheLru(cacheKey);
+			}
+			thumbnailCache.Add(cacheKey, tex);
+			long bytes = EstimateThumbnailCacheBytes(tex);
+			thumbnailCacheSizes[cacheKey] = bytes;
+			thumbnailCacheBytes += bytes;
 			TouchThumbnailCacheLru(cacheKey);
 			EnforceThumbnailCacheLimit();
+			return tex;
 		}
 
 		private static long EstimateThumbnailCacheBytes(Texture2D tex)
@@ -2215,7 +2237,7 @@ namespace VPB
 		private void DispatchPendingThumbnailCallbacks(QueuedImage res)
 		{
 			if (res == null || string.IsNullOrEmpty(res.imgPath)) return;
-			string pendingKey = ThumbnailMemoryCacheKey(res.imgPath, res.turboJpegScaleDenom, res.thumbnailUnityDecodeOnly);
+			string pendingKey = ThumbnailPendingKey(res.imgPath, res.turboJpegScaleDenom, res.thumbnailUnityDecodeOnly, res.skipCache);
 			List<ImageLoaderCallback> callbacks = null;
 			lock (pendingThumbnailLock)
 			{
@@ -2352,7 +2374,7 @@ namespace VPB
 				{
 					if (pendingThumbnailCallbacks == null) pendingThumbnailCallbacks = new Dictionary<string, List<ImageLoaderCallback>>();
 					List<ImageLoaderCallback> list;
-					string pendingKey = ThumbnailMemoryCacheKey(qi.imgPath, qi.turboJpegScaleDenom, qi.thumbnailUnityDecodeOnly);
+					string pendingKey = ThumbnailPendingKey(qi.imgPath, qi.turboJpegScaleDenom, qi.thumbnailUnityDecodeOnly, qi.skipCache);
 					if (pendingThumbnailCallbacks.TryGetValue(pendingKey, out list))
 					{
 						if (qi.callback != null) list.Add(qi.callback);
@@ -2362,7 +2384,25 @@ namespace VPB
 							for (int i = 0; i < queuedImages.data.Count; i++)
 							{
 								QueuedImage cand = queuedImages.data[i];
-								if (cand.imgPath == qi.imgPath && cand.turboJpegScaleDenom == qi.turboJpegScaleDenom)
+								if (cand.imgPath == qi.imgPath
+									&& cand.turboJpegScaleDenom == qi.turboJpegScaleDenom
+									&& cand.thumbnailUnityDecodeOnly == qi.thumbnailUnityDecodeOnly
+									&& cand.skipCache == qi.skipCache)
+								{
+									existing = cand;
+									break;
+								}
+							}
+						}
+						if (existing == null && dispatchedImages != null)
+						{
+							for (int i = 0; i < dispatchedImages.Count; i++)
+							{
+								QueuedImage cand = dispatchedImages[i];
+								if (cand != null && cand.imgPath == qi.imgPath
+									&& cand.turboJpegScaleDenom == qi.turboJpegScaleDenom
+									&& cand.thumbnailUnityDecodeOnly == qi.thumbnailUnityDecodeOnly
+									&& cand.skipCache == qi.skipCache)
 								{
 									existing = cand;
 									break;
@@ -2371,9 +2411,12 @@ namespace VPB
 						}
 						if (existing != null)
 						{
-							queuedImages.Remove(existing);
-							existing.insertionIndex = ++_insertionOrderCounter;
-							queuedImages.Enqueue(existing);
+							if (queuedImages != null && queuedImages.data != null && queuedImages.data.Contains(existing))
+							{
+								queuedImages.Remove(existing);
+								existing.insertionIndex = ++_insertionOrderCounter;
+								queuedImages.Enqueue(existing);
+							}
 							pool.Return(qi);
 							return;
 						}
@@ -2438,6 +2481,7 @@ namespace VPB
 
                 QueuedImage value = dispatchedImages[i];
                 if (value == null) continue;
+				if (value.working || value.thumbVarIoPending) continue;
                 if (!(value.processed || value.cancel)) continue;
                 CompleteDispatchedImageAt(i, value);
             }
@@ -2517,13 +2561,19 @@ namespace VPB
 
             value.Finish();
 
-            if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
+            if (value.imgPath != null && value.imgPath != "NULL")
             {
                 if (value.isThumbnail)
                 {
-                    if (value.tex != null) CacheThumbnail(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly), value.tex);
+                    if (value.tex != null)
+                    {
+                        // Forced retry owns freshest decode even if a normal request refilled cache concurrently.
+                        if (value.skipCache)
+                            ClearCacheThumbnail(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly);
+                        value.tex = CacheThumbnail(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly), value.tex);
+                    }
                 }
-                else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
+                else if (!value.skipCache && !textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
                 {
                     textureCache.Add(value.cacheSignature, value.tex);
                     textureTrackedCache.Add(value.tex, true);
@@ -2697,7 +2747,7 @@ namespace VPB
                         float age = now - ws;
                         if (age < stuckSec) continue;
 
-                        // If worker never reaches Process() (stg<20) for a long time, treat as wedged start and reset slot.
+                        // Worker keeps ownership until its finally block runs; pooling it early races live thread state.
                         if (!qi.debugAbortIssued && qi.debugStage < 20 && age >= (ThumbnailSoftTimeoutSec + 6.0f))
                         {
                             qi.debugAbortIssued = true;
@@ -2706,10 +2756,6 @@ namespace VPB
                                 qi.hadError = true;
                                 qi.errorText = "thumb worker never entered Process @" + age.ToString("0.000") + "s stg=" + qi.debugStage;
                                 qi.cancel = true;
-                                qi.processed = true;
-                                qi.working = false;
-                                System.Threading.Interlocked.Decrement(ref runningTasks);
-                                System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
                             }
                             catch { }
 
@@ -2717,7 +2763,7 @@ namespace VPB
                             {
                                 if (qi.debugWorkerThread != null && qi.debugWorkerThread.IsAlive)
                                 {
-                                    // Last resort: background thread wedged before Process; abandon thread (orphan) but free loader slot.
+                                    // Interrupt wait/sleep without reusing this job while thread still owns it.
                                     try { qi.debugWorkerThread.Interrupt(); } catch { }
                                 }
                             }
@@ -2748,10 +2794,6 @@ namespace VPB
                                 qi.hadError = true;
                                 qi.errorText = "thumb soft-timeout @" + age.ToString("0.000") + "s";
                                 qi.cancel = true; // ensures callbacks see cancel and target will retry/blank safely
-                                qi.processed = true;
-                                qi.working = false;
-                                System.Threading.Interlocked.Decrement(ref runningTasks);
-                                System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
                             }
                             catch { }
 
