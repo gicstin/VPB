@@ -3,13 +3,13 @@
   Rebuilds the icon rows in vam_patch/patch_manifest.json.
 
 .DESCRIPTION
-  Icons ship as a single packed atlas (BepInEx/plugins/vpb_icons.pack) built from
+  Icons ship as a single packed atlas (BepInEx/plugins/VPB/assets/icons.pack) built from
   assets/vpb_icons by scripts/build_icon_atlas.py, plus the third-party notice file
   the Tabler Icons MIT licence requires us to redistribute.
 
-  This removes every legacy per-PNG row under BepInEx/plugins/vpb_icons and any prior
+  This removes every legacy per-PNG row under BepInEx/plugins/VPB/assets/vpb_icons and any prior
   pack/notice row, then inserts the current rows immediately before the first
-  BepInEx/plugins/zstd entry. Run after rebuilding the pack.
+  BepInEx/plugins/VPB/native entry. Run after rebuilding the pack.
 #>
 param(
     [string] $ProjectDir = (Split-Path -Parent $PSScriptRoot)
@@ -20,10 +20,10 @@ $ErrorActionPreference = 'Stop'
 
 $manifestPath = Join-Path $ProjectDir 'vam_patch/patch_manifest.json'
 $patchRoot = Join-Path $ProjectDir 'vam_patch'
-$legacyPrefix = 'BepInEx/plugins/vpb_icons'
+$legacyPrefix = 'BepInEx/plugins/VPB/assets/vpb_icons'
 $shipped = @(
-    'BepInEx/plugins/vpb_icons.pack',
-    'BepInEx/plugins/VPB_THIRD_PARTY_NOTICES.txt'
+    'BepInEx/plugins/VPB/assets/icons.pack',
+    'BepInEx/plugins/VPB/VPB_THIRD_PARTY_NOTICES.txt'
 )
 
 if (-not (Test-Path -LiteralPath $manifestPath)) {
@@ -52,7 +52,7 @@ foreach ($entry in $manifest) {
     if ($rp.StartsWith($legacyPrefix) -or $shipped -contains $rp) {
         continue
     }
-    if (-not $inserted -and $rp -eq 'BepInEx/plugins/zstd') {
+    if (-not $inserted -and $rp -eq 'BepInEx/plugins/VPB/native') {
         foreach ($ic in $iconBlock) {
             $out.Add($ic)
         }

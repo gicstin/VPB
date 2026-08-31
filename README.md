@@ -9,7 +9,7 @@ VPB is a **fork** of the venerable **`var_browser`** project by **sFisherE**.
 
 VPB is a **BepInEx plugin for Virt-A-Mate (VaM)** that provides an in-game package/browser experience and related tooling.
 
-This repo builds a `VPB.dll` plugin, deployed to `BepInEx/plugins/`.
+This repo builds a `VPB.dll` plugin, deployed to `BepInEx/plugins/VPB/` along with the assets and native libraries it loads.
 
 ## Screenshots
 
@@ -73,8 +73,27 @@ https://github.com/gicstin/VPM
 
 1. Build or obtain `VPB.dll`.
 2. Copy it to:
-   - `VaM\BepInEx\plugins\VPB.dll`
+   - `VaM\BepInEx\plugins\VPB\VPB.dll`
 3. Start VaM.
+
+Everything VPB ships lives in that one `VPB` folder, so uninstalling is a single delete.
+
+### Installed layout
+
+```
+BepInEx/plugins/VPB/
+  VPB.dll
+  patch_manifest.json          what this install is supposed to contain
+  assets/                      icons.pack, help/, translations/, fonts/
+  native/                      sqlite3.dll, turbojpeg.dll, libzstd.dll, zstd.exe
+  net/                         VpbNet.exe, steam_api64.dll
+  icons_override/              yours — glyph overrides
+  clips/                       yours — recorded sessions
+```
+
+`I18N*.dll` stay in `BepInEx/plugins/` itself: they are Mono runtime assemblies, not VPB's.
+
+On every VaM launch `VPB.Patcher` reconciles the folder against the shipped `patch_manifest.json` and removes anything that is no longer part of the release, so an install can never accumulate two copies of a file that moved. It only ever touches loose files inside VPB's own folders — the folders listed as yours above, other plugins, and anything else under `BepInEx/plugins/` are never entered. If the manifest is missing or unreadable, nothing is removed.
 
 ### Updating
 
@@ -298,8 +317,8 @@ Open `VPB.sln` and build `Release`.
 
 Post-build, the project copies the resulting DLL to:
 
-- `$(VaMPath)\BepInEx\plugins\VPB.dll`
-- `vam_patch\BepInEx\plugins\VPB.dll`
+- `$(VaMPath)\BepInEx\plugins\VPB\VPB.dll`
+- `vam_patch\BepInEx\plugins\VPB\VPB.dll`
 
 Plugin version is sourced from `plugin_version.txt`.
 

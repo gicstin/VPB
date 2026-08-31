@@ -96,15 +96,38 @@ if (-not $vamPathOk) {
     Write-Host ("[PostBuildDeploy] VaMPath '{0}' not found - skipping VaM deploy, vam_patch staging will still run." -f $VaMPath)
 }
 
-$vamPlugins = Join-Path $VaMPath 'BepInEx\plugins'
-$patchPlugins = Join-Path $ProjectDir 'vam_patch\BepInEx\plugins'
+$vamPluginsRoot = Join-Path $VaMPath 'BepInEx\plugins'
+$vamPlugins = Join-Path $vamPluginsRoot 'VPB'
+$patchPlugins = Join-Path $ProjectDir 'vam_patch\BepInEx\plugins\VPB'
 
 if ($vamPathOk) { [void](Copy-FileWithRetry $TargetPath $vamPlugins) }
 [void](Copy-FileWithRetry $TargetPath $patchPlugins)
 
-$benchExample = Join-Path $patchPlugins 'bench_run.example.cfg'
-if (Test-Path -LiteralPath $benchExample) {
-    if ($vamPathOk) { [void](Copy-FileWithRetry $benchExample $vamPlugins) }
+if ($vamPathOk) {
+    $legacyFiles = @('VPB.dll', 'VPB.pdb', 'sqlite3.dll', 'turbojpeg.dll', 'vpb_icons.pack', 'VPB_THIRD_PARTY_NOTICES.txt', 'bench_run.cfg', 'bench_run.example.cfg')
+    $legacyDirs = @('vpb_fonts', 'vpb_help', 'vpb_translations', 'vpb_themes', 'vpb_ccm_clips', 'vpb_icons', 'VpbNet', 'zstd', 'bench', 'vpb_update_staging')
+    foreach ($name in $legacyFiles) {
+        $p = Join-Path $vamPluginsRoot $name
+        if (Test-Path -LiteralPath $p -PathType Leaf) {
+            try {
+                Remove-Item -LiteralPath $p -Force -ErrorAction Stop
+                Write-Host "[PostBuildDeploy] Removed legacy $p"
+            } catch {
+                Emit-Warning $p 'PBD012' ("Could not remove legacy file: " + $_.Exception.Message)
+            }
+        }
+    }
+    foreach ($name in $legacyDirs) {
+        $p = Join-Path $vamPluginsRoot $name
+        if (Test-Path -LiteralPath $p -PathType Container) {
+            try {
+                Remove-Item -LiteralPath $p -Recurse -Force -Confirm:$false -ErrorAction Stop
+                Write-Host "[PostBuildDeploy] Removed legacy $p"
+            } catch {
+                Emit-Warning $p 'PBD012' ("Could not remove legacy directory: " + $_.Exception.Message)
+            }
+        }
+    }
 }
 
 if ($vamPathOk) {
@@ -118,28 +141,41 @@ if ($vamPathOk) {
     }
 }
 
+$patchNative = Join-Path $patchPlugins 'native'
+$vamNative = Join-Path $vamPlugins 'native'
+
 $sqliteSrc = Join-Path $ProjectDir 'lib\sqlite-native\sqlite3.dll'
 if (Test-Path -LiteralPath $sqliteSrc) {
-    if ($vamPathOk) { [void](Copy-FileWithRetry $sqliteSrc $vamPlugins) }
-    [void](Copy-FileWithRetry $sqliteSrc $patchPlugins)
+    if ($vamPathOk) { [void](Copy-FileWithRetry $sqliteSrc $vamNative) }
+    [void](Copy-FileWithRetry $sqliteSrc $patchNative)
 }
 
 $turboSrc = Join-Path $ProjectDir 'lib\turbojpeg\turbojpeg.dll'
-$turboInPatch = Join-Path $patchPlugins 'turbojpeg.dll'
+$turboInPatch = Join-Path $patchNative 'turbojpeg.dll'
 if (Test-Path -LiteralPath $turboSrc) {
-    if ($vamPathOk) { [void](Copy-FileWithRetry $turboSrc $vamPlugins) }
-    [void](Copy-FileWithRetry $turboSrc $patchPlugins)
+    if ($vamPathOk) { [void](Copy-FileWithRetry $turboSrc $vamNative) }
+    [void](Copy-FileWithRetry $turboSrc $patchNative)
 } elseif ($vamPathOk -and (Test-Path -LiteralPath $turboInPatch)) {
     # Seed VaMPath from the staged copy only when absent; never overwrite a live turbojpeg.dll.
-    $vamTurbo = Join-Path $vamPlugins 'turbojpeg.dll'
+    $vamTurbo = Join-Path $vamNative 'turbojpeg.dll'
     if (-not (Test-Path -LiteralPath $vamTurbo)) {
-        [void](Copy-FileWithRetry $turboInPatch $vamPlugins)
+        [void](Copy-FileWithRetry $turboInPatch $vamNative)
     }
 }
 
-# VpbNet carries the multiplayer broker plus the steam_api64.dll it loads at runtime; the build
+# The patcher prunes anything under BepInEx/plugins/VPB that this manifest does not list, so the
+# install carries its own copy - that is what makes the next relocation self-cleaning.
+$manifestSrc = Join-Path $ProjectDir 'vam_patch\patch_manifest.json'
+if (Test-Path -LiteralPath $manifestSrc) {
+    [void](Copy-FileWithRetry $manifestSrc $patchPlugins)
+    if ($vamPathOk) { [void](Copy-FileWithRetry $manifestSrc $vamPlugins) }
+} else {
+    Emit-Warning $manifestSrc 'PBD013' "patch_manifest.json missing; the shipped copy was not refreshed and the prune will stay inert."
+}
+
+# net/ carries the multiplayer broker plus the steam_api64.dll it loads at runtime; the build
 # republishes it into vam_patch before compiling, so this pushes the fresh one into VaM.
-$assetDirs = @('vpb_translations', 'vpb_fonts', 'vpb_themes', 'vpb_help', 'VpbNet')
+$assetDirs = @('assets', 'native', 'net')
 foreach ($name in $assetDirs) {
     if (-not $vamPathOk) { break }
     $srcDir = Join-Path $patchPlugins $name
@@ -147,8 +183,7 @@ foreach ($name in $assetDirs) {
     Copy-DirRecursive $srcDir $dstDir
 }
 
-# Icons ship as a single packed atlas plus the licence notice it obliges us to carry.
-$assetFiles = @('vpb_icons.pack', 'VPB_THIRD_PARTY_NOTICES.txt')
+$assetFiles = @('VPB_THIRD_PARTY_NOTICES.txt')
 foreach ($name in $assetFiles) {
     if (-not $vamPathOk) { break }
     $srcFile = Join-Path $patchPlugins $name
@@ -157,20 +192,8 @@ foreach ($name in $assetFiles) {
     }
 }
 
-# A pre-atlas install leaves 182 loose PNGs behind. The atlas takes precedence over
-# them at runtime, so they are dead weight rather than a hazard - but clear them out.
-# Deliberate glyph overrides belong in vpb_icons_override/, which is never touched.
-if ($vamPathOk) {
-    $staleIcons = Join-Path $vamPlugins 'vpb_icons'
-    if (Test-Path -LiteralPath $staleIcons -PathType Container) {
-        try {
-            Remove-Item -LiteralPath $staleIcons -Recurse -Force -Confirm:$false
-            Write-Host "[PostBuildDeploy] Removed stale loose icon directory: $staleIcons"
-        } catch {
-            Emit-Warning $staleIcons 'PBD008' ("Could not remove stale icon directory: " + $_.Exception.Message)
-        }
-    }
-}
+# Anything left over inside BepInEx/plugins/VPB from an older layout is removed by VPB.Patcher at
+# the next VaM launch, driven by the manifest copied above - nothing to name here.
 
 if ($script:WarningCount -gt 0) {
     Write-Host ("[PostBuildDeploy] Completed with {0} warning(s); build successful. Review warnings above." -f $script:WarningCount)

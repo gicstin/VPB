@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -11,7 +11,7 @@ namespace VPB
     /// Loads the official SQLite native DLL (<c>sqlite3.dll</c>) with <see cref="LoadLibrary"/>, then binds entry points via <see cref="GetProcAddress"/>.
     /// Mono does not resolve <c>DllImport("sqlite3")</c> to a module loaded only by <c>LoadLibrary</c> (DllNotFoundException), so we never P/Invoke the short name.
     /// Do not place <c>sqlite3.dll</c> under <c>BepInEx\scripts</c> — VaM's Script Engine loads every .dll there as managed IL and will throw BadImageFormatException.
-    /// Default deploy: <c>BepInEx\plugins\sqlite3.dll</c> under the VaM install folder (see PostBuild in csproj).
+    /// Default deploy: <c>BepInEx\plugins\VPB\sqlite3.dll</c> under the VaM install folder (see PostBuild in csproj).
     /// </summary>
     internal static class VpbSqlite3
     {
@@ -337,7 +337,7 @@ namespace VPB
             }
 
             if (!sawExistingFile)
-                LogSqliteLoadDetailOnce("[VPB] VpbSqlite3: no sqlite3.dll found in candidate paths (install 64-bit sqlite3.dll under BepInEx\\plugins next to the game).");
+                LogSqliteLoadDetailOnce("[VPB] VpbSqlite3: no sqlite3.dll found in candidate paths (install 64-bit sqlite3.dll under BepInEx\\plugins\\VPB next to the game).");
             else if (!loadOk)
                 LogSqliteLoadDetailOnce("[VPB] VpbSqlite3: sqlite3.dll found but unusable — use a 64-bit official SQLite amalgamation DLL for this VaM build.");
         }
@@ -378,9 +378,14 @@ namespace VPB
             string asmDir = SafeAssemblyDirectory();
 
             List<string> list = new List<string>(16);
+            if (!IsUnderBepInExScriptsFolder(asmDir))
+                AddCandidate(list, VpbPaths.FindFile("native/sqlite3.dll", "sqlite3.dll"));
             if (!string.IsNullOrEmpty(s_GameInstallRoot))
             {
-                AddCandidate(list, Path.Combine(Path.Combine(Path.Combine(s_GameInstallRoot, "BepInEx"), "plugins"), "sqlite3.dll"));
+                string pluginsUnderRoot = Path.Combine(Path.Combine(s_GameInstallRoot, "BepInEx"), "plugins");
+                AddCandidate(list, Path.Combine(Path.Combine(Path.Combine(pluginsUnderRoot, "VPB"), "native"), "sqlite3.dll"));
+                AddCandidate(list, Path.Combine(Path.Combine(pluginsUnderRoot, "VPB"), "sqlite3.dll"));
+                AddCandidate(list, Path.Combine(pluginsUnderRoot, "sqlite3.dll"));
                 AddCandidate(list, Path.Combine(Path.Combine(Path.Combine(s_GameInstallRoot, "Cache"), "VPB"), "sqlite3.dll"));
             }
             AddCandidate(list, pluginsUnderCwd);
@@ -388,8 +393,6 @@ namespace VPB
             AddCandidate(list, cacheUnderBase);
             AddCandidate(list, Path.Combine(baseDir, "sqlite3.dll"));
             AddCandidate(list, Path.Combine(Environment.CurrentDirectory, "sqlite3.dll"));
-            if (!string.IsNullOrEmpty(asmDir) && !IsUnderBepInExScriptsFolder(asmDir))
-                AddCandidate(list, Path.Combine(asmDir, "sqlite3.dll"));
             return list.ToArray();
         }
 

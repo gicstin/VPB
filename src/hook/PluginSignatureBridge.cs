@@ -96,7 +96,7 @@ namespace VPB
             {
                 string pluginPath = null;
                 try { pluginPath = typeof(VamHookPlugin).Assembly.Location; } catch { pluginPath = null; }
-                if (string.IsNullOrEmpty(pluginPath)) pluginPath = "BepInEx/plugins/VPB.dll";
+                if (string.IsNullOrEmpty(pluginPath)) pluginPath = "BepInEx/plugins/VPB/VPB.dll";
 
                 Type fmType = typeof(MVR.FileManagement.FileManager);
                 TryInvokeStatic(fmType, "RegisterPluginHashToPluginPath", new object[] { pluginHash, pluginPath });

@@ -72,18 +72,6 @@
         "IsDirectory":  false
     },
     {
-        "RelativePath":  "BepInEx/plugins/VPB.dll",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/sqlite3.dll",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/turbojpeg.dll",
-        "IsDirectory":  false
-    },
-    {
         "RelativePath":  "BepInEx/plugins/I18N.CJK.dll",
         "IsDirectory":  false
     },
@@ -104,90 +92,6 @@
         "IsDirectory":  false
     },
     {
-        "RelativePath":  "BepInEx/plugins/vpb_fonts",
-        "IsDirectory":  true
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_fonts/NotoSansSC-VariableFont_wght.ttf",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_fonts/OFL.txt",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_fonts/README_FONT.txt",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_translations",
-        "IsDirectory":  true
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_translations/zh_cn.json",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_translations/zh_tw.json",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_translations/ja.json",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_translations/ko.json",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_help",
-        "IsDirectory":  true
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_help/en.md",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_icons.pack",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/VPB_THIRD_PARTY_NOTICES.txt",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/vpb_themes",
-        "IsDirectory":  true
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/VpbNet",
-        "IsDirectory":  true
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/VpbNet/steam_api64.dll",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/VpbNet/VpbNet.exe",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/zstd",
-        "IsDirectory":  true
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/zstd/dll",
-        "IsDirectory":  true
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/zstd/zstd.exe",
-        "IsDirectory":  false
-    },
-    {
-        "RelativePath":  "BepInEx/plugins/zstd/dll/libzstd.dll",
-        "IsDirectory":  false
-    },
-    {
         "RelativePath":  "VaM (Log Mode).bat",
         "IsDirectory":  false
     },
@@ -197,6 +101,106 @@
     },
     {
         "RelativePath":  "BepInEx/patchers/VPB.Patcher.dll",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/patch_manifest.json",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/VPB.dll",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/fonts",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/fonts/NotoSansSC-VariableFont_wght.ttf",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/fonts/OFL.txt",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/fonts/README_FONT.txt",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/help",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/help/en.md",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/translations",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/translations/ja.json",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/translations/ko.json",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/translations/zh_cn.json",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/translations/zh_tw.json",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/icons.pack",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/VPB_THIRD_PARTY_NOTICES.txt",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/net",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/net/steam_api64.dll",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/net/VpbNet.exe",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/native",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/native/libzstd.dll",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/native/sqlite3.dll",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/native/turbojpeg.dll",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/native/zstd.exe",
         "IsDirectory":  false
     }
 ]

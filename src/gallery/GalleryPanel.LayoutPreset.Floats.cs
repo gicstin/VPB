@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,7 +7,7 @@ namespace VPB
     public partial class GalleryPanel
     {
         /// <summary>
-        /// Float windows a layout restores. Transient popups (quick-tag menu, Remap Atom UIDs, Bench,
+        /// Float windows a layout restores. Transient popups (quick-tag menu, Remap Atom UIDs,
         /// command palette) are deliberately absent — restoring a modal is never what "my layout" means.
         /// Strip Scene is a mode, not an arrangement, and the quick-menu assign float belongs to the
         /// quick menu rather than to a gallery pane.

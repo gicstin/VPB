@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -1253,7 +1253,7 @@ namespace VPB
         private void TryKeyboardApplySelection()
         {
             if (!IsVisible) return;
-            if (_benchPickModeActive || _stripKeepSubScenePickActive) return;
+            if (_stripKeepSubScenePickActive) return;
             if (_removeModeActive) return;
             if (_commandPaletteOpen) return;
 

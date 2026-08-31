@@ -199,6 +199,7 @@ namespace VPB
                 {
                     var data = new ScanWhitelistData
                     {
+                        SchemaVersion = 1,
                         Enabled = _enabled,
                         WhitelistedFolders = new List<string>(_whitelistedFolders),
                         IncludedPackageUids = new List<string>(_includedPackageUids)
@@ -297,6 +298,25 @@ namespace VPB
             lock (lockObj)
             {
                 return _includedPackageUids.Contains(uid);
+            }
+        }
+
+        /// <summary>
+        /// True when this package is in VaM's startup scan set (folder whitelist, UID override, or whitelist disabled).
+        /// AllPackages is never in the AddonPackages scan set. Custom/ and Saves/ always are.
+        /// </summary>
+        public bool IsInStartupScan(string uid, string varFilePath)
+        {
+            if (string.IsNullOrEmpty(varFilePath)) return true;
+            string norm = varFilePath.Replace('\\', '/');
+            if (norm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return true;
+            if (norm.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase)) return true;
+            if (norm.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) return false;
+            lock (lockObj)
+            {
+                if (!_enabled) return true;
+                if (IsUidOverrideIncludedLocked(uid)) return true;
+                return IsPathWhitelistedLocked(varFilePath);
             }
         }
 
@@ -598,6 +618,8 @@ namespace VPB
         [System.Serializable]
         private class ScanWhitelistData
         {
+            [JsonProperty("schemaVersion")]
+            public int SchemaVersion;
             [JsonProperty("enabled")]
             public bool Enabled;
             [JsonProperty("whitelistedFolders")]

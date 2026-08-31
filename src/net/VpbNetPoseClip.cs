@@ -23,7 +23,7 @@ namespace VPB
 
         public static string ClipDirectory
         {
-            get { return Path.Combine(Path.Combine(VpbBenchPaths.PluginDir, "VpbNet"), ClipFolder); }
+            get { return VpbPaths.Clips; }
         }
 
         public static int FrameBytes(int controllerCount)

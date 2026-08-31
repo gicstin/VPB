@@ -178,7 +178,7 @@ namespace VPB
             new[] { "interaction",     "interaction", "plugin_quickmenu" },
             new[] { "shortcuts",       "keys_rules", "plugin_hotkeys", "keys_chrome", "keys_browse", "keys_selection", "keys_tools", "keys_world" },
             new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
-            new[] { "maintenance",     "helpers", "updater", "ba_migration", "plugin_bench" },
+            new[] { "maintenance",     "helpers", "updater", "ba_migration" },
             new[] { "multiplayer",     "net_rules" },
             new[] { "development",     "dev_net", "dev_clip" },
         };
@@ -3077,8 +3077,6 @@ namespace VPB
                         btnLabel = VPBTranslation.T("settings.row.manage", "MANAGE");
                     else if (string.Equals(def.Key, "plugin.qm_positions", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.adjust", "ADJUST");
-                    else if (string.Equals(def.Key, "plugin.bench.configure", StringComparison.OrdinalIgnoreCase))
-                        btnLabel = VPBTranslation.T("settings.row.configure", "CONFIGURE");
                     else if (isSceneAtomCache)
                         btnLabel = VPBTranslation.T("settings.row.clear", "CLEAR");
                     if (def.ActionLabel != null)

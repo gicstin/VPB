@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 namespace VPB
@@ -20,7 +20,6 @@ namespace VPB
             StickyTryOn = 5,
             StickyCleanup = 6,
             StickyImport = 7,
-            StickyBenchPick = 8,
             /// <summary>Legacy — Settings float is modeless; ResolveTaskChromeState never returns this.</summary>
             Settings = 9
         }
@@ -42,7 +41,6 @@ namespace VPB
                 case StickyToolMode.TryOn: return TaskChromeState.StickyTryOn;
                 case StickyToolMode.Cleanup: return TaskChromeState.StickyCleanup;
                 case StickyToolMode.Import: return TaskChromeState.StickyImport;
-                case StickyToolMode.BenchPick: return TaskChromeState.StickyBenchPick;
             }
 
             if (holdToLaunchEnabled || ItemApplyMode == ApplyMode.SingleClick)
@@ -100,8 +98,7 @@ namespace VPB
                 || state == TaskChromeState.StickyRemove
                 || state == TaskChromeState.StickyTryOn
                 || state == TaskChromeState.StickyCleanup
-                || state == TaskChromeState.StickyImport
-                || state == TaskChromeState.StickyBenchPick;
+                || state == TaskChromeState.StickyImport;
         }
 
         /// <summary>Hide / soft-disable 1-Click + Hold while sticky owns input.</summary>
@@ -239,8 +236,7 @@ namespace VPB
             _taskChromeState = state;
 
             if (state != TaskChromeState.StickyRemove
-                && state != TaskChromeState.StickyTryOn
-                && state != TaskChromeState.StickyBenchPick)
+                && state != TaskChromeState.StickyTryOn)
                 return false;
 
             // Point/pick/session owns input — kill browse action peers.
@@ -272,7 +268,7 @@ namespace VPB
             show(tboxReplaceBtn, false);
             show(tboxDeleteBtn, false);
             show(tboxRemoveHistoryBtn, false);
-            show(tboxSelectAllBtn, state == TaskChromeState.StickyBenchPick);
+            show(tboxSelectAllBtn, false);
             show(tboxClearSelectionBtn, true);
             show(_detailStripExpandBtnGO, false);
 
@@ -281,8 +277,6 @@ namespace VPB
             try { CloseTboxTargetMenu(); } catch { }
 
             SetTboxButtonEnabledVisual(tboxClearSelectionBtn, selectedFiles != null && selectedFiles.Count > 0);
-            if (state == TaskChromeState.StickyBenchPick)
-                SetTboxButtonEnabledVisual(tboxSelectAllBtn, true);
 
             try { RefreshSceneImportSideButtonVisibility(); } catch { }
             try { UpdateSideButtonPositions(); } catch { }
@@ -416,7 +410,6 @@ namespace VPB
             if (sb == null) return;
             sb.Append(_removeModeActive ? 'R' : 'r');
             sb.Append(_tryOnActive ? 'Y' : 'y');
-            sb.Append(_benchPickModeActive ? 'B' : 'b');
             sb.Append(IsImportStickyToolActive() ? 'I' : 'i');
             sb.Append(holdToLaunchEnabled ? 'L' : 'l');
             sb.Append(ItemApplyMode == ApplyMode.SingleClick ? '1' : '2');

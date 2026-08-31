@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -9,7 +9,7 @@ using UnityEngine;
 namespace VPB
 {
     /// <summary>
-    /// Optional libjpeg-turbo (<c>turbojpeg.dll</c> under BepInEx/plugins) via TurboJPEG C API.
+    /// Optional libjpeg-turbo (<c>turbojpeg.dll</c> under BepInEx/plugins/VPB) via TurboJPEG C API.
     /// Windows MSVC builds use 32-bit <c>unsigned long</c> for <c>jpegSize</c> — delegate uses <c>uint</c>.
     /// </summary>
     internal static class TurboJpegNative
@@ -493,11 +493,11 @@ namespace VPB
             string asmDir = SafeAssemblyDirectory();
 
             var list = new List<string>(16);
+            AddCandidate(list, VpbPaths.FindFile("native/turbojpeg.dll", "turbojpeg.dll"));
+            if (!string.IsNullOrEmpty(asmDir))
+                AddCandidate(list, Path.Combine(asmDir, "turbojpeg.dll"));
             AddCandidate(list, pluginsRel);
             AddCandidate(list, Path.Combine(Path.Combine(Path.Combine(baseDir, "BepInEx"), "plugins"), "turbojpeg.dll"));
-            if (!string.IsNullOrEmpty(asmDir) && asmDir.IndexOf(Path.Combine("BepInEx", "plugins"), StringComparison.OrdinalIgnoreCase) >= 0)
-                AddCandidate(list, Path.Combine(asmDir, "turbojpeg.dll"));
-            AddCandidate(list, Path.Combine(asmDir, "turbojpeg.dll"));
             return list.ToArray();
         }
     }

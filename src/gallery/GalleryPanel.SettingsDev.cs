@@ -371,7 +371,7 @@ namespace VPB
             AddDevText(defs, s.NetClipFile, "dev.clip.file", "dev_clip",
                 VPBTranslation.T("settings.dev.clip_file", "Clip file"),
                 VPBTranslation.T("settings.tip.dev.clip_file",
-                    "A bare name resolves inside BepInEx\\plugins\\VpbNet\\clips; a full path is used as given. Empty records to a timestamped name and replays the newest clip in that folder."),
+                    "A bare name resolves inside BepInEx\\plugins\\VPB\\VpbNet\\clips; a full path is used as given. Empty records to a timestamped name and replays the newest clip in that folder."),
                 null);
 
             defs.Add(new InternalSettingDefinition

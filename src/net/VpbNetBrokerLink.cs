@@ -167,7 +167,7 @@ namespace VPB
 
         public static string BrokerDirectory
         {
-            get { return Path.Combine(VpbBenchPaths.PluginDir, BrokerFolder); }
+            get { return VpbPaths.FindDir(VpbPaths.NetDirName, BrokerFolder); }
         }
 
         public static string BrokerExePath
