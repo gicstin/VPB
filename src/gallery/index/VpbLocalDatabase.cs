@@ -2840,7 +2840,7 @@ namespace VPB
         /// Refresh discovered new/removed .var paths after SQL restore already stamped the index valid.
         /// Clears the skip gate and schedules an incremental (or full) index patch.
         /// </summary>
-        internal static void NotifyPackageInventoryChangedFromRefresh(int added, int removed)
+        internal static void NotifyPackageInventoryChangedFromRefresh(int added, int removed, bool scheduleUpdate = true)
         {
             if (added <= 0 && removed <= 0) return;
             lock (s_Sync)
@@ -2856,7 +2856,8 @@ namespace VPB
                     + " gallery SQL gate invalidated (refresh delta add=" + added + " remove=" + removed + ")");
             }
             catch { }
-            try { ScheduleGalleryIndexUpdateAfterScan(); } catch { }
+            if (scheduleUpdate)
+                try { ScheduleGalleryIndexUpdateAfterScan(); } catch { }
         }
 
         internal static void InvalidateReadyStateOnCategoriesChanged()
@@ -4365,7 +4366,16 @@ namespace VPB
 
             long scanNow = 0;
             try { scanNow = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
-            if (scanNow != scanAtStart) return false;
+            if (scanNow != scanAtStart)
+            {
+                try
+                {
+                    LogUtil.LogWarning("[VPB] VpbLocalDatabase: incremental gallery index rejected"
+                        + " reason=scan_changed start=" + scanAtStart + " now=" + scanNow);
+                }
+                catch { }
+                return false;
+            }
 
             if (!indexComplete)
             {
@@ -4592,6 +4602,14 @@ namespace VPB
 
             if (pendingReschedule)
             {
+                long currentScan = long.MinValue;
+                try { currentScan = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+                if (rebuildCompleted && readyAfter == currentScan && TrySkipGalleryIndexRebuild())
+                {
+                    try { LogUtil.Log(VamStartupOptimizations.LogTag + " gallery index pending reschedule already satisfied"); }
+                    catch { }
+                    return;
+                }
                 if (!TryEnqueueFullGalleryIndexRebuild("pendingReschedule", true))
                     CoalesceFullRebuildInsteadOfSpin();
                 return;

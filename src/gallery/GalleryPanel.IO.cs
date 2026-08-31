@@ -4452,55 +4452,28 @@ namespace VPB
 
             // Cache the filtered list for selection operations (Select All, counts, etc)
             try { VpbProgressService.ReportBrowseRefreshPhase("Building grid"); } catch { }
+            long deepGbListCopyStartMs = swDeep != null ? swDeep.ElapsedMilliseconds : 0;
             lastFilteredFiles.Clear();
             if (files.Count > 0)
             {
                 if (lastFilteredFiles.Capacity < files.Count)
                     lastFilteredFiles.Capacity = files.Count;
-                const int snapChunk = 1024;
-                for (int si = 0; si < files.Count; si++)
-                {
-                    lastFilteredFiles.Add(files[si]);
-                    if ((si % snapChunk) == snapChunk - 1)
-                    {
-                        try { VpbProgressService.ReportBrowseRefresh(si + 1, files.Count, "Building grid"); } catch { }
-                        yield return null;
-                    }
-                }
+                // Reference copies are cheap; yielding here lets unrelated startup work stretch this phase by seconds.
+                lastFilteredFiles.AddRange(files);
             }
 
-            bool snapOk = false;
             try
             {
                 galleryFilesPreHideSnapshot.Clear();
                 if (files.Count > 0 && galleryFilesPreHideSnapshot.Capacity < files.Count)
                     galleryFilesPreHideSnapshot.Capacity = files.Count;
-                snapOk = true;
+                galleryFilesPreHideSnapshot.AddRange(files);
+                galleryPreHideSnapshotValid = true;
             }
             catch
             {
                 try { galleryFilesPreHideSnapshot.Clear(); } catch { }
                 galleryPreHideSnapshotValid = false;
-            }
-
-            if (snapOk)
-            {
-                const int hideChunk = 1024;
-                for (int si = 0; si < files.Count; si++)
-                {
-                    try { galleryFilesPreHideSnapshot.Add(files[si]); }
-                    catch
-                    {
-                        try { galleryFilesPreHideSnapshot.Clear(); } catch { }
-                        galleryPreHideSnapshotValid = false;
-                        snapOk = false;
-                        break;
-                    }
-                    if ((si % hideChunk) == hideChunk - 1)
-                        yield return null;
-                }
-                if (snapOk)
-                    galleryPreHideSnapshotValid = true;
             }
 
             // Promote to class member for RecyclingGridView — one copy pass from lastFilteredFiles (same snapshot as files)
@@ -4512,7 +4485,7 @@ namespace VPB
             if (!HasActiveNameFilter())
                 _topSearchBaseIsClean = true;
 
-            if (swDeep != null) deepGbListCopyMs = swDeep.ElapsedMilliseconds;
+            if (swDeep != null) deepGbListCopyMs = swDeep.ElapsedMilliseconds - deepGbListCopyStartMs;
 
             // Setup Recycling Grid (skipped in quiet mode — keep frozen display cells bound to _quietDisplayFiles)
             if (!_quietGalleryRefresh && contentGO != null)

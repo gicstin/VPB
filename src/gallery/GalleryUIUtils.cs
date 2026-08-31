@@ -922,7 +922,7 @@ namespace VPB
                 panel,
                 path,
                 suppressGalleryRefresh: false,
-                depsChangedRefreshScope: RefreshScope.Both,
+                depsChangedRefreshScope: RefreshScope.InstallOnly,
                 refreshReasonInstalled: "dragdrop_merge_scene",
                 refreshReasonAllowlist: "dragdrop_merge_scene",
                 prep);
