@@ -60,6 +60,7 @@ def main():
 
     src = re.sub(r'<Target Name="(PostBuild|AfterBuild)".*?</Target>', "", src, flags=re.S)
     src = re.sub(r"<PostBuildEvent>.*?</PostBuildEvent>", "", src, flags=re.S)
+    src = re.sub(r"<ProjectReference .*?</ProjectReference>", "", src, flags=re.S)
 
     open("VPBCheck.csproj", "w", encoding="utf-8").write(src)
     print("VPBCheck.csproj regenerated from VPB.csproj")

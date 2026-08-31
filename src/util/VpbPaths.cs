@@ -1,10 +1,13 @@
 using System;
 using System.IO;
+using VPB.Shared;
 
 namespace VPB
 {
     internal static class VpbPaths
     {
+        private static bool s_LegacyRootSwept;
+
         internal const string AssetsDirName = "assets";
         internal const string NativeDirName = "native";
         internal const string NetDirName = "net";
@@ -50,6 +53,38 @@ namespace VPB
         internal static string Net { get { return Path.Combine(s_Root, NetDirName); } }
 
         internal static string Clips { get { return Path.Combine(s_Root, ClipsDirName); } }
+
+        internal static void SweepLegacyRoot()
+        {
+            if (s_LegacyRootSwept) return;
+            s_LegacyRootSwept = true;
+
+            if (string.IsNullOrEmpty(s_LegacyRoot)) return;
+
+            try
+            {
+                int removed = VpbLegacyLayout.SweepPluginsRoot(s_LegacyRoot, LogSweepInfo, LogSweepWarning);
+                if (removed > 0)
+                {
+                    LogUtil.Log("[VPB] Retired " + removed + " item(s) from the old plugins-root layout; the shipped tree is "
+                        + s_Root + ". Restart VaM if anything looks stale.");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.Log("[VPB] Legacy root sweep failed: " + ex.Message);
+            }
+        }
+
+        private static void LogSweepInfo(string message)
+        {
+            LogUtil.Log("[VPB] " + message);
+        }
+
+        private static void LogSweepWarning(string message)
+        {
+            LogUtil.Log("[VPB] " + message);
+        }
 
         internal static string Combine(string relative)
         {

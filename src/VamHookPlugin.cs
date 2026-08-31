@@ -313,6 +313,8 @@ namespace VPB
             }
             catch { }
 
+            try { VpbPaths.SweepLegacyRoot(); } catch { }
+
             LogUtil.MarkPluginAwake();
             VamStartupProfiler.Milestone("plugin_awake");
 
