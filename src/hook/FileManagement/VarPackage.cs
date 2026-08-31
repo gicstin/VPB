@@ -32,8 +32,13 @@ namespace VPB
         public List<string> ClothingTags;
         public List<string> HairFileEntryNames;
         public List<string> HairTags;
+        public List<string> MorphFileEntryNames;
         /// <summary>Windows code page for zip entry names; 0 = system default (legacy rows).</summary>
         public int ZipNameCodePage;
+
+        const int MorphIndexPayloadMagic = 0x56504D49;
+        const int MorphIndexPayloadVersion = 1;
+        const int MaxMorphIndexEntriesPerPackage = 250000;
 
 		public void Read(BinaryReader reader)
 		{
@@ -52,6 +57,7 @@ namespace VPB
                 using (BinaryWriter writer = new BinaryWriter(ms))
                 {
                     WritePayloadBody(writer);
+                    WriteMorphIndexPayloadTrailer(writer);
                     writer.Flush();
                 }
                 return ms.ToArray();
@@ -65,6 +71,44 @@ namespace VPB
             using (BinaryReader reader = new BinaryReader(ms))
             {
                 ReadPayloadBody(reader);
+                TryReadMorphIndexPayloadTrailer(reader);
+            }
+        }
+
+        void WriteMorphIndexPayloadTrailer(BinaryWriter writer)
+        {
+            writer.Write(MorphIndexPayloadMagic);
+            writer.Write(MorphIndexPayloadVersion);
+            int count = MorphFileEntryNames != null ? MorphFileEntryNames.Count : -1;
+            writer.Write(count);
+            for (int i = 0; i < count; i++)
+                writer.Write(MorphFileEntryNames[i] ?? string.Empty);
+        }
+
+        void TryReadMorphIndexPayloadTrailer(BinaryReader reader)
+        {
+            MorphFileEntryNames = null;
+            if (reader == null || reader.BaseStream == null) return;
+            if (reader.BaseStream.Length - reader.BaseStream.Position < 12) return;
+            try
+            {
+                int magic = reader.ReadInt32();
+                int version = reader.ReadInt32();
+                int count = reader.ReadInt32();
+                if (magic != MorphIndexPayloadMagic || version != MorphIndexPayloadVersion)
+                    return;
+                if (count == -1) return;
+                if (count < 0 || count > MaxMorphIndexEntriesPerPackage) return;
+
+                List<string> paths = new List<string>(count);
+                for (int i = 0; i < count; i++)
+                    paths.Add(reader.ReadString());
+                MorphFileEntryNames = paths;
+            }
+            catch
+            {
+                // Truncated/corrupt optional trailer stays unknown; migration repairs it from ZIP directory.
+                MorphFileEntryNames = null;
             }
         }
 
@@ -343,10 +387,7 @@ namespace VPB
 		/// <summary>Per-package code page from manifest; <see cref="int.MinValue"/> when unset.</summary>
 		int _resolvedZipNameCodePage = int.MinValue;
 
-		/// <summary>
-		/// Opens a read-only zip; only central-directory name decode uses <see cref="ZipConstants.DefaultCodePage"/> under a brief lock.
-		/// Enumeration after open does not need the global lock.
-		/// </summary>
+		// Only central-directory name decode shares global code-page lock; enumeration is isolated after open.
 		static ZipFile OpenZipFileForRead(string varPath, int codePage)
 		{
 			FileStream file = File.Open(varPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
@@ -485,9 +526,7 @@ namespace VPB
 
 		private static int DetectZipNameCodePage(string cleanPath)
 		{
-			// Fast path:
-			// Most packages are either correctly UTF-8 flagged or pure ASCII. In those cases,
-			// the system-default decode will look clean and we should not try extra candidates.
+			// Clean default decode skips fallback candidates because UTF-8 and ASCII packages dominate.
 			double sysScore = ScoreZipNames(cleanPath, CodePageSystemDefault);
 			if (sysScore <= 0.5)
 			{
@@ -822,10 +861,7 @@ namespace VPB
 			get { return _referenceVersionOptionsLoaded; }
 		}
 
-		/// <summary>
-		/// Ensure meta.json reference-version options are loaded (cache-hit scans skip DumpVarPackage).
-		/// Cold/warm UI and load-prep only — do not call from NormalizeLoadPath hot loop.
-		/// </summary>
+		// Cache-hit scans skip meta.json, so UI metadata loads lazily outside normalization hot path.
 		public bool TryEnsureReferenceVersionOptions()
 		{
 			if (_referenceVersionOptionsLoaded)
@@ -846,21 +882,12 @@ namespace VPB
 			protected set;
 		}
 
-		/// <summary>
-		/// Internal "created" timestamp from zip header (meta.json <see cref="ZipEntry.DateTime"/>), stored as <see cref="DateTime.ToBinary"/>.
-		/// Falls back to <see cref="DateTime.MinValue"/> when unknown.
-		/// </summary>
 		public long InternalCreationTimeBinary
 		{
 			get;
 			protected set;
 		} = long.MinValue;
 
-		/// <summary>
-		/// First time VPB's gallery index saw this VAR uid, as <see cref="DateTime.ToBinary"/> (UTC).
-		/// Set once at first scan; preserved across index rebuilds via SQLite snapshot+restore.
-		/// <see cref="long.MinValue"/> when unknown. Populated from <c>pkg.first_scanned</c> column when reading rows from the gallery index.
-		/// </summary>
 		public long FirstScannedBinary { get; set; } = long.MinValue;
 
 		private static long NormalizeZipHeaderTimeBinary(long binaryOrMin)
@@ -1021,6 +1048,54 @@ namespace VPB
 				return true;
 			}
 		}
+
+		internal bool EnsureMorphFileEntryNamesIndexed()
+		{
+			if (MorphFileEntryNames != null) return true;
+			string scanPath = Path;
+			if (string.IsNullOrEmpty(scanPath)) return false;
+
+			DateTime creationTime;
+			DateTime lastWriteTime;
+			long size;
+			if (!FileStat.TryGetFileStat(scanPath, out creationTime, out lastWriteTime, out size)) return false;
+			long mtimeTicks = lastWriteTime.ToUniversalTime().Ticks;
+			List<string> paths = new List<string>();
+			try
+			{
+				int codePage = GetZipNameCodePageForVar(scanPath);
+				using (ZipFile zip = OpenZipFileForRead(scanPath, codePage))
+				{
+					foreach (ZipEntry entry in zip)
+					{
+						if (entry == null || !entry.IsFile || string.IsNullOrEmpty(entry.Name)) continue;
+						string name = entry.Name.Replace('\\', '/');
+						if (name.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)
+							&& name.EndsWith(".vmi", StringComparison.OrdinalIgnoreCase))
+							paths.Add(name);
+					}
+				}
+
+				DateTime creationAfter;
+				DateTime writeAfter;
+				long sizeAfter;
+				if (!FileStat.TryGetFileStat(scanPath, out creationAfter, out writeAfter, out sizeAfter)
+					|| sizeAfter != size || writeAfter.ToUniversalTime().Ticks != mtimeTicks)
+					return false;
+
+				if (VarPackageMgr.singleton == null
+					|| !VarPackageMgr.singleton.TrySetMorphFileEntryNames(Uid, size, mtimeTicks, paths))
+					return false;
+				MorphFileEntryNames = paths;
+				return true;
+			}
+			catch (Exception ex)
+			{
+				LogScanErrorOnce(Uid, "Morph index scan", ex);
+				return false;
+			}
+		}
+
 		public List<VarFileEntry> ClothingFileEntries
 		{
 			get;
@@ -1090,6 +1165,7 @@ namespace VPB
 		public List<string> ClothingTags;
 		public List<string> HairFileEntryNames;
 		public List<string> HairTags;
+		public List<string> MorphFileEntryNames;
 		public bool HasMissingDependencies
 		{
 			get;
@@ -1290,6 +1366,7 @@ namespace VPB
 			ClothingTags = null;
 			HairFileEntryNames = null;
 			HairTags = null;
+			MorphFileEntryNames = null;
 			PackageMetaTags = null;
 			Description = null;
 			PromotionalLink = null;
@@ -1302,12 +1379,7 @@ namespace VPB
 			PackageDependencies = null;
 		}
 
-		/// <summary>
-		/// Cache-hit scan restores clothing/hair tags but skips meta.json prose.
-		/// Call before UI reads <see cref="Description"/> / <see cref="PromotionalLink"/> /
-		/// <see cref="LicenseType"/> / <see cref="PackageMetaTags"/>.
-		/// Once-shot: missing/corrupt meta must not reopen the .var ZIP on every UI hover.
-		/// </summary>
+		// Missing or corrupt meta is cached so UI hover does not reopen archive repeatedly.
 		public bool TryEnsureMetaJsonLiteFields()
 		{
 			// Early-out on attempt flag only. Old gate also required _referenceVersionOptionsLoaded;
@@ -1420,10 +1492,7 @@ namespace VPB
 				|| (PackageMetaTags != null && PackageMetaTags.Count > 0)
 				|| _referenceVersionOptionsLoaded;
 		}
-		// Writes the .cs paths referenced by any .cslist in this VAR. Always writes, even with
-		// zero references, so a later sig check is a positive hit instead of a re-parse.
-		// Never call SQLite from bulk deep-scan workers (8-way) — writer storm freezes startup
-		// against VarPackageMgr SQL manifest load. Deferred single-thread flush after scan.
+		// Empty results persist as positive cache hits, while bulk scans defer SQLite writes to avoid writer contention.
 		private void PersistCslistReferencedPathsToDb()
 		{
 			try
@@ -1480,9 +1549,7 @@ namespace VPB
 					}
 				}
 
-				// Startup/scan: keep writes minimal. Parent→child tree SQL is filled lazily when
-				// Plugins float opens — never LIKE-delete during Refresh/scan (locked SQLite against
-				// 19k-package manifest load). Zero-.cslist packages: meta sig only (no BEGIN IMMEDIATE).
+				// Tree rows fill lazily because scan-time deletes contend with manifest loading.
 				if (cslistNames.Count == 0)
 				{
 					try { VpbLocalDatabase.StampCslistRefVarSigOnly(Uid, sig); } catch { }
@@ -1639,6 +1706,7 @@ namespace VPB
 							this.ClothingTags = vp.ClothingTags;
 							this.HairFileEntryNames = vp.HairFileEntryNames;
 							this.HairTags = vp.HairTags;
+							this.MorphFileEntryNames = vp.MorphFileEntryNames;
 							this.RecursivePackageDependencies = vp.RecursivePackageDependencies;
 							this.InternalCreationTimeBinary = NormalizeZipHeaderTimeBinary(vp.VarInternalCreationTimeBinary);
 							flag = true;
@@ -1655,6 +1723,7 @@ namespace VPB
 							int scanCodePage = GetZipNameCodePageForVar(Path);
 							zipFile = OpenZipFileForRead(Path, scanCodePage);
 							HashSet<string> set = new HashSet<string>();
+							List<string> morphFileEntryNames = new List<string>();
 							IEnumerator enumerator = zipFile.GetEnumerator();
 							try
 							{
@@ -1745,12 +1814,12 @@ namespace VPB
 												}
 											}
 										}
-										// There are too many morphs; over 2,000 packages can contain ~80k morphs
-										//else if (entryName.EndsWith(".vmi"))
-         //                           {
-									//	VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
-									//	FileEntries.Add(varFileEntry);
-									//}
+										else if (entryName.EndsWith(".vmi", StringComparison.OrdinalIgnoreCase))
+										{
+											string morphPath = entryName.Replace('\\', '/');
+											if (morphPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase))
+												morphFileEntryNames.Add(morphPath);
+										}
 										else if (entryName.EndsWith(".assetbundle"))
 										{
 											VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
@@ -1802,14 +1871,17 @@ namespace VPB
 								disposable.Dispose();
 							}
 						}
+						MorphFileEntryNames = morphFileEntryNames;
 					}
 
 						if (metaEntry != null)
 						{
 							flag = true;
 						}
-						ZipFile = zipFile;
-						DumpVarPackage();
+						DumpVarPackage(zipFile);
+						// Manifest lists are resident now; keeping every scanned archive open retains its central directory.
+						zipFile.Close();
+						zipFile = null;
 						if (invalid)
 						{
 							try
@@ -1962,17 +2034,19 @@ namespace VPB
 				Scaned = true;
 			}
 		}
-        //void FixVarName(string createName, string packageName)
-        //{
-        //    string uid = createName + "." + packageName + "." + Version;
-			
-        //    if (this.Uid != uid)
-        //    {
-        //        this.Uid = uid;
-        //        fixUid = true;
-        //    }
-        //}
-        void DumpVarPackage()
+		static string ReadZipEntryText(ZipFile zipFile, string internalPath)
+		{
+			if (zipFile == null)
+				throw new ArgumentNullException("zipFile");
+			ZipEntry entry = zipFile.GetEntry(internalPath);
+			if (entry == null)
+				throw new Exception("Could not find entry " + internalPath + " in zip file");
+			using (Stream stream = zipFile.GetInputStream(entry))
+			using (StreamReader reader = new StreamReader(stream))
+				return reader.ReadToEnd();
+		}
+
+		void DumpVarPackage(ZipFile zipFile)
 		{
 			if (IsCorruptedArchive)
 				return;
@@ -1987,21 +2061,18 @@ namespace VPB
 				{
 					try
 					{
-						using (VarFileEntryStreamReader varFileEntryStreamReader = new VarFileEntryStreamReader(item))
+						string aJSON = ReadZipEntryText(zipFile, item.InternalPath);
+						JSONClass asObject = JSON.Parse(aJSON).AsObject;
+						if (asObject != null)
 						{
-							string aJSON = varFileEntryStreamReader.ReadToEnd();
-							JSONClass asObject = JSON.Parse(aJSON).AsObject;
-							if (asObject != null)
+							if (asObject["tags"] != null)
 							{
-								if (asObject["tags"] != null)
+								string tag = asObject["tags"];
+								tag = tag.Trim();
+								if (!string.IsNullOrEmpty(tag))
 								{
-									string tag = asObject["tags"];
-									tag = tag.Trim();
-									if (!string.IsNullOrEmpty(tag))
-									{
-										clothingFileList.Add(item.InternalPath);
-										clothingTags.Add(tag.ToLowerInvariant());
-									}
+									clothingFileList.Add(item.InternalPath);
+									clothingTags.Add(tag.ToLowerInvariant());
 								}
 							}
 						}
@@ -2030,21 +2101,18 @@ namespace VPB
 				{
 					try
 					{
-						using (VarFileEntryStreamReader varFileEntryStreamReader = new VarFileEntryStreamReader(item))
+						string aJSON = ReadZipEntryText(zipFile, item.InternalPath);
+						JSONClass asObject = JSON.Parse(aJSON).AsObject;
+						if (asObject != null)
 						{
-							string aJSON = varFileEntryStreamReader.ReadToEnd();
-							JSONClass asObject = JSON.Parse(aJSON).AsObject;
-							if (asObject != null)
+							if (asObject["tags"] != null)
 							{
-								if (asObject["tags"] != null)
+								string tag = asObject["tags"];
+								tag = tag.Trim();
+								if (!string.IsNullOrEmpty(tag))
 								{
-									string tag = asObject["tags"];
-									tag = tag.Trim();
-									if (!string.IsNullOrEmpty(tag))
-									{
-										hairFileList.Add(item.InternalPath);
-										hairTags.Add(tag.ToLowerInvariant());
-									}
+									hairFileList.Add(item.InternalPath);
+									hairTags.Add(tag.ToLowerInvariant());
 								}
 							}
 						}
@@ -2068,50 +2136,47 @@ namespace VPB
 			{
 				try
 				{
-					using (VarFileEntryStreamReader varFileEntryStreamReader = new VarFileEntryStreamReader(metaEntry))
+					string aJSON = ReadZipEntryText(zipFile, metaEntry.InternalPath);
+					JSONClass asObject = JSON.Parse(aJSON).AsObject;
+					if (asObject != null)
 					{
-						string aJSON = varFileEntryStreamReader.ReadToEnd();
-						JSONClass asObject = JSON.Parse(aJSON).AsObject;
-						if (asObject != null)
+						HashSet<string> directDepends = new HashSet<string>();
+						try
 						{
-							// Build a direct dependency list (first-level keys + scanned references)
-							HashSet<string> directDepends = new HashSet<string>();
-							try
+							JSONClass depObj = asObject["dependencies"].AsObject;
+							if (depObj != null)
 							{
-								JSONClass depObj = asObject["dependencies"].AsObject;
-								if (depObj != null)
+								foreach (string key in depObj.Keys)
 								{
-									foreach (string key in depObj.Keys)
-									{
-										if (!string.IsNullOrEmpty(key)) directDepends.Add(key);
-									}
+									if (!string.IsNullOrEmpty(key)) directDepends.Add(key);
 								}
 							}
-							catch { }
-							try
+						}
+						catch { }
+						try
+						{
+							DependencyExtractor.ScanAllStringsForDependencies(asObject, directDepends);
+						}
+						catch { }
+
+						// Keep the existing recursive list for backwards compatibility and older caches.
+						HashSet<string> depends = new HashSet<string>();
+						GetDependenciesRecursive(asObject, depends);
+
+						var directList = directDepends.ToList();
+						try { this.PackageDependencies = directList; } catch { }
+						svp.RecursivePackageDependencies = depends.ToList();
+
+						try
+						{
+							var descNode = asObject["description"];
+							if (descNode != null)
 							{
-								DependencyExtractor.ScanAllStringsForDependencies(asObject, directDepends);
+								string d = descNode.Value;
+								if (!string.IsNullOrEmpty(d)) Description = d.Trim();
 							}
-							catch { }
-
-							// Keep the existing recursive list for backwards compatibility and older caches.
-							HashSet<string> depends = new HashSet<string>();
-							GetDependenciesRecursive(asObject, depends);
-
-							var directList = directDepends.ToList();
-							try { this.PackageDependencies = directList; } catch { }
-							svp.RecursivePackageDependencies = depends.ToList();
-
-							try
-							{
-								var descNode = asObject["description"];
-								if (descNode != null)
-								{
-									string d = descNode.Value;
-									if (!string.IsNullOrEmpty(d)) Description = d.Trim();
-								}
-							}
-							catch { }
+						}
+						catch { }
                             try
                             {
                                 var promoNode = asObject["promotionalLink"];
@@ -2141,9 +2206,8 @@ namespace VPB
                             // Full scan already read lite meta fields — skip ZIP reopen on filter/hover.
                             _metaJsonLiteLoaded = true;
 
-                            if (!FileManager.IsBulkDeepScanActive)
-                                FindMissingDependenciesRecursive(asObject);
-						}
+						if (!FileManager.IsBulkDeepScanActive)
+							FindMissingDependenciesRecursive(asObject);
 					}
 				}
 				catch (Exception ex3)
@@ -2182,12 +2246,16 @@ namespace VPB
                 svp.HairFileEntryNames = hairFileList;//.ToArray();
 			if (hairTags != null && hairTags.Count > 0)
                 svp.HairTags = hairTags;//.ToArray();
+			svp.MorphFileEntryNames = MorphFileEntryNames != null
+				? new List<string>(MorphFileEntryNames)
+				: null;
 
 			this.RecursivePackageDependencies = svp.RecursivePackageDependencies;
 			this.ClothingFileEntryNames = svp.ClothingFileEntryNames;
 			this.ClothingTags = svp.ClothingTags;
 			this.HairFileEntryNames = svp.HairFileEntryNames;
 			this.HairTags = svp.HairTags;
+			this.MorphFileEntryNames = svp.MorphFileEntryNames;
 
 			try
 			{
@@ -2293,10 +2361,6 @@ namespace VPB
             return InstallRecursive(new HashSet<string>(), null);
         }
 
-		/// <summary>
-		/// When <paramref name="outMovedPackageUids"/> is non-null, appends the <see cref="Uid"/> of every package whose
-		/// <see cref="InstallSelf"/> actually moved the .var (this package and any recursive dependency).
-		/// </summary>
 		public bool InstallRecursive(List<string> outMovedPackageUids)
 		{
 			if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null && !Settings.Instance.LoadDependenciesWithPackage.Value)
@@ -2371,9 +2435,7 @@ namespace VPB
 
 			LogUtil.Log($"Installing package: {Uid} from {this.Path} to {linkvar}");
 
-			// Install must be atomic.
-			// On Windows, File.Move across volumes falls back to copy+delete, which can expose a partially-copied
-			// file at the final path. VaM may read it immediately and throw ZipException (wrong local header).
+			// Final rename stays on destination volume so VaM never observes partially copied archive.
 			string dir = System.IO.Path.GetDirectoryName(linkvar);
 			try
 			{

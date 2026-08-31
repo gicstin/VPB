@@ -17,10 +17,12 @@ namespace VPB
         public static VarPackageMgr singleton = new VarPackageMgr();
 
         readonly object lookupLock = new object();
+        readonly object refreshLock = new object();
         public Dictionary<string, SerializableVarPackage> lookup = new Dictionary<string, SerializableVarPackage>();
 
         bool dirtyExternal = false;
         bool needsBlobUpgrade = false;
+        long manifestMutationGeneration;
         volatile int manifestLoadState; // 0=pending, 1=loading, 2=ready, -1=failed
         ManualResetEvent manifestLoadEvent;
 
@@ -55,8 +57,30 @@ namespace VPB
             lock (lookupLock)
             {
                 lookup[uid] = value;
+                manifestMutationGeneration++;
+                dirtyExternal = true;
             }
-            dirtyExternal = true;
+        }
+
+        internal bool TrySetMorphFileEntryNames(
+            string uid,
+            long fileSize,
+            long lastWriteTimeUtcTicks,
+            List<string> morphPaths)
+        {
+            if (string.IsNullOrEmpty(uid) || morphPaths == null) return false;
+            lock (lookupLock)
+            {
+                SerializableVarPackage cached;
+                if (!lookup.TryGetValue(uid, out cached) || cached == null) return false;
+                if (cached.VarFileSize != fileSize
+                    || cached.VarLastWriteTimeUtcTicks != lastWriteTimeUtcTicks)
+                    return false;
+                cached.MorphFileEntryNames = morphPaths;
+                manifestMutationGeneration++;
+                dirtyExternal = true;
+                return true;
+            }
         }
 
         public void Init()
@@ -65,6 +89,7 @@ namespace VPB
             manifestLoadState = 0;
             manifestLoadEvent = null;
             needsBlobUpgrade = false;
+            manifestMutationGeneration = 0;
             Stopwatch sw = Stopwatch.StartNew();
             try
             {
@@ -152,19 +177,31 @@ namespace VPB
 
         public void Refresh()
         {
-            if (!dirtyExternal && !needsBlobUpgrade) return;
-
-            Dictionary<string, SerializableVarPackage> snapshot;
-            lock (lookupLock)
+            lock (refreshLock)
             {
-                snapshot = new Dictionary<string, SerializableVarPackage>(lookup);
-            }
-            if (snapshot.Count == 0) return;
+                Dictionary<string, SerializableVarPackage> snapshot;
+                long snapshotGeneration;
+                bool snapshotNeedsBlobUpgrade;
+                lock (lookupLock)
+                {
+                    if (!dirtyExternal && !needsBlobUpgrade) return;
+                    snapshot = new Dictionary<string, SerializableVarPackage>(lookup);
+                    snapshotGeneration = manifestMutationGeneration;
+                    snapshotNeedsBlobUpgrade = needsBlobUpgrade;
+                }
+                if (snapshot.Count == 0) return;
 
-            if (VpbSqlite3.IsAvailable && VpbLocalDatabase.TrySavePackageManifestSnapshot(snapshot))
-            {
-                dirtyExternal = false;
-                needsBlobUpgrade = false;
+                if (VpbSqlite3.IsAvailable && VpbLocalDatabase.TrySavePackageManifestSnapshot(snapshot))
+                {
+                    lock (lookupLock)
+                    {
+                        // Scan workers may add manifests while SQLite writes this snapshot.
+                        if (manifestMutationGeneration == snapshotGeneration)
+                            dirtyExternal = false;
+                        if (snapshotNeedsBlobUpgrade)
+                            needsBlobUpgrade = false;
+                    }
+                }
             }
         }
     }

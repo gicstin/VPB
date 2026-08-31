@@ -17,6 +17,14 @@ using Prime31.MessageKit;
 
 namespace VPB
 {
+    internal enum MorphOwnerLookupResult
+    {
+        IndexIncomplete,
+        NotFound,
+        Ambiguous,
+        Unique
+    }
+
     public class FileManager : MonoBehaviour
     {
         public static bool IsScanning
@@ -94,6 +102,13 @@ namespace VPB
         protected static OnRefresh onRegistryReadyHandlers;
         static int s_RegistryReadyNotified;
         static int s_BulkDeepScanActive;
+        static readonly object s_MorphOwnerIndexLock = new object();
+        static Dictionary<string, string> s_UniqueMorphOwnerByPath;
+        static HashSet<string> s_AmbiguousMorphOwnerPaths;
+        static int s_MorphOwnerIndexReady;
+        static int s_MorphOwnerIndexGeneration;
+        static int s_MorphIndexMigrationRunning;
+        static int s_MorphIndexMigrationRequested;
 
         internal static bool IsBulkDeepScanActive =>
             System.Threading.Interlocked.CompareExchange(ref s_BulkDeepScanActive, 0, 0) != 0;
@@ -660,7 +675,7 @@ namespace VPB
                 int addN = addSet != null ? addSet.Count : 0;
                 int remN = removeSet != null ? removeSet.Count : 0;
                 if (addN > 0 || remN > 0)
-                    VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(addN, remN);
+                    VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(addN, remN, false);
             }
             catch { }
             if (regCount > 0 && (registryWarmRestore || usedPathCache))
@@ -1030,6 +1045,7 @@ namespace VPB
                             packagesByPath.Add(varPackage.Path, varPackage);
                         }
                         value.AddPackage(varPackage);
+                        OnMorphPackageRegistryChanged();
 
                         try { VamStartupOptimizations.InvalidateVamXAbsentCacheIfVamXPackageTouched(canonicalUid); } catch { }
 
@@ -1198,6 +1214,7 @@ namespace VPB
                     }
                 }
                 vp.Dispose();
+                OnMorphPackageRegistryChanged();
             }
         }
 
@@ -1321,6 +1338,116 @@ namespace VPB
                 if (internalPathToUidPath != null)
                     internalPathToUidPath.Clear();
             }
+            InvalidateMorphOwnerIndex();
+        }
+
+        static void InvalidateMorphOwnerIndex()
+        {
+            lock (s_MorphOwnerIndexLock)
+            {
+                s_UniqueMorphOwnerByPath = null;
+                s_AmbiguousMorphOwnerPaths = null;
+                System.Threading.Interlocked.Increment(ref s_MorphOwnerIndexGeneration);
+                System.Threading.Interlocked.Exchange(ref s_MorphOwnerIndexReady, 0);
+            }
+        }
+
+        static void OnMorphPackageRegistryChanged()
+        {
+            InvalidateMorphOwnerIndex();
+            if (!IsScanning) ScheduleDeferredMorphIndexMigration();
+        }
+
+        internal static MorphOwnerLookupResult TryGetMorphOwner(string internalPath, out string ownerUid)
+        {
+            ownerUid = null;
+            if (string.IsNullOrEmpty(internalPath) || IsScanning) return MorphOwnerLookupResult.IndexIncomplete;
+            string normalized = internalPath.Replace('\\', '/');
+            lock (s_MorphOwnerIndexLock)
+            {
+                if (System.Threading.Interlocked.CompareExchange(ref s_MorphOwnerIndexReady, 0, 0) == 0)
+                    return MorphOwnerLookupResult.IndexIncomplete;
+                if (s_AmbiguousMorphOwnerPaths != null && s_AmbiguousMorphOwnerPaths.Contains(normalized))
+                    return MorphOwnerLookupResult.Ambiguous;
+                if (s_UniqueMorphOwnerByPath != null
+                    && s_UniqueMorphOwnerByPath.TryGetValue(normalized, out ownerUid))
+                    return MorphOwnerLookupResult.Unique;
+                return MorphOwnerLookupResult.NotFound;
+            }
+        }
+
+        static void RebuildMorphOwnerIndex()
+        {
+            int generation = System.Threading.Interlocked.CompareExchange(ref s_MorphOwnerIndexGeneration, 0, 0);
+            VarPackage[] snapshot = GetPackagesSnapshotForBrowse();
+            if (snapshot == null)
+            {
+                InvalidateMorphOwnerIndex();
+                return;
+            }
+
+            Dictionary<string, string> unique = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int unknown = 0;
+            int pathCount = 0;
+            for (int i = 0; i < snapshot.Length; i++)
+            {
+                VarPackage package = snapshot[i];
+                if (package == null || package.invalid || package.IsCorruptedArchive || !package.Enabled) continue;
+                if (package.Group != null)
+                {
+                    if (package.Group.NewestEnabledPackage == null)
+                    {
+                        unknown++;
+                        continue;
+                    }
+                    if (package.Group.NewestEnabledPackage != package) continue;
+                }
+                List<string> paths = package.MorphFileEntryNames;
+                if (paths == null)
+                {
+                    unknown++;
+                    continue;
+                }
+
+                for (int p = 0; p < paths.Count; p++)
+                {
+                    string path = paths[p];
+                    if (string.IsNullOrEmpty(path)) continue;
+                    path = path.Replace('\\', '/');
+                    pathCount++;
+                    string existing;
+                    if (!unique.TryGetValue(path, out existing))
+                    {
+                        unique[path] = package.Uid;
+                    }
+                    else if (!string.Equals(existing, package.Uid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ambiguous.Add(path);
+                    }
+                }
+            }
+
+            if (unknown > 0)
+            {
+                InvalidateMorphOwnerIndex();
+                LogUtil.Log("[VPB MorphIndex] incomplete unknown_packages=" + unknown);
+                return;
+            }
+            foreach (string path in ambiguous)
+                unique.Remove(path);
+
+            lock (s_MorphOwnerIndexLock)
+            {
+                // Registry can change during background scan; stale ownership must stay unpublished.
+                if (generation != System.Threading.Interlocked.CompareExchange(ref s_MorphOwnerIndexGeneration, 0, 0))
+                    return;
+                s_UniqueMorphOwnerByPath = unique;
+                s_AmbiguousMorphOwnerPaths = ambiguous;
+                System.Threading.Interlocked.Exchange(ref s_MorphOwnerIndexReady, 1);
+            }
+            LogUtil.Log("[VPB MorphIndex] ready paths=" + pathCount
+                + " unique=" + unique.Count + " ambiguous=" + ambiguous.Count);
         }
 
         static VarPackage[] GetPackagesSnapshotForBrowse()
@@ -2205,6 +2332,7 @@ namespace VPB
 				}
 				m_Co = StartCoroutine(ScanVarPackagesCo(clean, invalid));
 				yield return m_Co;
+				m_Co = null;
 			}
 			else
 			{
@@ -2240,6 +2368,8 @@ namespace VPB
 			VamStartupProfiler.EndScope("vpb_StartScanCo_scan");
 
 			InvalidateInternalPathIndex();
+			try { ScheduleDeferredMorphIndexMigration(); } catch { }
+			try { ScheduleDeferredCslistReferencedPersist(); } catch { }
 
 			// Update time BEFORE calling handlers so handlers (and any UI code they trigger) see the latest time
 			lastPackageRefreshTime = DateTime.Now;
@@ -2416,8 +2546,6 @@ namespace VPB
 				try { VpbLocalDatabase.FlushMissingVarPathPrune(); } catch { }
 				// RebuildCore may have coalesced while bulk scan held caches incomplete.
 				try { VpbLocalDatabase.FlushPendingGalleryIndexAfterDeepScan(); } catch { }
-				// cslist-ref SQL skipped during bulk (no 8-worker SQLite storm). Single-thread fill.
-				try { ScheduleDeferredCslistReferencedPersist(); } catch { }
 			}
 		}
 
@@ -2447,6 +2575,69 @@ namespace VPB
 					}
 				}
 				catch { }
+			});
+		}
+
+		static void ScheduleDeferredMorphIndexMigration()
+		{
+			System.Threading.Interlocked.Exchange(ref s_MorphIndexMigrationRequested, 1);
+			if (System.Threading.Interlocked.CompareExchange(ref s_MorphIndexMigrationRunning, 1, 0) != 0)
+				return;
+
+			ThreadPool.QueueUserWorkItem(_ =>
+			{
+				try
+				{
+					do
+					{
+						System.Threading.Interlocked.Exchange(ref s_MorphIndexMigrationRequested, 0);
+						VarPackage[] snapshot = GetPackagesSnapshotForBrowse();
+						int migrated = 0;
+						int failed = 0;
+						int pendingPersist = 0;
+						if (snapshot != null)
+						{
+							for (int i = 0; i < snapshot.Length; i++)
+							{
+								VarPackage package = snapshot[i];
+								if (package == null || package.invalid || package.IsCorruptedArchive
+									|| package.MorphFileEntryNames != null)
+									continue;
+								if (package.EnsureMorphFileEntryNamesIndexed())
+								{
+									migrated++;
+									pendingPersist++;
+								}
+								else failed++;
+								if ((i + 1) % 2000 == 0)
+								{
+									LogUtil.Log("[VPB MorphIndex] migration " + (i + 1) + "/" + snapshot.Length
+										+ " migrated=" + migrated + " failed=" + failed);
+									if (pendingPersist > 0)
+									{
+										VarPackageMgr.singleton.Refresh();
+										pendingPersist = 0;
+									}
+								}
+							}
+						}
+						if (pendingPersist > 0) VarPackageMgr.singleton.Refresh();
+						RebuildMorphOwnerIndex();
+						LogUtil.Log("[VPB MorphIndex] migration done migrated=" + migrated + " failed=" + failed);
+					}
+					while (System.Threading.Interlocked.Exchange(ref s_MorphIndexMigrationRequested, 0) != 0);
+				}
+				catch (Exception ex)
+				{
+					InvalidateMorphOwnerIndex();
+					LogUtil.LogWarning("[VPB MorphIndex] migration failed: " + ex.Message);
+				}
+				finally
+				{
+					System.Threading.Interlocked.Exchange(ref s_MorphIndexMigrationRunning, 0);
+					if (System.Threading.Interlocked.CompareExchange(ref s_MorphIndexMigrationRequested, 0, 0) != 0)
+						ScheduleDeferredMorphIndexMigration();
+				}
 			});
 		}
 
