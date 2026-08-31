@@ -278,6 +278,7 @@
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\util\VPBLogger.cs" />
+    <Compile Include="src\util\VpbLegacyLayout.cs" />
     <Compile Include="src\util\VpbPaths.cs" />
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\VpbScrollTuning.cs" />
@@ -673,6 +674,20 @@
     <EmbeddedResource Remove="vam_patch\**" />
     <None Remove="vam_patch\**" />
     <Page Remove="vam_patch\**" />
+  </ItemGroup>
+  <!--
+    VPB.Patcher is a separate assembly loaded at BepInEx preload, not referenced by VPB.dll. It is
+    built here for one reason: its output is a committed payload file, and for months nothing forced
+    a rebuild, so patcher source changes never reached users. ReferenceOutputAssembly=false keeps it
+    a build-order dependency only. Set SkipVPBPatcherBuild=true to opt out.
+  -->
+  <ItemGroup Condition="'$(SkipVPBPatcherBuild)' != 'true'">
+    <ProjectReference Include="VPBPatcher.csproj">
+      <Project>{B2A1C3D4-5E6F-7A8B-9C0D-1E2F3A4B5C6D}</Project>
+      <Name>VPBPatcher</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
   </ItemGroup>
   <!--
     plugin_version.txt: line 1 = base (e.g. 0.28.0 or v0.28.0), line 2 = next build counter (integer).

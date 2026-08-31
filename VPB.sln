@@ -5,6 +5,8 @@ VisualStudioVersion = 18.1.11312.151
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VPB", "VPB.csproj", "{758453DA-4E36-49AF-8DF4-A046875D333D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VPBPatcher", "VPBPatcher.csproj", "{B2A1C3D4-5E6F-7A8B-9C0D-1E2F3A4B5C6D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{758453DA-4E36-49AF-8DF4-A046875D333D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{758453DA-4E36-49AF-8DF4-A046875D333D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{758453DA-4E36-49AF-8DF4-A046875D333D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2A1C3D4-5E6F-7A8B-9C0D-1E2F3A4B5C6D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2A1C3D4-5E6F-7A8B-9C0D-1E2F3A4B5C6D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2A1C3D4-5E6F-7A8B-9C0D-1E2F3A4B5C6D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2A1C3D4-5E6F-7A8B-9C0D-1E2F3A4B5C6D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

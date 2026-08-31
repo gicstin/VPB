@@ -173,6 +173,22 @@ if (Test-Path -LiteralPath $manifestSrc) {
     Emit-Warning $manifestSrc 'PBD013' "patch_manifest.json missing; the shipped copy was not refreshed and the prune will stay inert."
 }
 
+$patcherSrc = Join-Path $ProjectDir 'src\patcher\VPBPatcher.cs'
+$sharedSrc = Join-Path $ProjectDir 'src\util\VpbLegacyLayout.cs'
+$patcherDll = Join-Path $ProjectDir 'vam_patch\BepInEx\patchers\VPB.Patcher.dll'
+if (-not (Test-Path -LiteralPath $patcherDll)) {
+    Emit-Warning $patcherDll 'PBD014' "Shipped VPB.Patcher.dll missing; users get no legacy-layout cleanup. Build VPBPatcher.csproj."
+} else {
+    $dllMtime = (Get-Item -LiteralPath $patcherDll).LastWriteTimeUtc
+    foreach ($srcPath in @($patcherSrc, $sharedSrc)) {
+        if (-not (Test-Path -LiteralPath $srcPath)) { continue }
+        $srcMtime = (Get-Item -LiteralPath $srcPath).LastWriteTimeUtc
+        if ($dllMtime -lt $srcMtime) {
+            Emit-Warning $patcherDll 'PBD014' ("Shipped VPB.Patcher.dll ({0:o}) is older than {1} ({2:o}); rebuild VPBPatcher.csproj and commit the DLL or users keep running the old patcher." -f $dllMtime, (Split-Path -Leaf $srcPath), $srcMtime)
+        }
+    }
+}
+
 $assetDirs = @('assets', 'native')
 foreach ($name in $assetDirs) {
     if (-not $vamPathOk) { break }

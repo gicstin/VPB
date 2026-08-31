@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using BepInEx.Logging;
 using Mono.Cecil;
+using VPB.Shared;
 
 namespace VPB.Patcher
 {
@@ -13,13 +14,15 @@ namespace VPB.Patcher
 
         private static ManualLogSource Log;
 
-        private const string StagingDirName = "vpb_update_staging";
-        private const string PendingFileName = "pending.json";
-        private const string OldFileSuffix = ".vpb_old";
-        private const string PluginSubDirName = "VPB";
+        private const string StagingDirName = VpbLegacyLayout.StagingDirName;
+        private const string PendingFileName = VpbLegacyLayout.PendingFileName;
+        private const string RetryFileName = "retry.count";
+        private const string OldFileSuffix = VpbLegacyLayout.OldFileSuffix;
+        private const string PluginSubDirName = VpbLegacyLayout.PluginSubDirName;
         private const string ManifestFileName = "patch_manifest.json";
         private const string ManifestOwnedPrefix = "BepInEx/plugins/VPB/";
         private const int MinManifestRowsToPrune = 4;
+        private const int MaxPendingRetries = 3;
 
         private static readonly string[] PruneKeepNames =
         {
@@ -31,32 +34,6 @@ namespace VPB.Patcher
             "icons_override",
             "vpb_icons_override",
             "clips",
-            StagingDirName
-        };
-
-        private static readonly string[] LegacyRootFiles =
-        {
-            "VPB.dll",
-            "VPB.pdb",
-            "sqlite3.dll",
-            "turbojpeg.dll",
-            "vpb_icons.pack",
-            "VPB_THIRD_PARTY_NOTICES.txt",
-            "bench_run.cfg",
-            "bench_run.example.cfg"
-        };
-
-        private static readonly string[] LegacyRootDirs =
-        {
-            "vpb_fonts",
-            "vpb_help",
-            "vpb_translations",
-            "vpb_themes",
-            "vpb_ccm_clips",
-            "vpb_icons",
-            "VpbNet",
-            "zstd",
-            "bench",
             StagingDirName
         };
 
@@ -104,12 +81,14 @@ namespace VPB.Patcher
                 {
                     Log.LogWarning("pending.json empty or malformed, removing");
                     TryDelete(pendingPath);
+                    TryDelete(Path.Combine(stagingDir, RetryFileName));
                     return;
                 }
 
                 var filesDir = Path.Combine(stagingDir, "files");
                 int applied = 0;
                 int failed = 0;
+                int blocked = 0;
 
                 foreach (var entry in pending.Files)
                 {
@@ -141,6 +120,7 @@ namespace VPB.Patcher
                             {
                                 Log.LogWarning("Cannot rename " + entry.RelativePath + ": " + ex.Message);
                                 failed++;
+                                blocked++;
                                 continue;
                             }
                         }
@@ -152,12 +132,31 @@ namespace VPB.Patcher
                     {
                         Log.LogError("Failed to apply " + entry.RelativePath + ": " + ex.Message);
                         failed++;
+                        blocked++;
                     }
                 }
 
-                TryDelete(pendingPath);
-
                 Log.LogInfo("Update applied: " + applied + " files updated, " + failed + " failed");
+
+                var retryPath = Path.Combine(stagingDir, RetryFileName);
+                int retries = ReadRetryCount(retryPath);
+
+                if (blocked > 0 && retries < MaxPendingRetries)
+                {
+                    WriteRetryCount(retryPath, retries + 1);
+                    Log.LogWarning("Update incomplete: " + blocked + " file(s) locked; keeping pending for retry "
+                        + (retries + 1) + "/" + MaxPendingRetries + " at next launch");
+                    return;
+                }
+
+                if (blocked > 0)
+                {
+                    Log.LogError("Update abandoned after " + retries + " retries; " + blocked
+                        + " file(s) could not be replaced. Reinstall VPB manually.");
+                }
+
+                TryDelete(pendingPath);
+                TryDelete(retryPath);
 
                 if (Directory.Exists(filesDir))
                 {
@@ -185,21 +184,7 @@ namespace VPB.Patcher
                 if (!File.Exists(Path.Combine(vpbDir, "VPB.dll")))
                     return;
 
-                int removed = 0;
-
-                for (int i = 0; i < LegacyRootFiles.Length; i++)
-                {
-                    var path = Path.Combine(pluginsDir, LegacyRootFiles[i]);
-                    if (!File.Exists(path)) continue;
-                    if (RetireFile(path)) removed++;
-                }
-
-                for (int i = 0; i < LegacyRootDirs.Length; i++)
-                {
-                    var path = Path.Combine(pluginsDir, LegacyRootDirs[i]);
-                    if (!Directory.Exists(path)) continue;
-                    if (RetireDirectory(path)) removed++;
-                }
+                int removed = VpbLegacyLayout.SweepPluginsRoot(pluginsDir, null, LogPruneWarning);
 
                 removed += PruneUnshippedFiles(vpbDir);
 
@@ -334,41 +319,37 @@ namespace VPB.Patcher
             }
         }
 
-        private static bool RetireFile(string path)
+        private static void LogPruneWarning(string message)
         {
-            try
-            {
-                File.Delete(path);
-                return true;
-            }
-            catch { }
-
-            try
-            {
-                var retired = path + OldFileSuffix;
-                TryDelete(retired);
-                File.Move(path, retired);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log.LogWarning("Could not remove legacy " + path + ": " + ex.Message);
-                return false;
-            }
+            Log.LogWarning(message);
         }
 
-        private static bool RetireDirectory(string path)
+        private static bool RetireFile(string path)
+        {
+            return VpbLegacyLayout.RetireFile(path, LogPruneWarning);
+        }
+
+        private static int ReadRetryCount(string path)
         {
             try
             {
-                Directory.Delete(path, true);
-                return true;
+                if (!File.Exists(path)) return 0;
+                int value;
+                if (int.TryParse(File.ReadAllText(path).Trim(), out value) && value > 0) return value;
             }
-            catch (Exception ex)
+            catch { }
+            return 0;
+        }
+
+        private static void WriteRetryCount(string path, int value)
+        {
+            try
             {
-                Log.LogWarning("Could not remove legacy " + path + ": " + ex.Message);
-                return false;
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                File.WriteAllText(path, value.ToString());
             }
+            catch { }
         }
 
         private static void CleanupOldFiles(string gameRoot)
