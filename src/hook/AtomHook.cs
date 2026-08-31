@@ -37,6 +37,7 @@ namespace VPB
                 "AnimationPresets",
                 "BreastPhysicsPresets",
             };
+        private static bool s_AppearanceSceneDetectorWarningLogged;
 
         static bool ShouldSyncRefreshForPresetStorable(string storableId)
         {
@@ -237,6 +238,31 @@ namespace VPB
                 }
             }
             catch { }
+
+            if (string.Equals(storableId, "AppearancePresets", StringComparison.OrdinalIgnoreCase))
+            {
+                bool sceneLoad = false;
+                try
+                {
+                    sceneLoad = (VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene)
+                        || LogUtil.IsSceneLoading()
+                        || LogUtil.IsSceneLoadActive();
+                }
+                catch (Exception ex)
+                {
+                    // Preserve scene generation when load-state detection is unavailable.
+                    sceneLoad = true;
+                    if (!s_AppearanceSceneDetectorWarningLogged)
+                    {
+                        s_AppearanceSceneDetectorWarningLogged = true;
+                        try { LogUtil.LogWarning("[VPB] Appearance load boundary skipped: scene detection failed: " + ex.Message); }
+                        catch { }
+                    }
+                }
+
+                if (!sceneLoad && ImageLoadingMgr.singleton != null)
+                    ImageLoadingMgr.singleton.PrepareForAppearanceLoad();
+            }
 
             string presetName = null;
             try { presetName = __instance != null ? __instance.presetName : null; } catch { }

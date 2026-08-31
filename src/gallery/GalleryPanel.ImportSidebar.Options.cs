@@ -32,9 +32,7 @@ namespace VPB
 
         // Plugin picker: a caption + a pooled list of checkbox rows, rebuilt from the source atom's plugins.
         private GameObject importSidebarPluginChecklistRoot;
-        // The checklist's LayoutElement: its preferredHeight is driven by the live entry count so the scroll
-        // reserves space. The parent option panel uses a ContentSizeFitter (PreferredSize), under which a bare
-        // flexibleHeight collapses to zero, which would hide every plugin row.
+        // ContentSizeFitter collapses flexible-only height, so reserve space from live row count.
         private LayoutElement importSidebarPluginChecklistLe;
         // How many rows are visible before the checklist starts to scroll (drives the reserved height).
         private const int ImportSidebarVisiblePluginRows = 8;
@@ -78,9 +76,7 @@ namespace VPB
             public bool LinksToPerson;   // reaches the selected source person (tagged "on person")
         }
 
-        // Scene atom picker: every non-Person atom in the source scene (Lights, Empty, CUA, SubScene, …).
-        // Docked pane is 220px — two-line rows so leaf (unique) stays visible; fewer rows keep the
-        // inner list about the same height as the old 8×32 single-line viewport.
+        // Two-line rows keep unique leaf names visible within 220px dock width.
         private const int ImportSidebarVisibleSceneAtomRows = 6;
         private const float ImportSidebarSceneAtomRowHeightMul = 1.5f;
         private const int ImportSidebarMaxSceneAtomRows = 256;
@@ -755,9 +751,7 @@ namespace VPB
                 VPBTranslation.T("gallery.import.clear_all_plugins", "Clear All"),
                 "gallery.import.clear_all_plugins_tip", "Exclude every plugin from import", ImportSidebarClearAllPlugins);
 
-            // Scroll view sits below the "Pick plugins" toggle. Its height is reserved per the live entry count
-            // (UpdatePluginChecklistHeight) since the option panel is ContentSizeFitter-driven; the row list
-            // scrolls when it overflows ImportSidebarVisiblePluginRows.
+            // ContentSizeFitter collapses flexible-only height, so live row count must reserve scroll space.
             importSidebarPluginChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
                 0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: UI.GapHair(), addBottomFlexSpacer: false);
@@ -777,10 +771,7 @@ namespace VPB
             importSidebarPluginChecklistRoot.SetActive(false);
         }
 
-        // Rebuilds the checkbox list from the selected source atom's plugins. Visible only for Plugins + gate on.
-        // Switching source atom resets the checks to NONE (sig change); within the same atom, checks are preserved.
-        // Opting into "Pick plugins" means "I want to choose", so the list starts empty rather than mirroring the
-        // gate-off "import all" behavior (an all-checked default would make the picker a no-op).
+        // Pick mode starts empty because mirroring import-all would make opt-in selection ineffective.
         private void RefreshPluginChecklist()
         {
             bool show = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Plugins) && importSidebarPickPlugins;
@@ -801,9 +792,7 @@ namespace VPB
             RenderPluginChecklistRows();
         }
 
-        // Reserve a concrete height for the checklist scroll: the parent option panel is ContentSizeFitter-driven,
-        // so a flexibleHeight-only scroll collapses to zero and hides the rows. Height = caption + up to
-        // ImportSidebarVisiblePluginRows rows (longer lists scroll), matched to the current chrome scale.
+        // ContentSizeFitter collapses flexible-only height, so live row count must reserve scroll space.
         private void UpdatePluginChecklistHeight()
         {
             if (importSidebarPluginChecklistLe == null) return;
@@ -1274,10 +1263,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// VaM subscene uids are <c>Parent/Leaf</c>. Docked 220px clips the shared prefix, so the
-        /// row shows leaf first; parent goes on line 2.
-        /// </summary>
+        // Leaf-first labels preserve unique text when dock width clips shared parent prefixes.
         private static void SplitSceneAtomUid(string id, out string leaf, out string parent)
         {
             parent = null;
@@ -1460,9 +1446,7 @@ namespace VPB
             return result;
         }
 
-        // Enumerate every CustomUnityAsset in the source scene. Free-standing CUAs live OUTSIDE the person atom, so
-        // this needs the whole scene JSON (unlike the plugin picker, which slices one person). Full scene is loaded
-        // async after open; EnsureLoadedSceneJSON kicks/waits for that load and does not sync-parse on the click frame.
+        // Free-standing CUAs are outside Person JSON, so discovery waits for cached full-scene JSON.
         private List<ImportCUAEntry> BuildSourceCUAEntries()
         {
             var result = new List<ImportCUAEntry>();
@@ -1485,10 +1469,6 @@ namespace VPB
             return importSidebarLoadedSceneJSON;
         }
 
-        /// <summary>
-        /// Blocking fallback for Apply when background load has not finished. Prefer waiting via
-        /// WaitForImportSourceSceneReady when a coroutine is available.
-        /// </summary>
         private JSONClass EnsureLoadedSceneJSONSync()
         {
             if (importSidebarLoadedSceneJSON != null) return importSidebarLoadedSceneJSON;
@@ -1511,10 +1491,7 @@ namespace VPB
         private List<ImportPluginEntry> BuildSourcePluginEntries()
         {
             var result = new List<ImportPluginEntry>();
-            // Match BuildPresetJSONForCurrentSelection's data dependency: it can slice the atom straight from the
-            // in-memory scene (cache-miss path) with no FileEntry. Guarding on importSidebarSourceScene alone made
-            // the picker return empty (no rows) even while the "Plugins (N)" chip — which reads the same preset —
-            // counted plugins. Bail only when there is genuinely no source to read.
+            // Scene memory can provide atom JSON without a FileEntry, so either source keeps picker available.
             if (importSidebarSourceScene == null && importSidebarLoadedSceneJSON == null) return result;
             JSONClass preset = BuildPresetJSONForCurrentSelection();
             JSONArray storables = (preset != null && preset["storables"] != null) ? preset["storables"].AsArray : null;
@@ -1613,9 +1590,7 @@ namespace VPB
             return (h >= 0 && int.TryParse(key.Substring(h + 1), out n)) ? n : int.MaxValue;
         }
 
-        // Maps each target plugin URL -> its existing plugin#N slot key, so a merging source plugin with the
-        // same URL updates that live slot's settings instead of being appended as a duplicate. First slot wins
-        // when the target has the same URL twice. Keyed case-insensitively to match GetTargetPluginUrls.
+        // First existing URL slot wins so merge updates one live plugin instead of appending a duplicate.
         private Dictionary<string, string> GetTargetPluginUrlToKey()
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -1641,11 +1616,7 @@ namespace VPB
             return map;
         }
 
-        // Count of plugin slots currently on the target's PluginManager. VaM's merge-load renumbers
-        // ALL active plugins on the atom into a single contiguous 0..N-1 range (it does not preserve
-        // gaps or the original slot numbers - e.g. an existing plugin#5 compacts down to plugin#1 if
-        // only one other plugin precedes it), so the newly appended source plugins must start
-        // numbering at this COUNT, not at (highest existing slot number + 1).
+        // VaM compacts plugin slots during merge, so appended sources start at target count rather than highest slot.
         private int GetTargetPluginCount()
         {
             if (importSidebarTargetAtom == null) return 0;
@@ -1866,10 +1837,7 @@ namespace VPB
             return ShortNameForType(t);
         }
 
-        // Recompute per-type counts from the selected source atom and re-skin the chips.
-        // Empty types are greyed; selection INTENT is kept (paused) so Apply skips them — never silent prune.
-        // Does NOT sync-parse the full scene: CUA/Atoms counts fill in when background JSON arrives;
-        // person-type counts use SQLite atom JSON or an already-loaded scene slice (no deep-copy).
+        // Selection intent remains paused at zero so temporary source gaps do not silently change user choices.
         private void RefreshSourceTypeAvailability()
         {
             importSidebarSourceTypeCounts.Clear();
@@ -2097,11 +2065,7 @@ namespace VPB
             try { RefreshImportSidebarWizardHeader(); } catch { }
         }
 
-        /// <summary>
-        /// True when Apply needs a live Person target. Atoms-only without person-linked CUAs does not —
-        /// relative placement is best-effort when a person is selected (absolute coords otherwise).
-        /// Fixes Apply no-op on person-less scenes (UIButton import repro).
-        /// </summary>
+        // Atoms-only import needs no Person unless selected CUAs depend on one.
         private bool ImportSidebarNeedsPersonTarget()
         {
             if (importSidebarMultiSelectedTypes == null || importSidebarMultiSelectedTypes.Count == 0)
@@ -2207,22 +2171,6 @@ namespace VPB
             }
         }
 
-        // Maps toolbox AppearanceClothingApplyMode → ClothingApplyMode for Appearance-type imports.
-        // Outfit Only (clothingonly) is not an Appearance import — mapping it to ClothingOnly skipped
-        // skin/hair/morphs. Keep / Merge Outfit / Full Look (replace) only.
-        private ClothingApplyMode ResolveAppearanceClothingApplyModeFromConfig()
-        {
-            string cfg = AppearanceClothingApplyMode;
-            if (string.IsNullOrEmpty(cfg)) cfg = "replace";
-            if (string.Equals(cfg, "keep", StringComparison.OrdinalIgnoreCase))
-                return ClothingApplyMode.Keep;
-            if (string.Equals(cfg, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
-                return ClothingApplyMode.MergeOutfit;
-            if (string.Equals(cfg, "merge", StringComparison.OrdinalIgnoreCase))
-                return ClothingApplyMode.Merge;
-            return ClothingApplyMode.Replace;
-        }
-
         // Deletes target-linked CUAs when only the standalone CUA type is selected (Appearance path deletes during
         // its own apply). Then spawns the chosen source CUAs as native atoms.
         private void RunCUAImportWithOptionalDelete(bool standaloneCuaType)
@@ -2269,17 +2217,12 @@ namespace VPB
 
             string storableOverride = ResolveStorableOverrideForType(type);
 
-            // Appearance: sidebar "Disable clothing load" forces Keep. Otherwise honor the toolbox
-            // Appearance clothing mode (Keep My Outfit / Full Look / Outfit Only / Merge Outfit) — same
-            // contract as drag-drop. Clothing/Hair use the merge toggle. Morphs/Skin/Breast/etc. always
-            // Replace — clothing merge toggle must not append morph banks (deforms person).
+            // Gallery drag-drop mode is unrelated to sidebar intent, so OFF must load source clothing.
             ClothingApplyMode mode;
             if (type == VpbResourceType.Appearance)
-            {
                 mode = importSidebarSuppressClothingLoad
                     ? ClothingApplyMode.Keep
-                    : ResolveAppearanceClothingApplyModeFromConfig();
-            }
+                    : ClothingApplyMode.Replace;
             else if (type == VpbResourceType.Clothing || type == VpbResourceType.Hair)
             {
                 mode = importSidebarMergeClothingOrHair ? ClothingApplyMode.Merge : ClothingApplyMode.Replace;
@@ -2299,10 +2242,7 @@ namespace VPB
                 return;
             }
 
-            // Plugins: always hand the PluginPresets manager a plugins-ONLY slice (PluginManager dict + each
-            // plugin's param storable) — the same shape VaM loads for a .vap plugin preset. Feeding the whole
-            // person preset to the plugin preset manager imports nothing reliably. Pick-mode prunes to the
-            // checked plugins; off imports every source plugin. Merge so they add without dropping target plugins.
+            // Plugin manager needs a plugin-only preset shape because full Person JSON does not import plugin state reliably.
             if (type == VpbResourceType.Plugins)
             {
                 ICollection<string> keys;
@@ -2322,12 +2262,7 @@ namespace VPB
                 }
                 presetJSON = pluginSlice;
 
-                // Default = MERGE: keep the target's existing plugins. A source plugin whose URL already
-                // exists on the target UPDATES that live plugin's settings (its param storable is remapped
-                // onto the existing slot, and it is NOT re-added) instead of creating a duplicate; only
-                // genuinely new plugins are appended past the target's existing slots. VaM assigns appended
-                // plugins the next slot numbers, so the slice's plugin#N keys + plugin#N_* param storables
-                // must be remapped accordingly. "Clear existing plugins" = old wipe-and-replace.
+                // Existing URLs remap to live slots and only new URLs append, preventing duplicate plugins during merge.
                 if (importSidebarClearExistingPlugins)
                 {
                     mode = ClothingApplyMode.Replace;
@@ -2372,9 +2307,7 @@ namespace VPB
             // SimpleJSON .ToString() is O(N^2) and heap-bombs a multi-MB person atom.
             string sliceJson = VPB.src.util.JsonSerializationUtil.Serialize(presetJSON, 1 << 20);
 
-            // Appearance/Morphs: zero prior look morphs BEFORE ForceRun/Ensure RefreshPackageMorphs.
-            // VaM bank rebuild snapshots non-default values and restores them after ClearPackageMorphs —
-            // without this, previous looks bleed into later imports (corrupted face after many applies).
+            // Clear old look values before bank rebuild because RefreshPackageMorphs restores non-default snapshots.
             if (type == VpbResourceType.Appearance || type == VpbResourceType.Morphs)
             {
                 try
@@ -2404,26 +2337,7 @@ namespace VPB
             // would report "is missing"; rebuild the target's catalogs before apply.
             RefreshTargetClothingAndHairCatalog(importSidebarTargetAtom);
 
-            // Morph banks are separate from clothing/hair catalogs. Clothing/hair-only ForceRun can skip
-            // RefreshPackageMorphs (Naturalis cost); ingest here so new package morph UIDs resolve.
-            if (type == VpbResourceType.Appearance || type == VpbResourceType.Morphs)
-            {
-                try
-                {
-                    VamOnDemandLoader.EnsurePackageMorphsIngestedIfNeeded(
-                        importSidebarTargetAtom,
-                        sliceJson,
-                        "vpb_import_" + type);
-                }
-                catch (System.Exception ex)
-                {
-                    LogUtil.LogWarning("[VPB import] EnsurePackageMorphsIngested failed: " + ex.Message);
-                }
-            }
-
-            // Only suppress real clothing: keep the target's real garments, bring the source's non-real (cosmetic)
-            // clothing. Drop target old non-real -> merge source non-real -> appearance with the Keep clothing lock.
-            // Nested toggle only applies when sidebar "Disable clothing load" is on (not toolbox Keep alone).
+            // Clothing suppression keeps target garments but imports source cosmetics so appearance layers are not lost.
             if (dispatchType == VpbResourceType.Appearance
                 && importSidebarSuppressClothingLoad
                 && importSidebarOnlySuppressRealClothing)
@@ -2560,9 +2474,7 @@ namespace VPB
             if (broken == null)
                 broken = new List<SceneAtomImporter.BrokenUidRef>();
 
-            // Refs that land on their own (same uid live, receivers all matched) are not a decision —
-            // only prompt when something genuinely cannot be resolved. "Always show remap prompt"
-            // forces the gate for users who want to inspect every import.
+            // Prompt only for unresolved references because matched receivers require no user decision.
             List<SceneAtomImporter.BrokenUidRef> needsAttention
                 = SceneAtomImporter.FilterUidRefsNeedingAttention(broken);
             if (needsAttention.Count == 0 && !importSidebarAlwaysShowRemapPrompt)
@@ -2598,18 +2510,7 @@ namespace VPB
         /// <summary>Safety stop for the remap re-scan loop (co-import chains are shallow in practice).</summary>
         private const int RemapAtomUidsMaxPasses = 8;
 
-        /// <summary>
-        /// Remap modal loop: Create new co-imports donor atoms into <paramref name="selectedIds"/>;
-        /// remaps accumulate. Re-scan after create in case newly added atoms expose more broken refs.
-        /// Only refs the user has NOT yet been shown may reopen the modal — see <paramref name="decidedUids"/>.
-        /// </summary>
-        /// <param name="decidedUids">
-        /// Original UIDs already presented in a previous pass. A row the user answered is settled even when
-        /// the answer produced no remap entry (destination identical to the source uid, receiver-only row,
-        /// or a deliberate skip) — without this the re-scan re-collects it and the modal reopens forever,
-        /// which reads to the user as "Import does nothing".
-        /// </param>
-        /// <param name="pass">1-based modal pass, for the header cue and the loop cap.</param>
+        // Settled UIDs survive re-scan because no-op answers would otherwise reopen same modal.
         private void ContinueImportSelectedSceneAtomsAfterRemap(
             JSONClass scene,
             string sourceHostUid,
@@ -2644,9 +2545,7 @@ namespace VPB
                     }
                 }
 
-                // The user just answered every row in this pass. Mark them settled before re-scanning:
-                // an answer that yields no map entry (dest == source uid, receiver-only row, or a skip)
-                // is still an answer, and re-presenting it is the reopen loop.
+                // A no-op destination is still an answer, otherwise re-scan reopens same prompt.
                 if (broken != null)
                 {
                     for (int i = 0; i < broken.Count; i++)
@@ -2718,10 +2617,7 @@ namespace VPB
             });
         }
 
-        /// <summary>
-        /// Per-uid receiver-remap union. Returns the accumulator (created on demand) — the remap loop keeps
-        /// it in a captured local, which cannot be passed by ref.
-        /// </summary>
+        // Captured accumulator cannot pass by ref, so newly allocated map returns to loop state.
         private static Dictionary<string, Dictionary<string, string>> MergeReceiverRemapInto(
             Dictionary<string, Dictionary<string, string>> acc,
             Dictionary<string, Dictionary<string, string>> add)
