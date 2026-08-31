@@ -1205,7 +1205,6 @@ namespace VPB
             var ms = sceneLoadStopwatch.Elapsed.TotalMilliseconds;
             sceneLoadLastSeconds = ms / 1000.0;
             var name = sceneLoadName;
-            var pkgUidForBench = sceneLoadPackageUid;
             sceneLoadName = null;
             sceneLoadPackageUid = null;
             sceneLoadInternalActive = false;
@@ -1237,12 +1236,6 @@ namespace VPB
             {
                 LogError("SCENELOAD STATS exception: " + ex);
             }
-
-            try
-            {
-                NotifySceneLoadBenchCompleted(context, name, pkgUidForBench, ms);
-            }
-            catch { }
 
             perf.Clear();
             slowDisk.Clear();
@@ -1741,119 +1734,6 @@ namespace VPB
             }
 
             return GetSecondsSinceProcessStart();
-        }
-
-        internal static event Action<SceneLoadBenchSnapshot> SceneLoadBenchCompleted;
-
-        static void NotifySceneLoadBenchCompleted(string context, string sceneName, string packageUid, double totalMs)
-        {
-            if (SceneLoadBenchCompleted == null) return;
-            SceneLoadBenchSnapshot snap = BuildSceneLoadBenchSnapshot(context, sceneName, packageUid, totalMs);
-            SceneLoadBenchCompleted(snap);
-        }
-
-        static SceneLoadBenchSnapshot BuildSceneLoadBenchSnapshot(string context, string sceneName, string packageUid, double totalMs)
-        {
-            float endRealtime = Time.realtimeSinceStartup;
-            float preLoadInternalSec = sceneLoadPreLoadInternalRealtime >= 0f
-                ? Mathf.Max(0f, sceneLoadPreLoadInternalRealtime - sceneLoadBeginRealtime)
-                : -1f;
-            float loadInternalWindowSec = (sceneLoadPreLoadInternalRealtime >= 0f && sceneLoadPostLoadInternalRealtime >= 0f)
-                ? Mathf.Max(0f, sceneLoadPostLoadInternalRealtime - sceneLoadPreLoadInternalRealtime)
-                : -1f;
-            float postLoadInternalToNotLoadingSec = (sceneLoadPostLoadInternalRealtime >= 0f && sceneLoadFirstNotLoadingRealtime >= 0f)
-                ? Mathf.Max(0f, sceneLoadFirstNotLoadingRealtime - sceneLoadPostLoadInternalRealtime)
-                : -1f;
-            float firstImageActivitySec = sceneLoadFirstImageActivityRealtime >= 0f
-                ? Mathf.Max(0f, sceneLoadFirstImageActivityRealtime - sceneLoadBeginRealtime)
-                : -1f;
-            float worldUiSec = sceneLoadWorldUiActivatedRealtime >= 0f
-                ? Mathf.Max(0f, sceneLoadWorldUiActivatedRealtime - sceneLoadBeginRealtime)
-                : -1f;
-
-            float firstNotLoading = sceneLoadFirstNotLoadingRealtime;
-            float preNotLoadingSec = -1f;
-            float tailSec = -1f;
-            if (firstNotLoading >= 0f)
-            {
-                preNotLoadingSec = Mathf.Max(0f, firstNotLoading - sceneLoadBeginRealtime);
-                tailSec = Mathf.Max(0f, endRealtime - firstNotLoading);
-            }
-            float firstNotBusyDelaySec = -1f;
-            if (firstNotLoading >= 0f && sceneLoadFirstNotBusyRealtime >= 0f)
-                firstNotBusyDelaySec = Mathf.Max(0f, sceneLoadFirstNotBusyRealtime - firstNotLoading);
-            float criteriaReadyDelaySec = -1f;
-            if (firstNotLoading >= 0f && sceneLoadEndCriteriaRealtime >= 0f)
-                criteriaReadyDelaySec = Mathf.Max(0f, sceneLoadEndCriteriaRealtime - firstNotLoading);
-
-            int samples = sceneLoadFrameMs.Count;
-            double durSeconds = totalMs / 1000.0;
-            double fpsAvg = (durSeconds > 0.00001) ? (samples / durSeconds) : 0.0;
-            float avgMs = samples > 0 ? (sceneLoadFrameMsSum / samples) : 0f;
-            float p95 = 0f;
-            if (samples > 0)
-            {
-                var arr = sceneLoadFrameMs.ToArray();
-                Array.Sort(arr);
-                int idx = Mathf.Clamp(Mathf.CeilToInt(arr.Length * 0.95f) - 1, 0, arr.Length - 1);
-                if (idx >= 0 && idx < arr.Length) p95 = arr[idx];
-            }
-
-            Dictionary<string, SceneLoadBenchPerfEntry> perfCopy = null;
-            if (perf.Count > 0)
-            {
-                perfCopy = new Dictionary<string, SceneLoadBenchPerfEntry>(perf.Count, StringComparer.Ordinal);
-                foreach (var kv in perf)
-                {
-                    perfCopy[kv.Key] = new SceneLoadBenchPerfEntry
-                    {
-                        TotalMs = kv.Value.totalMs,
-                        TotalBytes = kv.Value.totalBytes,
-                        Count = kv.Value.count
-                    };
-                }
-            }
-
-            var snap = new SceneLoadBenchSnapshot();
-            snap.Context = context;
-            snap.SceneName = sceneName;
-            snap.PackageUid = packageUid;
-            snap.TotalMs = totalMs;
-            snap.TotalSeconds = durSeconds;
-            snap.Serial = sceneLoadTotalSerial;
-            snap.Success = true;
-            snap.PreLoadInternalSec = preLoadInternalSec;
-            snap.LoadInternalWindowSec = loadInternalWindowSec;
-            snap.PostLoadInternalToNotLoadingSec = postLoadInternalToNotLoadingSec;
-            snap.FirstImageActivitySec = firstImageActivitySec;
-            snap.WorldUiSec = worldUiSec;
-            snap.PreNotLoadingSec = preNotLoadingSec;
-            snap.TailSec = tailSec;
-            snap.FirstNotBusyDelaySec = firstNotBusyDelaySec;
-            snap.CriteriaReadyDelaySec = criteriaReadyDelaySec;
-            snap.FrameSamples = samples;
-            snap.FpsAvg = fpsAvg;
-            snap.FrameMsAvg = avgMs;
-            snap.FrameMsP95 = p95;
-            snap.FrameMsMax = sceneLoadFrameMsMax;
-            snap.St33 = sceneLoadSt33;
-            snap.St50 = sceneLoadSt50;
-            snap.St100 = sceneLoadSt100;
-            snap.MemAllocEnd = memAllocEnd;
-            snap.MemAllocDelta = memAllocEnd - memAllocStart;
-            snap.MemReservedEnd = memReservedEnd;
-            snap.MemReservedDelta = memReservedEnd - memReservedStart;
-            snap.MemManagedEnd = memManagedEnd;
-            snap.MemManagedDelta = memManagedEnd - memManagedStart;
-            snap.SettleFileExistsMisses = sceneSettleFileExistsMissCount;
-            snap.SettleOpenStreamMisses = sceneSettleOpenStreamMissCount;
-            snap.SettleVarEntryMisses = sceneSettleVarEntryMissCount;
-            snap.SettleOnDemandRetries = sceneSettleOnDemandRetryCount;
-            snap.SettleSampleCount = sceneSettleSampleCount;
-            snap.SettleBusySampleCount = sceneSettleBusySampleCount;
-            snap.SettleQueueMax = sceneSettleQueueMax;
-            snap.Perf = perfCopy;
-            return snap;
         }
 
         static class StringBuilderPool

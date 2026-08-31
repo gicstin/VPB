@@ -38,59 +38,12 @@ namespace VPB
         private static void EnsureTranslationsDir()
         {
             if (_translationsDir != null) return;
-            _translationsDir = "";
             try
             {
-                // Preferred: alongside VPB.dll (same directory)
-                if (!string.IsNullOrEmpty(_pluginDir))
-                {
-                    string local = Path.Combine(_pluginDir, "vpb_translations");
-                    if (Directory.Exists(local)) { _translationsDir = local; return; }
-                }
-
-                // Robust fallback: work whether VPB.dll is loaded from BepInEx/plugins or Custom/Scripts.
-                // Walk upward a few levels looking for:
-                // - <dir>/vpb_translations
-                // - <dir>/BepInEx/plugins/vpb_translations
-                if (!string.IsNullOrEmpty(_pluginDir))
-                {
-                    string d = _pluginDir;
-                    for (int i = 0; i < 8 && !string.IsNullOrEmpty(d); i++)
-                    {
-                        try
-                        {
-                            string direct = Path.Combine(d, "vpb_translations");
-                            if (Directory.Exists(direct)) { _translationsDir = direct; return; }
-
-                            string bep = Path.Combine(Path.Combine(Path.Combine(d, "BepInEx"), "plugins"), "vpb_translations");
-                            if (Directory.Exists(bep)) { _translationsDir = bep; return; }
-                        }
-                        catch { }
-
-                        try
-                        {
-                            string parent = Path.GetDirectoryName(d);
-                            if (string.IsNullOrEmpty(parent) || string.Equals(parent, d, StringComparison.OrdinalIgnoreCase))
-                                break;
-                            d = parent;
-                        }
-                        catch { break; }
-                    }
-                }
-
-                // Last-resort: relative to game working directory (VaM runs with game root as CWD)
-                try
-                {
-                    string cwd = Directory.GetCurrentDirectory();
-                    if (!string.IsNullOrEmpty(cwd))
-                    {
-                        string bep = Path.Combine(Path.Combine(Path.Combine(cwd, "BepInEx"), "plugins"), "vpb_translations");
-                        if (Directory.Exists(bep)) { _translationsDir = bep; return; }
-                    }
-                }
-                catch { }
+                string dir = VpbPaths.FindDir("assets/translations", "vpb_translations");
+                _translationsDir = Directory.Exists(dir) ? dir : "";
             }
-            catch { }
+            catch { _translationsDir = ""; }
         }
 
         /// <summary>

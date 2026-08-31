@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -17,8 +17,7 @@ namespace VPB
             Remove = 2,
             TryOn = 3,
             Cleanup = 4,
-            Import = 5,
-            BenchPick = 6
+            Import = 5
         }
 
         private string _modeAmbientMsg;
@@ -61,7 +60,6 @@ namespace VPB
             if (_tryOnActive) return StickyToolMode.TryOn;
             if (cleanupModeActive) return StickyToolMode.Cleanup;
             if (IsImportStickyToolActive()) return StickyToolMode.Import;
-            if (_benchPickModeActive) return StickyToolMode.BenchPick;
             return StickyToolMode.None;
         }
 
@@ -81,8 +79,6 @@ namespace VPB
                     return VPBTranslation.T("gallery.mode.strip_cleanup", "Cleanup");
                 case StickyToolMode.Import:
                     return VPBTranslation.T("gallery.mode.strip_import", "Import");
-                case StickyToolMode.BenchPick:
-                    return VPBTranslation.T("gallery.mode.strip_bench_pick", "Bench Pick");
                 default:
                     return null;
             }
@@ -128,10 +124,6 @@ namespace VPB
             if (keep != StickyToolMode.Import && IsImportStickyToolActive())
             {
                 try { ForceExitImportSidebarMode(); } catch { }
-            }
-            if (keep != StickyToolMode.BenchPick && _benchPickModeActive)
-            {
-                try { BenchAbortPickMode(reopenModal: false); } catch { }
             }
             if (_stripKeepSubScenePickActive && keep != StickyToolMode.Creator)
             {
@@ -429,9 +421,9 @@ namespace VPB
 
         private void SyncModeSemanticsBanner(StickyToolMode tool, string applyLabel)
         {
-            // Dedicated action bars own Try-On / BenchPick copy — no duplicate top banner.
+            // Dedicated action bars own Try-On copy — no duplicate top banner.
             // Hold / 1-Click stay on status line only (no permanent band).
-            bool dedicatedBar = tool == StickyToolMode.TryOn || tool == StickyToolMode.BenchPick;
+            bool dedicatedBar = tool == StickyToolMode.TryOn;
             bool show = tool != StickyToolMode.None && !dedicatedBar;
             string toolName = StickyToolDisplayName(tool);
             string cacheKey = ((int)tool).ToString()
@@ -621,22 +613,6 @@ namespace VPB
             if (importSidebarDetached) return false;
             if (!Input.GetKeyDown(KeyCode.Escape)) return false;
             try { ForceExitImportSidebarMode(); } catch { }
-            return true;
-        }
-
-        /// <summary>Esc: abort Bench Pick (matches ambient Esc → Bench Pick label).</summary>
-        private bool TryHandleBenchPickModeEsc()
-        {
-            if (!_benchPickModeActive) return false;
-            if (!Input.GetKeyDown(KeyCode.Escape)) return false;
-            try { BenchAbortPickMode(reopenModal: true); } catch { }
-            try
-            {
-                ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.bench.esc_aborted", "Bench Pick cancelled (Esc)."),
-                    1.5f);
-            }
-            catch { }
             return true;
         }
 

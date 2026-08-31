@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -571,12 +571,6 @@ namespace VPB
             try
             {
                 if (string.IsNullOrEmpty(name)) yield break;
-                if (_benchPickModeActive && !BenchPickModeAllowsShowRequest(name))
-                {
-                    ShowTemporaryStatus(VPBTranslation.T("bench.pick.block_nav",
-                        "End Scene Load Test selection first (Done or Cancel)."), 2.5f);
-                    yield break;
-                }
                 if (_stripKeepSubScenePickActive && !StripKeepSubScenePickAllowsShowRequest(name))
                 {
                     ShowTemporaryStatus(VPBTranslation.T(

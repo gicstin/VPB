@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,7 +7,7 @@ namespace VPB
 {
     /// <summary>
     /// Strip Scene create-fill: pick default SubScene from gallery (SubScenes category).
-    /// Jakob — same banner pick pattern as Bench. Single selection (one default path).
+    /// Jakob — banner pick pattern. Single selection (one default path).
     /// Confirm Pick = apply; Cancel Pick = abort (Esc).
     /// </summary>
     public partial class GalleryPanel
@@ -27,11 +27,6 @@ namespace VPB
             if (_stripKeepSubScenePickActive) return;
             if (backgroundBoxGO == null) return;
 
-            // Mutual exclusive with Bench pick.
-            if (_benchPickModeActive)
-            {
-                try { BenchAbortPickMode(reopenModal: false); } catch { }
-            }
 
             // Collapsed pane deactivates content subtree — must expand for pick (Fitts / visibility).
             try

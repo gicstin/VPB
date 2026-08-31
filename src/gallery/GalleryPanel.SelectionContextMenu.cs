@@ -2338,7 +2338,7 @@ namespace VPB
             show(tboxSettingsCancelBtn, false);
             show(tboxSettingsSaveBtn, false);
 
-            // Sticky Eraser / Try-On / Bench: mass-hide browse peers (mode-conditioned chrome).
+            // Sticky Eraser / Try-On: mass-hide browse peers (mode-conditioned chrome).
             if (TaskChromeTryApplyStickyTbox(show))
                 return;
 

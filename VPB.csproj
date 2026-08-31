@@ -42,7 +42,7 @@
     <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Native SQLite: never copy next to VPB.dll in bin — users often paste bin into BepInEx\scripts and break Script Engine. Deploy only via PostBuild to BepInEx\plugins. -->
+    <!-- Native SQLite: never copy next to VPB.dll in bin — users often paste bin into BepInEx\scripts and break Script Engine. Deploy only via PostBuild to BepInEx\plugins\VPB\native. -->
     <Content Include="lib\sqlite-native\sqlite3.dll">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Content>
@@ -278,6 +278,7 @@
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\util\VPBLogger.cs" />
+    <Compile Include="src\util\VpbPaths.cs" />
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\VpbScrollTuning.cs" />
     <Compile Include="src\util\VpbRandom.cs" />
@@ -309,19 +310,8 @@
     <Compile Include="src\VpbImport.SubToggleFilter.cs" />
     <Compile Include="src\VpbImport.IsolationGuard.cs" />
     <Compile Include="src\VdsLauncher.cs" />
-    <Compile Include="src\bench\VpbBenchUtils.cs" />
-    <Compile Include="src\bench\VpbBenchConfig.cs" />
-    <Compile Include="src\bench\VpbBenchConfigParser.cs" />
-    <Compile Include="src\bench\VpbBenchRunner.cs" />
-    <Compile Include="src\bench\VpbBenchRunSummary.cs" />
-    <Compile Include="src\bench\VpbBenchComparer.cs" />
-    <Compile Include="src\bench\VpbBenchConfigWriter.cs" />
-    <Compile Include="src\bench\VpbBenchConfigStore.cs" />
-    <Compile Include="src\bench\SceneLoadBenchSnapshot.cs" />
-    <Compile Include="src\gallery\GalleryPanel.Modal.Bench.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.MergeOutfit.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.RemapAtomUids.cs" />
-    <Compile Include="src\gallery\GalleryPanel.BenchPickMode.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\MVRPluginManagerHook.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />
@@ -400,6 +390,7 @@
     <Compile Include="src\unity-object-pool\PoolManager.cs" />
     <Compile Include="src\unity-object-pool\Singleton.cs" />
     <Compile Include="src\VamHookPlugin.cs" />
+    <Compile Include="src\VpbCompanionServer.cs" />
     <Compile Include="src\VamHookPlugin.I18n.cs" />
     <Compile Include="src\VamHookPlugin.Settings.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
@@ -706,13 +697,13 @@
     <VPBIconSource Include="scripts\build_icon_atlas.py" />
   </ItemGroup>
   <!--
-    Repacks assets/icons into vam_patch/BepInEx/plugins/vpb_icons.pack when a source icon or the
+    Repacks assets/icons into vam_patch/BepInEx/plugins/VPB/assets/icons.pack when a source icon or the
     icon map changes. Requires Python 3 with Pillow and cairosvg; a missing interpreter is a
     warning, not an error, because the built pack is committed. Set SkipVPBIconAtlas=true to skip.
   -->
   <Target Name="BuildVPBIconAtlas" BeforeTargets="BeforeCompile"
           Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBIconAtlas)' != 'true'"
-          Inputs="@(VPBIconSource)" Outputs="$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons.pack">
+          Inputs="@(VPBIconSource)" Outputs="$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB\assets\icons.pack">
     <PropertyGroup>
       <_IAProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_IAProjDir>
     </PropertyGroup>
@@ -727,7 +718,6 @@
       <_SMProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_SMProjDir>
     </PropertyGroup>
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbThemes.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
   </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -2194,7 +2194,6 @@ namespace VPB
 
         private void DetailStripLaunchBoundOrFirstSelected()
         {
-            if (_benchPickModeActive) return;
             if (_stripKeepSubScenePickActive) return;
             FileEntry file = _detailStripBoundFile;
             if (file == null && selectedFiles != null && selectedFiles.Count > 0)
@@ -4278,7 +4277,7 @@ namespace VPB
 
         private void DetailStripSetToolLinksEnabled(bool enabled)
         {
-            // Task chrome: sticky Eraser/Try-On/Cleanup/Bench kill strip actions.
+            // Task chrome: sticky Eraser/Try-On/Cleanup kill strip actions.
             try { enabled = TaskChromeShouldEnableDetailStripTools(enabled); } catch { }
 
             DetailStripSetLink(

@@ -35,7 +35,10 @@ namespace VPB
 
                 System.Collections.Generic.List<string> searchDirs = new System.Collections.Generic.List<string>();
                 
-                // 1. Same directory as VPB.dll (Handles scripts folder or custom location)
+                // 1. Standard installation: BepInEx/plugins/VPB/native/
+                searchDirs.Add(VpbPaths.Native);
+
+                // 2. Same directory as VPB.dll (Handles scripts folder or custom location)
                 if (!string.IsNullOrEmpty(assemblyDir))
                 {
                     searchDirs.Add(assemblyDir);

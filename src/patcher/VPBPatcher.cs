@@ -16,6 +16,49 @@ namespace VPB.Patcher
         private const string StagingDirName = "vpb_update_staging";
         private const string PendingFileName = "pending.json";
         private const string OldFileSuffix = ".vpb_old";
+        private const string PluginSubDirName = "VPB";
+        private const string ManifestFileName = "patch_manifest.json";
+        private const string ManifestOwnedPrefix = "BepInEx/plugins/VPB/";
+        private const int MinManifestRowsToPrune = 4;
+
+        private static readonly string[] PruneKeepNames =
+        {
+            "VPB.pdb"
+        };
+
+        private static readonly string[] PruneProtectedDirs =
+        {
+            "icons_override",
+            "vpb_icons_override",
+            "clips",
+            StagingDirName
+        };
+
+        private static readonly string[] LegacyRootFiles =
+        {
+            "VPB.dll",
+            "VPB.pdb",
+            "sqlite3.dll",
+            "turbojpeg.dll",
+            "vpb_icons.pack",
+            "VPB_THIRD_PARTY_NOTICES.txt",
+            "bench_run.cfg",
+            "bench_run.example.cfg"
+        };
+
+        private static readonly string[] LegacyRootDirs =
+        {
+            "vpb_fonts",
+            "vpb_help",
+            "vpb_translations",
+            "vpb_themes",
+            "vpb_ccm_clips",
+            "vpb_icons",
+            "VpbNet",
+            "zstd",
+            "bench",
+            StagingDirName
+        };
 
         public static void Patch(AssemblyDefinition assembly) { }
 
@@ -32,9 +75,23 @@ namespace VPB.Patcher
                     return;
                 }
 
-                CleanupOldFiles(gameRoot);
+                var pluginsDir = Path.Combine(Path.Combine(gameRoot, "BepInEx"), "plugins");
 
-                var stagingDir = Path.Combine(Path.Combine(Path.Combine(gameRoot, "BepInEx"), "plugins"), StagingDirName);
+                CleanupOldFiles(gameRoot);
+                ApplyPendingUpdate(gameRoot, Path.Combine(Path.Combine(pluginsDir, PluginSubDirName), StagingDirName));
+                ApplyPendingUpdate(gameRoot, Path.Combine(pluginsDir, StagingDirName));
+                PruneLegacyLayout(gameRoot);
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("VPB.Patcher error: " + ex);
+            }
+        }
+
+        private static void ApplyPendingUpdate(string gameRoot, string stagingDir)
+        {
+            try
+            {
                 var pendingPath = Path.Combine(stagingDir, PendingFileName);
 
                 if (!File.Exists(pendingPath))
@@ -115,7 +172,202 @@ namespace VPB.Patcher
             }
             catch (Exception ex)
             {
-                Log.LogError("VPB.Patcher error: " + ex);
+                Log.LogError("VPB.Patcher pending-update error: " + ex);
+            }
+        }
+
+        private static void PruneLegacyLayout(string gameRoot)
+        {
+            try
+            {
+                var pluginsDir = Path.Combine(Path.Combine(gameRoot, "BepInEx"), "plugins");
+                var vpbDir = Path.Combine(pluginsDir, PluginSubDirName);
+                if (!File.Exists(Path.Combine(vpbDir, "VPB.dll")))
+                    return;
+
+                int removed = 0;
+
+                for (int i = 0; i < LegacyRootFiles.Length; i++)
+                {
+                    var path = Path.Combine(pluginsDir, LegacyRootFiles[i]);
+                    if (!File.Exists(path)) continue;
+                    if (RetireFile(path)) removed++;
+                }
+
+                for (int i = 0; i < LegacyRootDirs.Length; i++)
+                {
+                    var path = Path.Combine(pluginsDir, LegacyRootDirs[i]);
+                    if (!Directory.Exists(path)) continue;
+                    if (RetireDirectory(path)) removed++;
+                }
+
+                removed += PruneUnshippedFiles(vpbDir);
+
+                if (removed > 0)
+                    Log.LogInfo("Removed " + removed + " stale VPB item(s); the shipped tree is BepInEx/plugins/" + PluginSubDirName);
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning("Legacy layout prune failed: " + ex.Message);
+            }
+        }
+
+        private static int PruneUnshippedFiles(string vpbDir)
+        {
+            var manifestPath = Path.Combine(vpbDir, ManifestFileName);
+            if (!File.Exists(manifestPath))
+                return 0;
+
+            var files = new List<string>();
+            var dirs = new List<string>();
+            if (!TryReadOwnedManifest(manifestPath, files, dirs))
+                return 0;
+
+            if (files.Count < MinManifestRowsToPrune || !files.Contains("vpb.dll"))
+            {
+                Log.LogWarning("Shipped manifest looks incomplete (" + files.Count + " owned files); skipping prune");
+                return 0;
+            }
+
+            var shippedDirs = new List<string>(dirs.Count);
+            for (int i = 0; i < dirs.Count; i++)
+                shippedDirs.Add(dirs[i].ToLowerInvariant());
+
+            int removed = 0;
+            PruneDirectory(vpbDir, "", files, shippedDirs, ref removed);
+            return removed;
+        }
+
+        private static void PruneDirectory(string absDir, string relDir, List<string> files, List<string> shippedDirs, ref int removed)
+        {
+            string[] present;
+            try { present = Directory.GetFiles(absDir); }
+            catch { return; }
+
+            for (int i = 0; i < present.Length; i++)
+            {
+                var name = Path.GetFileName(present[i]);
+                if (IsProtectedName(name, PruneKeepNames)) continue;
+                if (name.EndsWith(OldFileSuffix, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var rel = relDir.Length == 0 ? name : relDir + "/" + name;
+                if (files.Contains(rel.ToLowerInvariant())) continue;
+
+                if (RetireFile(present[i]))
+                {
+                    Log.LogInfo("Removed unshipped file: " + rel);
+                    removed++;
+                }
+            }
+
+            string[] subDirs;
+            try { subDirs = Directory.GetDirectories(absDir); }
+            catch { return; }
+
+            for (int i = 0; i < subDirs.Length; i++)
+            {
+                var name = Path.GetFileName(subDirs[i]);
+                if (IsProtectedName(name, PruneProtectedDirs)) continue;
+
+                var rel = relDir.Length == 0 ? name : relDir + "/" + name;
+                PruneDirectory(subDirs[i], rel, files, shippedDirs, ref removed);
+
+                if (shippedDirs.Contains(rel.ToLowerInvariant())) continue;
+
+                try
+                {
+                    if (Directory.GetFiles(subDirs[i]).Length == 0 && Directory.GetDirectories(subDirs[i]).Length == 0)
+                    {
+                        Directory.Delete(subDirs[i], false);
+                        Log.LogInfo("Removed superseded directory: " + rel);
+                        removed++;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static bool IsProtectedName(string name, string[] list)
+        {
+            for (int i = 0; i < list.Length; i++)
+            {
+                if (string.Equals(name, list[i], StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool TryReadOwnedManifest(string path, List<string> files, List<string> dirs)
+        {
+            try
+            {
+                var json = File.ReadAllText(path);
+                if (json == null || !json.TrimEnd().EndsWith("]", StringComparison.Ordinal))
+                {
+                    Log.LogWarning("Shipped manifest is truncated; skipping prune");
+                    return false;
+                }
+
+                var rows = SimpleJsonParser.ParseManifestRows(json);
+                if (rows == null || rows.Count == 0) return false;
+
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    var rel = rows[i].RelativePath;
+                    if (string.IsNullOrEmpty(rel)) continue;
+                    rel = rel.Replace('\\', '/');
+                    if (!rel.StartsWith(ManifestOwnedPrefix, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    var owned = rel.Substring(ManifestOwnedPrefix.Length);
+                    if (owned.Length == 0) continue;
+
+                    if (rows[i].IsDirectory) dirs.Add(owned);
+                    else files.Add(owned.ToLowerInvariant());
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning("Could not read shipped manifest: " + ex.Message);
+                return false;
+            }
+        }
+
+        private static bool RetireFile(string path)
+        {
+            try
+            {
+                File.Delete(path);
+                return true;
+            }
+            catch { }
+
+            try
+            {
+                var retired = path + OldFileSuffix;
+                TryDelete(retired);
+                File.Move(path, retired);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning("Could not remove legacy " + path + ": " + ex.Message);
+                return false;
+            }
+        }
+
+        private static bool RetireDirectory(string path)
+        {
+            try
+            {
+                Directory.Delete(path, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning("Could not remove legacy " + path + ": " + ex.Message);
+                return false;
             }
         }
 
@@ -238,6 +490,51 @@ namespace VPB.Patcher
                 return result;
             }
 
+            public static List<ManifestRow> ParseManifestRows(string json)
+            {
+                var rows = new List<ManifestRow>();
+                if (string.IsNullOrEmpty(json)) return rows;
+
+                int objStart = 0;
+                while (true)
+                {
+                    objStart = json.IndexOf('{', objStart);
+                    if (objStart < 0) break;
+                    int objEnd = json.IndexOf('}', objStart);
+                    if (objEnd < 0) break;
+
+                    var objStr = json.Substring(objStart, objEnd - objStart + 1);
+                    var rel = ExtractStringValue(objStr, "RelativePath");
+                    if (!string.IsNullOrEmpty(rel))
+                    {
+                        rows.Add(new ManifestRow
+                        {
+                            RelativePath = rel,
+                            IsDirectory = ExtractBoolValue(objStr, "IsDirectory")
+                        });
+                    }
+
+                    objStart = objEnd + 1;
+                }
+
+                return rows;
+            }
+
+            private static bool ExtractBoolValue(string json, string key)
+            {
+                var search = "\"" + key + "\"";
+                int keyIdx = json.IndexOf(search);
+                if (keyIdx < 0) return false;
+
+                int colonIdx = json.IndexOf(':', keyIdx + search.Length);
+                if (colonIdx < 0) return false;
+
+                int trueIdx = json.IndexOf("true", colonIdx + 1, StringComparison.OrdinalIgnoreCase);
+                int falseIdx = json.IndexOf("false", colonIdx + 1, StringComparison.OrdinalIgnoreCase);
+                if (trueIdx < 0) return false;
+                return falseIdx < 0 || trueIdx < falseIdx;
+            }
+
             private static string ExtractStringValue(string json, string key)
             {
                 var search = "\"" + key + "\"";
@@ -255,6 +552,12 @@ namespace VPB.Patcher
 
                 return json.Substring(quoteStart + 1, quoteEnd - quoteStart - 1);
             }
+        }
+
+        private class ManifestRow
+        {
+            public string RelativePath;
+            public bool IsDirectory;
         }
 
         private class PendingUpdate

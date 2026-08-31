@@ -736,12 +736,6 @@ namespace VPB
             _userHidden = false;
             ClearFloatsOnlyForShow();
 
-            if (_benchPickModeActive && !BenchPickModeAllowsShowRequest(title))
-            {
-                ShowTemporaryStatus(VPBTranslation.T("bench.pick.block_nav",
-                    "End Scene Load Test selection first (Done or Cancel)."), 2.5f);
-                return;
-            }
             if (_stripKeepSubScenePickActive && !StripKeepSubScenePickAllowsShowRequest(title))
             {
                 ShowTemporaryStatus(VPBTranslation.T(
@@ -2161,11 +2155,6 @@ namespace VPB
                 return;
             }
 
-            if (_benchPickModeActive)
-            {
-                BenchOnGallerySelectionChangedInPickMode();
-                return;
-            }
             if (_stripKeepSubScenePickActive)
             {
                 StripKeepOnGallerySelectionChangedInSubScenePick();
@@ -2187,7 +2176,6 @@ namespace VPB
         internal void ApplyFileFromHold(FileEntry file)
         {
             if (file == null) return;
-            if (_benchPickModeActive) return;
             if (_stripKeepSubScenePickActive) return;
             ApplyFileEntryNow(file);
         }
@@ -2195,7 +2183,6 @@ namespace VPB
         private void ApplyFileEntryNow(FileEntry file)
         {
             if (file == null) return;
-            if (_benchPickModeActive) return;
             if (_stripKeepSubScenePickActive) return;
 
             FileEntry applyFile = file;

@@ -2673,7 +2673,7 @@ namespace VPB
 
         /// <summary>
         /// Layout-group chrome button: rounded fill, flat Button, hover border, fixed or flexible width.
-        /// Used by modal headers/footers (scan whitelist, bench, quick-menu pos, category quick editor, etc.).
+        /// Used by modal headers/footers (scan whitelist, quick-menu pos, category quick editor, etc.).
         /// Pass <paramref name="width"/> &lt;= 0 for flexibleWidth=1 (shares row with siblings).
         /// </summary>
         public static GameObject CreateChromeLayoutButton(Transform parent, float width, float height, string label, int fontSize, Color bg, UnityAction onClick)
@@ -2713,7 +2713,7 @@ namespace VPB
         }
 
         /// <summary>
-        /// Alternating stripe list row with trailing remove chrome button (scan whitelist / bench lists).
+        /// Alternating stripe list row with trailing remove chrome button (scan whitelist lists).
         /// Returns the remove button so callers can attach tooltips.
         /// </summary>
         public static GameObject CreateRemovableStripeRow(
@@ -2884,10 +2884,9 @@ namespace VPB
             return Sprite.Create(GalleryIconAtlas.Texture, rect, new Vector2(0.5f, 0.5f));
         }
 
-        private static Sprite CreateLooseIconSprite(string relativePathFromPluginsDir, Color? recolorTo)
+        private static Sprite CreateLooseIconSprite(string fullPath, Color? recolorTo)
         {
-            if (string.IsNullOrEmpty(relativePathFromPluginsDir)) return null;
-            string fullPath = Path.Combine(BepInEx.Paths.PluginPath, relativePathFromPluginsDir);
+            if (string.IsNullOrEmpty(fullPath)) return null;
             if (!File.Exists(fullPath)) return null;
             byte[] bytes = File.ReadAllBytes(fullPath);
             Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);

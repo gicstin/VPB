@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -99,14 +99,6 @@ namespace VPB
                     break;
                 case StickyToolMode.Import:
                     try { SetImportSidebarActive(true); } catch { }
-                    break;
-                case StickyToolMode.BenchPick:
-                    // Bench enter owns its own args; abort deferred — user re-opens Bench.
-                    ShowTemporaryStatus(
-                        VPBTranslation.T(
-                            "gallery.tryon.sticky_bench_reopen",
-                            "Try-On closed — reopen Bench pick if needed."),
-                        2f);
                     break;
                 default:
                     break;

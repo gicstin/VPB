@@ -372,7 +372,6 @@ namespace VPB
             }
             catch { }
             try { GlobalInfo.EnsurePluginDataInitialized(); } catch { }
-            try { VpbBenchRunner.InitializeOnce(); } catch { }
             try
             {
                 VPBConfig.ReloadFromDisk();
@@ -537,6 +536,7 @@ namespace VPB
             VamOnDemandLoader.SetMainThread();
             VamScanFilter.DiscoverVamInternals();
             var _ = ScanWhitelistManager.Instance; // eager init
+            try { VpbCompanionServer.Start(); } catch { }
 
             // Migrate legacy VPB hide markers to native VaM-compatible format
             System.Threading.ThreadPool.QueueUserWorkItem((state) => {
@@ -681,7 +681,7 @@ namespace VPB
 
         void OnApplicationQuit()
         {
-            // Runs before OnDestroy during player quit — kill Win32 pump + zstd writers early.
+            // Runs before OnDestroy during player quit — kill Win32 pump, companion pipe, zstd writers early.
             try { VpbProgressService.ShutdownForQuit(); } catch { }
             try { VpbRandomHistory.Flush(); } catch { }
         }
@@ -783,11 +783,6 @@ namespace VPB
             if (IsGalleryPluginHotkeyCaptureActive()) return true;
             if (!VpbShortcutGate.GlobalHotkeyAllowed(opensUi)) return true;
             return ShouldSuppressBareKeyHotkey(ku);
-        }
-
-        internal static bool ShouldSuppressBenchHotkey(KeyUtil ku)
-        {
-            return ShouldSuppressPluginHotkey(ku);
         }
 
         private void PublishGlobalHotkeyKeysToGate()
@@ -926,6 +921,7 @@ namespace VPB
             VpbPerfDiag.RefreshCache();
             VamStartupProfiler.RefreshCache();
             VamOnDemandLoader.DrainMainThreadQueue();
+            VpbCompanionServer.PumpMainThread();
             VamOnDemandLoader.TickRefreshSimHold();
             VamLoadPerfHooks.Tick();
             Gallery.DrainPendingSqlIndexUpdate();
@@ -948,8 +944,6 @@ namespace VPB
             }
 
             VdsLauncher.TryExecuteOnce();
-
-            try { VpbBenchRunner.Tick(this, IsFileManagerInited); } catch { }
 
             if (m_PendingAutoLoadRefresh)
             {

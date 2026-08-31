@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -53,7 +53,6 @@ namespace VPB
                 case "helpers": return VPBTranslation.T("settings.section.helpers", "Helpers");
                 case "updater": return VPBTranslation.T("settings.section.updater", "Updater");
                 case "ba_migration": return VPBTranslation.T("settings.section.ba_migration", "BrowserAssistant");
-                case "plugin_bench": return VPBTranslation.T("settings.section.bench", "Benchmark");
                 default: return "";
             }
         }

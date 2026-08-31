@@ -102,58 +102,12 @@ namespace VPB
         private static void EnsureHelpDir()
         {
             if (_helpDir != null) return;
-            _helpDir = "";
             try
             {
-                string pluginDir = ResolvePluginDir();
-                if (!string.IsNullOrEmpty(pluginDir))
-                {
-                    string local = Path.Combine(pluginDir, "vpb_help");
-                    if (Directory.Exists(local)) { _helpDir = local; return; }
-                }
-                if (!string.IsNullOrEmpty(pluginDir))
-                {
-                    string d = pluginDir;
-                    for (int i = 0; i < 8 && !string.IsNullOrEmpty(d); i++)
-                    {
-                        string direct = Path.Combine(d, "vpb_help");
-                        if (Directory.Exists(direct)) { _helpDir = direct; return; }
-                        string bep = Path.Combine(Path.Combine(Path.Combine(d, "BepInEx"), "plugins"), "vpb_help");
-                        if (Directory.Exists(bep)) { _helpDir = bep; return; }
-                        try
-                        {
-                            string parent = Path.GetDirectoryName(d);
-                            if (string.IsNullOrEmpty(parent) || string.Equals(parent, d, StringComparison.OrdinalIgnoreCase))
-                                break;
-                            d = parent;
-                        }
-                        catch { break; }
-                    }
-                }
-                try
-                {
-                    string cwd = Directory.GetCurrentDirectory();
-                    if (!string.IsNullOrEmpty(cwd))
-                    {
-                        string bep = Path.Combine(Path.Combine(Path.Combine(cwd, "BepInEx"), "plugins"), "vpb_help");
-                        if (Directory.Exists(bep)) { _helpDir = bep; return; }
-                    }
-                }
-                catch { }
+                string dir = VpbPaths.FindDir("assets/help", "vpb_help");
+                _helpDir = Directory.Exists(dir) ? dir : "";
             }
-            catch { }
-        }
-
-        private static string ResolvePluginDir()
-        {
-            try
-            {
-                string loc = Assembly.GetExecutingAssembly().Location;
-                if (!string.IsNullOrEmpty(loc))
-                    return Path.GetDirectoryName(loc);
-            }
-            catch { }
-            return null;
+            catch { _helpDir = ""; }
         }
 
         public static List<HelpSection> LoadSections(string localeId)

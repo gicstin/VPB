@@ -9,10 +9,11 @@ namespace VPB
 {
     internal static class GalleryIconAtlas
     {
-        public const string PackFileName = "vpb_icons.pack";
-        public const string OverrideDirName = "vpb_icons_override";
+        public const string PackFileName = "assets/icons.pack";
+        public const string OverrideDirName = "icons_override";
 
         private static int _overrideDirState;
+        private static string _overrideDir;
 
         private const uint FlagDeflated = 1u;
         private const uint FlagAlphaOnly = 2u;
@@ -47,13 +48,14 @@ namespace VPB
             {
                 try
                 {
-                    _overrideDirState = Directory.Exists(Path.Combine(BepInEx.Paths.PluginPath, OverrideDirName)) ? 1 : 2;
+                    _overrideDir = VpbPaths.FindDir(OverrideDirName, "vpb_icons_override");
+                    _overrideDirState = Directory.Exists(_overrideDir) ? 1 : 2;
                 }
                 catch { _overrideDirState = 2; }
             }
             if (_overrideDirState != 1) return null;
             string key = ToAtlasKey(roleOrPath);
-            return key == null ? null : OverrideDirName + "/" + key + ".png";
+            return key == null ? null : Path.Combine(_overrideDir, key + ".png");
         }
 
         public static bool TryGetRect(string relativePathFromPluginsDir, out Rect rect)
@@ -73,7 +75,7 @@ namespace VPB
 
             try
             {
-                string packPath = Path.Combine(BepInEx.Paths.PluginPath, PackFileName);
+                string packPath = VpbPaths.FindFile(PackFileName, "vpb_icons.pack");
                 if (!File.Exists(packPath))
                 {
                     _loadError = "pack not found: " + packPath;

@@ -144,7 +144,6 @@ namespace VPB
             try { PluginSettingsHotkeyCaptureUpdate(); } catch { }
             try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
             try { FooterPluginInfoPollHoverTooltip(); } catch { }
-            try { BenchModalRuntimeTick(); } catch { }
             try { RemoveModeUpdate(); } catch { }
 
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;
@@ -902,9 +901,6 @@ namespace VPB
 
             // Docked Import Esc (float handled earlier via TryHandleImportSidebarFloatEsc).
             if (TryHandleImportSidebarDockedEsc())
-                return;
-
-            if (TryHandleBenchPickModeEsc())
                 return;
 
             if (TryHandleApplySemanticsEsc())

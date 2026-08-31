@@ -84,7 +84,7 @@ namespace VPB
 
         private string GetStagingDir()
         {
-            return Path.Combine(Path.Combine(Path.Combine(_gameRoot, "BepInEx"), "plugins"), StagingDirName);
+            return Path.Combine(Path.Combine(Path.Combine(Path.Combine(_gameRoot, "BepInEx"), "plugins"), "VPB"), StagingDirName);
         }
 
         private string GetPendingPath()

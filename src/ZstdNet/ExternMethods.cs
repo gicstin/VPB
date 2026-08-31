@@ -51,12 +51,8 @@ namespace ZstdNet
 
                 System.Collections.Generic.List<string> searchDirs = new System.Collections.Generic.List<string>();
                 
-                // 1. Target specific directory: BepInEx/plugins/VPB/zstd/dll/ (Standard Installation)
-                if (!string.IsNullOrEmpty(pluginDir))
-                {
-                    searchDirs.Add(Path.Combine(pluginDir, "VPB\\zstd\\dll"));
-                    searchDirs.Add(Path.Combine(pluginDir, "zstd\\dll"));
-                }
+                // 1. Standard installation: BepInEx/plugins/VPB/native/
+                searchDirs.Add(VPB.VpbPaths.Native);
 
                 // 2. Same directory as VPB.dll (Handles scripts folder or custom location)
                 if (!string.IsNullOrEmpty(assemblyDir))
@@ -64,6 +60,13 @@ namespace ZstdNet
                     searchDirs.Add(assemblyDir);
                     searchDirs.Add(Path.Combine(assemblyDir, "zstd\\dll"));
                     searchDirs.Add(Path.Combine(assemblyDir, "x64"));
+                }
+
+                // 3. Pre-subfolder layouts
+                if (!string.IsNullOrEmpty(pluginDir))
+                {
+                    searchDirs.Add(Path.Combine(pluginDir, "VPB\\zstd\\dll"));
+                    searchDirs.Add(Path.Combine(pluginDir, "zstd\\dll"));
                 }
                 
                 // 3. Scripts directory specific (if VPB.dll is in scripts, libzstd.dll might be in a subfolder there)

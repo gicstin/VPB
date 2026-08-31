@@ -405,7 +405,8 @@ namespace VPB
 
         /// <summary>
         /// Deterministic process-exit teardown. Clears blocking chrome, cancels workers,
-        /// and destroys OS heartbeat message pump so VaM can exit without Task Manager.
+        /// destroys OS heartbeat message pump, and unblocks companion named-pipe wait
+        /// so VaM can exit without Task Manager.
         /// </summary>
         internal static void ShutdownForQuit()
         {
@@ -424,6 +425,7 @@ namespace VPB
             catch { }
             try { OnDemandZstdWriteQueue.RequestCancel(); } catch { }
             try { ZstdCompressor.KillActiveProcesses(); } catch { }
+            try { VpbCompanionServer.Stop(); } catch { }
             try { ClearBlocking(); } catch { }
             try { VpbOsBusyHeartbeat.Shutdown(); } catch { }
         }

@@ -256,6 +256,8 @@ namespace VPB
         private bool m_WatchFaceAimFlip;
         private bool m_WatchFaceFlipLogged;
         private float m_WatchLastAppliedScale = -1f;
+        /// <summary>Live <see cref="SuperController.worldScale"/>, sampled once per watch update.</summary>
+        private float m_WatchWorldScale = 1f;
         private QuickMenuWatchFaceMode m_WatchFaceMode = QuickMenuWatchFaceMode.Compact;
         private QuickMenuWatchFaceMode m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
         private bool m_WatchLayoutLabels;
@@ -548,6 +550,20 @@ namespace VPB
             QuickMenuDestroyWatch();
         }
 
+        internal static float QuickMenuWorldScale()
+        {
+            float s = 1f;
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc != null) s = sc.worldScale;
+            }
+            catch { }
+            // Written as a failed positive test so NaN lands on the fallback too.
+            if (!(s > 1e-4f) || s > 1e4f) s = 1f;
+            return s;
+        }
+
         private void QuickMenuUpdateVrWatch()
         {
             if (!QuickMenuIsVrActive())
@@ -566,6 +582,7 @@ namespace VPB
 
             float now = Time.unscaledTime;
             var sc = SuperController.singleton;
+            m_WatchWorldScale = QuickMenuWorldScale();
             GetVamVrHandTransforms(sc, out m_WatchHandLeft, out m_WatchHandRight);
             if (!QuickMenuHandLooksTracked(m_WatchHandLeft)) m_WatchHandLeft = null;
             if (!QuickMenuHandLooksTracked(m_WatchHandRight)) m_WatchHandRight = null;
@@ -922,14 +939,16 @@ namespace VPB
             Vector3 watchPos = hand.TransformPoint(offset);
             Vector3 away = watchPos - cam.position;
             float mag2 = away.sqrMagnitude;
-            if (mag2 < 0.0064f || mag2 > QuickMenuWatchGlanceMaxDistSqr) return;
+
+            float ws2 = m_WatchWorldScale * m_WatchWorldScale;
+            if (mag2 < 0.0064f * ws2 || mag2 > QuickMenuWatchGlanceMaxDistSqr * ws2) return;
 
             float inv = 1f / Mathf.Sqrt(mag2);
             Vector3 restFwd = (hand.rotation * QuickMenuWatchWristLocalRot) * Vector3.forward;
             float wristDot = (away.x * restFwd.x + away.y * restFwd.y + away.z * restFwd.z) * inv;
 
             float lookDot = -1f;
-            if (mag2 <= QuickMenuWatchGlanceLookMaxDistSqr)
+            if (mag2 <= QuickMenuWatchGlanceLookMaxDistSqr * ws2)
             {
                 Vector3 camFwd = cam.forward;
                 lookDot = (camFwd.x * away.x + camFwd.y * away.y + camFwd.z * away.z) * inv;
@@ -2684,7 +2703,8 @@ namespace VPB
             float metersPerPx = VpbWorldSpaceUiScale.MetersPerUiPixel * m_WatchCfgScaleMul;
             if (metersPerPx < 1e-5f) metersPerPx = VpbWorldSpaceUiScale.MetersPerUiPixel;
             float fadeScale = Mathf.Lerp(QuickMenuWatchFadeScaleFrom, 1f, m_WatchFade);
-            float local = metersPerPx * fadeScale / lossy;
+
+            float local = metersPerPx * fadeScale * m_WatchWorldScale / lossy;
             if (Mathf.Abs(local - m_WatchLastAppliedScale) > 1e-7f)
             {
                 m_WatchLastAppliedScale = local;
@@ -2716,7 +2736,7 @@ namespace VPB
                 Vector3 from = cam.position;
                 if (m_WatchCfgShoulderBlend > 0f)
                     from += (cam.right * (m_WatchIsLeft ? QuickMenuWatchShoulderOutM : -QuickMenuWatchShoulderOutM)
-                          - cam.up * QuickMenuWatchShoulderDownM) * m_WatchCfgShoulderBlend;
+                          - cam.up * QuickMenuWatchShoulderDownM) * (m_WatchCfgShoulderBlend * m_WatchWorldScale);
                 Vector3 dir = t.position - from;
                 if (dir.sqrMagnitude > 1e-6f) QuickMenuAimWatchFaceAtEye(t, dir, cam);
             }
@@ -2831,17 +2851,19 @@ namespace VPB
             // stops tracking, so it is a stale reference for its own hysteresis.
             Vector3 anchor = QuickMenuWatchWristAnchorWorld();
             float d2 = (m_WatchOtherHand.position - anchor).sqrMagnitude;
+            // Reach radii are player-relative metres — see QuickMenuWorldScale.
+            float ws2 = m_WatchWorldScale * m_WatchWorldScale;
             if (m_WatchFrozen)
             {
                 // Release when the reaching hand leaves, and also when the wrist itself has walked
                 // away — otherwise dropping the watch arm leaves the face hanging in mid-air,
                 // indistinguishable from pin mode.
-                if (d2 > QuickMenuWatchFreezeExitSqr ||
-                    (anchor - t.position).sqrMagnitude > QuickMenuWatchFreezeBreakSqr)
+                if (d2 > QuickMenuWatchFreezeExitSqr * ws2 ||
+                    (anchor - t.position).sqrMagnitude > QuickMenuWatchFreezeBreakSqr * ws2)
                     m_WatchFrozen = false;
                 return;
             }
-            if (d2 <= QuickMenuWatchFreezeEnterSqr) m_WatchFrozen = true;
+            if (d2 <= QuickMenuWatchFreezeEnterSqr * ws2) m_WatchFrozen = true;
         }
 
         private static QuickMenuVrWatchMode QuickMenuParseWatchMode(string s)
@@ -3078,7 +3100,9 @@ namespace VPB
             m_Smoothed = Vector3.Lerp(m_Smoothed, raw, DragSmoothing);
             Vector3 step = m_Smoothed * DragGain;
             float m2 = step.sqrMagnitude;
-            if (m2 > DragMaxStepM * DragMaxStepM) step *= DragMaxStepM / Mathf.Sqrt(m2);
+
+            float maxStep = DragMaxStepM * VamHookPlugin.QuickMenuWorldScale();
+            if (m2 > maxStep * maxStep) step *= maxStep / Mathf.Sqrt(m2);
             owner.QuickMenuDragWatchOffset(step);
         }
 
