@@ -178,6 +178,29 @@ namespace VPB
 
             if (probe) AppearanceApplyProbe.Phase("preset_summary", AppearanceApplyProbe.SummarizePreset(preset));
 
+            bool presetClonedForOwnerlessMorphs = false;
+            if (resourceType == VpbResourceType.Appearance
+                && sourceEntry != null
+                && !UI.IsLikelyVarPackageReference(UI.NormalizePath(sourceEntry.Uid)))
+            {
+                if (presetJC != null)
+                {
+                    preset = CloneJsonClassStatic(preset);
+                    presetClonedForOwnerlessMorphs = true;
+                }
+                try
+                {
+                    List<string> inferredMorphOwners = VarPresetPathFixups.ResolveOwnerlessMorphPaths(preset);
+                    if (probe) AppearanceApplyProbe.Phase("morph_owner_fixups",
+                        "owners=" + inferredMorphOwners.Count);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("VpbImport.LoadPreset: ownerless morph resolution failed: " + ex.Message);
+                    if (probe) AppearanceApplyProbe.Warn("morph_owner_fixups: " + ex.Message);
+                }
+            }
+
             if (sourceEntry != null && !skipDependencyPrewarm)
             {
                 try
@@ -261,16 +284,12 @@ namespace VPB
 
             if (resourceType == VpbResourceType.Appearance && sourceEntry != null)
             {
-                if (presetJC != null)
+                if (presetJC != null && !presetClonedForOwnerlessMorphs)
                     preset = CloneJsonClassStatic(preset);
                 VarPresetPathFixups.Apply(preset, UI.NormalizePath(sourceEntry.Uid));
                 if (probe) AppearanceApplyProbe.Phase("path_fixups_done");
             }
 
-            // REFACTOR-IN-PROGRESS: regions below tag which slice owns each resource type's body.
-            // Slice A wired the skeleton + Appearance/Clothing dispatch. Slice C extended Appearance.
-            // Slice D will fill Pose. Slice E will fill Hair / ClothingItem / HairItem. Once all
-            // resource types ship, flatten the regions and drop the slice labels.
             switch (resourceType)
             {
                 #region Slice A + Slice C owns: Appearance
@@ -359,11 +378,7 @@ namespace VPB
                         if (clothingMode == ClothingApplyMode.ClothingOnly)
                         {
                             if (probe) AppearanceApplyProbe.Phase("clothing_only_start");
-                            // Outfit Only: wear exactly the preset's real garments PLUS the target's
-                            // current makeup/skin-overlay (cosmetic) clothing — body, face and hair are
-                            // left untouched. Loaded through the dedicated ClothingPresets PresetManager
-                            // (non-merge) so clothing item materials (textures/colors) bind correctly and
-                            // indices align. The target's existing garments are dropped; its cosmetics kept.
+                            // ClothingPresets preserves item material binding while replacing garments and retaining target cosmetics.
                             JSONClass keepCosmetics = null;
                             try
                             {
@@ -454,10 +469,7 @@ namespace VPB
 
                         if (lockClothing)
                         {
-                            // The lock preserves which clothing items are worn, but a non-merge appearance
-                            // load resets unlisted storables to default — stripping textures/colors from the
-                            // kept clothing since those material storables aren't in the incoming preset.
-                            // Snapshot them now and re-apply after the load (issue #43).
+                            // Non-merge appearance loads reset unlisted material storables even when clothing selection is locked.
                             try { keepClothingMaterialSnapshots = ClothingLoadingUtils.CaptureActiveClothingStorableSnapshots(targetAtom); }
                             catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Keep clothing material snapshot failed: {ex.Message}"); }
                         }
@@ -465,9 +477,7 @@ namespace VPB
                         bool mergeLoad = clothingMode == ClothingApplyMode.Merge;
                         MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
-                        // Non-merge Appearance: clear prior look appearance morphs even when morph-ingest
-                        // skipped (re-import / completed cache). Prevents leftover values from earlier
-                        // looks after many RefreshPackageMorphs cycles.
+                        // Repeated package refreshes can leave morph values from earlier looks when ingest no-ops.
                         if (!mergeLoad)
                         {
                             try
@@ -516,9 +526,6 @@ namespace VPB
                             if (lockStore != null) lockStore.RestorePresetLocks(targetAtom);
                         }
 
-                        // Re-apply the kept clothing's material/customization state that the non-merge load
-                        // reset to default. Clothing selection was locked and unchanged, so the same storables
-                        // still exist and can be restored synchronously (issue #43).
                         if (keepClothingMaterialSnapshots != null && keepClothingMaterialSnapshots.Count > 0)
                         {
                             try { ClothingLoadingUtils.RestoreClothingStorableSnapshots(targetAtom, keepClothingMaterialSnapshots); }
@@ -544,9 +551,7 @@ namespace VPB
                             catch (Exception ex) { LogUtil.LogWarning("VpbImport: deferred pose restore failed: " + ex.Message); }
                         }
 
-                        // Issue #80: rebind custom clothing tex after settle — skip Keep (clothing
-                        // untouched; snapshot restore already reapplied materials). Avoids re-queue
-                        // of every garment texture on each look change.
+                        // Keep mode already restored materials, so rebinding would requeue every garment texture.
                         if (clothingMode != ClothingApplyMode.Keep)
                         {
                             try { DAZClothingHook.ScheduleAtomCustomTextureResync(targetAtom); }
@@ -599,9 +604,7 @@ namespace VPB
 
                         string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
 
-                        // PresetManager.LoadPresetFromJSON overwrites the storable's "storable" lock-state
-                        // child plus loadPresetOnSelect/presetName. Snapshot before, re-apply after, so the
-                        // user's lock state and dropdown name survive the apply.
+                        // Native preset load overwrites lock and selection metadata that must survive resource-only apply.
                         PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
 
                         MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
@@ -1038,9 +1041,6 @@ namespace VPB
                 LogUtil.LogWarning($"VpbImport: Bridge invoke failed: {(bridgeError != null ? bridgeError.Message : "unknown error")}");
         }
 
-        // One worn clothing item extracted from a person JSON (appearance preset or atom.Store dump):
-        // the geometry "clothing" array entry that wears it, its positional clothingItem#N material
-        // storable (may be null), and its geometry "clothing:<uid>" activation bool (may be null).
         private sealed class ClothingSliceItem
         {
             public JSONClass Entry;
@@ -1050,10 +1050,6 @@ namespace VPB
             public JSONNode BoolVal;
         }
 
-        // Extracts worn clothing of the requested wear class (cosmetic vs real garment) from a person
-        // JSON. uidMaterials/seenUidMat accumulate the non-positional (uid/asset-path) clothing material
-        // storables shared across sources; those only bind to items that actually end up worn.
-        // When onlyUids is non-null, only entries whose clothing id is in that set are collected.
         private static void CollectClothingSliceItems(
             JSONClass source, bool wantCosmetic,
             List<ClothingSliceItem> items, List<JSONClass> uidMaterials, HashSet<string> seenUidMat,
@@ -1128,10 +1124,7 @@ namespace VPB
                 string uid = entry["id"] != null ? entry["id"].Value : "";
                 if (onlyUids != null && (string.IsNullOrEmpty(uid) || !onlyUids.Contains(uid))) continue;
 
-                // Three-way split for Outfit Only: real garments and ACCESSORIES (glasses, hats,
-                // jewelry) load from the preset; true FACE cosmetics (eye overlays, makeup, lashes,
-                // decals) are kept from the target. Accessories are cosmetic-classified but part of
-                // the outfit, so they ride the garment pass (wantCosmetic=false).
+                // Accessories follow garment pass because outfit replacement keeps only face cosmetics from target.
                 bool cosmetic = ClothingLoadingUtils.ClassifyClothingWearClass(uid) == ClothingLoadingUtils.ClothingWearClass.Cosmetic
                     || ClothingLoadingUtils.IsCosmeticClothingUidHeuristic(uid);
                 bool faceCosmetic = cosmetic && !ClothingLoadingUtils.IsAccessoryClothingUidHeuristic(uid);
@@ -1141,10 +1134,7 @@ namespace VPB
                 if (string.IsNullOrEmpty(internalId)) internalId = ClothingInternalIdFromUid(uid);
 
                 ClothingSliceItem item = new ClothingSliceItem { Entry = entry, InternalId = internalId, ItemStorables = new List<JSONClass>() };
-                // Primary binding: an item's customization (textures/colors/sim/wrap) is saved as storables
-                // whose id is the item's runtime storeId plus an arbitrary control suffix. The storeId is
-                // the internalId with spaces/underscores stripped (local items) or preserved (packaged),
-                // so match with separators removed and preserve the storables' original ids on load.
+                // Saved customization IDs append arbitrary suffixes to separator-normalized runtime store IDs.
                 string normInternal = NormalizeStorablePrefix(internalId);
                 if (!string.IsNullOrEmpty(normInternal))
                 {
@@ -1174,10 +1164,7 @@ namespace VPB
             }
         }
 
-        // A clothing item's customization storable id is its runtime storeId (internalId with
-        // spaces/underscores stripped) plus an arbitrary control suffix (Material.../Sim/WrapControl/
-        // ItemControl/Style/Preset...). Compare separator-stripped, case-sensitive. Rejects when a
-        // longer worn internalId also prefixes the storable (that item owns it instead).
+        // Longest worn ID wins because shorter normalized IDs can prefix another item's storable ID.
         private static bool StorableBelongsToItem(string storableId, string normInternal, List<string> allWornNorm)
         {
             string normS = NormalizeStorablePrefix(storableId);
@@ -1227,9 +1214,6 @@ namespace VPB
         /// <summary>Synthetic uid for the appearance skin package in the Merge Outfit picker.</summary>
         public const string MergeOutfitSkinUid = "__vpb_merge_skin__";
 
-        /// <summary>
-        /// Lists enabled clothing (and optionally hair/skin) items in an appearance preset for Merge Outfit.
-        /// </summary>
         public static List<AppearanceOutfitPickItem> ListAppearanceOutfitItems(
             FileEntry sourceEntry, JSONClass presetJC = null, bool includeSkinAndHair = false)
         {
@@ -1259,10 +1243,6 @@ namespace VPB
             return result;
         }
 
-        /// <summary>
-        /// Merge selected appearance clothing (and optional hair/skin) onto the target.
-        /// Null <paramref name="selectedUids"/> = merge all listed clothing only (not skin/hair).
-        /// </summary>
         public static void MergeAppearanceOutfitItems(
             FileEntry sourceEntry,
             Atom targetAtom,
@@ -1561,10 +1541,6 @@ namespace VPB
             return BuildClothingPresetSliceFromItems(items, uidMaterials, setUnlistedToDefault: false);
         }
 
-        // Builds a ClothingPresets-shaped slice worn as EXACTLY: the target's kept cosmetics (makeup /
-        // skin overlays, from keepCosmeticsSource) followed by the preset's real garments. Positional
-        // clothingItem#N material storables are reindexed to the combined worn order so textures/colors
-        // land on the right items. Loaded non-merge through the ClothingPresets PresetManager.
         private static JSONClass BuildClothingOnlyPresetSlice(JSONClass preset, JSONClass keepCosmeticsSource)
         {
             List<ClothingSliceItem> items = new List<ClothingSliceItem>();
@@ -1619,10 +1595,6 @@ namespace VPB
             return slice;
         }
 
-        // Temporary diagnostic for the "Outfit Only" import path. One-shot per apply (not a hot path),
-        // so it always logs. Prefix "[VPB OutfitDiag]" for easy grep in BepInEx/LogOutput.log.
-        // Dumps how source clothing maps to the built ClothingPresets slice so material (texture/color)
-        // binding can be verified against the real JSON field names.
         private static void DumpOutfitOnlyDiag(JSONClass preset, JSONClass keepCosmetics, JSONClass slice)
         {
             LogUtil.Log("[VPB OutfitDiag] ===== Outfit Only apply diagnostic =====");
@@ -1778,15 +1750,7 @@ namespace VPB
             return clone;
         }
 
-        // Merge support: remaps a plugins slice's plugin#N keys (and matching plugin#N_* param storable ids +
-        // references) for a MERGE onto a target that already has plugins.
-        //   - A source plugin whose URL is already on the target (<paramref name="targetUrlToExistingKey"/>)
-        //     is remapped onto that EXISTING slot and dropped from the PluginManager dict, so applying the
-        //     slice updates the live plugin's settings in place instead of creating a duplicate.
-        //   - A source plugin with a new URL is appended: assigned the next free slot starting at
-        //     <paramref name="startNumber"/> (= target's max plugin# + 1) and kept in the dict.
-        // Without the remap, VaM's append renumbering would leave the param storables bound to the wrong/
-        // colliding slot and the imported plugins would land without their settings.
+        // Existing URLs retain live slots, while new URLs need free slots so parameter storables bind correctly.
         internal static void MergePluginSliceKeys(JSONClass slice, int startNumber, Dictionary<string, string> targetUrlToExistingKey)
         {
             if (slice == null) return;
@@ -1838,9 +1802,7 @@ namespace VPB
             // Dropping matched plugins from the dict is itself a change even when no key was renumbered.
             pmStorable["plugins"] = rebuilt;
 
-            // Rewrite the param storable ids + any plugin#N references for keys that actually moved, via a
-            // two-phase sentinel pass: old -> unique sentinel, then sentinel -> new. The sentinel can never
-            // equal an old OR new plugin key, so overlapping ranges cannot cross-corrupt regardless of order.
+            // Two-phase sentinels prevent overlapping plugin slot ranges from corrupting remaps.
             List<string> changed = new List<string>();
             foreach (string ok in oldKeys)
                 if (map[ok] != ok) changed.Add(ok);
@@ -2020,13 +1982,7 @@ namespace VPB
             }
         }
 
-        // VaM's primary body controls default to positionState/rotationState = On, so a pose save OMITS those
-        // keys for them (only NON-default states like the deliberately-enabled pelvis/toe controls get written).
-        // On a fresh scene load that is fine, but our merge-load applies the pose onto an EXISTING person whose
-        // foot controls may be Off / hip Comply — and native merge-load leaves a control's state untouched when
-        // the JSON omits it. Result: feet unpinned, toes curl. This restores the fresh-load intent by injecting
-        // On into exactly the primary controls when (and only when) the pose omits their state — an explicit
-        // Off/Comply written by the author is present in the JSON and therefore never overridden.
+        // VaM omits default On states and merge-load preserves target state, so inject On only when primary-control state is absent.
         private static readonly string[] PrimaryPoseControlIds =
             { "hipControl", "chestControl", "headControl", "rHandControl", "lHandControl", "rFootControl", "lFootControl" };
 
@@ -2068,11 +2024,6 @@ namespace VPB
         #endregion
 
         #region Scene-atom helpers
-        /// <summary>
-        /// Wraps a single scene-atom JSON node (shape: {id, type, storables, ...}) as a preset JSON
-        /// (shape: {storables, setUnlistedParamsToDefault?}) consumable by PresetManager.LoadPresetFromJSON.
-        /// Used by callers that extract a Person from a scene dump and apply it as an Appearance/Clothing preset.
-        /// </summary>
         internal static JSONClass WrapAtomNodeAsPreset(JSONClass atomNode)
         {
             if (atomNode == null) return null;
@@ -2096,10 +2047,7 @@ namespace VPB
         }
 
         #region Slice G helpers — preset-params snapshot for non-Appearance branches
-        /// <summary>
-        /// Snapshot of preset-storable state that PresetManager.LoadPresetFromJSON overwrites as a side effect.
-        /// The "storable" JSON child of any *Presets storable holds the PresetManager's lock state for that storable.
-        /// </summary>
+        // Native preset load mutates lock and selection state as a side effect.
         internal sealed class PresetParamsSnapshot
         {
             public string StorableName;
