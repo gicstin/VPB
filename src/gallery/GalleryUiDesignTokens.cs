@@ -175,6 +175,8 @@
 
         // Footer / filter chrome
         public const float FooterBarHeightRef = ButtonSizeRef + BandPadVRef * 2f;
+        /// <summary>Session footer chip — icon + Play/In.</summary>
+        public const float FooterSessionBtnWidthRef = 88f;
         public const float FooterInfoRowHeightRef = ControlSlotHeightRef;
         public const float FooterToolboxTopRef = FooterBarHeightRef + FooterInfoRowHeightRef;
         /// <summary>Near-grid sticky mode / apply-semantics banner (below filter chips).</summary>

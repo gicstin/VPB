@@ -50,6 +50,9 @@ namespace VPB
             public string SubGroupKey;
             public string Label;
             public string Tooltip;
+            /// <summary>Extra finder haystack. Not shown as tooltip. Used when the visible
+            /// label is a gateway to content that used to be searchable as its own rows.</summary>
+            public string SearchText;
             public InternalSettingControlType ControlType;
 
             public Func<bool> GetBool;
@@ -73,12 +76,24 @@ namespace VPB
             public Func<string> GetString;
             public Action<string> SetString;
 
+            /// <summary>TextArea only: render a one-line field at normal row height instead of the
+            /// tall multi-line box. For short values — a path, an address, an atom uid.</summary>
+            public bool SingleLineText;
+
+            /// <summary>TextArea only: when non-null and returns true, the field is shown but cannot be
+            /// typed into. Text stays selectable so the value can still be read and copied.</summary>
+            public Func<bool> TextReadOnly;
+
             /// <summary>When non-null and returns false, row omitted from settings list (e.g. slider hidden until parent toggle on).</summary>
             public Func<bool> RowVisible;
 
             /// <summary>Fired when a Button-type row is clicked (primary or secondary click).</summary>
             public Action OnAction;
             public Func<bool> ActionEnabled;
+
+            /// <summary>Button only: caption, re-read on every row rebuild. For a button whose one
+            /// action has two states (Lock / Unlock) rather than two buttons that are never both useful.</summary>
+            public Func<string> ActionLabel;
 
             public Func<Color> GetColor;
             public Action<Color> SetColor;
@@ -164,6 +179,8 @@ namespace VPB
             new[] { "shortcuts",       "keys_rules", "plugin_hotkeys", "keys_chrome", "keys_browse", "keys_selection", "keys_tools", "keys_world" },
             new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
             new[] { "maintenance",     "helpers", "updater", "ba_migration" },
+            new[] { "multiplayer",     "net_rules" },
+            new[] { "development",     "dev_net", "dev_clip" },
         };
 
         private static Dictionary<string, string> _settingsFineToGroup;
@@ -196,6 +213,8 @@ namespace VPB
                 case "shortcuts":       return VPBTranslation.T("settings.group.tab.shortcuts", "Shortcuts");
                 case "performance":     return VPBTranslation.T("settings.group.tab.performance", "Performance");
                 case "maintenance":     return VPBTranslation.T("settings.group.tab.maintenance", "Maintenance");
+                case "multiplayer":     return VPBTranslation.T("settings.group.tab.multiplayer", "Multiplayer");
+                case "development":     return VPBTranslation.T("settings.group.tab.development", "Development");
                 default:                return key;
             }
         }
@@ -335,6 +354,8 @@ namespace VPB
                 case "shortcuts":       return "hexagon-letter-k";
                 case "performance":     return "gauge";
                 case "maintenance":     return "tools";
+                case "multiplayer":     return "users-group";
+                case "development":     return "robot";
                 default:                return null;
             }
         }
@@ -2086,6 +2107,8 @@ namespace VPB
 
             AppendGalleryPerfSettings(defs);
             AppendPluginInternalSettingDefinitions(defs);
+            AppendNetRuleSettings(defs);
+            AppendDevSettingDefinitions(defs);
             defs.Add(new InternalSettingDefinition {
                 Key = "performance.sceneAtomCacheLimit", GroupKey = "performance",
                 Label = VPBTranslation.T("settings.scene_atom_cache_limit", "Scene Import Cache Limit (GB)"),
@@ -2983,14 +3006,16 @@ namespace VPB
                     return;
                 }
 
-                cle.minHeight = 96f * uiS;
+                bool oneLine = def.SingleLineText;
+                float taH = oneLine ? chipH : 72f * uiS;
+                cle.minHeight = oneLine ? chipH : 96f * uiS;
                 GameObject taHost = new GameObject("SettingsTextAreaHost");
                 taHost.transform.SetParent(controls.transform, false);
-                LayoutElement tle = UI.AddLE(taHost, minWidth: 120f * uiS, minHeight: 72f * uiS, preferredWidth: 320f * uiS, preferredHeight: 72f * uiS, flexibleWidth: 1f);
+                LayoutElement tle = UI.AddLE(taHost, minWidth: 120f * uiS, minHeight: taH, preferredWidth: 320f * uiS, preferredHeight: taH, flexibleWidth: 1f);
 
                 Image taBg = AddSettingsControlRoundedBg(taHost, new Color(0.16f, 0.16f, 0.18f, 1f));
                 InputField inf = taHost.AddComponent<InputField>();
-                inf.lineType = InputField.LineType.MultiLineNewline;
+                inf.lineType = oneLine ? InputField.LineType.SingleLine : InputField.LineType.MultiLineNewline;
                 inf.targetGraphic = taBg;
                 inf.interactable = true;
                 inf.navigation = new Navigation { mode = Navigation.Mode.None };
@@ -3003,13 +3028,20 @@ namespace VPB
                 cb.fadeDuration = 0f;
                 inf.colors = cb;
 
-                Text taTxt = UI.CreateLabel(taHost, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(0.95f, 0.95f, 0.97f, 1f), TextAnchor.UpperLeft, richText: false, name: "Text");
+                Text taTxt = UI.CreateLabel(taHost, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(0.95f, 0.95f, 0.97f, 1f), oneLine ? TextAnchor.MiddleLeft : TextAnchor.UpperLeft, richText: false, name: "Text");
                 GalleryUiMetrics.ApplyFont(taTxt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
                 RectTransform taTxtRt = taTxt.GetComponent<RectTransform>();
                 taTxtRt.offsetMin = new Vector2(6f * uiS, 6f * uiS);
                 taTxtRt.offsetMax = new Vector2(-6f * uiS, -6f * uiS);
                 inf.textComponent = taTxt;
                 inf.text = def.GetString() ?? "";
+
+                bool textLocked = def.TextReadOnly != null && def.TextReadOnly();
+                if (textLocked)
+                {
+                    inf.readOnly = true;
+                    taTxt.color = new Color(0.95f, 0.95f, 0.97f, 0.6f);
+                }
 
                 inf.onValueChanged.AddListener(s => def.SetString(s ?? ""));
                 inf.onEndEdit.AddListener(s =>
@@ -3047,6 +3079,15 @@ namespace VPB
                         btnLabel = VPBTranslation.T("settings.row.adjust", "ADJUST");
                     else if (isSceneAtomCache)
                         btnLabel = VPBTranslation.T("settings.row.clear", "CLEAR");
+                    if (def.ActionLabel != null)
+                    {
+                        try
+                        {
+                            string dyn = def.ActionLabel();
+                            if (!string.IsNullOrEmpty(dyn)) btnLabel = dyn;
+                        }
+                        catch { }
+                    }
                     GameObject actionGO = CreateMiniButton(controls.transform, btnLabel, 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
                         if (def.ActionEnabled != null && !def.ActionEnabled()) return;
                         def.OnAction?.Invoke();

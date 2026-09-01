@@ -113,6 +113,7 @@ namespace VPB
             if (footerPerfMinusBtn != null) into.Add(footerPerfMinusBtn);
             if (footerPerfToggleBtn != null) into.Add(footerPerfToggleBtn);
             if (footerHubBtnGO != null) into.Add(footerHubBtnGO);
+            if (footerNetSessionBtnGO != null) into.Add(footerNetSessionBtnGO);
             if (footerCommandPaletteBtnGO != null) into.Add(footerCommandPaletteBtnGO);
             // Redo may collapse; Undo stays pinned (never added) for recovery Fitts path.
             if (footerRedoBtnGO != null) into.Add(footerRedoBtnGO);
@@ -412,6 +413,18 @@ namespace VPB
                         Hide();
                     }, icon: icon,
                     tipKey: "gallery.tooltip.hub", tipDefault: "Hub browse / dev Hub panel");
+            }
+            else if (go == footerNetSessionBtnGO)
+            {
+                bool shown = false;
+                try { shown = VpbNetSessionUi.IsWanted; } catch { }
+                AddFooterOverflowMenuRow(panel,
+                    shown
+                        ? VPBTranslation.T("gallery.footer.overflow_session_hide", "Hide session")
+                        : VPBTranslation.T("gallery.footer.overflow_session_show", "Show session"),
+                    () => { CloseFooterOverflowMenu(); VpbNetSessionUi.Toggle(); }, icon: icon, active: shown,
+                    tipKey: "gallery.tooltip.net_session",
+                    tipDefault: "Show or collapse the multiplayer session window. A live session cannot fully hide — Leave on the panel ends it.");
             }
             else if (go == footerCommandPaletteBtnGO)
             {

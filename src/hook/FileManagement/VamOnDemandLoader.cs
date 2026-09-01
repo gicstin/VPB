@@ -1997,6 +1997,7 @@ namespace VPB
                 lock (s_FailedLock)
                     s_LastFailedAttemptTicksByUid.Remove(uid);
                 try { DependencyGraph.EnsureForPackage(uid); } catch { }
+                try { VpbLocalDatabase.RecordOnDemandHit(uid); } catch { }
                 MarkPromotedPackageCatalogStale(uid);
                 if (PackageRegistrationNeedsNativeCatalogRefresh(uid, null))
                 {

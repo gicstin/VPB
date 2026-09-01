@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -320,6 +320,26 @@ namespace VPB
                 FileManagerBridge.Refresh("scene_merge_drop", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
             }
 
+            // Before the prewarm, not after it. A pose saved in raw atom format names every
+            // package the whole Person was wearing, and registering those can freeze VaM for
+            // several seconds - long enough for a live session on the other machine to decide
+            // this one died. A two-person pose is restored physical-only and never touches one
+            // of those references, so it does not need them registered.
+            if (CheckDualPose())
+            {
+                string dualWhy;
+                VpbDualPoseFile dual = VpbDualPose.Parse(
+                    VpbDualPose.EntryReference(FileEntry) ?? normalizedPath,
+                    _dualPoseNode != null ? _dualPoseNode.AsObject : null, out dualWhy);
+                if (dual != null)
+                {
+                    VpbDualPoseModal.Show(dual, atom);
+                    return;
+                }
+                LogUtil.LogWarning("[VPB] " + FileEntry.Name + " looked like a two-person pose but "
+                    + (dualWhy ?? "could not be split") + "; applying it as a single pose.");
+            }
+
             bool shouldPrewarmOnDemand =
                 itemType == ItemType.Clothing ||
                 itemType == ItemType.Hair ||
@@ -362,12 +382,6 @@ namespace VPB
             LogUtil.Log($"[DragDropDebug] Attempting to apply. FullPath: {normalizedPath}, LegacyPath: {legacyPath}, Installed: {installed}");
 
             JSONStorable geometry = atom.GetStorableByID("geometry");
-
-            if (CheckDualPose())
-            {
-                ApplyDualPose(atom, _dualPoseNode);
-                return;
-            }
 
             // Merge Outfit: show per-item picker before undo capture (cancel must not push undo).
             if (itemType == ItemType.Appearance

@@ -826,6 +826,7 @@ namespace VPB
                 return GalleryUiDesignTokens.SettingsFloatSectionHeaderHeightRef * s;
             if (def != null
                 && def.ControlType == InternalSettingControlType.TextArea
+                && !def.SingleLineText
                 && !string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
             {
                 return GalleryUiDesignTokens.SettingsFloatTextAreaRowHeightRef * s;

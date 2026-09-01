@@ -28,9 +28,9 @@ namespace VPB
         AutoInstallOnly = 12,
         /// <summary>File / package creation time (not last modified).</summary>
         DateCreated = 13,
-        /// <summary>Show only loaded packages (AddonPackages/ + Custom/ + Saves/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
+        /// <summary>Show only packages in the VaM startup scan set (whitelist / AddonPackages when whitelist off).</summary>
         LoadedOnly = 14,
-        /// <summary>Show only unloaded packages (e.g. AllPackages/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
+        /// <summary>Show only packages excluded from startup scan (on-demand) or parked in AllPackages.</summary>
         UnloadedOnly = 15,
         /// <summary>Local "used" counter (scene launches + clothing applies).</summary>
         UsageCount = 16,

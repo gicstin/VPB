@@ -667,6 +667,7 @@ namespace VPB
             EnsureLayoutPresetTables(conn);
             EnsurePkgNewestSchema(conn);
             EnsurePkgLicenseSchema(conn);
+            EnsureOnDemandHitTable(conn);
         }
 
         /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process. Returns true on success (including no-op).</summary>
@@ -2408,17 +2409,38 @@ namespace VPB
         }
 
         /// <summary>
-        /// 1 = loaded: .var under <c>AddonPackages/</c>, or under <c>Custom/</c> / <c>Saves/</c> (treated as always loaded / not AllPackages-style repo).
-        /// 0 = unloaded (e.g. <c>AllPackages/</c>, <c>InvalidPackages/</c>, or other roots).
+        /// 1 = in VaM startup scan: Custom/, Saves/, or AddonPackages/ that is whitelisted (or whitelist disabled).
+        /// 0 = AllPackages / excluded-from-scan (on-demand only).
         /// </summary>
         internal static int ComputePackageLoadedFlagFromVarPath(string varPath)
+        {
+            return ComputePackageLoadedFlag(null, varPath);
+        }
+
+        internal static int ComputePackageLoadedFlag(string uid, string varPath)
         {
             if (string.IsNullOrEmpty(varPath)) return 0;
             string p = varPath.Replace('\\', '/');
             if (p.Length >= 7 && p.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return 1;
             if (p.Length >= 6 && p.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase)) return 1;
-            if (p.Length >= 15 && p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) return 1;
-            return 0;
+            if (string.IsNullOrEmpty(uid))
+            {
+                try
+                {
+                    string name = Path.GetFileNameWithoutExtension(p);
+                    if (!string.IsNullOrEmpty(name)) uid = name;
+                }
+                catch { }
+            }
+            try
+            {
+                return ScanWhitelistManager.Instance.IsInStartupScan(uid, p) ? 1 : 0;
+            }
+            catch
+            {
+                if (p.Length >= 15 && p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) return 1;
+                return 0;
+            }
         }
 
         /// <summary>
@@ -2463,7 +2485,7 @@ namespace VPB
                             string uid = pkg.Uid ?? "";
                             if (uid.Length == 0) continue;
                             string vp = pkg.Path ?? "";
-                            int ld = ComputePackageLoadedFlagFromVarPath(vp);
+                            int ld = ComputePackageLoadedFlag(uid, vp);
                             st.BindText(1, vp);
                             st.BindText(2, ld.ToString());
                             st.BindText(3, uid);
@@ -5244,7 +5266,7 @@ namespace VPB
                     {
                         LogUtil.LogWarning(
                             "[VPB] VpbLocalDatabase: sqlite3.dll could not be loaded (no local DB index). " +
-                            "Deploy 64-bit sqlite3.dll to BepInEx\\plugins under the VaM folder (Cache\\VPB is a legacy DLL fallback). " +
+                            "Deploy 64-bit sqlite3.dll to BepInEx\\plugins\\VPB under the VaM folder (Cache\\VPB is a legacy DLL fallback). " +
                             "Expected DB path (when working): " + GetLocalDatabasePathForDiagnostics());
                     }
                     catch { }

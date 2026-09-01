@@ -534,6 +534,7 @@ namespace VPB
             }
             panels.Clear();
             try { GalleryPanel.DestroyLayoutPresetsOverlay(); } catch { }
+            try { VpbDualPoseModal.DestroyOverlay(); } catch { }
         }
 
         /// <summary>Next slot for extra panes after <see cref="GalleryPanel.PrimaryPanelId"/>. First pane always gets primary so SQL filter memory survives Close.</summary>

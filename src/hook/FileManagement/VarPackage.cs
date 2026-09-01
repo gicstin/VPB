@@ -35,6 +35,12 @@ namespace VPB
         public List<string> MorphFileEntryNames;
         /// <summary>Windows code page for zip entry names; 0 = system default (legacy rows).</summary>
         public int ZipNameCodePage;
+        /// <summary>
+        /// Trailing int after <see cref="ZipNameCodePage"/>. 0 = pre-scene-json scan rule.
+        /// <see cref="VarPackage.CurrentScanRuleStamp"/> marks caches written after VAR scene JSON
+        /// is indexed even when sister jpg GetEntry misses.
+        /// </summary>
+        public int ScanRuleStamp;
 
         const int MorphIndexPayloadMagic = 0x56504D49;
         const int MorphIndexPayloadVersion = 1;
@@ -216,6 +222,13 @@ namespace VPB
                     }
                 }
             }
+            ScanRuleStamp = 0;
+            if (!includeVarMeta
+                && reader.BaseStream != null
+                && reader.BaseStream.Length - reader.BaseStream.Position >= 4)
+            {
+                try { ScanRuleStamp = reader.ReadInt32(); } catch { ScanRuleStamp = 0; }
+            }
             if (includeVarMeta)
             {
                 VarFileSize = reader.ReadInt64();
@@ -343,6 +356,7 @@ namespace VPB
                     }
                 }
             }
+            writer.Write(ScanRuleStamp);
         }
     }
 
@@ -412,6 +426,64 @@ namespace VPB
 					ZipConstants.DefaultCodePage = prev;
 				}
 			}
+		}
+
+		internal static string NormalizeZipInternalPath(string name)
+		{
+			if (string.IsNullOrEmpty(name)) return name;
+			return name.Replace('\\', '/');
+		}
+
+		/// <summary>
+		/// Gallery scene/subscene JSON inside a VAR. Local scenes do not require a sister jpg;
+		/// VAR scan used to, and <see cref="ZipFile.GetEntry"/> misses packers that store backslashes
+		/// (same workaround as cslist lookup). Always index these even when sister lookup fails.
+		/// </summary>
+		internal static bool IsZipGallerySceneJsonInternalPath(string internalPath)
+		{
+			string n = NormalizeZipInternalPath(internalPath);
+			if (string.IsNullOrEmpty(n) || !n.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+				return false;
+			return n.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase)
+				|| n.StartsWith("Custom/SubScene/", StringComparison.OrdinalIgnoreCase);
+		}
+
+		/// <summary>
+		/// SharpZipLib <see cref="ZipFile.GetEntry"/> is exact on stored slashes. Try <c>/</c> then <c>\</c>.
+		/// </summary>
+		internal static ZipEntry FindZipEntry(ZipFile zf, string name)
+		{
+			if (zf == null || string.IsNullOrEmpty(name)) return null;
+			ZipEntry e = zf.GetEntry(name);
+			if (e != null) return e;
+			if (name.IndexOf('/') >= 0)
+				return zf.GetEntry(name.Replace('/', '\\'));
+			if (name.IndexOf('\\') >= 0)
+				return zf.GetEntry(name.Replace('\\', '/'));
+			return null;
+		}
+
+		internal const int CurrentScanRuleStamp = 1;
+
+		/// <summary>
+		/// Old caches dropped VAR scene JSON when sister jpg GetEntry missed.
+		/// CUA+scene packs look like assetbundles with no Saves/scene json.
+		/// Stamp 0 + that shape → one zip rescan; dump writes stamp 1 so genuine CUA does not loop.
+		/// </summary>
+		internal static bool CachedNamesNeedSceneJsonRescan(IList<string> names, int stamp)
+		{
+			if (stamp >= CurrentScanRuleStamp) return false;
+			if (names == null || names.Count == 0) return false;
+			bool hasAssetBundle = false;
+			for (int i = 0; i < names.Count; i++)
+			{
+				string n = names[i];
+				if (IsZipGallerySceneJsonInternalPath(n)) return false;
+				if (!hasAssetBundle && n != null
+					&& n.EndsWith(".assetbundle", StringComparison.OrdinalIgnoreCase))
+					hasAssetBundle = true;
+			}
+			return hasAssetBundle;
 		}
 
 		void RememberZipNameCodePage(int codePage)
@@ -1569,12 +1641,7 @@ namespace VPB
 							string cslistInternal = cslistNames[i];
 							try
 							{
-								ZipEntry ze = zf.GetEntry(cslistInternal);
-								if (ze == null)
-								{
-									// Try original-case lookup with backslashes (some packers write that form).
-									ze = zf.GetEntry(cslistInternal.Replace('/', '\\'));
-								}
+								ZipEntry ze = FindZipEntry(zf, cslistInternal);
 								if (ze == null) continue;
 
 								string cslistDir = cslistInternal;
@@ -1682,6 +1749,11 @@ namespace VPB
 						}
 						lastWriteUtcTicks = LastWriteTime.ToUniversalTime().Ticks;
 						SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCacheValidated(this.Uid, Size, lastWriteUtcTicks);
+						if (vp != null && vp.FileEntryNames != null
+							&& CachedNamesNeedSceneJsonRescan(vp.FileEntryNames, vp.ScanRuleStamp))
+						{
+							vp = null;
+						}
 						if (vp != null && vp.FileEntryNames != null)
 						{
 							if (vp.IsInvalid)
@@ -1733,33 +1805,32 @@ namespace VPB
 									if (zipEntry.IsFile)
 									{
 										string entryName = zipEntry.Name;
-										if (entryName.EndsWith(".json"))
+										if (entryName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
 										{
-											if (zipEntry.Name == "meta.json")
+											if (string.Equals(zipEntry.Name, "meta.json", StringComparison.OrdinalIgnoreCase))
 											{
 												try { InternalCreationTimeBinary = NormalizeZipHeaderTimeBinary(zipEntry.DateTime.ToBinary()); } catch { InternalCreationTimeBinary = long.MinValue; }
 												VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
 												FileEntries.Add(varFileEntry);
-												if (zipEntry.Name == "meta.json")
-												{
-													metaEntry = varFileEntry;
-												}
+												metaEntry = varFileEntry;
 											}
 											else
 											{
-												string entry = entryName.Substring(0, entryName.Length - 5) + ".jpg";
-												if (!set.Contains(entry))
+												string jpgName = entryName.Substring(0, entryName.Length - 5) + ".jpg";
+												ZipEntry jpgEntry = FindZipEntry(zipFile, jpgName);
+												bool isSceneJson = IsZipGallerySceneJsonInternalPath(entryName);
+												if (jpgEntry != null || isSceneJson)
 												{
-													ZipEntry jpgEntry = zipFile.GetEntry(entry);
+													FileEntries.Add(new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size));
 													if (jpgEntry != null)
 													{
-														VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
-														FileEntries.Add(varFileEntry);
-														VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
-														FileEntries.Add(varFileEntry2);
-
-														set.Add(entry);
-
+														string jpgKey = NormalizeZipInternalPath(jpgEntry.Name);
+														if (jpgKey == null) jpgKey = jpgName;
+														if (!set.Contains(jpgKey) && !set.Contains(jpgName))
+														{
+															FileEntries.Add(new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size));
+															set.Add(jpgKey);
+														}
 													}
 												}
 											}
@@ -1776,7 +1847,7 @@ namespace VPB
 												string sisterPath = baseName + sExt;
 												if (!set.Contains(sisterPath))
 												{
-													ZipEntry sisterZipEntry = zipFile.GetEntry(sisterPath);
+													ZipEntry sisterZipEntry = FindZipEntry(zipFile, sisterPath);
 													if (sisterZipEntry != null)
 													{
 														FileEntries.Add(new VarFileEntry(this, sisterZipEntry.Name, sisterZipEntry.DateTime, sisterZipEntry.Size));
@@ -1790,7 +1861,7 @@ namespace VPB
 											string entry = entryName.Substring(0, entryName.Length - 4) + ".jpg";
 											if (!set.Contains(entry))
 											{
-												ZipEntry jpgEntry = zipFile.GetEntry(entry);
+												ZipEntry jpgEntry = FindZipEntry(zipFile, entry);
 												if (jpgEntry != null)
 												{
 													VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
@@ -1829,7 +1900,7 @@ namespace VPB
 											//SuperController.LogMessage("assetbundle:"+ entry);
 											if (!set.Contains(entry))
 											{
-												ZipEntry jpgEntry = zipFile.GetEntry(entry);
+												ZipEntry jpgEntry = FindZipEntry(zipFile, entry);
 												if (jpgEntry != null)
 												{
 
@@ -1852,7 +1923,7 @@ namespace VPB
 											{
 												string sisterPath = baseNoExt + sExt;
 												if (set.Contains(sisterPath)) continue;
-												ZipEntry sisterZe = zipFile.GetEntry(sisterPath);
+												ZipEntry sisterZe = FindZipEntry(zipFile, sisterPath);
 												if (sisterZe != null)
 												{
 													FileEntries.Add(new VarFileEntry(this, sisterZe.Name, sisterZe.DateTime, sisterZe.Size));
@@ -2263,6 +2334,7 @@ namespace VPB
 				svp.ZipNameCodePage = cp != 0 ? cp : CodePageSystemDefault;
 			}
 			catch { svp.ZipNameCodePage = CodePageSystemDefault; }
+			svp.ScanRuleStamp = CurrentScanRuleStamp;
 
 		if (VarPackageMgr.singleton != null)
 			{

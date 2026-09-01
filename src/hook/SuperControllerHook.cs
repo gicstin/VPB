@@ -1500,13 +1500,28 @@ namespace VPB
         [HarmonyPatch(typeof(SuperController), "LoadInternal", new Type[] {
             typeof(string),typeof(bool),typeof(bool)
         })]
-        public static void PreLoadInternal(SuperController __instance,
+        public static bool PreLoadInternal(SuperController __instance,
             string saveName, bool loadMerge, bool editMode)
         {
+            if (!loadMerge)
+            {
+                bool held = false;
+                try { held = VpbNetSceneLaunchGuard.HoldNativeSceneLaunch(saveName, editMode); }
+                catch { held = false; }
+                if (held) return false;
+                try { VpbNetSceneLaunchGuard.NotifyLaunchPassed(); } catch { }
+            }
+
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             LogUtil.BeginSceneLoad(saveName);
             LogUtil.MarkScenePhasePreLoadInternal();
             try { ThirdPartyFixHook.TryClearInGameLogsOnSceneLaunch(__instance, loadMerge); } catch { }
+            // "Don't ask again this session" is answered about the people in one scene. A new
+            // scene is new people, so the question comes back.
+            if (!loadMerge)
+            {
+                try { VpbDualPoseModal.ForgetRememberedChoice(); } catch { }
+            }
             // Scene Loader / VAM Browser / triggers all funnel here — record History outside VPB gallery UI.
             try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "scene"); } catch { }
             try
@@ -1564,6 +1579,8 @@ namespace VPB
                     FileButton.EnsureInstalledInternal(text);
                 }
             }
+
+            return true;
         }
 
         [HarmonyPostfix]

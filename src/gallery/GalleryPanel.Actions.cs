@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -68,8 +68,16 @@ namespace VPB
             // the person lookup below — ResolveCuaTargetAtom is the accessor for asset targets.
             try
             {
+                Atom claimed = VpbNetAvatarGuard.MyAvatar();
+                if (claimed != null) return claimed;
+            }
+            catch { }
+
+            try
+            {
                 Atom selectedInDropdown = SelectedTargetAtom;
-                if (selectedInDropdown != null && !SceneUtils.IsCustomUnityAssetAtom(selectedInDropdown))
+                if (selectedInDropdown != null && !SceneUtils.IsCustomUnityAssetAtom(selectedInDropdown)
+                    && !VpbNetAvatarGuard.IsPeerAvatar(selectedInDropdown))
                     return selectedInDropdown;
             }
             catch { }
@@ -78,7 +86,8 @@ namespace VPB
             try
             {
                 Atom selected = SuperController.singleton.GetSelectedAtom();
-                if (selected != null && SceneUtils.IsPersonLikeAtom(selected)) return selected;
+                if (selected != null && SceneUtils.IsPersonLikeAtom(selected)
+                    && !VpbNetAvatarGuard.IsPeerAvatar(selected)) return selected;
             }
             catch { }
 
@@ -91,7 +100,11 @@ namespace VPB
                     foreach (Atom a in allAtoms)
                     {
                         if (a == null) continue;
-                        try { if (SceneUtils.IsPersonLikeAtom(a)) return a; } catch { }
+                        try
+                        {
+                            if (SceneUtils.IsPersonLikeAtom(a) && !VpbNetAvatarGuard.IsPeerAvatar(a)) return a;
+                        }
+                        catch { }
                     }
                 }
             }
@@ -172,7 +185,10 @@ namespace VPB
                             pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
                             target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        VpbNetPresetRelay.NotifyApplying("LoadClothing");
                         dragger.LoadClothing(target);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        VpbNetPresetRelay.NotifyApplied("LoadClothing", file, target);
                         return true;
                     }
 
@@ -221,7 +237,10 @@ namespace VPB
                             pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
                             target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        VpbNetPresetRelay.NotifyApplying("LoadHair");
                         dragger.LoadHair(target);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        VpbNetPresetRelay.NotifyApplied("LoadHair", file, target);
                         return true;
                     }
 
@@ -232,7 +251,10 @@ namespace VPB
                             pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
                             target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        VpbNetPresetRelay.NotifyApplying("LoadSkin");
                         dragger.LoadSkin(target);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        VpbNetPresetRelay.NotifyApplied("LoadSkin", file, target);
                         return true;
                     }
 
@@ -244,7 +266,10 @@ namespace VPB
                             target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
                         // ApplyClothingToAtom resolves BreastPhysics/Glute from path.
+                        VpbNetPresetRelay.NotifyApplying("LoadSkin");
                         dragger.LoadSkin(target);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        VpbNetPresetRelay.NotifyApplied("LoadSkin", file, target);
                         return true;
                     }
 
@@ -255,7 +280,10 @@ namespace VPB
                             pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
                             target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        VpbNetPresetRelay.NotifyApplying("LoadMorphs");
                         dragger.LoadMorphs(target);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        VpbNetPresetRelay.NotifyApplied("LoadMorphs", file, target);
                         return true;
                     }
 
@@ -267,7 +295,12 @@ namespace VPB
                             pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
                             target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
-                        dragger.LoadPose(target);
+                        // False: two-person pose; cast window has it, do not relay as one.
+                        VpbNetPresetRelay.NotifyApplying("LoadPose");
+                        bool posed = dragger.LoadPose(target);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        if (posed)
+                            VpbNetPresetRelay.NotifyApplied("LoadPose", file, target);
                         return true;
                     }
 
@@ -277,7 +310,11 @@ namespace VPB
                         VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadAppearance",
                             pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
                             target != null ? target.uid : null);
-                        return TryLoadAppearanceAutoSpawningIfNeeded(file, dragger);
+                        VpbNetPresetRelay.NotifyApplying("LoadAppearance");
+                        bool applied = TryLoadAppearanceAutoSpawningIfNeeded(file, dragger);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        if (applied) VpbNetPresetRelay.NotifyApplied("LoadAppearance", file, target);
+                        return applied;
                     }
 
                     // Skin category fallback only when path is not another person-preset type.
@@ -288,7 +325,10 @@ namespace VPB
                             pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
                             target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        VpbNetPresetRelay.NotifyApplying("LoadSkin");
                         dragger.LoadSkin(target);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        VpbNetPresetRelay.NotifyApplied("LoadSkin", file, target);
                         return true;
                     }
 
@@ -330,7 +370,11 @@ namespace VPB
                     {
                         Atom target = GetBestTargetAtom();
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
-                        dragger.LoadPose(target);
+                        VpbNetPresetRelay.NotifyApplying("LoadPose");
+                        bool posed = dragger.LoadPose(target);
+                        VpbNetPresetRelay.NotifyApplyDone();
+                        if (posed)
+                            VpbNetPresetRelay.NotifyApplied("LoadPose", file, target);
                         return true;
                     }
 

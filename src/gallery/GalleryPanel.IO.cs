@@ -4992,16 +4992,12 @@ namespace VPB
                     {
                         FileEntry e = list[i];
                         if (e == null) { list.RemoveAt(i); continue; }
-                        // IMPORTANT: Only check the package root (before ":/") so internal paths like
-                        // "...var:/Custom/..." don't incorrectly count as "loaded".
                         string p = (e.Path ?? "").Replace('\\', '/');
                         int sep = p.IndexOf(":/", StringComparison.Ordinal);
                         string root = (sep >= 0) ? p.Substring(0, sep) : p;
-                        bool loaded =
-                            root.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
-                            root.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
-                            root.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase);
-                        if (!loaded) list.RemoveAt(i);
+                        bool inScan = false;
+                        try { inScan = ScanWhitelistManager.Instance.IsInStartupScan(e.Uid, root); } catch { }
+                        if (!inScan) list.RemoveAt(i);
                     }
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
@@ -5017,11 +5013,9 @@ namespace VPB
                         string p = (e.Path ?? "").Replace('\\', '/');
                         int sep = p.IndexOf(":/", StringComparison.Ordinal);
                         string root = (sep >= 0) ? p.Substring(0, sep) : p;
-                        bool loaded =
-                            root.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
-                            root.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
-                            root.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase);
-                        if (loaded) list.RemoveAt(i);
+                        bool inScan = false;
+                        try { inScan = ScanWhitelistManager.Instance.IsInStartupScan(e.Uid, root); } catch { }
+                        if (inScan) list.RemoveAt(i);
                     }
                     catch { try { list.RemoveAt(i); } catch { } }
                 }

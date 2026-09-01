@@ -185,6 +185,12 @@ namespace VPB
                     return "ERR " + ex.Message;
                 }
             }
+            if (line.Equals("ONDEMAND_STATS", StringComparison.OrdinalIgnoreCase))
+            {
+                var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                VpbLocalDatabase.TryReadOnDemandHits(counts);
+                return "OK " + counts.Count.ToString();
+            }
             return "ERR unknown";
         }
     }

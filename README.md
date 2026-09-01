@@ -86,7 +86,9 @@ BepInEx/plugins/VPB/
   patch_manifest.json          what this install is supposed to contain
   assets/                      icons.pack, help/, translations/, fonts/
   native/                      sqlite3.dll, turbojpeg.dll, libzstd.dll, zstd.exe
+  net/                         VpbNet.exe, steam_api64.dll
   icons_override/              yours — glyph overrides
+  clips/                       yours — recorded sessions
 ```
 
 `I18N*.dll` stay in `BepInEx/plugins/` itself: they are Mono runtime assemblies, not VPB's.

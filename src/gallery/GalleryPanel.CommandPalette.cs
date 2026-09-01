@@ -318,6 +318,8 @@ namespace VPB
             AddCommandPaletteLayoutPresetEntries(GView);
             AddCommandPaletteEntry("settings", "gallery.cmd.settings", "Open Settings", "", GView, "prefs options config",
                 () => { try { OpenSettingsSideTab(); } catch { } });
+            AddCommandPaletteEntry("net_session", "gallery.cmd.net_session", "Play with a friend", "", GView, "mp multiplayer session play friend host join steam room",
+                () => { try { VpbNetSessionUi.Toggle(); } catch { } });
             AddCommandPaletteEntry("settings_interaction", "gallery.cmd.settings_interaction", "Settings → Interaction", "", GView, "try-on apply hold click drag",
                 () => { try { OpenSettingsGroup("interaction"); } catch { } });
             AddCommandPaletteEntry("settings_shortcuts", "gallery.cmd.settings_shortcuts", "Settings → Shortcuts", "", GView, "hotkeys keys bindings rebind chords disable space enter conflict",

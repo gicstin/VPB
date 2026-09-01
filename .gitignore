@@ -21,7 +21,12 @@
 /old
 /CHANGELOG.md
 /sample
-/tools
+/tools/*
+!/tools/VpbNet/
+!/tools/make_check_csproj.py
+/tools/VpbNet/bin/
+/tools/VpbNet/obj/
+/tools/VpbNet/.vs/
 /VPB-0.22
 /.claude
 /FEEDBACK_PLAN.md
@@ -40,3 +45,6 @@ scripts/_icon_contact_sheet.png
 # Icon tooling cache
 scripts/_tabler_probe_cache.npz
 /assets/tabler-icons-3.46.0
+
+# Runtime scratch written next to the broker when Steam starts without one
+steam_appid.txt

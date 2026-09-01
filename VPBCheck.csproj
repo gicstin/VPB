@@ -1,0 +1,872 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <Import Project="VPB.local.props" Condition="Exists('VPB.local.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{758453DA-4E36-49AF-8DF4-A046875D333D}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>VPB</RootNamespace>
+    <AssemblyName>VPBCheck</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <NoStdLib>true</NoStdLib>
+    <NoConfig>true</NoConfig>
+    <ImplicitlyExpandDesignTimeFacades>false</ImplicitlyExpandDesignTimeFacades>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <VaMPath Condition="'$(VaMPath)' == ''">F:/VamDev</VaMPath>
+    <TargetFrameworkProfile>
+    </TargetFrameworkProfile>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>embedded</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Check\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0618</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>embedded</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Check\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Native SQLite: never copy next to VPB.dll in bin — users often paste bin into BepInEx\scripts and break Script Engine. Deploy only via PostBuild to BepInEx\plugins\VPB\native. -->
+    <Content Include="lib\sqlite-native\sqlite3.dll">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Content>
+    <!-- libjpeg-turbo TurboJPEG API; optional dev override in lib — PostBuild also syncs from vam_patch when lib absent. -->
+    <Content Include="lib\turbojpeg\turbojpeg.dll">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony20">
+      <HintPath>$(VaMPath)\BepInEx\core\0Harmony20.dll</HintPath>
+    </Reference>
+    <Reference Include="mscorlib">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\mscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\Assembly-CSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="Assembly-UnityScript">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\Assembly-UnityScript.dll</HintPath>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(VaMPath)\BepInEx\core\BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Include="ICSharpCode.SharpZipLib">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\ICSharpCode.SharpZipLib.dll</HintPath>
+    </Reference>
+    <Reference Include="MHLab.PATCH">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\MHLab.PATCH.dll</HintPath>
+    </Reference>
+    <Reference Include="System">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\System.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Core">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\System.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Drawing">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\System.Drawing.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    
+    
+    <Reference Include="System.Data">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\System.Data.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Xml">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\System.Xml.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AccessibilityModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.AccessibilityModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AIModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.AIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.AnimationModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ARModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.ARModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.AssetBundleModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.BaselibModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.BaselibModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ClothModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.ClothModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CloudWebServicesModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.CloudWebServicesModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ClusterInputModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.ClusterInputModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ClusterRendererModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.ClusterRendererModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CrashReportingModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.CrashReportingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.DirectorModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.DirectorModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.FacebookModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.FacebookModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.GameCenterModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.GameCenterModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.GridModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.GridModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.HotReloadModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.HotReloadModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.InputModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.JSONSerializeModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.Networking">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.Networking.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ParticlesLegacyModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.ParticlesLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.ParticleSystemModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.PerformanceReportingModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.PerformanceReportingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.Physics2DModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.Physics2DModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ScreenCaptureModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.ScreenCaptureModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.SharedInternalsModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.SharedInternalsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.SpatialTracking">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.SpatialTracking.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.SpatialTrackingModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.SpatialTrackingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.SpriteMaskModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.SpriteMaskModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.SpriteShapeModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.SpriteShapeModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.StyleSheetsModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.StyleSheetsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.SubstanceModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.SubstanceModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TerrainModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.TerrainModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TerrainPhysicsModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.TerrainPhysicsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TilemapModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.TilemapModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.Timeline">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.Timeline.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TimelineModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.TimelineModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TLSModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.TLSModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIElementsModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UIElementsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UmbraModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UmbraModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UNETModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UNETModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityAnalyticsModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UnityAnalyticsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityConnectModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UnityConnectModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAssetBundleModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UnityWebRequestAssetBundleModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UnityWebRequestModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestTextureModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UnityWebRequestTextureModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestWWWModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UnityWebRequestWWWModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.VehiclesModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.VehiclesModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.VideoModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.VideoModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.VRModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.VRModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.WebModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.WebModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.WindModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.WindModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.XRModule">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.XRModule.dll</HintPath>
+    </Reference>
+    <Reference Include="Valve.Newtonsoft.Json, Version=9.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(VaMPath)\VaM_Data\Managed\Valve.Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="ZFBrowser">
+      <HintPath>$(VaMPath)\VaM_Data\Managed\ZFBrowser.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="src\ByteArrayPool.cs" />
+    <Compile Include="src\ClothingLoadingUtils.cs" />
+    <Compile Include="src\SceneUtils.cs" />
+    <Compile Include="src\GlobalInfo.cs" />
+    <Compile Include="src\util\VPBLogger.cs" />
+    <Compile Include="src\util\VpbLegacyLayout.cs" />
+    <Compile Include="src\util\VpbPaths.cs" />
+    <Compile Include="src\util\XrUtils.cs" />
+    <Compile Include="src\util\VpbScrollTuning.cs" />
+    <Compile Include="src\util\VpbRandom.cs" />
+    <Compile Include="src\util\VpbRandomHistory.cs" />
+    <Compile Include="src\util\AtomGenderUtils.cs" />
+    <Compile Include="src\util\AppearancePresetSuppress.cs" />
+    <Compile Include="src\util\AppearanceApplyProbe.cs" />
+    <Compile Include="src\util\CslistParser.cs" />
+    <Compile Include="src\util\VarPresetPathFixups.cs" />
+    <Compile Include="src\util\VpbPerfTelemetry.cs" />
+    <Compile Include="src\util\VpbPerfDiag.cs" />
+    <Compile Include="src\util\VpbFrameRate.cs" />
+    <Compile Include="protocol\VpbNetIpc.cs" />
+    <Compile Include="protocol\VpbNetProtocol.cs" />
+    <Compile Include="protocol\VpbNetClock.cs" />
+    <Compile Include="protocol\VpbNetSnapshotBuffer.cs" />
+    <Compile Include="protocol\VpbNetSnapshotSelfTest.cs" />
+    <Compile Include="protocol\VpbNetEvent.cs" />
+    <Compile Include="protocol\VpbNetEventSelfTest.cs" />
+    <Compile Include="protocol\VpbNetSession.cs" />
+    <Compile Include="protocol\VpbNetSessionSelfTest.cs" />
+    <Compile Include="protocol\VpbNetKeyframe.cs" />
+    <Compile Include="protocol\VpbNetKeyframeSelfTest.cs" />
+    <Compile Include="protocol\VpbNetDiagnostics.cs" />
+    <Compile Include="protocol\VpbNetDiagnosticsSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRig.cs" />
+    <Compile Include="protocol\VpbNetRules.cs" />
+    <Compile Include="protocol\VpbNetRulesSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRigSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRoomCode.cs" />
+    <Compile Include="protocol\VpbNetRedact.cs" />
+    <Compile Include="protocol\VpbNetRedactSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRoomCodeSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRoomBook.cs" />
+    <Compile Include="protocol\VpbNetRoomBookSelfTest.cs" />
+    <Compile Include="protocol\VpbNetRendezvous.cs" />
+    <Compile Include="protocol\VpbNetRendezvousSelfTest.cs" />
+    <Compile Include="protocol\VpbNetInviteCode.cs" />
+    <Compile Include="protocol\VpbNetInviteCodeSelfTest.cs" />
+    <Compile Include="protocol\VpbNetContract.cs" />
+    <Compile Include="protocol\VpbNetOffer.cs" />
+    <Compile Include="protocol\VpbNetOfferSelfTest.cs" />
+    <Compile Include="protocol\VpbNetContractSelfTest.cs" />
+    <Compile Include="protocol\VpbNetStorable.cs" />
+    <Compile Include="protocol\VpbNetStorableSelfTest.cs" />
+    <Compile Include="protocol\VpbNetFidelity.cs" />
+    <Compile Include="protocol\VpbNetFidelitySelfTest.cs" />
+    <Compile Include="protocol\VpbNetProp.cs" />
+    <Compile Include="protocol\VpbNetPropSelfTest.cs" />
+    <Compile Include="protocol\VpbNetAvatar.cs" />
+    <Compile Include="protocol\VpbNetSteam.cs" />
+    <Compile Include="protocol\VpbNetSteamSelfTest.cs" />
+    <Compile Include="protocol\VpbNetAvatarSelfTest.cs" />
+    <Compile Include="src\net\VpbNetContentCatalog.cs" />
+    <Compile Include="src\net\VpbNetContentResolver.cs" />
+    <Compile Include="src\net\VpbNetContentSync.cs" />
+    <Compile Include="src\net\VpbNetContentUi.cs" />
+    <Compile Include="src\net\VpbNetPeerLook.cs" />
+    <Compile Include="src\net\VpbNetRulebook.cs" />
+    <Compile Include="src\net\VpbNetTransportChoice.cs" />
+    <Compile Include="src\net\VpbNetRuleCatalog.cs" />
+    <Compile Include="src\net\VpbNetUiKit.cs" />
+    <Compile Include="src\net\VpbNetRulesUi.cs" />
+    <Compile Include="src\net\VpbNetAskUi.cs" />
+    <Compile Include="src\net\VpbNetAlertUi.cs" />
+    <Compile Include="src\net\VpbNetPoseRing.cs" />
+    <Compile Include="src\net\VpbNetPoseSampler.cs" />
+    <Compile Include="src\net\VpbNetPoseApplier.cs" />
+    <Compile Include="src\net\VpbNetOverlay.cs" />
+    <Compile Include="src\net\VpbNetPresence.cs" />
+    <Compile Include="src\net\VpbNetSessionUi.cs" />
+    <Compile Include="src\net\VpbNetSceneLaunchGuard.cs" />
+    <Compile Include="src\net\VpbNetSteamFlow.cs" />
+    <Compile Include="src\net\VpbNetRoomBookStore.cs" />
+    <Compile Include="src\net\VpbNetFrameRing.cs" />
+    <Compile Include="src\net\VpbNetBrokerLink.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsDev.cs" />
+    <Compile Include="src\net\VpbNetPoseClip.cs" />
+    <Compile Include="src\net\VpbNetRecordReplay.cs" />
+    <Compile Include="src\net\VpbNetControllerSet.cs" />
+    <Compile Include="src\net\VpbNetFidelityRig.cs" />
+    <Compile Include="src\net\VpbNetRuntime.cs" />
+    <Compile Include="src\net\VpbNetTriggerRelay.cs" />
+    <Compile Include="src\net\VpbNetPropSync.cs" />
+    <Compile Include="src\net\VpbNetAtomParamSync.cs" />
+    <Compile Include="src\net\VpbNetAvatarRoster.cs" />
+    <Compile Include="src\net\VpbNetAvatarLock.cs" />
+    <Compile Include="src\net\VpbNetAvatarGuard.cs" />
+    <Compile Include="src\net\VpbNetBodyGuard.cs" />
+    <Compile Include="src\net\VpbNetBusy.cs" />
+    <Compile Include="src\net\VpbNetCollisionGuard.cs" />
+    <Compile Include="src\net\VpbNetPresetRelay.cs" />
+    <Compile Include="src\net\VpbNetDualPoseRelay.cs" />
+    <Compile Include="src\net\VpbNetPerfHarness.cs" />
+    <Compile Include="src\perf\VpbPerfSnapshot.cs" />
+    <Compile Include="src\perf\VpbPerfController.cs" />
+    <Compile Include="src\hook\VpbPerfHairHook.cs" />
+    <Compile Include="src\hook\VpbCatalogRefreshGuard.cs" />
+    <Compile Include="src\hook\VpbCatalogRefreshHook.cs" />
+    <Compile Include="src\util\VamStartupProfiler.cs" />
+    <Compile Include="src\util\VamStartupOptimizations.cs" />
+    <Compile Include="src\util\VpbPackageIndexDiagnostics.cs" />
+    <Compile Include="src\hook\VamStartupProfilerPatches.cs" />
+    <Compile Include="src\hook\VamStartupOptimizationPatches.cs" />
+    <Compile Include="src\hook\perf\VamLoadPerfHooks.cs" />
+    <Compile Include="src\hook\perf\VamSceneLoadPhaseProfiler.cs" />
+    <Compile Include="src\hook\perf\VamAssetBundleQueue.cs" />
+    <Compile Include="src\hook\perf\VamFrameAttributionProfiler.cs" />
+    <Compile Include="src\util\LooseVapGenderProbe.cs" />
+    <Compile Include="src\VpbImport.cs" />
+    <Compile Include="src\VpbImport.SubToggleFilter.cs" />
+    <Compile Include="src\VpbImport.IsolationGuard.cs" />
+    <Compile Include="src\VdsLauncher.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.MergeOutfit.cs" />
+    <Compile Include="src\gallery\VpbDualPose.cs" />
+    <Compile Include="src\gallery\VpbDualPoseModal.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.RemapAtomUids.cs" />
+    <Compile Include="src\hook\AtomHook.cs" />
+    <Compile Include="src\hook\MVRPluginManagerHook.cs" />
+    <Compile Include="src\hook\BoneViewMode.cs" />
+    <Compile Include="src\hook\JSONOptimization.cs" />
+    <Compile Include="src\hook\ImageProcessingOptimization.cs" />
+    <Compile Include="src\hook\DAZClothingHook.cs" />
+    <Compile Include="src\hook\MaterialOptionsTextureGuard.cs" />
+    <Compile Include="src\hook\DAZHairSwapHook.cs" />
+    <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
+    <Compile Include="src\hook\HubResourcePackageHook.cs" />
+    <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
+    <Compile Include="src\hook\OnDemandBackgroundDecode.cs" />
+    <Compile Include="src\hook\OnDemandZstdWriteQueue.cs" />
+    <Compile Include="src\hook\NativeTextureOnDemandCache.Pipeline.cs" />
+    <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
+    <Compile Include="src\hook\VpbBusyChrome.cs" />
+    <Compile Include="src\hook\VpbOsBusyHeartbeat.cs" />
+    <Compile Include="src\hook\VpbProgressService.cs" />
+    <Compile Include="src\hook\SceneLoadNativeUiBridge.cs" />
+    <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
+    <Compile Include="src\hook\TurboJpegNative.cs" />
+    <Compile Include="src\hook\TurboJpegStats.cs" />
+    <Compile Include="src\hook\HubImageLoaderThreaded.cs" />
+    <Compile Include="src\hook\HubPixelPackingJobs.cs" />
+    <Compile Include="src\hook\CustomAssetLoader.cs" />
+    <Compile Include="src\hook\GenericTextureHook.cs" />
+    <Compile Include="src\hook\DazCharacterTextureBlendHook.cs" />
+    <Compile Include="src\hook\TextureUtil.cs" />
+    <Compile Include="src\hook\VaMCompatibleImageDecode.cs" />
+    <Compile Include="src\hook\VaMTextureLoadFlags.cs" />
+    <Compile Include="src\hook\VaMDazImportMaterialExtractor.cs" />
+    <Compile Include="src\hook\ZstdCompressor.cs" />
+    <Compile Include="src\ZstdNet\Compressor.cs" />
+    <Compile Include="src\ZstdNet\Decompressor.cs" />
+    <Compile Include="src\ZstdNet\CompressionOptions.cs" />
+    <Compile Include="src\ZstdNet\DecompressionOptions.cs" />
+    <Compile Include="src\ZstdNet\ExternMethods.cs" />
+    <Compile Include="src\ZstdNet\Consts.cs" />
+    <Compile Include="src\ZstdNet\ReturnValueExtensions.cs" />
+    <Compile Include="src\ZstdNet\ZstdException.cs" />
+    <Compile Include="src\hook\ImageLoadingMgr.cs" />
+    <Compile Include="src\hook\SuperControllerHook.cs" />
+    <Compile Include="src\hook\PerfMonSilencer.cs" />
+    <Compile Include="src\hook\ThirdPartyFixHook.cs" />
+    <Compile Include="src\hook\StateMachineDiagnostic.cs" />
+    <Compile Include="src\hook\TagFilter.cs" />
+    <Compile Include="src\hook\Tools.cs" />
+    <Compile Include="src\hook\Native\Kernel32.cs" />
+    <Compile Include="src\hook\uFileBrowser\DirectoryButton.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowser.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowserCallback.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowserFullCallback.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowser_Clothing.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowser_UI.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileButton.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileIcon.cs" />
+    <Compile Include="src\hook\uFileBrowser\ShortCutButton.cs" />
+    <Compile Include="src\hook\VarNameParser.cs" />
+    <Compile Include="src\hook\PluginSignatureBridge.cs" />
+    <Compile Include="src\VpbSaveCacheSupport.cs" />
+    <Compile Include="src\KeyUtil.cs" />
+    <Compile Include="src\VpbShortcutMap.cs" />
+    <Compile Include="src\VpbShortcutText.cs" />
+    <Compile Include="src\LogUtil.cs" />
+    <Compile Include="src\MessageDef.cs" />
+    <Compile Include="src\MessageKit\MessageKit.cs" />
+    <Compile Include="src\Messager.cs" />
+    <Compile Include="src\Settings.cs" />
+    <Compile Include="src\BaImporter.cs" />
+    <Compile Include="src\VPBConfig.cs" />
+    <Compile Include="src\VPBHelpContent.cs" />
+    <Compile Include="src\VPBTranslation.cs" />
+    <Compile Include="src\VPBUiFont.cs" />
+    <Compile Include="src\unity-object-pool\ObjectPool.cs" />
+    <Compile Include="src\unity-object-pool\ObjectPoolContainer.cs" />
+    <Compile Include="src\unity-object-pool\PoolManager.cs" />
+    <Compile Include="src\unity-object-pool\Singleton.cs" />
+    <Compile Include="src\VamHookPlugin.cs" />
+    <Compile Include="src\VpbCompanionServer.cs" />
+    <Compile Include="src\VamHookPlugin.I18n.cs" />
+    <Compile Include="src\VamHookPlugin.Settings.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignFloat.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuRandomPreview.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuVrWatch.cs" />
+    <Compile Include="src\ContextMenuPanel.cs" />
+    <Compile Include="src\gallery\Gallery.cs" />
+    <Compile Include="src\gallery\GalleryFileListSnapshotCache.cs" />
+    <Compile Include="src\gallery\GallerySearchQuery.cs" />
+    <Compile Include="src\gallery\GalleryTitleSearchChip.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleSearchChips.cs" />
+    <Compile Include="src\gallery\GalleryTagCountSnapshotCache.cs" />
+    <Compile Include="src\gallery\GalleryTagCountBackgroundScan.cs" />
+    <Compile Include="src\gallery\CacheCleanupManager.cs" />
+    <Compile Include="src\gallery\index\VpbSqlite3.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.OnDemandHits.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.ExclusiveDeps.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.HistoryUsage.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.PackageManifest.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.VarPathInventory.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryUserTags.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryUserTagCategories.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.GallerySearch.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.FacetTally.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.SceneAtomCache.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.FilterPresets.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.NetScenePath.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.PluginsCatalog.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.PkgNewest.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.PkgLicense.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryLabels.cs" />
+    <Compile Include="src\gallery\TagsManager.cs" />
+    <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TagEditor.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UserTags.Clipboard.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UserTags.Scroll.cs" />
+    <Compile Include="src\gallery\GalleryUserTagEditorText.cs" />
+    <Compile Include="src\gallery\GalleryUserTagYamlBrain.cs" />
+    <Compile Include="src\gallery\MultilineInputFieldHomeEndFix.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryQuickSwitch.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryQuickSwitchEditor.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleSearchResponsive.cs" />
+    <Compile Include="src\GalleryPanel.cs" />
+    <Compile Include="src\gallery\AppearanceGenderClassifier.cs" />
+    <Compile Include="src\gallery\GalleryPanel.AppearanceGenderFacetCounts.cs" />
+    <Compile Include="src\gallery\GalleryPanel.AppearanceGenderCache.cs" />
+    <Compile Include="src\gallery\GalleryPanel.AppearanceAutoSpawn.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsMaintenance.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsFloat.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsNav.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsNetRules.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsPerf.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsPlugin.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsShortcuts.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsReset.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CompressCache.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FooterPluginInfo.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PerfPreset.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.ScanWhitelist.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.QuickMenuPos.cs" />
+    <Compile Include="src\VamHookPlugin.GalleryModalsBridge.cs" />
+    <Compile Include="src\VamHookPlugin.TextureCacheApi.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Helpers.cs" />
+    <Compile Include="src\gallery\GalleryPanel.GlobalSourceFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.IO.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFloat.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Catalog.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Tree.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Dest.cs" />
+    <Compile Include="src\gallery\GalleryPanel.NavigationTiming.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Lifecycle.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Lifecycle.Init.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.Update.cs" />
+    <Compile Include="src\gallery\GalleryPanel.StickyTooltip.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Transparency.cs" />
+    <Compile Include="src\gallery\GalleryPanel.RemoveMode.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ModeAmbient.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TaskChrome.cs" />
+    <Compile Include="src\gallery\GalleryPanel.RiskPolicy.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UxConsistency.cs" />
+    <Compile Include="src\gallery\GalleryPanel.KeyboardFocus.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CommandPalette.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TryOn.cs" />
+    <Compile Include="src\gallery\GalleryPanel.DetailStrip.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
+    <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.QuickFilter.Active.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FilterRandomizer.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorFilter.Multi.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorConsolidation.cs" />
+    <Compile Include="src\gallery\CreatorNameConsolidation.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleCreatorDropdown.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Sorting.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Helpers.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Layout.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.CategoryAccordion.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SidePanelHeader.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Core.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Tags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Remove.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Misc.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Thumbnails.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ThumbPlaceholderBitmap.cs" />
+    <Compile Include="src\gallery\PluginThumbPlaceholderRefs.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ThumbnailDebug.cs" />
+    <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Onboarding.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FilterChips.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ContextBar.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleBarOverflow.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FooterOverflow.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FloatsOnly.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SideRailOverflow.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SaveMenuPopup.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TagCategories.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Chrome.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Wizard.cs" />
+    <Compile Include="src\gallery\GalleryPanel.InAppHelp.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UI.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SceneOverwriteSave.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UI.Layout.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SelectionContextMenu.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ContentTypeDescriptor.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SideRail.Facets.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SideRail.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UiScale.cs" />
+    <Compile Include="src\gallery\GalleryUiScaleAutoDetect.cs" />
+    <Compile Include="src\gallery\GalleryUiScaleHotkey.cs" />
+    <Compile Include="src\gallery\GalleryUiDesignTokens.cs" />
+    <Compile Include="src\gallery\GalleryUiColorTokens.cs" />
+    <Compile Include="src\gallery\GalleryUiMetrics.cs" />
+    <Compile Include="src\gallery\VpbWorldSpaceUiScale.cs" />
+    <Compile Include="src\gallery\GalleryPanel.WorldSpaceScale.cs" />
+    <Compile Include="src\gallery\GalleryModalTypography.cs" />
+    <Compile Include="src\gallery\GalleryPanel.BrowseFilters.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LicenseFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.Cleanup.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.PowerUi.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.Chrome.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.Possess.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.CreateOptions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.SubScenePick.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.DeletePackages.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalPresets.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.AutoInstallHide.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ScanWhitelistGestures.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.LoadUnloadCache.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.UI.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Float.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Atoms.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Options.cs" />
+    <Compile Include="src\gallery\GalleryPanel.QuickMenuExports.cs" />
+    <Compile Include="src\gallery\GalleryPanel.RandomPreview.cs" />
+    <Compile Include="src\util\JSONExtensions.cs" />
+    <Compile Include="src\util\JsonSerializationUtil.cs" />
+    <Compile Include="src\util\CUAConverter.cs" />
+    <Compile Include="src\util\CUAAtomImporter.cs" />
+    <Compile Include="src\util\SceneAtomImporter.cs" />
+    <Compile Include="src\util\VpbThreePointLightSetup.cs" />
+    <Compile Include="src\util\VpbLoadingIconUtil.cs" />
+    <Compile Include="src\util\VpbCreatorStripPossessable.cs" />
+    <Compile Include="src\util\PoseImportDiagnostics.cs" />
+    <Compile Include="src\util\GalleryAtomListingDiagnostics.cs" />
+    <Compile Include="src\gallery\GallerySortManager.cs" />
+    <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
+    <Compile Include="src\gallery\CategoryFilterState.cs" />
+    <Compile Include="src\gallery\GalleryTypes.cs" />
+    <Compile Include="src\gallery\GalleryIconAtlas.cs" />
+    <Compile Include="src\gallery\GalleryUIUtils.cs" />
+    <Compile Include="src\gallery\GalleryFileButtonBinder.cs" />
+    <Compile Include="src\gallery\GalleryUIUtils.Behaviours.cs" />
+    <Compile Include="src\gallery\GalleryUIUtils.FloatPanelInteract.cs" />
+    <Compile Include="src\gallery\GalleryFloatGeometry.cs" />
+    <Compile Include="src\gallery\GalleryDockLayout.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Dock.cs" />
+    <Compile Include="src\gallery\GalleryLayoutPreset.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.Capture.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.Apply.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.Store.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.Floats.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.Float.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.Float.Rows.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.Float.Geometry.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.RevertBar.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.ModeWatch.cs" />
+    <Compile Include="src\gallery\GalleryPanel.LayoutPreset.Convert.cs" />
+    <Compile Include="src\gallery\GalleryLayoutPresetStore.cs" />
+    <Compile Include="src\gallery\GalleryLayoutPresetDefaults.cs" />
+    <Compile Include="src\gallery\GalleryPanel.DockAnchorMenu.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.LayoutPresets.cs" />
+    <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.cs" />
+    <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.Undo.cs" />
+    <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.SceneMerge.cs" />
+    <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.SceneMerge.Regions.cs" />
+    <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.Import.cs" />
+    <Compile Include="src\gallery\Gallery.DependencyWhitelist.cs" />
+    <Compile Include="src\gallery\AnchorPresets.cs" />
+    <Compile Include="src\gallery\SceneUtils.cs" />
+    <Compile Include="src\gallery\ChamferedRect.cs" />
+    <Compile Include="src\gallery\RoundedRect.cs" />
+    <Compile Include="src\gallery\UIDragBlocker.cs" />
+    <Compile Include="src\gallery\UIScrollPassthrough.cs" />
+    <Compile Include="src\gallery\GalleryViewportCtrlScrollColumns.cs" />
+    <Compile Include="src\gallery\GalleryVrThumbstickScroll.cs" />
+    <Compile Include="src\gallery\GalleryPanel.VrThumbstickScroll.cs" />
+    <Compile Include="src\gallery\SpringScrollButton.cs" />
+    <Compile Include="src\gallery\HoldToApplyOnHover.cs" />
+    <Compile Include="src\gallery\UIRichValueHover.cs" />
+    <Compile Include="src\gallery\PackageListEntry.cs" />
+    <Compile Include="src\gallery\QuickFilterSettings.cs" />
+    <Compile Include="src\gallery\QuickFiltersUI.cs" />
+    <Compile Include="src\gallery\QuickFiltersUI.Keyboard.cs" />
+    <Compile Include="src\gallery\UIColorPicker.cs" />
+    <Compile Include="src\gallery\VPBUiPickers.cs" />
+    <Compile Include="src\RatingsManager.cs" />
+    <Compile Include="src\CreatorRatingsManager.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorRatings.cs" />
+    <Compile Include="src\LocalSceneGallerySupport.cs" />
+    <Compile Include="src\PackageHidePrefs.cs" />
+    <Compile Include="src\LockedPackagesManager.cs" />
+    <Compile Include="src\AutoLoadPackagesManager.cs" />
+    <Compile Include="src\DependencyWhitelistManager.cs" />
+    <Compile Include="src\SpawnAtomElement.cs" />
+    <Compile Include="src\hook\FileManagement\ExclusiveDependencyFinder.cs" />
+    <Compile Include="src\hook\FileManagement\DependencyExtractor.cs" />
+    <Compile Include="src\hook\FileManagement\DependencyGraph.cs" />
+    <Compile Include="src\hook\FileManagement\DirectoryEntry.cs" />
+    <Compile Include="src\hook\FileManagement\FileEntry.cs" />
+    <Compile Include="src\hook\FileManagement\FileEntryStream.cs" />
+    <Compile Include="src\hook\FileManagement\FileEntryStreamReader.cs" />
+    <Compile Include="src\hook\FileManagement\FileManager.cs" />
+    <Compile Include="src\hook\FileManagement\FileManagerBridge.cs" />
+    <Compile Include="src\hook\FileManagement\FileStat.cs" />
+    <Compile Include="src\hook\FileManagement\SystemFileEntry.cs" />
+    <Compile Include="src\hook\FileManagement\SystemFileEntryStream.cs" />
+    <Compile Include="src\hook\FileManagement\SystemFileEntryStreamReader.cs" />
+    <Compile Include="src\hook\FileManagement\VarDirectoryEntry.cs" />
+    <Compile Include="src\hook\FileManagement\VarFileEntry.cs" />
+    <Compile Include="src\hook\FileManagement\VarFileEntryStream.cs" />
+    <Compile Include="src\hook\FileManagement\VarFileEntryStreamReader.cs" />
+    <Compile Include="src\hook\FileManagement\VarPackage.cs" />
+    <Compile Include="src\hook\FileManagement\VarPackage.SceneJsonScanSelfTest.cs" />
+    <Compile Include="src\hook\FileManagement\VarPackageGroup.cs" />
+    <Compile Include="src\hook\FileManagement\PackageReferenceVersionResolver.cs" />
+    <Compile Include="src\hook\FileManagement\VamScanFilter.cs" />
+    <Compile Include="src\hook\FileManagement\VamOnDemandLoader.cs" />
+    <Compile Include="src\ScanWhitelistManager.cs" />
+    <Compile Include="src\hook\Hub\HubBrowse.cs" />
+    <Compile Include="src\hook\Hub\HubResourceCreatorSupportUI.cs" />
+    <Compile Include="src\hook\Hub\HubResourceItem.cs" />
+    <Compile Include="src\hook\Hub\HubResourceItemDetail.cs" />
+    <Compile Include="src\hook\Hub\HubResourceItemDetailUI.cs" />
+    <Compile Include="src\hook\Hub\HubResourceItemUI.cs" />
+    <Compile Include="src\hook\Hub\HubResourcePackage.cs" />
+    <Compile Include="src\hook\Hub\HubResourcePackageUI.cs" />
+    <Compile Include="src\Properties\AssemblyInfo.cs" />
+    <Compile Include="src\VamHookPlugin_Interface.cs" />
+    <Compile Include="src\updater\VpbUpdaterService.cs" />
+    <Compile Include="src\updater\VpbUpdateConfig.cs" />
+    <Compile Include="src\updater\VamHookPlugin.Updater.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)PluginVersion.g.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="_vam_patch\**" />
+    <EmbeddedResource Remove="vam_patch\**" />
+    <None Remove="vam_patch\**" />
+    <Page Remove="vam_patch\**" />
+  </ItemGroup>
+  <!--
+    VPB.Patcher is a separate assembly loaded at BepInEx preload, not referenced by VPB.dll. It is
+    built here for one reason: its output is a committed payload file, and for months nothing forced
+    a rebuild, so patcher source changes never reached users. ReferenceOutputAssembly=false keeps it
+    a build-order dependency only. Set SkipVPBPatcherBuild=true to opt out.
+  -->
+  <ItemGroup Condition="'$(SkipVPBPatcherBuild)' != 'true'">
+    
+  </ItemGroup>
+  <!--
+    plugin_version.txt: line 1 = base (e.g. 0.28.0 or v0.28.0), line 2 = next build counter (integer).
+    Before each compile: if line 1 changed vs last build (see obj/VPB_last_plugin_base.txt), line 2 resets to 1;
+    then PluginVersion.g.cs is written for this build, and line 2 is bumped for the next compile.
+    Set SkipVPBVersionPrepare=true to skip (e.g. some CI). Design-time builds are skipped.
+  -->
+  <Target Name="GeneratePluginVersion" BeforeTargets="BeforeCompile" Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBVersionPrepare)' != 'true'">
+    <!-- Trim trailing \ so cmd.exe does not treat \" inside -IntermediateDir "...\Debug\" as an escaped quote (which drops -ProjectDir). -->
+    <PropertyGroup>
+      <_PVFullInt>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)'))</_PVFullInt>
+      <PluginVersionIntermediateDir>$([System.String]::Copy('$(_PVFullInt)').TrimEnd('\'))</PluginVersionIntermediateDir>
+      <_PVProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_PVProjDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PluginVersionIntermediateDir)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_PVProjDir)\scripts\PreparePluginVersion.ps1&quot; -VersionFile &quot;$(_PVProjDir)\plugin_version.txt&quot; -IntermediateDir &quot;$(PluginVersionIntermediateDir)&quot; -ProjectDir &quot;$(_PVProjDir)&quot;" WorkingDirectory="$(_PVProjDir)" />
+  </Target>
+  <ItemGroup>
+    <VPBIconSource Include="assets\icons\icon_map.json" />
+    <VPBIconSource Include="assets\icons\tabler\*.svg" />
+    <VPBIconSource Include="assets\icons\filled\*.svg" />
+    <VPBIconSource Include="scripts\build_icon_atlas.py" />
+  </ItemGroup>
+  <!--
+    Repacks assets/icons into vam_patch/BepInEx/plugins/VPB/assets/icons.pack when a source icon or the
+    icon map changes. Requires Python 3 with Pillow and cairosvg; a missing interpreter is a
+    warning, not an error, because the built pack is committed. Set SkipVPBIconAtlas=true to skip.
+  -->
+  <Target Name="BuildVPBIconAtlas" BeforeTargets="BeforeCompile"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBIconAtlas)' != 'true'"
+          Inputs="@(VPBIconSource)" Outputs="$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB\assets\icons.pack">
+    <PropertyGroup>
+      <_IAProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_IAProjDir>
+    </PropertyGroup>
+    <Exec Command="python &quot;$(_IAProjDir)\scripts\build_icon_atlas.py&quot;" WorkingDirectory="$(_IAProjDir)" ContinueOnError="WarnAndContinue" />
+  </Target>
+  <ItemGroup>
+    <VpbNetBrokerSource Include="tools\VpbNet\**\*.cs" Exclude="tools\VpbNet\bin\**;tools\VpbNet\obj\**" />
+    <VpbNetBrokerSource Include="tools\VpbNet\VpbNet.csproj" />
+    <VpbNetBrokerSource Include="protocol\*.cs" />
+    <VpbNetBrokerSource Include="scripts\BuildVpbNetBroker.ps1" />
+  </ItemGroup>
+  <!--
+    Publishes the multiplayer broker and stages vam_patch/BepInEx/plugins/VPB/net/VpbNet.exe, so a
+    plugin build and the exe that ships beside it can never drift apart. The broker and the plugin
+    compile the same /protocol sources against two different runtimes; a one-sided rebuild is a
+    wire-format mismatch at session start.
+
+    Inputs/Outputs mean an untouched broker costs nothing. A missing dotnet SDK or a failed
+    publish is a warning, not an error: the committed exe is still valid. Set
+    SkipVpbNetBroker=true to skip.
+  -->
+  <Target Name="BuildVpbNetBroker" BeforeTargets="BeforeCompile"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVpbNetBroker)' != 'true'"
+          Inputs="@(VpbNetBrokerSource)" Outputs="$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB\net\VpbNet.exe">
+    <PropertyGroup>
+      <_BNProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_BNProjDir>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BNProjDir)\scripts\BuildVpbNetBroker.ps1&quot; -ProjectDir &quot;$(_BNProjDir)&quot;" WorkingDirectory="$(_BNProjDir)" ContinueOnError="WarnAndContinue" />
+  </Target>
+  <!--
+    Keeps the vpb_icons rows in vam_patch/patch_manifest.json in sync with the shipped icon pack.
+    Set SkipVPBPatchManifestSync=true to skip (e.g. CI). Design-time builds are skipped.
+  -->
+  <Target Name="SyncPatchManifestVpbIcons" BeforeTargets="BeforeCompile" DependsOnTargets="BuildVPBIconAtlas;BuildVpbNetBroker" Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBPatchManifestSync)' != 'true'">
+    <PropertyGroup>
+      <_SMProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_SMProjDir>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
+    <!-- Runs unconditionally, unlike the publish above: it also repairs rows when only steam_api64.dll changed. -->
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbNet.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" ContinueOnError="WarnAndContinue" />
+  </Target>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <!-- Deploy logic lives in scripts/PostBuildDeploy.ps1 so cmd-batch quoting and silent copy /Y failures stop eating locked-DLL replacements. Script never fails the build, emits MSBuild-formatted warnings (yellow in Errors panel) on copy/lock issues. -->
+    
+  </PropertyGroup>
+</Project>

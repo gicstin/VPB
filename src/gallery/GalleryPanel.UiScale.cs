@@ -113,6 +113,7 @@ namespace VPB
             try { if (IsFixedTopDockMode()) ApplyTopDockSideButtonsLayout(chromeS); } catch { }
             try { RescaleRemapAtomUidsIfOpen(chromeS); } catch { }
             try { RescaleSettingsFloatIfOpen(chromeS); } catch { }
+            try { VpbNetRuntime.NotifyChromeScale(); } catch { }
             try { RescalePluginsFloatIfOpen(chromeS); } catch { }
             try { RescaleLayoutPresetsFloatIfOpen(chromeS); } catch { }
             try { RescaleCommandPaletteIfOpen(); } catch { }

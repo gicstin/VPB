@@ -189,7 +189,9 @@ if (-not (Test-Path -LiteralPath $patcherDll)) {
     }
 }
 
-$assetDirs = @('assets', 'native')
+# net/ carries the multiplayer broker plus the steam_api64.dll it loads at runtime; the build
+# republishes it into vam_patch before compiling, so this pushes the fresh one into VaM.
+$assetDirs = @('assets', 'native', 'net')
 foreach ($name in $assetDirs) {
     if (-not $vamPathOk) { break }
     $srcDir = Join-Path $patchPlugins $name
