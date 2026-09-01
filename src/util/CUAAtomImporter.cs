@@ -36,7 +36,8 @@ namespace VPB.src.util
         // replaceExisting=false (merge) appends without removing prior VPB imports; true replaces them first.
         public static IEnumerator ImportSelectedCUAsAsAtoms(
             JSONClass sourceScene, string sourcePersonAtomId, Atom targetPerson, string sourceHostUid,
-            HashSet<string> selectedIds, bool offPersonRelativeToPerson, bool replaceExisting = true)
+            HashSet<string> selectedIds, bool offPersonRelativeToPerson, bool replaceExisting = true,
+            Dictionary<string, string> liveIdSink = null)
         {
             if (sourceScene == null || targetPerson == null || string.IsNullOrEmpty(sourcePersonAtomId))
                 yield break;
@@ -48,7 +49,7 @@ namespace VPB.src.util
             {
                 yield return ImportSelectedCUAsAsAtomsCore(
                     sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid,
-                    selectedIds, offPersonRelativeToPerson, replaceExisting);
+                    selectedIds, offPersonRelativeToPerson, replaceExisting, liveIdSink);
             }
             finally
             {
@@ -60,7 +61,8 @@ namespace VPB.src.util
 
         private static IEnumerator ImportSelectedCUAsAsAtomsCore(
             JSONClass sourceScene, string sourcePersonAtomId, Atom targetPerson, string sourceHostUid,
-            HashSet<string> selectedIds, bool offPersonRelativeToPerson, bool replaceExisting)
+            HashSet<string> selectedIds, bool offPersonRelativeToPerson, bool replaceExisting,
+            Dictionary<string, string> liveIdSink)
         {
             if (sourceScene == null || targetPerson == null || string.IsNullOrEmpty(sourcePersonAtomId))
                 yield break;
@@ -143,6 +145,10 @@ namespace VPB.src.util
             var idMap = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (string id in importIds)
                 idMap[id] = MakeUniqueLiveId(id, idMap);
+
+            if (liveIdSink != null)
+                foreach (KeyValuePair<string, string> kv in idMap)
+                    liveIdSink[kv.Key] = kv.Value;
 
             HashSet<string> importedSet;
             if (!s_importedByTarget.TryGetValue(targetPerson.uid, out importedSet))
