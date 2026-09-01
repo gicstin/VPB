@@ -422,6 +422,7 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.PluginsCatalog.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PkgNewest.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PkgLicense.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.HideMarkers.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryLabels.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
@@ -625,6 +626,7 @@
     <Compile Include="src\gallery\GalleryPanel.CreatorRatings.cs" />
     <Compile Include="src\LocalSceneGallerySupport.cs" />
     <Compile Include="src\PackageHidePrefs.cs" />
+    <Compile Include="src\VpbHideIndex.cs" />
     <Compile Include="src\LockedPackagesManager.cs" />
     <Compile Include="src\AutoLoadPackagesManager.cs" />
     <Compile Include="src\DependencyWhitelistManager.cs" />

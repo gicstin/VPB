@@ -148,6 +148,11 @@ namespace VPB
 
         private void TboxHideSelectedPackages()
         {
+            TboxHideSelectedPackages(IsCtrlHeld());
+        }
+
+        private void TboxHideSelectedPackages(bool escalateToPackage)
+        {
             try
             {
                 if (selectedFiles == null || selectedFiles.Count == 0)
@@ -156,8 +161,8 @@ namespace VPB
                     return;
                 }
 
-                var seenUid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                int resolvableUids = 0;
+                var seenTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int resolvableTargets = 0;
                 int ok = 0;
                 int failed = 0;
 
@@ -165,50 +170,42 @@ namespace VPB
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    if (TryGetTboxResolvablePackageState(f, out string uid, out FileEntry fe, out bool hidden, out _, out _))
-                    {
-                        if (!seenUid.Add(uid)) continue;
-                        resolvableUids++;
-                        if (hidden) continue;
-
-                        try
-                        {
-                            bool hid;
-                            if (LocalSceneGallerySupport.TryResolveSavesSceneJson(fe, out _, out _, false))
-                                hid = PackageHidePrefs.TryEnsureLocalSceneJsonHidden(fe);
-                            else
-                                hid = PackageHidePrefs.TryEnsureVpbPackageHidden(fe);
-                            if (hid) ok++;
-                            else failed++;
-                        }
-                        catch (Exception ex)
-                        {
-                            failed++;
-                            LogUtil.LogError("[VPB] TboxHideSelectedPackages " + uid + ": " + ex.Message);
-                        }
+                    if (!TryGetTboxHideTarget(f, escalateToPackage, out TboxHideTargetKind kind, out string key, out bool hidden))
                         continue;
+                    if (!seenTargets.Add(key)) continue;
+                    resolvableTargets++;
+                    if (hidden) continue;
+
+                    try
+                    {
+                        bool hid;
+                        switch (kind)
+                        {
+                            case TboxHideTargetKind.LocalSceneJson:
+                                hid = PackageHidePrefs.TryEnsureLocalSceneJsonHidden(f);
+                                break;
+                            case TboxHideTargetKind.LocalPreset:
+                                f.SetHidden(true);
+                                hid = f.IsHidden();
+                                break;
+                            case TboxHideTargetKind.VarItem:
+                                hid = PackageHidePrefs.TryEnsureVarItemHidden(f);
+                                break;
+                            default:
+                                hid = PackageHidePrefs.TryEnsureVpbPackageHidden(f);
+                                break;
+                        }
+                        if (hid) ok++;
+                        else failed++;
                     }
-
-                    if (TryGetTboxResolvableLocalPresetHideState(f, out string presetKey, out bool presetHidden))
+                    catch (Exception ex)
                     {
-                        if (!seenUid.Add(presetKey)) continue;
-                        resolvableUids++;
-                        if (presetHidden) continue;
-                        try
-                        {
-                            f.SetHidden(true);
-                            ok++;
-                        }
-                        catch (Exception ex)
-                        {
-                            failed++;
-                            LogUtil.LogError("[VPB] TboxHideSelectedPackages preset " + presetKey + ": " + ex.Message);
-                        }
-                        continue;
+                        failed++;
+                        LogUtil.LogError("[VPB] TboxHideSelectedPackages " + key + ": " + ex.Message);
                     }
                 }
 
-                if (resolvableUids == 0)
+                if (resolvableTargets == 0)
                 {
                     ShowTemporaryStatus("No packages, local scenes, or local presets in selection.");
                     return;
@@ -217,9 +214,6 @@ namespace VPB
                 if (ok > 0)
                 {
                     try { RemoveCurrentGalleryEntriesMatchingHideFilter(); } catch { }
-                }
-                if (ok > 0)
-                {
                     try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
                     try { RefreshSelectionVisuals(); } catch { }
                 }
@@ -228,7 +222,7 @@ namespace VPB
                 if (ok == 0)
                     ShowTemporaryStatus(failed > 0 ? "Hide failed (see log)." : "Nothing to hide.", 2f);
                 else
-                    ShowTemporaryStatus($"Hidden {ok}" + (failed > 0 ? $", {failed} skipped." : "."), 2f);
+                    ShowTemporaryStatus($"Hidden {ok}" + (escalateToPackage ? " package(s)" : "") + (failed > 0 ? $", {failed} skipped." : "."), 2f);
             }
             catch (Exception ex)
             {
@@ -314,6 +308,11 @@ namespace VPB
 
         private void TboxUnhideSelectedPackages()
         {
+            TboxUnhideSelectedPackages(IsCtrlHeld());
+        }
+
+        private void TboxUnhideSelectedPackages(bool escalateToPackage)
+        {
             try
             {
                 if (selectedFiles == null || selectedFiles.Count == 0)
@@ -322,8 +321,8 @@ namespace VPB
                     return;
                 }
 
-                var seenUid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                int resolvableUids = 0;
+                var seenTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int resolvableTargets = 0;
                 int ok = 0;
                 int failed = 0;
 
@@ -331,50 +330,46 @@ namespace VPB
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    if (TryGetTboxResolvablePackageState(f, out string uid, out FileEntry fe, out bool hidden, out _, out _))
-                    {
-                        if (!seenUid.Add(uid)) continue;
-                        resolvableUids++;
-                        if (!hidden) continue;
-
-                        try
-                        {
-                            bool unhid;
-                            if (LocalSceneGallerySupport.TryResolveSavesSceneJson(fe, out _, out _, false))
-                                unhid = PackageHidePrefs.TryRemoveLocalSceneJsonHide(fe);
-                            else
-                                unhid = PackageHidePrefs.TryRemovePackageVarHide(fe);
-                            if (unhid) ok++;
-                            else failed++;
-                        }
-                        catch (Exception ex)
-                        {
-                            failed++;
-                            LogUtil.LogError("[VPB] TboxUnhideSelectedPackages " + uid + ": " + ex.Message);
-                        }
+                    if (!TryGetTboxHideTarget(f, escalateToPackage, out TboxHideTargetKind kind, out string key, out bool hidden))
                         continue;
+                    if (!seenTargets.Add(key)) continue;
+                    resolvableTargets++;
+                    if (!hidden) continue;
+
+                    try
+                    {
+                        bool unhid;
+                        switch (kind)
+                        {
+                            case TboxHideTargetKind.LocalSceneJson:
+                                unhid = PackageHidePrefs.TryRemoveLocalSceneJsonHide(f);
+                                break;
+                            case TboxHideTargetKind.LocalPreset:
+                                f.SetHidden(false);
+                                unhid = !f.IsHidden();
+                                break;
+                            case TboxHideTargetKind.VarItem:
+                                unhid = false;
+                                if (PackageHidePrefs.IsVarItemHidden(f))
+                                    unhid |= PackageHidePrefs.TryRemoveVarItemHide(f);
+                                if (PackageHidePrefs.IsPackageVarHidden(f))
+                                    unhid |= PackageHidePrefs.TryRemovePackageVarHide(f);
+                                break;
+                            default:
+                                unhid = PackageHidePrefs.TryRemovePackageVarHide(f);
+                                break;
+                        }
+                        if (unhid) ok++;
+                        else failed++;
                     }
-
-                    if (TryGetTboxResolvableLocalPresetHideState(f, out string presetKey, out bool presetHidden))
+                    catch (Exception ex)
                     {
-                        if (!seenUid.Add(presetKey)) continue;
-                        resolvableUids++;
-                        if (!presetHidden) continue;
-                        try
-                        {
-                            f.SetHidden(false);
-                            ok++;
-                        }
-                        catch (Exception ex)
-                        {
-                            failed++;
-                            LogUtil.LogError("[VPB] TboxUnhideSelectedPackages preset " + presetKey + ": " + ex.Message);
-                        }
-                        continue;
+                        failed++;
+                        LogUtil.LogError("[VPB] TboxUnhideSelectedPackages " + key + ": " + ex.Message);
                     }
                 }
 
-                if (resolvableUids == 0)
+                if (resolvableTargets == 0)
                 {
                     ShowTemporaryStatus("No packages, local scenes, or local presets in selection.");
                     return;

@@ -4431,19 +4431,31 @@ namespace VPB
             {
                 FileEntry f = selectedFiles[i];
                 if (f == null) continue;
-                if (TryGetTboxResolvablePackageState(f, out string uid, out _, out bool hidden, out _, out _))
-                {
-                    if (!seen.Add(uid)) continue;
-                    if (hidden) unhideN++;
-                    else hideN++;
-                    continue;
-                }
-                if (TryGetTboxResolvableLocalPresetHideState(f, out string presetKey, out bool presetHidden))
-                {
-                    if (!seen.Add(presetKey)) continue;
-                    if (presetHidden) unhideN++;
-                    else hideN++;
-                }
+                if (!TryGetTboxHideTarget(f, false, out _, out string key, out bool hidden)) continue;
+                if (!seen.Add(key)) continue;
+                if (hidden) unhideN++;
+                else hideN++;
+            }
+        }
+
+        private void GridCtxCountPackageHideUnhide(out int hideN, out int unhideN)
+        {
+            hideN = 0;
+            unhideN = 0;
+            if (selectedFiles == null || selectedFiles.Count == 0) return;
+            if (SelectionExceedsHeavyScanBudget()) return;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry f = selectedFiles[i];
+                if (f == null) continue;
+                if (!TryGetTboxHideTarget(f, false, out TboxHideTargetKind kind, out _, out _)) continue;
+                if (kind != TboxHideTargetKind.VarItem) continue;
+                if (!TryGetTboxHideTarget(f, true, out _, out string pkgKey, out bool pkgHidden)) continue;
+                if (!seen.Add(pkgKey)) continue;
+                if (pkgHidden) unhideN++;
+                else hideN++;
             }
         }
 

@@ -540,9 +540,8 @@ namespace VPB
             var _ = ScanWhitelistManager.Instance; // eager init
             try { VpbCompanionServer.Start(); } catch { }
 
-            // Migrate legacy VPB hide markers to native VaM-compatible format
             System.Threading.ThreadPool.QueueUserWorkItem((state) => {
-                try { PackageHidePrefs.MigrateAllLegacyHideMarkers(); } catch { }
+                try { PackageHidePrefs.TryCollapseLegacyFannedOutPackageHides(); } catch { }
             });
 
             AutoLoadALPackages();

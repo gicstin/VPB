@@ -1478,7 +1478,7 @@ namespace VPB
             );
             tboxHideBtn.name = "Tbox_Hide";
             TboxConfigureActionButtonFlex(tboxHideBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxHideBtn, "gallery.tooltip.tbox_hide", "Hide selected packages in VaM file lists (AddonPackagesFilePrefs … .hide)");
+            AddTooltip(tboxHideBtn, "gallery.tooltip.tbox_hide", "Hide the selected items in VaM file lists (AddonPackagesFilePrefs … .hide). A scene or preset inside a package hides on its own — sister files stay visible. Hold Ctrl to hide the whole package.");
             try
             {
                 // Hide = show_hidden ON
@@ -1501,7 +1501,7 @@ namespace VPB
             );
             tboxUnhideBtn.name = "Tbox_Unhide";
             TboxConfigureActionButtonFlex(tboxUnhideBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxUnhideBtn, "gallery.tooltip.tbox_unhide", "Remove .hide markers for selected packages");
+            AddTooltip(tboxUnhideBtn, "gallery.tooltip.tbox_unhide", "Remove .hide markers for the selected items. Hold Ctrl to unhide the whole package.");
             try
             {
                 // Unhide = show_hidden OFF
@@ -3078,6 +3078,56 @@ namespace VPB
             {
                 return false;
             }
+        }
+
+        internal enum TboxHideTargetKind
+        {
+            None = 0,
+            LocalSceneJson,
+            LocalPreset,
+            VarItem,
+            VarPackage,
+        }
+
+        private bool TryGetTboxHideTarget(FileEntry f, bool escalateToPackage, out TboxHideTargetKind kind, out string dedupeKey, out bool hidden)
+        {
+            kind = TboxHideTargetKind.None;
+            dedupeKey = null;
+            hidden = false;
+            if (f == null) return false;
+
+            if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out string relGallery, false))
+            {
+                kind = TboxHideTargetKind.LocalSceneJson;
+                dedupeKey = "scene:" + relGallery.Replace('\\', '/');
+                hidden = PackageHidePrefs.IsLocalSceneJsonHidden(f);
+                return true;
+            }
+
+            if (TryGetTboxResolvableLocalPresetHideState(f, out string presetKey, out bool presetHidden))
+            {
+                kind = TboxHideTargetKind.LocalPreset;
+                dedupeKey = "preset:" + presetKey;
+                hidden = presetHidden;
+                return true;
+            }
+
+            string uid = TryGetPackageUidForEntry(f);
+            if (string.IsNullOrEmpty(uid)) return false;
+
+            bool packageRow = escalateToPackage || PackageHidePrefs.IsPackageStandInRow(f);
+            if (!packageRow && f is VarFileEntry vfe && !string.IsNullOrEmpty(vfe.InternalPath))
+            {
+                kind = TboxHideTargetKind.VarItem;
+                dedupeKey = "item:" + vfe.Uid;
+                hidden = PackageHidePrefs.IsVarItemHidden(f) || PackageHidePrefs.IsPackageVarHidden(f);
+                return true;
+            }
+
+            kind = TboxHideTargetKind.VarPackage;
+            dedupeKey = "pkg:" + uid;
+            hidden = PackageHidePrefs.IsPackageVarHidden(f);
+            return true;
         }
 
         /// <summary>

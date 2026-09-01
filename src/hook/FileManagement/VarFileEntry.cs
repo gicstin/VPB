@@ -211,22 +211,60 @@ namespace VPB
 
 		public override bool HasFlagFile(string flagName)
 		{
-			return false;
+			if (string.IsNullOrEmpty(flagName)) return false;
+			if (string.Equals(flagName, "hide", StringComparison.OrdinalIgnoreCase))
+				return VpbHideIndex.IsItemHiddenByEntryUid(Uid);
+			string p = VpbHideIndex.BuildVarEntryFlagPath(GetRowPackageUid(), InternalPath, flagName);
+			if (string.IsNullOrEmpty(p)) return false;
+			try { return File.Exists(p); }
+			catch { return false; }
+		}
+
+		public override void SetFlagFile(string flagName, bool b)
+		{
+			if (string.IsNullOrEmpty(flagName)) return;
+			if (string.Equals(flagName, "hide", StringComparison.OrdinalIgnoreCase))
+			{
+				VpbHideIndex.SetItemHidden(GetRowPackageUid(), InternalPath, b);
+				return;
+			}
+			string p = VpbHideIndex.BuildVarEntryFlagPath(GetRowPackageUid(), InternalPath, flagName);
+			if (string.IsNullOrEmpty(p)) return;
+			try
+			{
+				if (b)
+				{
+					if (File.Exists(p)) return;
+					string dir = System.IO.Path.GetDirectoryName(p);
+					if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+					File.WriteAllText(p, string.Empty);
+				}
+				else if (File.Exists(p))
+				{
+					File.Delete(p);
+				}
+			}
+			catch { }
 		}
 
 		public bool IsFlagFileModifiable(string flagName)
 		{
-			return false;
+			return !string.IsNullOrEmpty(flagName) && !string.IsNullOrEmpty(InternalPath);
 		}
 
 		public override bool IsHidden()
 		{
-			return false;
+			return VpbHideIndex.IsItemHiddenByEntryUid(Uid);
+		}
+
+		public override void SetHidden(bool b)
+		{
+			VpbHideIndex.SetItemHidden(GetRowPackageUid(), InternalPath, b);
 		}
 
 		public bool IsHiddenModifiable()
 		{
-			return false;
+			return !string.IsNullOrEmpty(InternalPath);
 		}
 
 

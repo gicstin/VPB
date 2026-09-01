@@ -667,6 +667,7 @@ namespace VPB
             EnsureLayoutPresetTables(conn);
             EnsurePkgNewestSchema(conn);
             EnsurePkgLicenseSchema(conn);
+            EnsureHideMarkerSchema(conn);
         }
 
         /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process. Returns true on success (including no-op).</summary>
