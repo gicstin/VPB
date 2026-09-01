@@ -177,6 +177,7 @@ namespace VPB
             s_LastTickMs = 0.0;
             s_CurrentPhase = "Clear + Unload";
             s_Active = true;
+            VamAssetBundleQueue.BeginLoadWindow();
             VamFrameAttributionProfiler.BeginLoad();
         }
 

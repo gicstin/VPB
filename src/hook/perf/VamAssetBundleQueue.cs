@@ -19,17 +19,38 @@ namespace VPB
         internal static long Started;
         internal static long Completed;
         internal static long Failures;
+        internal static long Recovered;
+
+        sealed class Delivery
+        {
+            public AssetLoader.AssetBundleFromFileRequest Request;
+            public AssetBundle Bundle;
+            public bool Ready;
+        }
 
         sealed class Entry
         {
             public string Path;
-            public List<AssetLoader.AssetBundleFromFileRequest> Waiters;
+            public List<Delivery> Waiters;
+        }
+
+        sealed class LoadResult
+        {
+            public AssetBundle Bundle;
         }
 
         static readonly Dictionary<string, Entry> s_InFlight = new Dictionary<string, Entry>(StringComparer.Ordinal);
         static readonly List<string> s_Pending = new List<string>();
         static readonly Dictionary<string, int> s_PackageBusy = new Dictionary<string, int>(StringComparer.Ordinal);
+        static readonly List<Delivery> s_Delivery = new List<Delivery>();
+        static int s_DeliveryHead;
+        static bool s_Draining;
         static int s_Running;
+        static bool s_DriverRunning;
+        static float s_LastProgressRealtime;
+
+        const float StallSeconds = 60f;
+        const int DeliveryCompactThreshold = 64;
 
         static FieldInfo s_SingletonField;
         static FieldInfo s_RefCountsField;
@@ -108,6 +129,19 @@ namespace VPB
             counts[path] = counts.TryGetValue(path, out n) ? n + 1 : 1;
         }
 
+        static void ReleaseRef(AssetLoader loader, string path)
+        {
+            try
+            {
+                var counts = RefCounts(loader);
+                int n;
+                if (!counts.TryGetValue(path, out n)) return;
+                if (n <= 1) counts.Remove(path);
+                else counts[path] = n - 1;
+            }
+            catch { }
+        }
+
         public static bool PreQueueLoadAssetBundleFromFile(AssetLoader.AssetBundleFromFileRequest abffr)
         {
             if (!Enabled) return true;
@@ -116,18 +150,26 @@ namespace VPB
             AssetLoader loader = Singleton();
             if (loader == null) return true;
 
+            string path = abffr.path;
+            bool refAdded = false;
+            Delivery created = null;
+
             try
             {
-                string path = abffr.path;
                 AddRef(loader, path);
+                refAdded = true;
                 Served++;
+
+                created = new Delivery { Request = abffr };
+                s_Delivery.Add(created);
+                EnsureDriver(loader);
 
                 AssetBundle existing;
                 if (PathToBundle(loader).TryGetValue(path, out existing))
                 {
                     AlreadyLoaded++;
-                    abffr.assetBundle = existing;
-                    if (abffr.callback != null) abffr.callback(abffr);
+                    created.Bundle = existing;
+                    created.Ready = true;
                     return false;
                 }
 
@@ -135,23 +177,26 @@ namespace VPB
                 if (s_InFlight.TryGetValue(path, out e))
                 {
                     Deduped++;
-                    e.Waiters.Add(abffr);
+                    e.Waiters.Add(created);
                     return false;
                 }
 
-                e = new Entry
-                {
-                    Path = path,
-                    Waiters = new List<AssetLoader.AssetBundleFromFileRequest>(2) { abffr }
-                };
+                e = new Entry { Path = path, Waiters = new List<Delivery>(2) { created } };
                 s_InFlight[path] = e;
                 s_Pending.Add(path);
+                MarkProgress();
                 Pump(loader);
                 return false;
             }
             catch (Exception ex)
             {
                 Failures++;
+                if (refAdded) ReleaseRef(loader, path);
+                if (created != null)
+                {
+                    created.Request = null;
+                    created.Ready = true;
+                }
                 LogUtil.LogWarning("[VPB.Perf] bundle queue fell back to VaM loader: " + ex.Message);
                 return true;
             }
@@ -177,7 +222,8 @@ namespace VPB
                 s_Running++;
                 MarkPackageBusy(next, 1);
                 Started++;
-                loader.StartCoroutine(LoadOne(loader, next));
+                MarkProgress();
+                loader.StartCoroutine(RunGuarded(loader, next));
             }
         }
 
@@ -185,6 +231,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(path)) return string.Empty;
             int i = path.IndexOf(":/", StringComparison.Ordinal);
+            if (i <= 0) i = path.IndexOf(":\\", StringComparison.Ordinal);
             return i > 0 ? path.Substring(0, i) : string.Empty;
         }
 
@@ -207,9 +254,59 @@ namespace VPB
             else s_PackageBusy[key] = n;
         }
 
-        static IEnumerator LoadOne(AssetLoader loader, string path)
+        static void MarkProgress()
         {
-            AssetBundle bundle = null;
+            s_LastProgressRealtime = Time.realtimeSinceStartup;
+        }
+
+        static IEnumerator RunGuarded(AssetLoader loader, string path)
+        {
+            LoadResult result = new LoadResult();
+            List<IEnumerator> stack = new List<IEnumerator>(2);
+            stack.Add(LoadOne(path, result));
+
+            while (stack.Count > 0)
+            {
+                IEnumerator top = stack[stack.Count - 1];
+                object current = null;
+                bool moved = false;
+                bool failed = false;
+                try
+                {
+                    moved = top.MoveNext();
+                    if (moved) current = top.Current;
+                }
+                catch (Exception ex)
+                {
+                    failed = true;
+                    LogUtil.LogWarning("[VPB.Perf] bundle load threw for " + path + ": " + ex.Message);
+                }
+
+                if (failed)
+                {
+                    result.Bundle = null;
+                    break;
+                }
+                if (!moved)
+                {
+                    stack.RemoveAt(stack.Count - 1);
+                    continue;
+                }
+
+                IEnumerator nested = current as IEnumerator;
+                if (nested != null)
+                {
+                    stack.Add(nested);
+                    continue;
+                }
+                yield return current;
+            }
+
+            Finish(loader, path, result.Bundle);
+        }
+
+        static IEnumerator LoadOne(string path, LoadResult result)
+        {
             AssetBundleCreateRequest abcr = null;
             byte[] bytes = null;
 
@@ -246,11 +343,9 @@ namespace VPB
             if (abcr != null)
             {
                 yield return abcr;
-                try { bundle = abcr.assetBundle; }
+                try { result.Bundle = abcr.assetBundle; }
                 catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] assetBundle fetch failed for " + path + ": " + ex.Message); }
             }
-
-            Finish(loader, path, bundle);
         }
 
         static void Finish(AssetLoader loader, string path, AssetBundle bundle)
@@ -269,8 +364,16 @@ namespace VPB
                 else
                 {
                     var map = PathToBundle(loader);
-                    if (!map.ContainsKey(path)) map.Add(path, bundle);
-                    else bundle = map[path];
+                    AssetBundle published;
+                    if (!map.TryGetValue(path, out published))
+                    {
+                        map.Add(path, bundle);
+                    }
+                    else if (!ReferenceEquals(published, bundle))
+                    {
+                        try { bundle.Unload(false); } catch { }
+                        bundle = published;
+                    }
                     Completed++;
                 }
 
@@ -278,11 +381,10 @@ namespace VPB
                 {
                     for (int i = 0; i < e.Waiters.Count; i++)
                     {
-                        var w = e.Waiters[i];
-                        if (w == null) continue;
-                        w.assetBundle = bundle;
-                        try { if (w.callback != null) w.callback(w); }
-                        catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] bundle callback threw for " + path + ": " + ex.Message); }
+                        Delivery d = e.Waiters[i];
+                        if (d == null) continue;
+                        d.Bundle = bundle;
+                        d.Ready = true;
                     }
                 }
             }
@@ -296,19 +398,157 @@ namespace VPB
                 s_Running--;
                 if (s_Running < 0) s_Running = 0;
                 MarkPackageBusy(path, -1);
+                MarkProgress();
                 try { Pump(loader); }
                 catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] bundle pump failed: " + ex.Message); }
+                try { Drain(); }
+                catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] bundle drain failed: " + ex.Message); }
             }
+        }
+
+        static void Drain()
+        {
+            if (s_Draining) return;
+            s_Draining = true;
+            try
+            {
+                while (s_DeliveryHead < s_Delivery.Count)
+                {
+                    Delivery d = s_Delivery[s_DeliveryHead];
+                    if (d == null) { s_DeliveryHead++; continue; }
+                    if (!d.Ready) break;
+
+                    s_DeliveryHead++;
+                    var req = d.Request;
+                    d.Request = null;
+                    if (req == null) continue;
+
+                    req.assetBundle = d.Bundle;
+                    try { if (req.callback != null) req.callback(req); }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning("[VPB.Perf] bundle callback threw for "
+                            + (req.path ?? "?") + ": " + ex.Message);
+                    }
+                }
+
+                if (s_DeliveryHead >= s_Delivery.Count)
+                {
+                    s_Delivery.Clear();
+                    s_DeliveryHead = 0;
+                }
+                else if (s_DeliveryHead >= DeliveryCompactThreshold)
+                {
+                    s_Delivery.RemoveRange(0, s_DeliveryHead);
+                    s_DeliveryHead = 0;
+                }
+            }
+            finally
+            {
+                s_Draining = false;
+            }
+        }
+
+        static void EnsureDriver(AssetLoader loader)
+        {
+            if (s_DriverRunning || loader == null) return;
+            s_DriverRunning = true;
+            MarkProgress();
+            loader.StartCoroutine(DriverCo(loader));
+        }
+
+        static IEnumerator DriverCo(AssetLoader loader)
+        {
+            while (true)
+            {
+                yield return null;
+
+                bool idle = false;
+                try
+                {
+                    Drain();
+                    Pump(loader);
+                    Watchdog(loader);
+                    idle = s_DeliveryHead >= s_Delivery.Count
+                        && s_InFlight.Count == 0
+                        && s_Pending.Count == 0
+                        && s_Running == 0;
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB.Perf] bundle driver tick failed: " + ex.Message);
+                }
+
+                if (idle) break;
+            }
+            s_DriverRunning = false;
+        }
+
+        static void Watchdog(AssetLoader loader)
+        {
+            if (s_Running == 0 && s_Pending.Count == 0 && s_InFlight.Count == 0
+                && s_DeliveryHead < s_Delivery.Count)
+            {
+                Delivery head = s_Delivery[s_DeliveryHead];
+                if (head != null && !head.Ready)
+                {
+                    Recovered++;
+                    head.Ready = true;
+                    LogUtil.LogWarning("[VPB.Perf] bundle delivery orphaned for "
+                        + (head.Request != null ? head.Request.path : "?") + "; releasing queue");
+                    Drain();
+                }
+                return;
+            }
+
+            if (s_Pending.Count == 0 || s_Running < MaxConcurrent) return;
+            if (Time.realtimeSinceStartup - s_LastProgressRealtime < StallSeconds) return;
+
+            Recovered++;
+            LogUtil.LogWarning("[VPB.Perf] bundle queue stalled " + StallSeconds + "s (running=" + s_Running
+                + " pending=" + s_Pending.Count + " inflight=" + s_InFlight.Count + "); reclaiming worker slots");
+            s_Running = 0;
+            s_PackageBusy.Clear();
+            MarkProgress();
+            Pump(loader);
+        }
+
+        static long s_WindowServed;
+        static long s_WindowDeduped;
+        static long s_WindowAlreadyLoaded;
+        static long s_WindowStarted;
+        static long s_WindowCompleted;
+        static long s_WindowFailures;
+        static long s_WindowRecovered;
+
+        public static void BeginLoadWindow()
+        {
+            s_WindowServed = Served;
+            s_WindowDeduped = Deduped;
+            s_WindowAlreadyLoaded = AlreadyLoaded;
+            s_WindowStarted = Started;
+            s_WindowCompleted = Completed;
+            s_WindowFailures = Failures;
+            s_WindowRecovered = Recovered;
         }
 
         public static string Status()
         {
-            return "[VPB.Perf] bundleQueue served=" + Served
+            return "[VPB.Perf] bundleQueue load: served=" + (Served - s_WindowServed)
+                + " started=" + (Started - s_WindowStarted)
+                + " dedup=" + (Deduped - s_WindowDeduped)
+                + " cached=" + (AlreadyLoaded - s_WindowAlreadyLoaded)
+                + " done=" + (Completed - s_WindowCompleted)
+                + " fail=" + (Failures - s_WindowFailures)
+                + " recovered=" + (Recovered - s_WindowRecovered)
+                + " | session: served=" + Served
                 + " started=" + Started
                 + " dedup=" + Deduped
                 + " cached=" + AlreadyLoaded
                 + " done=" + Completed
                 + " fail=" + Failures
+                + " recovered=" + Recovered
+                + " | inflight=" + (s_Delivery.Count - s_DeliveryHead)
                 + " maxConcurrent=" + MaxConcurrent;
         }
     }

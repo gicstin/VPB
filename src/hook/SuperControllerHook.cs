@@ -2279,6 +2279,53 @@ namespace VPB
             }
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "IsFileInPackage", new Type[] { typeof(string) })]
+        public static void PostIsFileInPackageOnDemand(string path, ref bool __result)
+        {
+            long t0 = VamSceneLoadPhaseProfiler.Active ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            try
+            {
+                if (__result) return;
+                if (string.IsNullOrEmpty(path)) return;
+                if (path.IndexOf(":/", StringComparison.Ordinal) <= 0
+                    && path.IndexOf(":\\", StringComparison.Ordinal) <= 0) return;
+
+                if (VamOnDemandLoader.s_InOnDemand) return;
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+
+                if (MVR.FileManagement.FileManager.GetVarFileEntry(path) != null)
+                {
+                    __result = true;
+                    LogIsFileInPackageRecovered(path);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostIsFileInPackageOnDemand error: " + ex.Message);
+            }
+            finally
+            {
+                if (t0 != 0L)
+                    VamSceneLoadPhaseProfiler.AddHookCost(VamSceneLoadPhaseProfiler.HookBucket.GetFileEntry,
+                        System.Diagnostics.Stopwatch.GetTimestamp() - t0);
+            }
+        }
+
+        static readonly HashSet<string> s_IsFileInPackageRecoveredLogged =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static void LogIsFileInPackageRecovered(string path)
+        {
+            try
+            {
+                if (s_IsFileInPackageRecoveredLogged.Count > 512) return;
+                if (!s_IsFileInPackageRecoveredLogged.Add(path)) return;
+                LogUtil.Log("[VPB OnDemand] IsFileInPackage recovered: " + path);
+            }
+            catch { }
+        }
+
         /// <summary>
         /// Issue #12: plugins calling native <c>FileManager.GetPackage</c> must see scan-excluded
         /// packages once requested. Register on demand and retry (no full catalog Refresh here).
