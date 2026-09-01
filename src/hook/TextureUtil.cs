@@ -289,33 +289,58 @@ namespace VPB
 
             try
             {
-                if (needsReinit && isCompressedTarget)
+                if (!needsReinit || tex.Resize(w, h, fmt, mipAlloc))
                 {
-                    Texture2D tmp = new Texture2D(w, h, fmt, mipAlloc, linear);
-                    try
+                    if (TextureMatchesCachedLayout(tex, w, h, fmt))
                     {
-                        SafeLoadRawTextureData(tmp, data, w, h, fmt);
-                        tmp.Apply(genMipsOnApply, false);
-                        Graphics.CopyTexture(tmp, tex);
-                    }
-                    finally
-                    {
-                        UnityEngine.Object.Destroy(tmp);
+                        SafeLoadRawTextureData(tex, data, w, h, fmt);
+                        tex.Apply(genMipsOnApply, markNonReadable && !isSimTexture);
+                        return TextureMatchesCachedLayout(tex, w, h, fmt);
                     }
                 }
-                else
-                {
-                    if (needsReinit) tex.Resize(w, h, fmt, mipAlloc);
-                    SafeLoadRawTextureData(tex, data, w, h, fmt);
-                    tex.Apply(genMipsOnApply, markNonReadable && !isSimTexture);
-                }
-                return true;
             }
             catch (Exception ex)
             {
-                LogUtil.LogError("[VPB] ApplyCachedRawToTexture failed: " + ex.Message);
+                if (!isCompressedTarget)
+                {
+                    LogUtil.LogError("[VPB] ApplyCachedRawToTexture failed: " + ex.Message);
+                    return false;
+                }
+                LogUtil.LogWarning("[VPB] ApplyCachedRawToTexture raw load failed (" + ex.Message + "); retrying via GPU copy");
+            }
+
+            if (!isCompressedTarget || isSimTexture) return false;
+
+            try
+            {
+                if (needsReinit && !tex.Resize(w, h, fmt, mipAlloc)) return false;
+                if (!TextureMatchesCachedLayout(tex, w, h, fmt)) return false;
+
+                Texture2D tmp = new Texture2D(w, h, fmt, mipAlloc, linear);
+                try
+                {
+                    SafeLoadRawTextureData(tmp, data, w, h, fmt);
+                    tmp.Apply(genMipsOnApply, false);
+                    Graphics.CopyTexture(tmp, tex);
+                }
+                finally
+                {
+                    UnityEngine.Object.Destroy(tmp);
+                }
+                return TextureMatchesCachedLayout(tex, w, h, fmt);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] ApplyCachedRawToTexture GPU copy failed: " + ex.Message);
                 return false;
             }
+        }
+
+        private static bool TextureMatchesCachedLayout(Texture2D tex, int w, int h, TextureFormat fmt)
+        {
+            if (tex == null) return false;
+            if (tex.width != w || tex.height != h) return false;
+            return tex.format == fmt;
         }
 
         public static Texture2D CreateTextureFromCachedRaw(byte[] data, int w, int h, TextureFormat fmt, bool createMipMaps, bool linear, bool markNonReadable, bool forceReadable)

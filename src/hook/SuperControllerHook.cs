@@ -671,11 +671,31 @@ namespace VPB
                 return null;
             }
 
+            if (IsMissingLocalSavesDirectory(__0))
+                return __exception;
+
             __result = s_EmptyStringArray;
             // Rate-limit: BodyLanguage can hammer missing morph dirs; avoid log spam alloc.
             if (ShouldLogGetFilesEmpty(__0))
                 LogUtil.LogWarning("[VPB] FileManager.GetFiles non-existent path suppressed (returned empty): " + __0);
             return null;
+        }
+
+        static bool IsMissingLocalSavesDirectory(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            try
+            {
+                if (path.IndexOf(":/", StringComparison.Ordinal) > 0) return false;
+                if (path.IndexOf(":\\", StringComparison.Ordinal) > 0) return false;
+
+                string p = path.IndexOf('\\') >= 0 ? path.Replace('\\', '/') : path;
+                if (p.Length > 0 && p[0] == '/') p = p.Substring(1);
+                if (!p.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase)) return false;
+
+                return !Directory.Exists(p);
+            }
+            catch { return false; }
         }
 
         static readonly string[] s_EmptyStringArray = new string[0];
