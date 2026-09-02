@@ -32,6 +32,16 @@ namespace VPB
         {
             public string Path;
             public List<Delivery> Waiters;
+            public Worker Worker;
+        }
+
+        sealed class Worker
+        {
+            public string Path;
+            public Entry Owner;
+            public int LastDriverTick;
+            public float LastTickRealtime;
+            public bool Disowned;
         }
 
         sealed class LoadResult
@@ -43,13 +53,22 @@ namespace VPB
         static readonly List<string> s_Pending = new List<string>();
         static readonly Dictionary<string, int> s_PackageBusy = new Dictionary<string, int>(StringComparer.Ordinal);
         static readonly List<Delivery> s_Delivery = new List<Delivery>();
+        static readonly List<Worker> s_Active = new List<Worker>();
+        static readonly List<string> s_OrphanScratch = new List<string>();
         static int s_DeliveryHead;
         static bool s_Draining;
-        static int s_Running;
+        static bool s_Pumping;
+        static bool s_PumpAgain;
         static bool s_DriverRunning;
+        static int s_DriverTick;
+        static int s_DriverEpoch;
+        static float s_DriverTickRealtime;
+        static AssetLoader s_DriverLoader;
         static float s_LastProgressRealtime;
 
         const float StallSeconds = 60f;
+        const float DriverStallSeconds = 10f;
+        const int WorkerStallTicks = 240;
         const int DeliveryCompactThreshold = 64;
 
         static FieldInfo s_SingletonField;
@@ -204,7 +223,31 @@ namespace VPB
 
         static void Pump(AssetLoader loader)
         {
-            while (s_Running < MaxConcurrent && s_Pending.Count > 0)
+            if (loader == null) return;
+            if (s_Pumping)
+            {
+                s_PumpAgain = true;
+                return;
+            }
+            s_Pumping = true;
+            try
+            {
+                do
+                {
+                    s_PumpAgain = false;
+                    PumpOnce(loader);
+                }
+                while (s_PumpAgain);
+            }
+            finally
+            {
+                s_Pumping = false;
+            }
+        }
+
+        static void PumpOnce(AssetLoader loader)
+        {
+            while (s_Active.Count < MaxConcurrent && s_Pending.Count > 0)
             {
                 string next = null;
                 int nextIndex = -1;
@@ -219,11 +262,23 @@ namespace VPB
                 if (next == null) return;
 
                 s_Pending.RemoveAt(nextIndex);
-                s_Running++;
+
+                Entry owner;
+                if (!s_InFlight.TryGetValue(next, out owner) || owner == null) continue;
+
+                Worker worker = new Worker
+                {
+                    Path = next,
+                    Owner = owner,
+                    LastDriverTick = s_DriverTick,
+                    LastTickRealtime = Time.realtimeSinceStartup
+                };
+                owner.Worker = worker;
+                s_Active.Add(worker);
                 MarkPackageBusy(next, 1);
                 Started++;
                 MarkProgress();
-                loader.StartCoroutine(RunGuarded(loader, next));
+                loader.StartCoroutine(RunGuarded(loader, worker));
             }
         }
 
@@ -259,14 +314,22 @@ namespace VPB
             s_LastProgressRealtime = Time.realtimeSinceStartup;
         }
 
-        static IEnumerator RunGuarded(AssetLoader loader, string path)
+        static void Heartbeat(Worker worker)
+        {
+            worker.LastDriverTick = s_DriverTick;
+            worker.LastTickRealtime = Time.realtimeSinceStartup;
+        }
+
+        static IEnumerator RunGuarded(AssetLoader loader, Worker worker)
         {
             LoadResult result = new LoadResult();
             List<IEnumerator> stack = new List<IEnumerator>(2);
-            stack.Add(LoadOne(path, result));
+            stack.Add(LoadOne(worker.Path, result));
 
             while (stack.Count > 0)
             {
+                Heartbeat(worker);
+
                 IEnumerator top = stack[stack.Count - 1];
                 object current = null;
                 bool moved = false;
@@ -279,7 +342,7 @@ namespace VPB
                 catch (Exception ex)
                 {
                     failed = true;
-                    LogUtil.LogWarning("[VPB.Perf] bundle load threw for " + path + ": " + ex.Message);
+                    LogUtil.LogWarning("[VPB.Perf] bundle load threw for " + worker.Path + ": " + ex.Message);
                 }
 
                 if (failed)
@@ -299,10 +362,22 @@ namespace VPB
                     stack.Add(nested);
                     continue;
                 }
+
+                AsyncOperation op = current as AsyncOperation;
+                if (op != null)
+                {
+                    while (!op.isDone)
+                    {
+                        Heartbeat(worker);
+                        yield return null;
+                    }
+                    continue;
+                }
+
                 yield return current;
             }
 
-            Finish(loader, path, result.Bundle);
+            Finish(loader, worker, result.Bundle);
         }
 
         static IEnumerator LoadOne(string path, LoadResult result)
@@ -332,6 +407,7 @@ namespace VPB
                     yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, bytes);
                     try { abcr = AssetBundle.LoadFromMemoryAsync(bytes); }
                     catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] LoadFromMemoryAsync failed for " + path + ": " + ex.Message); }
+                    bytes = null;
                 }
             }
             else
@@ -348,57 +424,87 @@ namespace VPB
             }
         }
 
-        static void Finish(AssetLoader loader, string path, AssetBundle bundle)
+        static AssetBundle PublishOrUnload(AssetLoader loader, string path, AssetBundle bundle)
         {
-            Entry e = null;
+            if (bundle == null) return null;
+
+            if (loader == null || !ReferenceEquals(Singleton(), loader))
+            {
+                try { bundle.Unload(false); } catch { }
+                return null;
+            }
+
+            var map = PathToBundle(loader);
+            AssetBundle published;
+            if (!map.TryGetValue(path, out published))
+            {
+                map.Add(path, bundle);
+                return bundle;
+            }
+            if (!ReferenceEquals(published, bundle))
+            {
+                try { bundle.Unload(false); } catch { }
+            }
+            return published;
+        }
+
+        static void ResolveWaiters(Entry e, AssetBundle bundle)
+        {
+            if (e == null || e.Waiters == null) return;
+            for (int i = 0; i < e.Waiters.Count; i++)
+            {
+                Delivery d = e.Waiters[i];
+                if (d == null || d.Ready) continue;
+                d.Bundle = bundle;
+                d.Ready = true;
+            }
+            e.Waiters.Clear();
+        }
+
+        static void Finish(AssetLoader loader, Worker worker, AssetBundle bundle)
+        {
+            bool disowned = worker.Disowned;
             try
             {
-                s_InFlight.TryGetValue(path, out e);
-                s_InFlight.Remove(path);
-
-                if (bundle == null)
+                if (disowned)
                 {
-                    Failures++;
-                    SuperController.LogError("Error during attempt to load assetbundle " + path + ". Not valid");
+                    PublishOrUnload(loader, worker.Path, bundle);
                 }
                 else
                 {
-                    var map = PathToBundle(loader);
-                    AssetBundle published;
-                    if (!map.TryGetValue(path, out published))
-                    {
-                        map.Add(path, bundle);
-                    }
-                    else if (!ReferenceEquals(published, bundle))
-                    {
-                        try { bundle.Unload(false); } catch { }
-                        bundle = published;
-                    }
-                    Completed++;
-                }
+                    Entry cur;
+                    if (s_InFlight.TryGetValue(worker.Path, out cur) && ReferenceEquals(cur, worker.Owner))
+                        s_InFlight.Remove(worker.Path);
 
-                if (e != null)
-                {
-                    for (int i = 0; i < e.Waiters.Count; i++)
+                    bundle = PublishOrUnload(loader, worker.Path, bundle);
+
+                    if (bundle == null)
                     {
-                        Delivery d = e.Waiters[i];
-                        if (d == null) continue;
-                        d.Bundle = bundle;
-                        d.Ready = true;
+                        Failures++;
+                        SuperController.LogError("Error during attempt to load assetbundle " + worker.Path + ". Not valid");
                     }
+                    else
+                    {
+                        Completed++;
+                    }
+
+                    ResolveWaiters(worker.Owner, bundle);
                 }
             }
             catch (Exception ex)
             {
                 Failures++;
-                LogUtil.LogWarning("[VPB.Perf] bundle finish failed for " + path + ": " + ex.Message);
+                LogUtil.LogWarning("[VPB.Perf] bundle finish failed for " + worker.Path + ": " + ex.Message);
             }
             finally
             {
-                s_Running--;
-                if (s_Running < 0) s_Running = 0;
-                MarkPackageBusy(path, -1);
-                MarkProgress();
+                if (!disowned)
+                {
+                    s_Active.Remove(worker);
+                    MarkPackageBusy(worker.Path, -1);
+                    MarkProgress();
+                }
+                worker.Owner = null;
                 try { Pump(loader); }
                 catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] bundle pump failed: " + ex.Message); }
                 try { Drain(); }
@@ -420,10 +526,12 @@ namespace VPB
 
                     s_DeliveryHead++;
                     var req = d.Request;
+                    AssetBundle ready = d.Bundle;
                     d.Request = null;
+                    d.Bundle = null;
                     if (req == null) continue;
 
-                    req.assetBundle = d.Bundle;
+                    req.assetBundle = ready;
                     try { if (req.callback != null) req.callback(req); }
                     catch (Exception ex)
                     {
@@ -451,28 +559,62 @@ namespace VPB
 
         static void EnsureDriver(AssetLoader loader)
         {
-            if (s_DriverRunning || loader == null) return;
-            s_DriverRunning = true;
-            MarkProgress();
-            loader.StartCoroutine(DriverCo(loader));
+            if (loader == null) return;
+
+            if (!ReferenceEquals(s_DriverLoader, loader))
+            {
+                AdoptLoader(loader);
+            }
+            else if (s_DriverRunning)
+            {
+                if (Time.realtimeSinceStartup - s_DriverTickRealtime < DriverStallSeconds) return;
+                Recovered++;
+                LogUtil.LogWarning("[VPB.Perf] bundle driver unresponsive; restarting");
+            }
+
+            StartDriver(loader);
         }
 
-        static IEnumerator DriverCo(AssetLoader loader)
+        static void AdoptLoader(AssetLoader loader)
+        {
+            if ((object)s_DriverLoader != null)
+            {
+                for (int i = s_Active.Count - 1; i >= 0; i--)
+                    DisownWorker(i, "AssetLoader replaced");
+                s_PackageBusy.Clear();
+            }
+            s_DriverLoader = loader;
+        }
+
+        static void StartDriver(AssetLoader loader)
+        {
+            s_DriverLoader = loader;
+            s_DriverRunning = true;
+            s_DriverEpoch++;
+            s_DriverTickRealtime = Time.realtimeSinceStartup;
+            MarkProgress();
+            loader.StartCoroutine(DriverCo(loader, s_DriverEpoch));
+        }
+
+        static IEnumerator DriverCo(AssetLoader loader, int epoch)
         {
             while (true)
             {
                 yield return null;
+                if (epoch != s_DriverEpoch) yield break;
 
                 bool idle = false;
                 try
                 {
+                    s_DriverTick++;
+                    s_DriverTickRealtime = Time.realtimeSinceStartup;
                     Drain();
                     Pump(loader);
                     Watchdog(loader);
                     idle = s_DeliveryHead >= s_Delivery.Count
                         && s_InFlight.Count == 0
                         && s_Pending.Count == 0
-                        && s_Running == 0;
+                        && s_Active.Count == 0;
                 }
                 catch (Exception ex)
                 {
@@ -481,13 +623,84 @@ namespace VPB
 
                 if (idle) break;
             }
-            s_DriverRunning = false;
+            if (epoch == s_DriverEpoch) s_DriverRunning = false;
+        }
+
+        static void DisownWorker(int index, string reason)
+        {
+            Worker w = s_Active[index];
+            s_Active.RemoveAt(index);
+            if (w == null) return;
+
+            w.Disowned = true;
+            MarkPackageBusy(w.Path, -1);
+            Recovered++;
+            Failures++;
+            LogUtil.LogWarning("[VPB.Perf] bundle worker abandoned for " + w.Path + " (" + reason + ")");
+
+            Entry e = w.Owner;
+            Entry cur;
+            if (e != null && s_InFlight.TryGetValue(w.Path, out cur) && ReferenceEquals(cur, e))
+                s_InFlight.Remove(w.Path);
+            ResolveWaiters(e, null);
+            MarkProgress();
+        }
+
+        static void ReclaimDeadWorkers()
+        {
+            if (s_Active.Count == 0) return;
+            float now = Time.realtimeSinceStartup;
+            for (int i = s_Active.Count - 1; i >= 0; i--)
+            {
+                Worker w = s_Active[i];
+                if (w == null) { s_Active.RemoveAt(i); continue; }
+                if (s_DriverTick - w.LastDriverTick < WorkerStallTicks) continue;
+                if (now - w.LastTickRealtime < StallSeconds) continue;
+                DisownWorker(i, "no coroutine tick for " + StallSeconds + "s");
+            }
+        }
+
+        static void ReleaseOrphanEntries()
+        {
+            s_OrphanScratch.Clear();
+            foreach (var kv in s_InFlight) s_OrphanScratch.Add(kv.Key);
+
+            for (int i = 0; i < s_OrphanScratch.Count; i++)
+            {
+                Entry e;
+                if (!s_InFlight.TryGetValue(s_OrphanScratch[i], out e)) continue;
+                s_InFlight.Remove(s_OrphanScratch[i]);
+                Recovered++;
+                Failures++;
+                LogUtil.LogWarning("[VPB.Perf] bundle entry orphaned for " + s_OrphanScratch[i] + "; releasing waiters");
+                ResolveWaiters(e, null);
+            }
+            s_OrphanScratch.Clear();
+            MarkProgress();
         }
 
         static void Watchdog(AssetLoader loader)
         {
-            if (s_Running == 0 && s_Pending.Count == 0 && s_InFlight.Count == 0
-                && s_DeliveryHead < s_Delivery.Count)
+            ReclaimDeadWorkers();
+
+            if (s_Active.Count > 0) return;
+
+            if (s_PackageBusy.Count > 0) s_PackageBusy.Clear();
+
+            if (s_Pending.Count > 0)
+            {
+                Pump(loader);
+                return;
+            }
+
+            if (s_InFlight.Count > 0)
+            {
+                ReleaseOrphanEntries();
+                Drain();
+                return;
+            }
+
+            if (s_DeliveryHead < s_Delivery.Count)
             {
                 Delivery head = s_Delivery[s_DeliveryHead];
                 if (head != null && !head.Ready)
@@ -498,19 +711,7 @@ namespace VPB
                         + (head.Request != null ? head.Request.path : "?") + "; releasing queue");
                     Drain();
                 }
-                return;
             }
-
-            if (s_Pending.Count == 0 || s_Running < MaxConcurrent) return;
-            if (Time.realtimeSinceStartup - s_LastProgressRealtime < StallSeconds) return;
-
-            Recovered++;
-            LogUtil.LogWarning("[VPB.Perf] bundle queue stalled " + StallSeconds + "s (running=" + s_Running
-                + " pending=" + s_Pending.Count + " inflight=" + s_InFlight.Count + "); reclaiming worker slots");
-            s_Running = 0;
-            s_PackageBusy.Clear();
-            MarkProgress();
-            Pump(loader);
         }
 
         static long s_WindowServed;
@@ -549,6 +750,8 @@ namespace VPB
                 + " fail=" + Failures
                 + " recovered=" + Recovered
                 + " | inflight=" + (s_Delivery.Count - s_DeliveryHead)
+                + " active=" + s_Active.Count
+                + " pending=" + s_Pending.Count
                 + " maxConcurrent=" + MaxConcurrent;
         }
     }
