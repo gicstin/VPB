@@ -75,12 +75,15 @@ namespace VPB
         internal static IEnumerator CoWaitForCapacity(int payloadBytes)
         {
             if (payloadBytes <= 0 || payloadBytes > MaxPendingPayloadBytes) yield break;
-            while (!s_Cancel && (PendingCount >= MaxPendingJobs || Interlocked.Read(ref s_PayloadBytes) + payloadBytes > MaxPendingPayloadBytes))
+            while (!s_Cancel && !VpbShutdown.IsQuitting
+                && (PendingCount >= MaxPendingJobs || Interlocked.Read(ref s_PayloadBytes) + payloadBytes > MaxPendingPayloadBytes))
                 yield return null;
         }
 
         internal static void BeginJobSession()
         {
+            if (VpbShutdown.IsQuitting) return;
+            try { VpbShutdown.Register("zstd-write-queue", RequestCancel); } catch { }
             s_Cancel = false;
             s_MaxWriters = ResolveMaxWriters();
             TryBoostThreadPool();
@@ -324,7 +327,7 @@ namespace VPB
             try
             {
                 if (job == null) return;
-                if (s_Cancel)
+                if (s_Cancel || VpbShutdown.IsQuitting)
                 {
                     ReleaseJob(job);
                     NativeTextureOnDemandCache.NotifyZstdWriteFailed();

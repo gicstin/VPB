@@ -266,6 +266,10 @@ namespace VPB
             singleton = this;
             IsFileManagerInited = false;
 
+            try { VpbShutdown.Arm(); } catch { }
+            try { VpbLocalDatabase.RegisterShutdownHooks(); } catch { }
+            try { VpbProgressService.RegisterShutdownHooks(); } catch { }
+
             try
             {
                 var current = Debug.unityLogger.logHandler;

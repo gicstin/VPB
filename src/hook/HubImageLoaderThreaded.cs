@@ -862,6 +862,8 @@ namespace VPB
         {
             if (!_threadsRunning)
             {
+                if (VpbShutdown.IsQuitting) return;
+                try { VpbShutdown.Register("hub-image-loader", StopThreads); } catch { }
                 _threadsRunning = true;
                 imageLoaderTask = new ImageLoaderTaskInfo();
                 imageLoaderTask.name = "HubImageLoaderTask";

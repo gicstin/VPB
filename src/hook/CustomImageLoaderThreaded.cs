@@ -1644,6 +1644,8 @@ namespace VPB
             lock (typeof(CustomImageLoaderThreaded))
             {
                 if (_varThumbIoThread != null && _varThumbIoThread.IsAlive) return;
+                if (VpbShutdown.IsQuitting) return;
+                try { VpbShutdown.Register("var-thumb-io", StopVarThumbIoWorker); } catch { }
                 _varThumbIoStop = false;
                 _varThumbIoThread = new Thread(VarThumbIoLoop)
                 {
@@ -1654,9 +1656,19 @@ namespace VPB
             }
         }
 
+        private static void StopVarThumbIoWorker()
+        {
+            _varThumbIoStop = true;
+            Thread t = _varThumbIoThread;
+            if (t != null && t.IsAlive)
+            {
+                try { t.Join(250); } catch { }
+            }
+        }
+
         private static void VarThumbIoLoop()
         {
-            while (!_varThumbIoStop)
+            while (!_varThumbIoStop && !VpbShutdown.IsQuitting)
             {
                 QueuedImage qi = null;
                 try

@@ -358,7 +358,7 @@ namespace VPB
                 string varPath = CleanFilePath(rawPath);
                 diff.PathHashSet.Add(varPath);
 
-                string candidateUid = CanonicalizeUidSegments(packagePathToUid(varPath));
+                string candidateUid = packagePathToUid(varPath);
                 if (VpbPackageIndexDiagnostics.ShouldTrace(candidateUid))
                 {
                     bool dupUid = existingUids != null && existingUids.Contains(candidateUid);
@@ -588,7 +588,10 @@ namespace VPB
             });
 
             while (!diffReady.WaitOne(0))
+            {
+                if (VpbShutdown.IsQuitting) yield break;
                 yield return null;
+            }
             diffReady.Close();
 
             HashSet<string> addSet;
@@ -765,8 +768,9 @@ namespace VPB
         }
 
         /// <summary>
-        /// Trim whitespace on each <c>Creator.Name.Version</c> segment.
-        /// Hub ids never include the space in names like <c>verytoxic.Lingerie[A] .2.var</c>.
+        /// Whitespace-trimmed <c>Creator.Name.Version</c> alias used only for LOOKUP fallback and Hub queries.
+        /// Never a registry key and never a dedup criterion: <c>verytoxic. Laid_Edges.2.var</c> and
+        /// <c>verytoxic.Laid_Edges.2.var</c> are two distinct packages, exactly as VaM treats them.
         /// </summary>
         internal static string CanonicalizeUidSegments(string uid)
         {
@@ -845,7 +849,7 @@ namespace VPB
             canonicalUid = null;
             if (string.IsNullOrEmpty(vpath)) return false;
             string cleanPath = CleanFilePath(vpath);
-            string text = CanonicalizeUidSegments(packagePathToUid(cleanPath));
+            string text = packagePathToUid(cleanPath);
             string[] array = text.Split('.');
             if (array.Length != 3) return false;
             string creator = array[0];
@@ -922,17 +926,25 @@ namespace VPB
             catch { }
         }
 
+        /// <summary>
+        /// Reasons that must re-walk the disk instead of trusting the cached var-path inventory.
+        /// Deletions self-heal (the per-row existence check fails the cache), but ADDITIONS are invisible
+        /// to a cached path list, so any reason that can introduce a new .var belongs here — including
+        /// <c>gallery_manual</c>, which is the user explicitly saying "I changed the folder, go look".
+        /// </summary>
         static bool RefreshReasonNeedsFreshVarDiskEnum(string refreshReason)
+        {
+            if (string.IsNullOrEmpty(refreshReason)) return false;
+            return RefreshReasonNeedsHubPackageScan(refreshReason)
+                || refreshReason.IndexOf("gallery_manual", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static bool RefreshReasonNeedsHubPackageScan(string refreshReason)
         {
             if (string.IsNullOrEmpty(refreshReason)) return false;
             return refreshReason.IndexOf("hub_download", StringComparison.OrdinalIgnoreCase) >= 0
                 || refreshReason.IndexOf("hub_delete", StringComparison.OrdinalIgnoreCase) >= 0
                 || refreshReason.IndexOf("hub_deferred", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        static bool RefreshReasonNeedsHubPackageScan(string refreshReason)
-        {
-            return RefreshReasonNeedsFreshVarDiskEnum(refreshReason);
         }
 
         /// <summary>
@@ -1001,7 +1013,7 @@ namespace VPB
                 LogUtil.Log("RegisterPackage " + vpath);
             }
             string cleanPath = CleanFilePath(vpath);
-            string text = CanonicalizeUidSegments(packagePathToUid(cleanPath));
+            string text = packagePathToUid(cleanPath);
             string[] array = text.Split('.');
 
             bool isDuplicated = false;
@@ -1918,6 +1930,11 @@ namespace VPB
                 ManualResetEvent inventoryDone = new ManualResetEvent(false);
                 bool usedPathCache = false;
                 bool skipPathInventoryCache = RefreshReasonNeedsFreshVarDiskEnum(refreshReason);
+                if (skipPathInventoryCache)
+                {
+                    try { VpbLocalDatabase.InvalidateScanRootSignatureCaches(); } catch { }
+                    try { LogUtil.Log("Var path inventory bypassed (forced fresh disk enum) reason=" + refreshReason); } catch { }
+                }
                 ThreadPool.QueueUserWorkItem((state) =>
                 {
                     try
@@ -1953,6 +1970,11 @@ namespace VPB
 
                 while (!inventoryDone.WaitOne(0) || !manifestDone.WaitOne(0))
                 {
+                    if (VpbShutdown.IsQuitting)
+                    {
+                        try { VpbProgressService.EndManifestLoad(); } catch { }
+                        yield break;
+                    }
                     yield return null;
                 }
                 try { VpbProgressService.EndManifestLoad(); } catch { }
@@ -2458,7 +2480,7 @@ namespace VPB
 					{
 						try
 						{
-							while (true)
+							while (!VpbShutdown.IsQuitting)
 							{
 								int i = Interlocked.Increment(ref nextIndex);
 								if (i >= packages.Length) break;
@@ -2512,6 +2534,7 @@ namespace VPB
 							try { VpbLocalDatabase.NotifyDeepScanProgress(idx, allCount); } catch { }
 						}
 					}
+					if (VpbShutdown.IsQuitting) yield break;
 					yield return null;
 				}
 				doneEvent.Close();
@@ -3790,7 +3813,7 @@ namespace VPB
 				catch { }
 			}
 			if (!string.IsNullOrEmpty(fromPath))
-				return CanonicalizeUidSegments(fromPath);
+				return fromPath;
 
 			if (string.IsNullOrEmpty(storedPackageUid))
 				return null;
@@ -3811,7 +3834,18 @@ namespace VPB
 			else if (s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
 				s = s.Substring(0, s.Length - 4);
 
-			return string.IsNullOrEmpty(s) ? null : CanonicalizeUidSegments(s);
+			return string.IsNullOrEmpty(s) ? null : s;
+		}
+
+		static bool IndexedRowUidMatches(string liveUid, string uidKey)
+		{
+			if (string.IsNullOrEmpty(liveUid) || string.IsNullOrEmpty(uidKey)) return false;
+			if (string.Equals(liveUid, uidKey, StringComparison.OrdinalIgnoreCase)) return true;
+			if (!UidHasWhitespace(liveUid) && !UidHasWhitespace(uidKey)) return false;
+			return string.Equals(
+				CanonicalizeUidSegments(liveUid),
+				CanonicalizeUidSegments(uidKey),
+				StringComparison.OrdinalIgnoreCase);
 		}
 
 		/// <summary>
@@ -3826,14 +3860,22 @@ namespace VPB
 
 			lock (packagesLock)
 			{
-				if (packagesByUid != null && packagesByUid.TryGetValue(uidKey, out pkg) && pkg != null)
-					return true;
+				if (packagesByUid != null)
+				{
+					if (packagesByUid.TryGetValue(uidKey, out pkg) && pkg != null)
+						return true;
+					string aliasKey = CanonicalizeUidSegments(uidKey);
+					if (!string.Equals(aliasKey, uidKey, StringComparison.Ordinal)
+						&& packagesByUid.TryGetValue(aliasKey, out pkg) && pkg != null)
+						return true;
+					pkg = null;
+				}
 			}
 
 			if (!string.IsNullOrEmpty(lastKnownVarPath))
 			{
 				pkg = GetPackage(lastKnownVarPath, false);
-				if (pkg != null && string.Equals(pkg.Uid, uidKey, StringComparison.OrdinalIgnoreCase))
+				if (pkg != null && IndexedRowUidMatches(pkg.Uid, uidKey))
 					return true;
 				pkg = null;
 			}
@@ -3842,11 +3884,11 @@ namespace VPB
 			if (!string.IsNullOrEmpty(fn) && fn.IndexOf('.') >= 0)
 			{
 				pkg = GetPackage("AddonPackages/" + fn, false);
-				if (pkg != null && string.Equals(pkg.Uid, uidKey, StringComparison.OrdinalIgnoreCase))
+				if (pkg != null && IndexedRowUidMatches(pkg.Uid, uidKey))
 					return true;
 				pkg = null;
 				pkg = GetPackage("AllPackages/" + fn, false);
-				if (pkg != null && string.Equals(pkg.Uid, uidKey, StringComparison.OrdinalIgnoreCase))
+				if (pkg != null && IndexedRowUidMatches(pkg.Uid, uidKey))
 					return true;
 				pkg = null;
 			}
@@ -3858,7 +3900,7 @@ namespace VPB
 				if (p.IndexOf('/') >= 0 || p.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
 				{
 					pkg = GetPackage(p, false);
-					if (pkg != null && string.Equals(pkg.Uid, uidKey, StringComparison.OrdinalIgnoreCase))
+					if (pkg != null && IndexedRowUidMatches(pkg.Uid, uidKey))
 						return true;
 					pkg = null;
 				}
@@ -4187,6 +4229,64 @@ namespace VPB
 
 					ulong index = ((ulong)info.FileIndexHigh << 32) | info.FileIndexLow;
 					fileId = info.VolumeSerialNumber.ToString("X8") + ":" + index.ToString("X16");
+					return true;
+				}
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Directory LastWriteTime as <see cref="DateTime.ToBinary"/>, following junctions/symlinks to the
+		/// real directory. <c>Directory.GetLastWriteTimeUtc</c> on a reparse point reports the LINK node's
+		/// own timestamp, which never moves when content is added to the target — a symlinked AddonPackages
+		/// therefore looks permanently unchanged. Returns false when the link cannot be resolved, so callers
+		/// can refuse to treat an unreadable root as "unchanged".
+		/// </summary>
+		internal static bool TryGetDirectoryLastWriteBinaryFollowingLinks(string path, out long binary, out bool isReparsePoint)
+		{
+			binary = 0;
+			isReparsePoint = false;
+			if (string.IsNullOrEmpty(path)) return false;
+
+			try
+			{
+				FileAttributes attr = File.GetAttributes(path);
+				isReparsePoint = (attr & FileAttributes.ReparsePoint) != 0;
+				if (!isReparsePoint)
+				{
+					binary = Directory.GetLastWriteTimeUtc(path).ToBinary();
+					return true;
+				}
+			}
+			catch
+			{
+				return false;
+			}
+
+			try
+			{
+				using (SafeFileHandle handle = CreateFile(
+					path,
+					0x80,
+					(uint)(FileShare.ReadWrite | FileShare.Delete),
+					IntPtr.Zero,
+					OPEN_EXISTING,
+					FILE_FLAG_BACKUP_SEMANTICS,
+					IntPtr.Zero))
+				{
+					if (handle.IsInvalid) return false;
+
+					BY_HANDLE_FILE_INFORMATION info;
+					if (!GetFileInformationByHandle(handle.DangerousGetHandle(), out info))
+						return false;
+
+					long ft = ((long)info.LastWriteTime.dwHighDateTime << 32)
+						| (uint)info.LastWriteTime.dwLowDateTime;
+					if (ft <= 0) return false;
+					binary = DateTime.FromFileTimeUtc(ft).ToBinary();
 					return true;
 				}
 			}

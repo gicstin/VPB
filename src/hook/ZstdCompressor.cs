@@ -100,10 +100,12 @@ namespace VPB
         private static void RegisterActiveProcess(Process process)
         {
             if (process == null) return;
+            try { VpbShutdown.Register("zstd-child-processes", KillActiveProcesses); } catch { }
             lock (_activeProcLock)
             {
                 _activeProcs.Add(process);
             }
+            if (VpbShutdown.IsQuitting) KillActiveProcesses();
         }
 
         private static void UnregisterActiveProcess(Process process)

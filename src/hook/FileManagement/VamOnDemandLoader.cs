@@ -1617,6 +1617,19 @@ namespace VPB
                 return null;
             }
 
+            string onDiskUid = UidFromVarPath(varPath);
+            if (!string.IsNullOrEmpty(onDiskUid)
+                && !string.Equals(onDiskUid, resolvedUid, StringComparison.OrdinalIgnoreCase)
+                && IsUidAlreadyRegisteredInVam(onDiskUid))
+            {
+                lock (s_RegisteredLock)
+                {
+                    s_RegisteredOnDemand.Add(onDiskUid);
+                    if (!string.IsNullOrEmpty(resolvedUid)) s_RegisteredOnDemand.Add(resolvedUid);
+                }
+                return null;
+            }
+
             // RegisterPackage can run before native managers initialize, so replay requests after refresh readiness.
             if (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged())
             {
@@ -1960,10 +1973,16 @@ namespace VPB
 
             // Deferred startup requests can become "already registered" by the time they drain
             // (e.g. VaM's first Refresh scanned the temporary allow-list). Skip duplicate invokes.
-            if (IsUidAlreadyRegisteredInVam(uid))
+            string diskUid = UidFromVarPath(varPath);
+            bool sameAsDisk = string.IsNullOrEmpty(diskUid)
+                || string.Equals(diskUid, uid, StringComparison.OrdinalIgnoreCase);
+            if (IsUidAlreadyRegisteredInVam(uid) || (!sameAsDisk && IsUidAlreadyRegisteredInVam(diskUid)))
             {
                 lock (s_RegisteredLock)
+                {
                     s_RegisteredOnDemand.Add(uid);
+                    if (!sameAsDisk) s_RegisteredOnDemand.Add(diskUid);
+                }
                 lock (s_FailedLock)
                     s_LastFailedAttemptTicksByUid.Remove(uid);
                 return;

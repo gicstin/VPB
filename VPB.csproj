@@ -331,6 +331,7 @@
     <Compile Include="src\hook\VpbBusyChrome.cs" />
     <Compile Include="src\hook\VpbOsBusyHeartbeat.cs" />
     <Compile Include="src\hook\VpbProgressService.cs" />
+    <Compile Include="src\hook\VpbShutdown.cs" />
     <Compile Include="src\hook\SceneLoadNativeUiBridge.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
     <Compile Include="src\hook\TurboJpegNative.cs" />

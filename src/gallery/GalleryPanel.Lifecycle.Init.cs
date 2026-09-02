@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -472,7 +472,7 @@ namespace VPB
 
             titleBarRefreshBtnText = refreshBtn.GetComponentInChildren<Text>();
             VPBUiFont.ApplyTo(titleBarRefreshBtnText);
-            AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages (right-click: VaM file list only)");
+            AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Rescan packages from disk — picks up .var files added or renamed outside VaM (right-click: VaM file list only)");
             { var s = UI.LoadIconSprite("refresh", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(refreshBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
 
             // Settings (title bar, left of filter presets; side rails no longer host Settings)
@@ -829,7 +829,7 @@ namespace VPB
                 });
                 rightRefreshEt.triggers.Add(rightRefreshPointerClick);
 
-                AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages (right-click: VaM file list only)");
+                AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Rescan packages from disk — picks up .var files added or renamed outside VaM (right-click: VaM file list only)");
 
                 _rightMainSideSearchOnValueChanged = (val) => {
                     if (_suppressMainSideSearchValueChanged) return;

@@ -33,8 +33,10 @@ namespace VPB
         {
             if (s_stop) return;
             if (s_started) return;
+            if (VpbShutdown.IsQuitting) return;
             s_started = true;
             s_stop = false;
+            try { VpbShutdown.Register("companion-pipe", Stop); } catch { }
             // Dedicated background thread — never park ThreadPool on WaitForConnection.
             // Occupied pool thread + native pipe wait keeps Unity from exiting (same class as #91).
             s_thread = new Thread(AcceptLoop);
@@ -104,7 +106,7 @@ namespace VPB
 
         static void AcceptLoop()
         {
-            while (!s_stop)
+            while (!s_stop && !VpbShutdown.IsQuitting)
             {
                 NamedPipeServerStream pipe = null;
                 try
@@ -149,9 +151,9 @@ namespace VPB
             var pending = new Pending { Line = line, Done = new ManualResetEvent(false) };
             lock (s_MainLock)
                 s_Main.Enqueue(pending);
-            if (!pending.Done.WaitOne(15000))
+            if (!VpbShutdown.WaitOrQuit(pending.Done, 15000))
             {
-                writer.WriteLine("ERR timeout");
+                writer.WriteLine(VpbShutdown.IsQuitting ? "ERR stopping" : "ERR timeout");
                 return;
             }
             if (s_stop) return;

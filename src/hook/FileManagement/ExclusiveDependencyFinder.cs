@@ -144,6 +144,15 @@ namespace VPB
             if (string.IsNullOrEmpty(group)) group = GroupShort(canon);
             if (string.IsNullOrEmpty(group)) return;
 
+            RememberInstalledGroup(input, newestVer, group, uid, ver);
+
+            string canonGroup = GroupShort(canon);
+            if (!string.IsNullOrEmpty(canonGroup) && !string.Equals(canonGroup, group, StringComparison.OrdinalIgnoreCase))
+                RememberInstalledGroup(input, newestVer, canonGroup, uid, ver);
+        }
+
+        static void RememberInstalledGroup(ScanInput input, Dictionary<string, int> newestVer, string group, string uid, int ver)
+        {
             List<string> list;
             if (!input.GroupToUids.TryGetValue(group, out list) || list == null)
             {
@@ -471,6 +480,12 @@ namespace VPB
             if (input.InstalledUids != null && input.InstalledUids.Contains(t))
                 return t;
 
+            string canonToken = FileManager.CanonicalizeUidSegments(t);
+            if (!string.Equals(canonToken, t, StringComparison.Ordinal)
+                && input.InstalledUids != null
+                && input.InstalledUids.Contains(canonToken))
+                return canonToken;
+
             string group = GroupShort(t);
             if (string.IsNullOrEmpty(group)) return null;
             string ver = LastSegment(t);
@@ -493,7 +508,12 @@ namespace VPB
         static string NewestInGroup(string group, ScanInput input)
         {
             string newest;
-            if (input.GroupToNewestUid != null && input.GroupToNewestUid.TryGetValue(group, out newest))
+            if (input.GroupToNewestUid == null) return null;
+            if (input.GroupToNewestUid.TryGetValue(group, out newest))
+                return newest;
+            string canonGroup = FileManager.CanonicalizeUidSegments(group);
+            if (!string.Equals(canonGroup, group, StringComparison.Ordinal)
+                && input.GroupToNewestUid.TryGetValue(canonGroup, out newest))
                 return newest;
             return null;
         }
@@ -501,8 +521,15 @@ namespace VPB
         static string ClosestMin(string group, int minVer, ScanInput input)
         {
             List<string> uids;
-            if (input.GroupToUids == null || !input.GroupToUids.TryGetValue(group, out uids) || uids == null)
-                return null;
+            if (input.GroupToUids == null) return null;
+            if (!input.GroupToUids.TryGetValue(group, out uids) || uids == null)
+            {
+                string canonGroup = FileManager.CanonicalizeUidSegments(group);
+                if (string.Equals(canonGroup, group, StringComparison.Ordinal)
+                    || !input.GroupToUids.TryGetValue(canonGroup, out uids)
+                    || uids == null)
+                    return null;
+            }
             string bestUid = null;
             int bestVer = int.MaxValue;
             for (int i = 0; i < uids.Count; i++)
@@ -531,7 +558,6 @@ namespace VPB
             if (lastSlash >= 0 && lastSlash + 1 < d.Length) d = d.Substring(lastSlash + 1);
             if (d.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
                 d = d.Substring(0, d.Length - 4);
-            d = FileManager.CanonicalizeUidSegments(d);
             if (string.IsNullOrEmpty(d)) return null;
             if (string.Equals(d, "SELF", StringComparison.OrdinalIgnoreCase)) return null;
             return d;

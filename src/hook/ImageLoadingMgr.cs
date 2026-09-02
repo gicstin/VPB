@@ -2419,7 +2419,7 @@ namespace VPB
                 {
                     try
                     {
-                        while (!CurrentZstdStats.CancelRequested)
+                        while (!CurrentZstdStats.CancelRequested && !VpbShutdown.IsQuitting)
                         {
                             BulkZstdWorkItem item = null;
                             lock (queueLock)
@@ -2443,7 +2443,7 @@ namespace VPB
                 worker.Start();
             }
 
-            done.WaitOne();
+            VpbShutdown.WaitOrQuit(done);
             done.Close();
         }
 

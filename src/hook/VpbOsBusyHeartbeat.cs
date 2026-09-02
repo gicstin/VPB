@@ -125,6 +125,7 @@ namespace VPB
             {
                 if (s_ShutdownRequested) return;
                 if (s_Thread != null && s_ThreadRunning) return;
+                try { VpbShutdown.Register("os-busy-heartbeat", Shutdown); } catch { }
                 s_ThreadRunning = true;
                 s_Thread = new Thread(ThreadMain);
                 s_Thread.IsBackground = true;

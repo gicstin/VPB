@@ -661,6 +661,20 @@ namespace VPB
                 if (evOk) MetaSet(conn, EverythingDematKey, "1");
             }
 
+            const string UidWhitespaceRepairKey = "uid_whitespace_identity_repair_v1";
+            if (string.IsNullOrEmpty(MetaGet(conn, UidWhitespaceRepairKey)))
+            {
+                int purged;
+                if (TryPurgePkgRowsWithMismatchedVarPathUid(conn, out purged))
+                {
+                    if (purged > 0)
+                    {
+                        try { LogUtil.Log("[VPB.DB] uid/var_path identity repair purged " + purged + " stale package rows"); } catch { }
+                    }
+                    MetaSet(conn, UidWhitespaceRepairKey, "1");
+                }
+            }
+
             EnsurePackageManifestSchema(conn);
             EnsureGalleryUserTagTables(conn);
             EnsureFilterPresetTables(conn);
@@ -668,6 +682,81 @@ namespace VPB
             EnsurePkgNewestSchema(conn);
             EnsurePkgLicenseSchema(conn);
             EnsureHideMarkerSchema(conn);
+        }
+
+        /// <summary>
+        /// Drops <c>pkg</c> rows whose <c>uid</c> disagrees with the .var file name in <c>var_path</c>.
+        /// Rows written while VPB trimmed whitespace out of uid segments can carry one file's payload
+        /// under another file's identity; they cannot self-heal because the uid key still looks live.
+        /// </summary>
+        static bool TryPurgePkgRowsWithMismatchedVarPathUid(VpbSqlite3.Connection conn, out int purged)
+        {
+            purged = 0;
+            List<string> stale = null;
+            try
+            {
+                using (var sel = conn.Prepare("SELECT uid, ifnull(var_path,'') FROM pkg WHERE var_path IS NOT NULL AND var_path <> ''"))
+                {
+                    while (sel.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string uid = sel.ColumnText(0);
+                        if (string.IsNullOrEmpty(uid)) continue;
+                        string varPath = sel.ColumnText(1);
+                        if (string.IsNullOrEmpty(varPath)) continue;
+
+                        string fileUid = UidFromVarPathForRepair(varPath);
+                        if (string.IsNullOrEmpty(fileUid)) continue;
+                        if (string.Equals(fileUid, uid, StringComparison.OrdinalIgnoreCase)) continue;
+
+                        if (stale == null) stale = new List<string>();
+                        stale.Add(uid);
+                    }
+                }
+            }
+            catch { return false; }
+
+            if (stale == null || stale.Count == 0) return true;
+
+            try
+            {
+                conn.ExecUtf8("BEGIN IMMEDIATE;");
+                using (var delMem = conn.Prepare("DELETE FROM cat_mem WHERE pkg_uid=?"))
+                using (var delDepSrc = conn.Prepare("DELETE FROM pkg_dep WHERE src_uid=?"))
+                using (var delDepRef = conn.Prepare("DELETE FROM pkg_dep WHERE dep_uid=?"))
+                using (var delPkg = conn.Prepare("DELETE FROM pkg WHERE uid=?"))
+                {
+                    for (int i = 0; i < stale.Count; i++)
+                    {
+                        string uid = stale[i];
+                        delMem.BindText(1, uid); delMem.Step(); delMem.Reset();
+                        delDepSrc.BindText(1, uid); delDepSrc.Step(); delDepSrc.Reset();
+                        delDepRef.BindText(1, uid); delDepRef.Step(); delDepRef.Reset();
+                        delPkg.BindText(1, uid); delPkg.Step(); delPkg.Reset();
+                    }
+                }
+                conn.ExecUtf8("COMMIT;");
+            }
+            catch
+            {
+                try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                return false;
+            }
+
+            purged = stale.Count;
+            return true;
+        }
+
+        static string UidFromVarPathForRepair(string varPath)
+        {
+            if (string.IsNullOrEmpty(varPath)) return null;
+            string parsed;
+            try
+            {
+                if (FileManager.TryGetCanonicalUidFromVarPath(varPath, out parsed) && !string.IsNullOrEmpty(parsed))
+                    return parsed;
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process. Returns true on success (including no-op).</summary>
@@ -1970,12 +2059,11 @@ namespace VPB
             try
             {
                 if (!Directory.Exists(root)) return max;
-                try
-                {
-                    long rootM = Directory.GetLastWriteTimeUtc(root).ToBinary();
-                    if (rootM > max) max = rootM;
-                }
-                catch { }
+                long rootM;
+                bool rootLink;
+                if (FileManager.TryGetDirectoryLastWriteBinaryFollowingLinks(root, out rootM, out rootLink)
+                    && rootM > max)
+                    max = rootM;
 
                 string[] dirs;
                 try { dirs = Directory.GetDirectories(root, "*", SearchOption.AllDirectories); }
@@ -1985,12 +2073,11 @@ namespace VPB
                 {
                     for (int i = 0; i < dirs.Length; i++)
                     {
-                        try
-                        {
-                            long m = Directory.GetLastWriteTimeUtc(dirs[i]).ToBinary();
-                            if (m > max) max = m;
-                        }
-                        catch { }
+                        long m;
+                        bool link;
+                        if (FileManager.TryGetDirectoryLastWriteBinaryFollowingLinks(dirs[i], out m, out link)
+                            && m > max)
+                            max = m;
                     }
                 }
             }
@@ -2898,6 +2985,19 @@ namespace VPB
 
         internal static bool IsGalleryIndexRebuildActive() => s_RebuildRunning || s_RebuildScheduled;
 
+        /// <summary>
+        /// Quit stopper: give a running index worker a short window to leave its loops cleanly, then
+        /// interrupt every open connection so nothing stays parked inside native sqlite3_step.
+        /// </summary>
+        internal static void RegisterShutdownHooks()
+        {
+            VpbShutdown.Register("gallery-sql-index", () =>
+            {
+                VpbShutdown.WaitForIdleOrTimeout(() => s_RebuildRunning, 1200, 25);
+                try { VpbSqlite3.InterruptAllForShutdown(); } catch { }
+            });
+        }
+
         /// <summary>True while gallery SQLite index is being built or about to start (startup overlay).</summary>
         internal static bool ShouldShowGalleryIndexBuildOverlay()
         {
@@ -3559,6 +3659,7 @@ namespace VPB
                 if (parallelCatMem)
                 {
                     ParallelClassifyCatMemForPackages(pkgArray, classifier, workerCatMemLists, classifyWorkers, out classifyTicks);
+                    ThrowIfQuitting();
                     FlushWorkerCatMemRowLists(workerCatMemLists, classifyWorkers, catMemBatch, insMem, ref nCatMemInserted, ref catMemSqlTicks);
                 }
                 else
@@ -3568,6 +3669,7 @@ namespace VPB
                     {
                         VarPackage pkg = pkgArray[pi];
                         if (pkg == null) continue;
+                        if ((pi & 0x3F) == 0) ThrowIfQuitting();
                         seqRows.Clear();
                         ClassifyPackageCatMemRows(pkg, classifier, seqRows);
                         FlushCatMemRows(seqRows, catMemBatch, insMem, ref nCatMemInserted, ref catMemSqlTicks);
@@ -4135,6 +4237,7 @@ namespace VPB
 
         static bool TryClaimGalleryIndexRebuildSlot()
         {
+            if (VpbShutdown.IsQuitting) return false;
             lock (s_Sync)
             {
                 if (s_RebuildScheduled || s_RebuildRunning)
@@ -4425,6 +4528,7 @@ namespace VPB
             List<VarPackage> removedPackages,
             List<string> removedUidsOnly)
         {
+            if (VpbShutdown.IsQuitting) return;
             bool queueFullRebuild = false;
             bool pendingReschedule = false;
             try
@@ -4468,6 +4572,7 @@ namespace VPB
             }
 
             if (!queueFullRebuild && !pendingReschedule) return;
+            if (VpbShutdown.IsQuitting) return;
 
             bool bulkScan = false;
             try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
@@ -4532,6 +4637,11 @@ namespace VPB
 
         private static void RebuildWorker()
         {
+            if (VpbShutdown.IsQuitting)
+            {
+                lock (s_Sync) { s_RebuildScheduled = false; }
+                return;
+            }
             long readyBefore;
             lock (s_Sync) { readyBefore = s_ReadyScanBinary; }
             long readyAfter = long.MinValue;
@@ -4893,6 +5003,16 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Abort an index build in progress at quit so the open transaction rolls back instead of
+        /// committing partial rows. No ready stamp is written, so the next launch repairs it.
+        /// </summary>
+        static void ThrowIfQuitting()
+        {
+            if (VpbShutdown.IsQuitting)
+                throw new OperationCanceledException("VPB gallery index build aborted: VaM is quitting");
+        }
+
         /// <summary>Parallel classify pass; each worker list is filled independently.</summary>
         static int ParallelClassifyCatMemForPackages(
             VarPackage[] packages,
@@ -4919,7 +5039,7 @@ namespace VPB
                     try
                     {
                         List<CatMemRow> rows = workerLists[wi];
-                        while (true)
+                        while (!VpbShutdown.IsQuitting)
                         {
                             int i = Interlocked.Increment(ref nextIndex);
                             if (i >= packages.Length) break;
@@ -4938,7 +5058,7 @@ namespace VPB
                 });
             }
 
-            doneEvent.WaitOne();
+            VpbShutdown.WaitOrQuit(doneEvent);
             try { doneEvent.Close(); } catch { }
 
             long tsFreq = Stopwatch.Frequency;
@@ -8358,10 +8478,10 @@ namespace VPB
                     if (!string.IsNullOrEmpty(targetShort))
                     {
                         using (var st = conn.Prepare(
-                            "SELECT COUNT(DISTINCT src_uid) FROM pkg_dep WHERE dep_uid = ? OR dep_uid LIKE ?"))
+                            "SELECT COUNT(DISTINCT src_uid) FROM pkg_dep WHERE dep_uid = ? OR dep_uid LIKE ? ESCAPE '\\'"))
                         {
                             st.BindText(1, targetUid);
-                            st.BindText(2, targetShort + ".%");
+                            st.BindText(2, EscapeLike(targetShort) + ".%");
                             if (st.Step() == VpbSqlite3.SqliteRow)
                                 count = (int)st.ColumnInt64(0);
                         }
@@ -8429,9 +8549,9 @@ namespace VPB
                     // Group match (Author.Name.*): includes .latest, .minX, numeric versions, etc.
                     if (!string.IsNullOrEmpty(targetShort))
                     {
-                        using (var st2 = conn.Prepare("SELECT DISTINCT src_uid FROM pkg_dep WHERE dep_uid LIKE ?"))
+                        using (var st2 = conn.Prepare("SELECT DISTINCT src_uid FROM pkg_dep WHERE dep_uid LIKE ? ESCAPE '\\'"))
                         {
-                            st2.BindText(1, targetShort + ".%");
+                            st2.BindText(1, EscapeLike(targetShort) + ".%");
                             int step2;
                             while ((step2 = st2.Step()) == VpbSqlite3.SqliteRow)
                             {
@@ -8569,9 +8689,9 @@ namespace VPB
                 int bestVersion = -1;
                 string bestUid = null;
                 using (var conn = new VpbSqlite3.Connection(DbPath))
-                using (var st = conn.Prepare("SELECT uid FROM pkg WHERE uid LIKE ?"))
+                using (var st = conn.Prepare("SELECT uid FROM pkg WHERE uid LIKE ? ESCAPE '\\'"))
                 {
-                    st.BindText(1, packageGroup + ".%");
+                    st.BindText(1, EscapeLike(packageGroup) + ".%");
                     for (;;)
                     {
                         int rc = st.Step();
