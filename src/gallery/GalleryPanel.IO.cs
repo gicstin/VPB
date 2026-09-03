@@ -936,7 +936,7 @@ namespace VPB
 
                     try
                     {
-                        var row = new PackageListEntry(uid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid);
+                        var row = new PackageListEntry(uid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid);
                         if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row))
                         {
                             VpbPackageIndexDiagnostics.Log(uid, "galleryRowSkip", "reason=hide_filter sqlPath='" + (r.VarPath ?? "") + "'");
@@ -2546,7 +2546,7 @@ namespace VPB
                 if (r.PackageSizeOrInvalid != long.MinValue)
                     entrySize = r.PackageSizeOrInvalid;
 
-                VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.ItemUsageKey);
+                VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid, r.ItemUsageKey);
                 bulk.Add(vfe);
             }
             return bulk;
@@ -3630,7 +3630,7 @@ namespace VPB
                                     if (r.PackageSizeOrInvalid != long.MinValue)
                                         entrySize = r.PackageSizeOrInvalid;
 
-                                    VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, null);
+                                    VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid, null);
                                     bulk.Add(vfe);
                                 }
                             }
@@ -3744,7 +3744,7 @@ namespace VPB
                                                     long sz = r.PackageSizeOrInvalid != long.MinValue ? r.PackageSizeOrInvalid : 0;
                                                     try
                                                     {
-                                                        var row = new PackageListEntry(r.PackageUid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid);
+                                                        var row = new PackageListEntry(r.PackageUid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid);
                                                         if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
                                                         if (utCatMemKeyHits != null)
                                                         {

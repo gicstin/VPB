@@ -36,9 +36,9 @@ namespace VPB
         UsageCount = 16,
         /// <summary>Show only items with zero local usage.</summary>
         UnusedOnly = 17,
-        /// <summary>Family first added: MIN(first_scanned) across all .var versions sharing creator.packageName.</summary>
+        /// <summary>Family first added: earliest first_scanned or NTFS creation time across all .var versions.</summary>
         DateAdded = 18,
-        /// <summary>Family last updated: first_scanned of the highest-N .var version in creator.packageName.</summary>
+        /// <summary>Family last updated: earliest first_scanned or NTFS creation time for highest-N .var version.</summary>
         DateUpdated = 19,
         /// <summary>Random order (Fisher–Yates shuffle each time sort is applied).</summary>
         Random = 20
@@ -87,6 +87,9 @@ namespace VPB
         // Bounded: clear-on-overflow (same pattern as GalleryFileListSnapshotCache).
         private static Dictionary<string, HashSet<string>> _sceneDependencyCache = new Dictionary<string, HashSet<string>>();
         private const int SceneDependencyCacheMaxEntries = 512;
+        private static readonly object FamilyFirstScannedCacheLock = new object();
+        private static Dictionary<string, long> _familyFirstScannedByUid;
+        private static long _familyFirstScannedScanBinary = long.MinValue;
 
         /// <summary>Drop in-memory scene-deps L1 cache (package refresh / soak-test bound).</summary>
         public static void ClearSceneDependencyCache()
@@ -580,6 +583,11 @@ namespace VPB
                 string p = sfe.Path ?? "";
                 return p.Length == 0 ? null : "sys:" + p;
             }
+            return ComputeFamilyKeyFromUid(uid);
+        }
+
+        private static string ComputeFamilyKeyFromUid(string uid)
+        {
             if (string.IsNullOrEmpty(uid)) return null;
             int lastDot = uid.LastIndexOf('.');
             if (lastDot <= 0) return uid;
@@ -641,6 +649,22 @@ namespace VPB
             return DateTime.MinValue;
         }
 
+        private static DateTime GetPackageFileCreationTime(FileEntry file)
+        {
+            DateTime dt;
+            if (file is VarFileEntry vfe)
+            {
+                if (vfe.TryGetGalleryIndexedFileCreationTime(out dt)) return NormalizeToUtcForCompare(dt);
+                try { if (vfe.Package != null) return NormalizeToUtcForCompare(vfe.Package.CreationTime); } catch { }
+            }
+            else if (file is PackageListEntry ple)
+            {
+                if (ple.TryGetGalleryIndexedFileCreationTime(out dt)) return NormalizeToUtcForCompare(dt);
+                try { if (ple.Package != null) return NormalizeToUtcForCompare(ple.Package.CreationTime); } catch { }
+            }
+            return DateTime.MinValue;
+        }
+
         /// <summary>Highest VAR version (N from "Creator.Package.N") for this row's uid; 0 when unknown.</summary>
         private static int GetUidVersionNumber(FileEntry file)
         {
@@ -652,6 +676,11 @@ namespace VPB
                 uid = ple.GetPackageUidForGalleryUserTags();
                 if (string.IsNullOrEmpty(uid) && ple.Package != null) uid = ple.Package.Uid;
             }
+            return GetUidVersionNumberFromUid(uid);
+        }
+
+        private static int GetUidVersionNumberFromUid(string uid)
+        {
             if (string.IsNullOrEmpty(uid)) return 0;
             int lastDot = uid.LastIndexOf('.');
             if (lastDot < 0 || lastDot >= uid.Length - 1) return 0;
@@ -659,11 +688,97 @@ namespace VPB
             return int.TryParse(uid.Substring(lastDot + 1), out v) ? v : 0;
         }
 
-        /// <summary>Build per-family (creator.package) scan-time lookup over the current file list. One pass, no I/O.</summary>
+        private static void AccumulatePackageVersion(
+            Dictionary<string, FamilyScanTimes> map,
+            string familyKey,
+            int version,
+            DateTime versionDate)
+        {
+            if (map == null || string.IsNullOrEmpty(familyKey)) return;
+            FamilyScanTimes dates;
+            map.TryGetValue(familyKey, out dates);
+            VpbGalleryFamilyDate.AccumulateVersion(
+                versionDate,
+                version,
+                ref dates.MinScanned,
+                ref dates.HighestVersion,
+                ref dates.HighestVersionScanned);
+            map[familyKey] = dates;
+        }
+
+        private static Dictionary<string, long> GetFamilyFirstScannedByUid()
+        {
+            long scanBinary;
+            try { scanBinary = FileManager.lastPackageRefreshTime.ToBinary(); }
+            catch { scanBinary = long.MinValue; }
+
+            lock (FamilyFirstScannedCacheLock)
+            {
+                if (_familyFirstScannedByUid != null && _familyFirstScannedScanBinary == scanBinary)
+                    return _familyFirstScannedByUid;
+            }
+
+            Dictionary<string, long> fresh = VpbLocalDatabase.ReadFirstScannedBinariesFromPkg();
+            if (fresh.Count == 0 && FileManager.GetPackageCount() > 0)
+                return fresh;
+
+            long currentScanBinary;
+            try { currentScanBinary = FileManager.lastPackageRefreshTime.ToBinary(); }
+            catch { currentScanBinary = long.MinValue; }
+            if (currentScanBinary != scanBinary) return fresh;
+
+            lock (FamilyFirstScannedCacheLock)
+            {
+                _familyFirstScannedByUid = fresh;
+                _familyFirstScannedScanBinary = scanBinary;
+                return _familyFirstScannedByUid;
+            }
+        }
+
         private static Dictionary<string, FamilyScanTimes> BuildFamilyScanTimes(List<FileEntry> files)
         {
             var map = new Dictionary<string, FamilyScanTimes>(StringComparer.OrdinalIgnoreCase);
             if (files == null) return map;
+            Dictionary<string, long> firstScannedByUid = GetFamilyFirstScannedByUid();
+
+            VarPackage[] packages = null;
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    if (FileManager.PackagesByUid != null && FileManager.PackagesByUid.Count > 0)
+                        packages = FileManager.PackagesByUid.Values.ToArray();
+                }
+            }
+            catch { packages = null; }
+
+            if (packages != null)
+            {
+                for (int i = 0; i < packages.Length; i++)
+                {
+                    VarPackage pkg = packages[i];
+                    if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) continue;
+                    DateTime firstScanned = DateTime.MinValue;
+                    try
+                    {
+                        long firstScannedBinary;
+                        if (firstScannedByUid == null
+                            || !firstScannedByUid.TryGetValue(pkg.Uid, out firstScannedBinary))
+                            firstScannedBinary = pkg.FirstScannedBinary;
+                        if (firstScannedBinary != 0L && firstScannedBinary != long.MinValue)
+                            firstScanned = NormalizeToUtcForCompare(DateTime.FromBinary(firstScannedBinary));
+                    }
+                    catch { }
+                    DateTime created = DateTime.MinValue;
+                    try { created = NormalizeToUtcForCompare(pkg.CreationTime); } catch { }
+                    AccumulatePackageVersion(
+                        map,
+                        ComputeFamilyKeyFromUid(pkg.Uid),
+                        GetUidVersionNumberFromUid(pkg.Uid),
+                        VpbGalleryFamilyDate.EarliestKnown(firstScanned, created));
+                }
+            }
+
             for (int i = 0; i < files.Count; i++)
             {
                 var f = files[i];
@@ -686,25 +801,11 @@ namespace VPB
                     continue;
                 }
 
-                DateTime scanned = GetIndexedFirstScannedForFile(f);
+                DateTime scanned = VpbGalleryFamilyDate.EarliestKnown(
+                    GetIndexedFirstScannedForFile(f),
+                    GetPackageFileCreationTime(f));
                 int version = GetUidVersionNumber(f);
-
-                FamilyScanTimes fst;
-                if (!map.TryGetValue(famKey, out fst))
-                {
-                    fst = new FamilyScanTimes { MinScanned = scanned, HighestVersion = version, HighestVersionScanned = scanned };
-                    map[famKey] = fst;
-                }
-                else
-                {
-                    if (scanned < fst.MinScanned || fst.MinScanned == DateTime.MinValue) fst.MinScanned = scanned;
-                    if (version > fst.HighestVersion)
-                    {
-                        fst.HighestVersion = version;
-                        fst.HighestVersionScanned = scanned;
-                    }
-                    map[famKey] = fst;
-                }
+                AccumulatePackageVersion(map, famKey, version, scanned);
             }
             return map;
         }
