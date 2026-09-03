@@ -791,6 +791,51 @@ namespace VPB
             return string.Join(".", parts);
         }
 
+        static Dictionary<string, string> s_WhitespaceUidAliases;
+        static Dictionary<string, string> s_WhitespaceGroupAliases;
+
+        static void AddWhitespaceAlias(ref Dictionary<string, string> map, string actualId)
+        {
+            if (string.IsNullOrEmpty(actualId) || !UidHasWhitespace(actualId)) return;
+            string canonical = CanonicalizeUidSegments(actualId);
+            if (string.IsNullOrEmpty(canonical) || string.Equals(canonical, actualId, StringComparison.Ordinal)) return;
+            if (map == null) map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!map.ContainsKey(canonical)) map.Add(canonical, actualId);
+        }
+
+        static bool TryResolveWhitespaceAlias(Dictionary<string, string> map, string requestedId, out string actualId)
+        {
+            actualId = null;
+            if (map == null || map.Count == 0 || string.IsNullOrEmpty(requestedId)) return false;
+            string canonical = CanonicalizeUidSegments(requestedId);
+            if (string.IsNullOrEmpty(canonical)) return false;
+            return map.TryGetValue(canonical, out actualId)
+                && !string.IsNullOrEmpty(actualId)
+                && !string.Equals(actualId, requestedId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool TryResolveWhitespaceAliasUid(string requestedUid, out string actualUid)
+        {
+            lock (packagesLock)
+            {
+                return TryResolveWhitespaceAlias(s_WhitespaceUidAliases, requestedUid, out actualUid);
+            }
+        }
+
+        static void AddWhitespaceAliasKeys(Dictionary<string, string> map, HashSet<string> keys)
+        {
+            if (map == null || keys == null) return;
+            foreach (KeyValuePair<string, string> kv in map) keys.Add(kv.Key);
+        }
+
+        internal static bool TryResolveWhitespaceAliasGroupId(string requestedGroupId, out string actualGroupId)
+        {
+            lock (packagesLock)
+            {
+                return TryResolveWhitespaceAlias(s_WhitespaceGroupAliases, requestedGroupId, out actualGroupId);
+            }
+        }
+
         static string StripAllWhitespace(string s)
         {
             if (string.IsNullOrEmpty(s)) return s;
@@ -1048,6 +1093,7 @@ namespace VPB
                             {
                                 value = new VarPackageGroup(shortName);
                                 packageGroups.Add(shortName, value);
+                                AddWhitespaceAlias(ref s_WhitespaceGroupAliases, shortName);
                             }
                         }
                         VarPackage varPackage = new VarPackage(canonicalUid, cleanPath, value, text2, text3, version);
@@ -1055,6 +1101,7 @@ namespace VPB
                         {
                             packagesByUid.Add(canonicalUid, varPackage);
                             packagesByPath.Add(varPackage.Path, varPackage);
+                            AddWhitespaceAlias(ref s_WhitespaceUidAliases, canonicalUid);
                         }
                         value.AddPackage(varPackage);
                         OnMorphPackageRegistryChanged();
@@ -1215,6 +1262,8 @@ namespace VPB
                 {
                     packagesByUid.Remove(vp.Uid);
                     packagesByPath.Remove(vp.Path);
+                    if (s_WhitespaceUidAliases != null && UidHasWhitespace(vp.Uid))
+                        s_WhitespaceUidAliases.Remove(CanonicalizeUidSegments(vp.Uid));
                     if (vp.FileEntries != null)
                     {
                         foreach (VarFileEntry fileEntry in vp.FileEntries)
@@ -1276,6 +1325,14 @@ namespace VPB
                 if (packageGroups != null)
                 {
                     packageGroups.Clear();
+                }
+                if (s_WhitespaceUidAliases != null)
+                {
+                    s_WhitespaceUidAliases.Clear();
+                }
+                if (s_WhitespaceGroupAliases != null)
+                {
+                    s_WhitespaceGroupAliases.Clear();
                 }
                 if (allVarFileEntries != null)
                 {
@@ -3180,6 +3237,8 @@ namespace VPB
                     ? new HashSet<string>(packageGroups.Keys, StringComparer.OrdinalIgnoreCase)
                     : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 snapshot = packagesByUid != null ? packagesByUid.Values.ToArray() : new VarPackage[0];
+                AddWhitespaceAliasKeys(s_WhitespaceUidAliases, uidKeys);
+                AddWhitespaceAliasKeys(s_WhitespaceGroupAliases, groupKeys);
             }
 
             for (int i = 0; i < snapshot.Length; i++)
@@ -3439,8 +3498,18 @@ namespace VPB
             // Try exact match
             if (packagesByUid.ContainsKey(uid)) return packagesByUid[uid];
 
+            string aliasUid;
+            if (TryResolveWhitespaceAliasUid(uid, out aliasUid) && packagesByUid.ContainsKey(aliasUid))
+                return packagesByUid[aliasUid];
+
             // Try to resolve group
             string groupId = PackageIDToPackageGroupID(uid);
+            if (!packageGroups.ContainsKey(groupId))
+            {
+                string aliasGroupId;
+                if (TryResolveWhitespaceAliasGroupId(groupId, out aliasGroupId))
+                    groupId = aliasGroupId;
+            }
             if (packageGroups.ContainsKey(groupId))
             {
                 VarPackageGroup group = packageGroups[groupId];
@@ -3791,6 +3860,13 @@ namespace VPB
 			{
 				return true;
 			}
+			string aliasUid;
+			if (packagesByUid != null
+				&& TryResolveWhitespaceAliasUid(packageUidOrPath, out aliasUid)
+				&& packagesByUid.ContainsKey(aliasUid))
+			{
+				return true;
+			}
 			return false;
 		}
 
@@ -3867,6 +3943,10 @@ namespace VPB
 					string aliasKey = CanonicalizeUidSegments(uidKey);
 					if (!string.Equals(aliasKey, uidKey, StringComparison.Ordinal)
 						&& packagesByUid.TryGetValue(aliasKey, out pkg) && pkg != null)
+						return true;
+					string spacedKey;
+					if (TryResolveWhitespaceAlias(s_WhitespaceUidAliases, uidKey, out spacedKey)
+						&& packagesByUid.TryGetValue(spacedKey, out pkg) && pkg != null)
 						return true;
 					pkg = null;
 				}
@@ -3972,6 +4052,13 @@ namespace VPB
 					}
 				}
 				catch { }
+			}
+
+			if (value == null)
+			{
+				string aliasUid;
+				if (TryResolveWhitespaceAliasUid(packageUidOrPath, out aliasUid))
+					value = TryResolve(aliasUid);
 			}
 
 			if (value == null)
@@ -4082,6 +4169,12 @@ namespace VPB
 			if (packageGroups != null)
 			{
 				packageGroups.TryGetValue(packageGroupUid, out value);
+				if (value == null)
+				{
+					string aliasGroupUid;
+					if (TryResolveWhitespaceAliasGroupId(packageGroupUid, out aliasGroupUid))
+						packageGroups.TryGetValue(aliasGroupUid, out value);
+				}
 			}
 			return value;
 		}
