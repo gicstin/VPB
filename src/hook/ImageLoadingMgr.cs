@@ -23,7 +23,6 @@ namespace VPB
         public static bool currentProcessingIsThumbnail;
         public static ImageLoaderThreaded.QueuedImage currentProcessingQI;
         
-        private const int AlphaCacheVersion = 3;
         /// <summary>Max decompressed bytes for zstd serve on calling thread (LoadImage immediate, etc.).</summary>
         private const int MaxSyncDecompressedPayloadBytes = 8 * 1024 * 1024;
         /// <summary>Sized for an 8K RGBA full mip chain (8192² × 4 × 4/3 ≈ 341 MiB); 512 MiB is the next round bucket.</summary>
@@ -82,7 +81,7 @@ namespace VPB
                 string zstdDir = VamHookPlugin.GetCacheDir();
                 if (string.IsNullOrEmpty(zstdDir) || !Directory.Exists(zstdDir)) return;
 
-                string sentinel = Path.Combine(zstdDir, ".vpb_alpha_v" + AlphaCacheVersion);
+                string sentinel = Path.Combine(zstdDir, ".vpb_texcache_v" + TextureUtil.TextureCacheVersion);
                 if (File.Exists(sentinel)) return;
 
                 string[] metaFiles;
@@ -94,14 +93,12 @@ namespace VPB
                 {
                     try
                     {
-                        var meta = SimpleJSON.JSON.Parse(File.ReadAllText(metaFile));
-                        if (meta == null || meta["vpbVer"].AsInt < AlphaCacheVersion)
-                        {
-                            string dataFile = metaFile.Substring(0, metaFile.Length - 4);
-                            try { if (File.Exists(dataFile)) File.Delete(dataFile); } catch { }
-                            try { File.Delete(metaFile); } catch { }
-                            deleted++;
-                        }
+                        string dataFile = metaFile.Substring(0, metaFile.Length - 4);
+                        if (IsZstdWritePathBusy(dataFile)) continue;
+                        if (!TextureUtil.CacheEntryNeedsSourceRebuild(dataFile)) continue;
+                        try { if (File.Exists(dataFile)) File.Delete(dataFile); } catch { }
+                        try { File.Delete(metaFile); } catch { }
+                        deleted++;
                     }
                     catch { }
                 }
@@ -109,7 +106,7 @@ namespace VPB
                 if (deleted > 0)
                     LogUtil.Log("[VPB] Cleaned " + deleted + " stale alpha cache file(s) from previous version.");
 
-                File.WriteAllText(sentinel, AlphaCacheVersion.ToString());
+                File.WriteAllText(sentinel, TextureUtil.TextureCacheVersion.ToString());
             }
             catch (Exception ex)
             {
@@ -169,6 +166,8 @@ namespace VPB
             public int MipCount;
             /// <summary><see cref="TextureUtil.MipStorageBase"/> or <see cref="TextureUtil.MipStorageFull"/>.</summary>
             public string MipStorage;
+
+            public int VpbVer;
         }
 
         private class DiskCachePayload
@@ -807,6 +806,63 @@ namespace VPB
             return false;
         }
 
+        private static bool IsStaleVersionMeta(MetadataEntry meta)
+        {
+            if (meta == null) return false;
+            if (string.IsNullOrEmpty(meta.MipStorage)) return false;
+            if (meta.VpbVer >= TextureUtil.TextureCacheVersion) return false;
+            return !TextureUtil.IsMipMetaRepairableOnServe(meta.CreateMipMaps, meta.MipStorage, meta.Width, meta.Height, meta.Format);
+        }
+
+        private bool TryPurgeStaleVersionCache(string cachePath, MetadataEntry meta)
+        {
+            if (string.IsNullOrEmpty(cachePath) || !IsStaleVersionMeta(meta)) return false;
+            if (IsZstdCachePathBusy(cachePath)) return false;
+
+            lock (metadataCacheLock)
+            {
+                metadataCache.Remove(cachePath);
+            }
+
+            lock (decompressedCacheLock)
+            {
+                CachedDecompressed entry;
+                if (decompressedCache.TryGetValue(cachePath, out entry))
+                {
+                    currentMemoryUsage -= entry.Data != null ? entry.Data.Length : 0;
+                    if (currentMemoryUsage < 0) currentMemoryUsage = 0;
+                    if (entry.LRUNode != null) lruOrder.Remove(entry.LRUNode);
+                    decompressedCache.Remove(cachePath);
+                }
+            }
+
+            bool removed = false;
+            try { if (File.Exists(cachePath)) { File.Delete(cachePath); removed = true; } } catch { }
+            try
+            {
+                string metaPath = cachePath + "meta";
+                if (File.Exists(metaPath)) { File.Delete(metaPath); removed = true; }
+            }
+            catch { }
+
+            if (removed) LogStaleVersionPurge(cachePath);
+            return true;
+        }
+
+        private static int staleVersionPurges;
+        private static int staleVersionPurgeLogged;
+
+        private static void LogStaleVersionPurge(string cachePath)
+        {
+            int n = Interlocked.Increment(ref staleVersionPurges);
+            if (n != 1 && n % 1000 != 0) return;
+            if (Interlocked.Exchange(ref staleVersionPurgeLogged, n) == n) return;
+            LogUtil.Log("[VPB] One-time cache migration to v" + TextureUtil.TextureCacheVersion
+                + ": dropped " + n + " block-compressed entr(ies) whose mip chain cannot be rebuilt in place."
+                + " Run Compress Cache to convert the rest in bulk instead of during scene loads. Latest: "
+                + Path.GetFileName(cachePath ?? string.Empty));
+        }
+
         private static void TryUpgradeDiskCacheMetaIfStale(string cachePath, MetadataEntry resolvedMeta, int rawLength, bool queueCreateMipMaps)
         {
             if (string.IsNullOrEmpty(cachePath) || resolvedMeta == null || rawLength <= 0) return;
@@ -1127,12 +1183,15 @@ namespace VPB
         
         private MetadataEntry FastLoadMetadata(string cachePath)
         {
+            MetadataEntry cachedEntry = null;
             lock (metadataCacheLock)
             {
-                if (metadataCache.TryGetValue(cachePath, out var cached))
-                {
-                    return cached;
-                }
+                metadataCache.TryGetValue(cachePath, out cachedEntry);
+            }
+            if (cachedEntry != null)
+            {
+                if (!IsStaleVersionMeta(cachedEntry)) return cachedEntry;
+                if (TryPurgeStaleVersionCache(cachePath, cachedEntry)) return null;
             }
 
             if (IsZstdCachePathBusy(cachePath))
@@ -1170,9 +1229,11 @@ namespace VPB
                 bool createMipMaps = false;
                 int mipCount = 0;
                 string mipStorage = null;
+                int vpbVer = 0;
                 try { createMipMaps = metaJson["createMipMaps"].AsBool; } catch { }
                 try { mipCount = metaJson["mipCount"].AsInt; } catch { }
                 try { mipStorage = metaJson["mipStorage"].Value; } catch { }
+                try { vpbVer = metaJson["vpbVer"].AsInt; } catch { }
 
                 var entry = new MetadataEntry
                 {
@@ -1183,8 +1244,11 @@ namespace VPB
                     IsReadable = isRead,
                     CreateMipMaps = createMipMaps,
                     MipCount = mipCount > 0 ? mipCount : TextureUtil.CountMipLevels(w, h),
-                    MipStorage = mipStorage
+                    MipStorage = mipStorage,
+                    VpbVer = vpbVer
                 };
+
+                if (TryPurgeStaleVersionCache(cachePath, entry)) return null;
 
                 lock (metadataCacheLock)
                 {
@@ -2221,9 +2285,14 @@ namespace VPB
                             queueMip = metaJson["createMipMaps"].AsBool;
                         }
                         catch { }
-                        if (!hadMipFields && !queueMip && (fmt == TextureFormat.DXT1 || fmt == TextureFormat.DXT5))
-                            queueMip = true;
+                        if (!hadMipFields && !queueMip && TextureUtil.IsBlockCompressedFormat(fmt))
+                            queueMip = TextureUtil.GetExpectedFullMipChainSize(w, h, fmt) == (int)rawByteLength;
                         TextureUtil.WriteMipFieldsToMeta(metaJson, w, h, fmt, (int)rawByteLength, queueMip);
+
+                        if (TextureUtil.IsMipPayloadConsistent(
+                                metaJson["createMipMaps"].AsBool, metaJson["mipStorage"].Value,
+                                (int)rawByteLength, w, h, fmt))
+                            TextureUtil.WriteCacheVersionToMeta(metaJson);
                     }
                     File.WriteAllText(targetPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(metaJson, 1024));
                     return;
@@ -2880,18 +2949,19 @@ namespace VPB
                     byte[] raw;
                     TextureFormat format;
                     int w, h;
-                    if (!TryCaptureAlphaTextureBytesForZstdWrite(texture, item.Linear, out raw, out format, out w, out h)) return;
+                    if (!TryCaptureAlphaTextureBytesForZstdWrite(texture, item.Linear, item.QueueCreateMipMaps, out raw, out format, out w, out h)) return;
                     if (raw == null || raw.Length == 0 || raw.Length > MaxRuntimeZstdWritePayloadBytes) return;
 
                     int level = 3;
                     try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
                     string pathCopy = zstdPath;
+                    bool alphaMip = item.QueueCreateMipMaps;
                     Interlocked.Increment(ref activeRuntimeZstdWrites);
                     try
                     {
                         queuedToWorker = ThreadPool.QueueUserWorkItem(_ =>
                         {
-                            try { WriteCapturedBytesToZstdCache(pathCopy, raw, w, h, format, false, false, level, AlphaCacheVersion); }
+                            try { WriteCapturedBytesToZstdCache(pathCopy, raw, w, h, format, false, alphaMip, level); }
                             finally { Interlocked.Decrement(ref activeRuntimeZstdWrites); }
                         });
                     }
@@ -2906,7 +2976,7 @@ namespace VPB
                 byte[] rawBytes;
                 TextureFormat fmt;
                 int width, height;
-                if (!TryGetTextureBytesForZstdWrite(texture, item.Linear, item.IsSimPath, out rawBytes, out fmt, out width, out height))
+                if (!TryGetTextureBytesForZstdWrite(texture, item.Linear, item.IsSimPath, item.QueueCreateMipMaps, out rawBytes, out fmt, out width, out height))
                     return;
                 if (rawBytes == null || rawBytes.Length == 0 || rawBytes.Length > MaxRuntimeZstdWritePayloadBytes) return;
 
@@ -2920,7 +2990,7 @@ namespace VPB
                 {
                     queuedToWorker = ThreadPool.QueueUserWorkItem(_ =>
                     {
-                        try { WriteCapturedBytesToZstdCache(pathForWorker, rawBytes, width, height, fmt, isSim, queueMip, zlevel, 0); }
+                        try { WriteCapturedBytesToZstdCache(pathForWorker, rawBytes, width, height, fmt, isSim, queueMip, zlevel); }
                         finally { Interlocked.Decrement(ref activeRuntimeZstdWrites); }
                     });
                 }
@@ -2937,6 +3007,7 @@ namespace VPB
         private static bool TryCaptureAlphaTextureBytesForZstdWrite(
             Texture2D src,
             bool linear,
+            bool createMipMaps,
             out byte[] raw,
             out TextureFormat format,
             out int w,
@@ -2948,6 +3019,8 @@ namespace VPB
             h = 0;
             if (src == null) return false;
 
+            bool mipChain = createMipMaps && TextureUtil.CanGenerateMipsFromBaseLevel(src.width, src.height, TextureFormat.RGBA32);
+
             RenderTexture rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32, linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
             Texture2D rgba = null;
             RenderTexture prev = RenderTexture.active;
@@ -2955,9 +3028,9 @@ namespace VPB
             {
                 Graphics.Blit(src, rt);
                 RenderTexture.active = rt;
-                rgba = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, linear);
+                rgba = new Texture2D(src.width, src.height, TextureFormat.RGBA32, mipChain, linear);
                 rgba.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0, false);
-                rgba.Apply(false, false);
+                rgba.Apply(mipChain, false);
                 w = src.width;
                 h = src.height;
                 raw = rgba.GetRawTextureData();
@@ -2979,8 +3052,7 @@ namespace VPB
             TextureFormat format,
             bool isSimPath,
             bool queueCreateMipMaps,
-            int zstdLevel,
-            int alphaCacheVersion)
+            int zstdLevel)
         {
             if (string.IsNullOrEmpty(zstdPath) || raw == null || raw.Length == 0 || w <= 0 || h <= 0) return;
 
@@ -3002,7 +3074,7 @@ namespace VPB
                 zmeta["height"] = h.ToString();
                 zmeta["format"] = format.ToString();
                 if (isSimPath) zmeta["isReadable"] = "true";
-                if (alphaCacheVersion > 0) zmeta["vpbVer"].AsInt = alphaCacheVersion;
+                TextureUtil.WriteCacheVersionToMeta(zmeta);
                 zmeta["zstdLevel"].AsInt = zstdLevel;
                 TextureUtil.WriteMipFieldsToMeta(zmeta, w, h, format, raw.Length, queueCreateMipMaps);
                 File.WriteAllText(metaTmp, VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
@@ -3206,7 +3278,7 @@ namespace VPB
                     if (pendingZstdWrites.Contains(alphaPath)) return true;
                     pendingZstdWrites.Add(alphaPath);
                 }
-                EnqueueRuntimeZstdWrite(qi, alphaPath, false, true, false);
+                EnqueueRuntimeZstdWrite(qi, alphaPath, false, true, ResolveQueueCreateMipMaps(qi));
                 return true;
             }
 
@@ -3279,7 +3351,7 @@ namespace VPB
             return IsTextureReadableForCacheWrite(tex);
         }
 
-        private static bool TryGetTextureBytesForZstdWrite(Texture2D src, bool linear, bool forceReadable, out byte[] raw, out TextureFormat format, out int w, out int h)
+        private static bool TryGetTextureBytesForZstdWrite(Texture2D src, bool linear, bool forceReadable, bool createMipMaps, out byte[] raw, out TextureFormat format, out int w, out int h)
         {
             raw = null;
             format = src.format;
@@ -3296,6 +3368,8 @@ namespace VPB
                 catch { }
             }
 
+            bool mipChain = (createMipMaps || src.mipmapCount > 1) && TextureUtil.CanGenerateMipsFromBaseLevel(w, h, TextureFormat.RGBA32);
+
             RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
             Texture2D rgba = null;
             RenderTexture prev = RenderTexture.active;
@@ -3303,9 +3377,9 @@ namespace VPB
             {
                 Graphics.Blit(src, rt);
                 RenderTexture.active = rt;
-                rgba = new Texture2D(w, h, TextureFormat.RGBA32, false, linear);
+                rgba = new Texture2D(w, h, TextureFormat.RGBA32, mipChain, linear);
                 rgba.ReadPixels(new Rect(0, 0, w, h), 0, 0, false);
-                rgba.Apply(false, false);
+                rgba.Apply(mipChain, false);
                 raw = rgba.GetRawTextureData();
                 format = TextureFormat.RGBA32;
                 return raw != null && raw.Length > 0;

@@ -3277,6 +3277,17 @@ namespace VPB
                         zstdPathOnDisk = null;
                         zstdWritePath = null;
                     }
+                    if (zstdExists && TextureUtil.CacheEntryNeedsSourceRebuild(zstdPathOnDisk))
+                    {
+                        TextureUtil.TryDeleteZstdCacheFile(zstdPathOnDisk);
+                        zstdExists = false;
+                        zstdPathOnDisk = null;
+                    }
+                    if (nativeExists && TextureUtil.CacheEntryNeedsSourceRebuild(cachePath))
+                    {
+                        TryDeleteFileAndMeta(cachePath, ref s_NativeDeletes);
+                        nativeExists = false;
+                    }
                     bool needNative = wantNative && !nativeExists;
                     bool rewriteZstd = wantZstd && zstdExists && s_JobRewriteExistingZstd;
                     bool needZstd = wantZstd && (!zstdExists || rewriteZstd);

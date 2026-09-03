@@ -505,6 +505,7 @@ namespace VPB
                         TextureUtil.WriteMipFieldsToMeta(zmeta, job.Width, job.Height, job.Format, (int)Math.Min(int.MaxValue, rawByteLength), job.CreateMipMaps);
                     }
                     catch { }
+                    TextureUtil.WriteCacheVersionToMeta(zmeta);
                 }
 
                 File.WriteAllText(metaTmp, VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
@@ -539,6 +540,7 @@ namespace VPB
             }
             zmeta["zstdLevel"].AsInt = job.Level;
             TextureUtil.WriteMipFieldsToMeta(zmeta, job.Width, job.Height, job.Format, rawLength, job.CreateMipMaps);
+            TextureUtil.WriteCacheVersionToMeta(zmeta);
             return zmeta;
         }
 

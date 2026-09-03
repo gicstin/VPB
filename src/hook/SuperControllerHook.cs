@@ -366,10 +366,13 @@ namespace VPB
         }
 
         /// <summary>GPU blit → readable RGBA32 copy. Caller owns destroy of returned texture when different from <paramref name="src"/>.</summary>
-        internal static Texture2D EnsureCpuReadableTexture(Texture2D src, bool linear, string logTag)
+        internal static Texture2D EnsureCpuReadableTexture(Texture2D src, bool linear, bool createMipMaps, string logTag)
         {
             if (src == null) return null;
             if (IsTextureReadableCompat(src)) return src;
+
+            bool mipChain = (createMipMaps || src.mipmapCount > 1)
+                && TextureUtil.CanGenerateMipsFromBaseLevel(src.width, src.height, TextureFormat.RGBA32);
 
             RenderTexture rt = null;
             RenderTexture prev = RenderTexture.active;
@@ -378,9 +381,9 @@ namespace VPB
                 rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
                 Graphics.Blit(src, rt);
                 RenderTexture.active = rt;
-                Texture2D readableTex = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, linear);
+                Texture2D readableTex = new Texture2D(src.width, src.height, TextureFormat.RGBA32, mipChain, linear);
                 readableTex.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0);
-                readableTex.Apply(false, false);
+                readableTex.Apply(mipChain, false);
                 if (!string.IsNullOrEmpty(logTag))
                     LogUtil.Log("[VPB] " + logTag + ": made texture CPU-readable " + src.width + "x" + src.height);
                 return readableTex;
@@ -2074,7 +2077,7 @@ namespace VPB
                                 string tag = IsCharacterTextureQueuedImage(__instance) ? "CHAR" : "SIM";
                                 LogUtil.Log("[VPB " + tag + "] PostFinish: Fixing up non-readable texture: " + __instance.imgPath);
 
-                                Texture2D readableTex = EnsureCpuReadableTexture(tex, __instance.linear, null);
+                                Texture2D readableTex = EnsureCpuReadableTexture(tex, __instance.linear, __instance.createMipMaps, null);
                                 if (readableTex != null && readableTex != tex)
                                 {
                                     UnityEngine.Object.Destroy(tex);

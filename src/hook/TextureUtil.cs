@@ -77,6 +77,31 @@ namespace VPB
             }
         }
 
+        public static bool IsBlockCompressedFormat(TextureFormat fmt)
+        {
+            return fmt == TextureFormat.DXT1 || fmt == TextureFormat.DXT5;
+        }
+
+        public static bool CanGenerateMipsFromBaseLevel(int w, int h, TextureFormat fmt)
+        {
+            if (IsBlockCompressedFormat(fmt)) return false;
+            return GetExpectedFullMipChainSize(w, h, fmt) > 0;
+        }
+
+        public static bool ShouldAllocateMipChain(bool createMipMaps, int rawLength, int w, int h, TextureFormat fmt)
+        {
+            if (!createMipMaps) return false;
+            if (ShouldAllocateMipChainForRawLoad(createMipMaps, rawLength, w, h, fmt)) return true;
+            return CanGenerateMipsFromBaseLevel(w, h, fmt);
+        }
+
+        public static bool ShouldGenerateMipsOnApply(bool createMipMaps, int rawLength, int w, int h, TextureFormat fmt)
+        {
+            if (!createMipMaps) return false;
+            if (ShouldAllocateMipChainForRawLoad(createMipMaps, rawLength, w, h, fmt)) return false;
+            return CanGenerateMipsFromBaseLevel(w, h, fmt);
+        }
+
         /// <summary>Match CustomImageLoader: full mip chain bytes in <paramref name="rawLength"/> require mipChain on Texture2D ctor.</summary>
         public static bool ShouldAllocateMipChainForRawLoad(bool createMipMaps, int rawLength, int w, int h, TextureFormat fmt)
         {
@@ -96,6 +121,30 @@ namespace VPB
 
         public const string MipStorageBase = "base";
         public const string MipStorageFull = "full";
+
+        public const int TextureCacheVersion = 4;
+
+        public static void WriteCacheVersionToMeta(JSONNode meta)
+        {
+            if (meta == null) return;
+            meta["vpbVer"].AsInt = TextureCacheVersion;
+        }
+
+
+        public static bool IsMipMetaRepairableOnServe(bool createMipMaps, string mipStorage, int w, int h, TextureFormat fmt)
+        {
+            if (!createMipMaps) return true;
+            if (string.Equals(mipStorage, MipStorageFull, StringComparison.OrdinalIgnoreCase)) return true;
+            return CanGenerateMipsFromBaseLevel(w, h, fmt);
+        }
+
+        public static bool IsMipPayloadConsistent(bool createMipMaps, string mipStorage, int rawLength, int w, int h, TextureFormat fmt)
+        {
+            if (!createMipMaps) return true;
+            int fullSize = GetExpectedFullMipChainSize(w, h, fmt);
+            if (fullSize > 0 && rawLength == fullSize) return true;
+            return IsMipMetaRepairableOnServe(createMipMaps, mipStorage, w, h, fmt);
+        }
 
         /// <summary>Unity-style mip count from full size down to 1×1.</summary>
         public static int CountMipLevels(int w, int h)
@@ -210,20 +259,32 @@ namespace VPB
             meta["mipStorage"] = storage;
         }
 
-        /// <summary>
-        /// Loads raw texture data from a byte array using zero-copy IntPtr if the buffer is oversized.
-        /// </summary>
+
+        private static void LoadRawPinned(Texture2D t, byte[] data, int size)
+        {
+            GCHandle pin = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
+            {
+                t.LoadRawTextureData(pin.AddrOfPinnedObject(), size);
+            }
+            finally
+            {
+                pin.Free();
+            }
+        }
+
         public static void SafeLoadRawTextureData(Texture2D t, byte[] data, int length, int w, int h, TextureFormat fmt)
         {
             if (t == null || data == null) return;
-            
+
             int expected = GetExpectedRawDataSize(w, h, fmt);
             if (expected <= 0)
             {
-                // Fallback for formats we don't have expected size for
                 t.LoadRawTextureData(data);
                 return;
             }
+
+            if (length <= 0) length = data.Length;
 
             if (length < expected)
             {
@@ -232,34 +293,28 @@ namespace VPB
                 return;
             }
 
-            if (expected > 0 && length > expected)
+            int required = expected;
+            if (t.mipmapCount > 1)
             {
-                t.LoadRawTextureData(data);
+                int full = GetExpectedFullMipChainSize(w, h, fmt);
+                if (full > 0) required = full;
+            }
+
+            if (length >= required || data.Length >= required)
+            {
+                LoadRawPinned(t, data, required);
                 return;
             }
 
-            if (data.Length == expected && length == expected)
+            byte[] padded = ByteArrayPool.Rent(required);
+            try
             {
-                t.LoadRawTextureData(data);
+                Buffer.BlockCopy(data, 0, padded, 0, expected);
+                LoadRawPinned(t, padded, required);
             }
-            else
+            finally
             {
-                // Use IntPtr overload to avoid copying if the array is too large (pooled buffer)
-                GCHandle pin = GCHandle.Alloc(data, GCHandleType.Pinned);
-                try
-                {
-                    t.LoadRawTextureData(pin.AddrOfPinnedObject(), expected);
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError($"[VPB] SafeLoadRawTextureData (IntPtr) failed: {ex.Message}");
-                    // Last resort fallback
-                    t.LoadRawTextureData(data);
-                }
-                finally
-                {
-                    pin.Free();
-                }
+                ByteArrayPool.Return(padded);
             }
         }
 
@@ -282,14 +337,15 @@ namespace VPB
 
             InferCreateMipMapsFromRawSize(ref createMipMaps, rawLen, w, h, fmt);
             bool mipAlloc = ShouldAllocateMipChainForRawLoad(createMipMaps, rawLen, w, h, fmt);
-            bool genMipsOnApply = createMipMaps && !mipAlloc;
+            bool genMipsOnApply = ShouldGenerateMipsOnApply(createMipMaps, rawLen, w, h, fmt);
+            bool wantMipChain = mipAlloc || genMipsOnApply;
             bool isSimTexture = forceReadable;
-            bool isCompressedTarget = fmt == TextureFormat.DXT1 || fmt == TextureFormat.DXT5;
-            bool needsReinit = tex.width != w || tex.height != h || tex.format != fmt;
+            bool isCompressedTarget = IsBlockCompressedFormat(fmt);
+            bool needsReinit = tex.width != w || tex.height != h || tex.format != fmt || (tex.mipmapCount > 1) != wantMipChain;
 
             try
             {
-                if (!needsReinit || tex.Resize(w, h, fmt, mipAlloc))
+                if (!needsReinit || tex.Resize(w, h, fmt, wantMipChain))
                 {
                     if (TextureMatchesCachedLayout(tex, w, h, fmt))
                     {
@@ -313,10 +369,10 @@ namespace VPB
 
             try
             {
-                if (needsReinit && !tex.Resize(w, h, fmt, mipAlloc)) return false;
+                if (needsReinit && !tex.Resize(w, h, fmt, wantMipChain)) return false;
                 if (!TextureMatchesCachedLayout(tex, w, h, fmt)) return false;
 
-                Texture2D tmp = new Texture2D(w, h, fmt, mipAlloc, linear);
+                Texture2D tmp = new Texture2D(w, h, fmt, wantMipChain, linear);
                 try
                 {
                     SafeLoadRawTextureData(tmp, data, w, h, fmt);
@@ -348,9 +404,9 @@ namespace VPB
             if (data == null || data.Length == 0 || w <= 0 || h <= 0) return null;
             InferCreateMipMapsFromRawSize(ref createMipMaps, data.Length, w, h, fmt);
             bool mipAlloc = ShouldAllocateMipChainForRawLoad(createMipMaps, data.Length, w, h, fmt);
-            bool genMipsOnApply = createMipMaps && !mipAlloc;
+            bool genMipsOnApply = ShouldGenerateMipsOnApply(createMipMaps, data.Length, w, h, fmt);
             bool isSimTexture = forceReadable;
-            var tex = new Texture2D(w, h, fmt, mipAlloc, linear);
+            var tex = new Texture2D(w, h, fmt, mipAlloc || genMipsOnApply, linear);
             SafeLoadRawTextureData(tex, data, w, h, fmt);
             tex.Apply(genMipsOnApply, markNonReadable && !isSimTexture);
             return tex;
@@ -591,6 +647,32 @@ namespace VPB
                 int h = mz["height"].AsInt;
                 if (w <= 0 || h <= 0) return false;
                 return (long)w * h >= minPixels;
+            }
+            catch { return false; }
+        }
+
+        public static bool CacheEntryNeedsSourceRebuild(string cachePath)
+        {
+            if (string.IsNullOrEmpty(cachePath)) return false;
+            try
+            {
+                string metaPath = cachePath + "meta";
+                if (!File.Exists(metaPath)) return false;
+                var mz = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
+                if (mz == null) return false;
+
+                string storage = mz["mipStorage"] != null ? mz["mipStorage"].Value : null;
+                if (string.IsNullOrEmpty(storage)) return false;
+                if (mz["vpbVer"].AsInt >= TextureCacheVersion) return false;
+
+                int w = mz["width"].AsInt;
+                int h = mz["height"].AsInt;
+                if (w <= 0 || h <= 0) return false;
+
+                TextureFormat fmt = TextureFormat.RGBA32;
+                try { fmt = (TextureFormat)Enum.Parse(typeof(TextureFormat), mz["format"].Value); } catch { }
+
+                return !IsMipMetaRepairableOnServe(mz["createMipMaps"].AsBool, storage, w, h, fmt);
             }
             catch { return false; }
         }
