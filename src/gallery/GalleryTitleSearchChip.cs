@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -10,6 +10,9 @@ namespace VPB
         Tag = 1,
         Creator = 2,
         Status = 3,
+        PackSubject = 4,
+        PackHubTag = 5,
+        PackAny = 6,
     }
 
     internal enum TitleSearchChipPolarity
@@ -25,11 +28,20 @@ namespace VPB
         public TitleSearchChipPolarity Polarity;
         public string Value;
         public int BranchIndex;
+        /// <summary>Quoted on serialize → exact pack-field match (facet click / multi-word).</summary>
+        public bool Exact;
 
         public bool CanExclude
         {
-            // Broad / Tag may exclude. Creator / Status may not.
-            get { return Kind == TitleSearchChipKind.Tag || Kind == TitleSearchChipKind.Broad; }
+            // Broad / Tag / data-pack atoms may exclude. Creator / Status may not.
+            get
+            {
+                return Kind == TitleSearchChipKind.Tag
+                    || Kind == TitleSearchChipKind.Broad
+                    || Kind == TitleSearchChipKind.PackSubject
+                    || Kind == TitleSearchChipKind.PackHubTag
+                    || Kind == TitleSearchChipKind.PackAny;
+            }
         }
 
         public string ToDisplayLabel()
@@ -43,6 +55,12 @@ namespace VPB
                     return "@" + v;
                 case TitleSearchChipKind.Status:
                     return v;
+                case TitleSearchChipKind.PackSubject:
+                    return (Polarity == TitleSearchChipPolarity.Exclude ? "-looks:" : "looks:") + v;
+                case TitleSearchChipKind.PackHubTag:
+                    return (Polarity == TitleSearchChipPolarity.Exclude ? "-hubtag:" : "hubtag:") + v;
+                case TitleSearchChipKind.PackAny:
+                    return (Polarity == TitleSearchChipPolarity.Exclude ? "-lap:" : "lap:") + v;
                 default:
                     // Broad: bare word; exclude serializes as -term (honest broad exclude).
                     return Polarity == TitleSearchChipPolarity.Exclude ? "-" + v : v;
@@ -60,9 +78,39 @@ namespace VPB
                     return "@" + v;
                 case TitleSearchChipKind.Status:
                     return v;
+                case TitleSearchChipKind.PackSubject:
+                    return (Polarity == TitleSearchChipPolarity.Exclude ? "-looks:" : "looks:")
+                        + QuotePackTokenValue(v, Exact);
+                case TitleSearchChipKind.PackHubTag:
+                    return (Polarity == TitleSearchChipPolarity.Exclude ? "-hubtag:" : "hubtag:")
+                        + QuotePackTokenValue(v, Exact);
+                case TitleSearchChipKind.PackAny:
+                    return (Polarity == TitleSearchChipPolarity.Exclude ? "-lap:" : "lap:")
+                        + QuotePackTokenValue(v, Exact);
                 default:
                     return Polarity == TitleSearchChipPolarity.Exclude ? "-" + v : v;
             }
+        }
+
+        internal static string QuotePackTokenValue(string v, bool exact)
+        {
+            if (string.IsNullOrEmpty(v)) return "";
+            bool quote = exact;
+            if (!quote)
+            {
+                for (int i = 0; i < v.Length; i++)
+                {
+                    char c = v[i];
+                    if (c == ' ' || c == '\t' || c == '"' || c == ',')
+                    {
+                        quote = true;
+                        break;
+                    }
+                }
+            }
+            if (!quote) return v;
+            string inner = v.IndexOf('"') >= 0 ? v.Replace("\"", "") : v;
+            return "\"" + inner + "\"";
         }
     }
 
@@ -126,6 +174,7 @@ namespace VPB
                     for (int i = 0; i < br.CreatorTerms.Count; i++)
                         TryAdd(dest, TitleSearchChipKind.Creator, TitleSearchChipPolarity.Include, br.CreatorTerms[i], bi);
                 }
+                AppendPackChips(dest, br, bi, forceExclude);
                 AppendStatusChips(dest, br.Status, bi);
             }
         }
@@ -170,6 +219,17 @@ namespace VPB
             string value,
             int branchIndex)
         {
+            return TryAdd(dest, kind, polarity, value, branchIndex, false);
+        }
+
+        internal static bool TryAdd(
+            List<TitleSearchChip> dest,
+            TitleSearchChipKind kind,
+            TitleSearchChipPolarity polarity,
+            string value,
+            int branchIndex,
+            bool exact)
+        {
             if (dest == null || string.IsNullOrEmpty(value)) return false;
             string v = value.Trim().ToLowerInvariant();
             if (v.Length == 0) return false;
@@ -177,7 +237,10 @@ namespace VPB
             // Creator / Status cannot exclude.
             if (polarity == TitleSearchChipPolarity.Exclude
                 && kind != TitleSearchChipKind.Tag
-                && kind != TitleSearchChipKind.Broad)
+                && kind != TitleSearchChipKind.Broad
+                && kind != TitleSearchChipKind.PackSubject
+                && kind != TitleSearchChipKind.PackHubTag
+                && kind != TitleSearchChipKind.PackAny)
             {
                 polarity = TitleSearchChipPolarity.Include;
             }
@@ -191,6 +254,7 @@ namespace VPB
 
                 // Same kind+value: update polarity (e.g. Shift+Enter / drag Incl↔Excl).
                 c.Polarity = polarity;
+                if (exact) c.Exact = true;
                 dest[i] = c;
                 return true;
             }
@@ -200,7 +264,8 @@ namespace VPB
                 Kind = kind,
                 Polarity = polarity,
                 Value = v,
-                BranchIndex = branchIndex < 0 ? 0 : branchIndex
+                BranchIndex = branchIndex < 0 ? 0 : branchIndex,
+                Exact = exact
             });
             return true;
         }
@@ -235,6 +300,39 @@ namespace VPB
             c.Polarity = polarity;
             chips[index] = c;
             return true;
+        }
+
+        private static void AppendPackChips(
+            List<TitleSearchChip> dest, GallerySearchBranch br, int branchIndex, bool forceExclude)
+        {
+            if (br == null) return;
+            AppendPackList(dest, br.PackSubjectInclude, TitleSearchChipKind.PackSubject, branchIndex, forceExclude);
+            AppendPackList(dest, br.PackSubjectExclude, TitleSearchChipKind.PackSubject, branchIndex, true);
+            AppendPackList(dest, br.PackHubTagInclude, TitleSearchChipKind.PackHubTag, branchIndex, forceExclude);
+            AppendPackList(dest, br.PackHubTagExclude, TitleSearchChipKind.PackHubTag, branchIndex, true);
+            AppendPackList(dest, br.PackAnyInclude, TitleSearchChipKind.PackAny, branchIndex, forceExclude);
+            AppendPackList(dest, br.PackAnyExclude, TitleSearchChipKind.PackAny, branchIndex, true);
+        }
+
+        private static void AppendPackList(
+            List<TitleSearchChip> dest, List<string> values, TitleSearchChipKind kind,
+            int branchIndex, bool exclude)
+        {
+            if (values == null) return;
+            TitleSearchChipPolarity polarity = exclude
+                ? TitleSearchChipPolarity.Exclude
+                : TitleSearchChipPolarity.Include;
+            for (int i = 0; i < values.Count; i++)
+            {
+                string v = values[i];
+                bool exact = false;
+                if (v != null && v.Length > 1 && v[0] == '=')
+                {
+                    exact = true;
+                    v = v.Substring(1);
+                }
+                TryAdd(dest, kind, polarity, v, branchIndex, exact);
+            }
         }
 
         private static void AppendStatusChips(List<TitleSearchChip> dest, GallerySearchQuery.StatusFlags status, int branchIndex)

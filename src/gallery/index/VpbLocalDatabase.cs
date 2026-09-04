@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -682,6 +682,7 @@ namespace VPB
             EnsurePkgNewestSchema(conn);
             EnsurePkgLicenseSchema(conn);
             EnsureHideMarkerSchema(conn);
+            EnsureDataPackSchema(conn);
         }
 
         /// <summary>
@@ -4445,6 +4446,7 @@ namespace VPB
                         // Always recompute after remove and/or add (IndexVarPackages may no-op on empty add).
                         try { RefreshAllPkgNewestFlags(conn); } catch { }
                         try { MarkPkgLicenseBackfillComplete(conn); } catch { }
+                        RefreshDataPackLinksAfterIndexChange(conn);
 
                         // Ready meta describes whole live inventory. Never publish it over a partial delta.
                         if (indexComplete)
@@ -5671,6 +5673,7 @@ namespace VPB
 
                         try { RefreshAllPkgNewestFlags(conn); } catch { }
                         try { MarkPkgLicenseBackfillComplete(conn); } catch { }
+                        RefreshDataPackLinksAfterIndexChange(conn);
 
                         long tMeta0 = Stopwatch.GetTimestamp();
                         if (catMemIndexComplete)
@@ -6040,12 +6043,31 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Side-tab creator file counts from <c>cat_mem</c> + <c>pkg</c> (distinct VAR file rows), using the same extension + path rules as the legacy package scan.
-        /// Only files that appear in the index (assigned to at least one category) are counted; unclassified VAR files are excluded.
-        /// </summary>
+        internal enum FileCountGroupMode
+        {
+            Creator = 0,
+            DataPackHubTag = 1,
+            DataPackSubject = 2,
+        }
+
         internal static bool TryReadCreatorFileCounts(
             Dictionary<string, int> countsOut,
+            string extensionPipeSeparated,
+            List<string> pathPrefixes,
+            string singlePathPrefix,
+            HashSet<string> activeTags = null,
+            string categoryTitle = null,
+            string packagePathFilter = null,
+            HashSet<string> activeUserTags = null)
+        {
+            return TryReadGroupedFileCounts(countsOut, FileCountGroupMode.Creator,
+                extensionPipeSeparated, pathPrefixes, singlePathPrefix,
+                activeTags, categoryTitle, packagePathFilter, activeUserTags);
+        }
+
+        internal static bool TryReadGroupedFileCounts(
+            Dictionary<string, int> countsOut,
+            FileCountGroupMode groupMode,
             string extensionPipeSeparated,
             List<string> pathPrefixes,
             string singlePathPrefix,
@@ -6106,11 +6128,43 @@ namespace VPB
                     // EVERYTHING grid is all cat_mem (minus previews); category.paths are loose-disk roots only — do not AND them here.
                     bool hasPathPrefix = !isEverythingC3
                         && ((pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix));
+                    bool packMode = groupMode != FileCountGroupMode.Creator;
+                    if (packMode && !DataPackTablesPresent(conn)) return false;
+
+                    string groupExpr;
+                    string groupGuard;
+                    if (groupMode == FileCountGroupMode.DataPackHubTag)
+                    {
+                        groupExpr = "dt.tag";
+                        groupGuard = "length(trim(ifnull(dt.tag,''))) > 0";
+                    }
+                    else if (groupMode == FileCountGroupMode.DataPackSubject)
+                    {
+                        groupExpr = "de.subject";
+                        groupGuard = "length(trim(ifnull(de.subject,''))) > 0";
+                    }
+                    else
+                    {
+                        groupExpr = "p.creator";
+                        groupGuard = "length(trim(coalesce(p.creator,''))) > 0";
+                    }
+
                     var sb = new StringBuilder();
-                    string countExpr = (hasCat && !isEverythingC3) ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
-                    sb.Append("SELECT p.creator, ").Append(countExpr).Append(" ");
+                    string countExpr = (hasCat && !isEverythingC3 && !packMode)
+                        ? "COUNT(*)"
+                        : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
+                    sb.Append("SELECT ").Append(groupExpr).Append(", ").Append(countExpr).Append(" ");
                     sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
-                    sb.Append("WHERE length(trim(coalesce(p.creator,''))) > 0");
+                    if (packMode)
+                    {
+                        sb.Append("CROSS JOIN datapack_link dl ON dl.pkg_uid = m.pkg_uid ");
+                        sb.Append(groupMode == FileCountGroupMode.DataPackHubTag
+                            ? "CROSS JOIN datapack_tag dt ON dt.pack_id=dl.pack_id AND dt.entry_id=dl.entry_id AND dt.ns='hub' "
+                            : "CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
+                    }
+                    sb.Append("WHERE ").Append(groupGuard);
+                    if (groupMode == FileCountGroupMode.DataPackHubTag)
+                        AppendDataPackTagNotHiddenSql(sb, "dt.tag", "m.pkg_uid");
                     if (hasCat && !isEverythingC3) sb.Append(" AND m.category = ?");
                     if (isEverythingC3) sb.Append(BuildEverythingNonPreviewAnd("m.internal_path"));
                     if (hasPackagePathFilter)
@@ -6164,7 +6218,7 @@ namespace VPB
                     var utBind = new List<string>();
                     AppendSqlActiveUserTagExists(sb, utBind, activeUserTags, "m", isEverythingC3 ? Gallery.EverythingCategoryName : null);
 
-                    sb.Append(" GROUP BY p.creator");
+                    sb.Append(" GROUP BY ").Append(groupExpr);
 
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
@@ -6207,11 +6261,11 @@ namespace VPB
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
                         {
-                            string creator = stmt.ColumnText(0);
+                            string key = stmt.ColumnText(0);
                             int n;
-                            if (!int.TryParse(stmt.ColumnText(1), out n)) n = 0;
-                            if (!string.IsNullOrEmpty(creator))
-                                countsOut[creator] = n;
+                            if (!int.TryParse(stmt.ColumnText(1), out n)) n = (int)stmt.ColumnInt64(1);
+                            if (!string.IsNullOrEmpty(key))
+                                countsOut[key] = n;
                         }
                     }
                 }

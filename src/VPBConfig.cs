@@ -1101,6 +1101,8 @@ namespace VPB
         public bool TryOnModeEnabled = false;
         /// <summary>When ON, the E/C keys move the navigation rig up/down in world (complements WASD). On by default.</summary>
         public bool VerticalMoveKeysEnabled = true;
+        public bool DataPackLookapediaEnabled = true;
+        public bool DataPackHubTagsEnabled = true;
         public JSONClass ShortcutBindings = new JSONClass();
         public bool ShortcutsRequireWindowFocus = true;
         public bool ShortcutsNeedVisiblePane = true;
@@ -1836,6 +1838,8 @@ namespace VPB
             HoldToLaunchEnabled = false;
             TryOnModeEnabled = false;
             VerticalMoveKeysEnabled = true;
+            DataPackLookapediaEnabled = true;
+            DataPackHubTagsEnabled = true;
             ShortcutBindings = new JSONClass();
             ShortcutsRequireWindowFocus = true;
             ShortcutsNeedVisiblePane = true;
@@ -2304,6 +2308,8 @@ namespace VPB
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["TryOnModeEnabled"] != null) TryOnModeEnabled = node["TryOnModeEnabled"].AsBool;
                         if (node["VerticalMoveKeysEnabled"] != null) VerticalMoveKeysEnabled = node["VerticalMoveKeysEnabled"].AsBool;
+                        if (node["DataPackLookapediaEnabled"] != null) DataPackLookapediaEnabled = node["DataPackLookapediaEnabled"].AsBool;
+                        if (node["DataPackHubTagsEnabled"] != null) DataPackHubTagsEnabled = node["DataPackHubTagsEnabled"].AsBool;
                         if (node["ShortcutBindings"] != null) ShortcutBindings = node["ShortcutBindings"].AsObject;
                         if (node["ShortcutsRequireWindowFocus"] != null) ShortcutsRequireWindowFocus = node["ShortcutsRequireWindowFocus"].AsBool;
                         if (node["ShortcutsNeedVisiblePane"] != null) ShortcutsNeedVisiblePane = node["ShortcutsNeedVisiblePane"].AsBool;
@@ -2755,6 +2761,8 @@ namespace VPB
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["TryOnModeEnabled"].AsBool = TryOnModeEnabled;
                 node["VerticalMoveKeysEnabled"].AsBool = VerticalMoveKeysEnabled;
+                node["DataPackLookapediaEnabled"].AsBool = DataPackLookapediaEnabled;
+                node["DataPackHubTagsEnabled"].AsBool = DataPackHubTagsEnabled;
                 try { VpbShortcutMap.SaveToConfig(); } catch { }
                 if (ShortcutBindings != null) node["ShortcutBindings"] = ShortcutBindings;
                 node["ShortcutsRequireWindowFocus"].AsBool = ShortcutsRequireWindowFocus;

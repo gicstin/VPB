@@ -58,7 +58,7 @@ The language button on the title bar (e.g. EN) switches UI text. Help content lo
 
 ## Advanced search
 
-Title-bar search is a **universal filter**. Bare words match name/path/creator/uid **or** user-tag text.
+Title-bar search is a **universal filter**. Bare words match name/path/creator/uid, user-tag text, **or** Look-A-Pedia “looks like” names (so typing `jinx` finds a look packaged as Kinx).
 
 ### Filter chips (Enter to commit)
 - Type `@creatorA` then **Enter**, then `#tagB` then **Enter** — each becomes its own chip under **Include**.
@@ -79,14 +79,17 @@ Title-bar search is a **universal filter**. Bare words match name/path/creator/u
 - **IF** — optional preface before a status/badge word. Same as writing the status alone: `IF loaded` ≡ `loaded`. Use it when you think “only IF this is true…”.
 
 ### Text and tags
-- Bare words — `dress man` (each word must match somewhere; AND)
-- **Broad exclude** — `-wet` (must **not** match name/path/creator/uid **or** user-tag text). Chip Exclude / Shift+Enter on a bare word uses this.
+- Bare words — `dress man` (each word must match somewhere; AND). Also matches Look-A-Pedia **looks like** names when that pack is on.
+- **Broad exclude** — `-wet` (must **not** match name/path/creator/uid, user-tag text, or Look-A-Pedia subject). Chip Exclude / Shift+Enter on a bare word uses this.
 - User tag — `tag:wet` or `#wet`
 - **Multiple tags** (comma list) — `tag:wet,shiny,-nsfw` or `#wet,#shiny,-nsfw` or shorthand `wet,shiny,-nsfw`
   - plain name = must have that tag
   - `-name` = must **not** have that tag
 - Exclude tag — `-tag:nsfw` or `-#nsfw` (user-tag only; different from bare `-wet`)
 - Creator — `creator:Acid` or `@Acid` (comma list OK: `@Acid,@Other`)
+- **Looks like** — **Looks like** section in {{icon:tags|Tags}} (amber, read-only), or `looks:jinx` (Look-A-Pedia subject only; comma list = **any of**). Click **Looks like** on the detail strip to commit this chip.
+- **Hub tag** — **Hub tags** section in {{icon:tags|Tags}} (green, read-only), or `hubtag:nier` (comma list = **any of**). With the Hub data pack on, every package the Hub knows carries its Hub tags, not just Look-A-Pedia entries. Look-A-Pedia and Hub rows that share a Hub resource id also share package matches (Hub filenames fill empty Look-A-Pedia `vars`, and the other way around). Select an item: Hub tags on the **detail strip** are clickable filters (right-click excludes), same as the Tags list. Open the tag list to see them in green under your own tags: read-only there, but **click** hides one on that package and **right-click** hides it everywhere (Settings shows the count and can undo the lot). Same string can still be **Create Tag** as a user tag — different namespace, no conflict.
+- **Any pack field** — `lap:gaming` (subject, title, creator, category, tag line, or tags — across both packs). Leading `-` excludes (`-looks:`, `-hubtag:`, `-lap:`).
 
 ### Status and badges
 Grid letter badges: **A** auto-install, **H** hidden, **W** scan-whitelist excluded, **T** user tags.
@@ -102,6 +105,10 @@ Grid letter badges: **A** auto-install, **H** hidden, **W** scan-whitelist exclu
 - `whitelist` / `badge:w` — scan-excluded badge **W**
 
 ### Examples
+- Open {{icon:tags|Tags}} and expand **Looks like** or **Hub tags** — no syntax
+- `jinx` — name/path **or** Look-A-Pedia “looks like” (finds Kinx)
+- `looks:jinx` — only Look-A-Pedia subject (expert)
+- `hubtag:nier` — Hub tag from the Hub / Look-A-Pedia packs (Tags list Hub tags section)
 - `tag:fav,outfit,-nsfw` — has fav and outfit tags, not nsfw
 - `#wet OR #shiny` — either tag
 - `dress AND IF loaded` — name/path contains dress, and package is loaded
@@ -122,6 +129,8 @@ At the top of the Tags column, pick a mode:
 - **Tag** — assign your tags to packages (Applied / Available lists).
 - **Filter** — filter the grid by selected tags (AND/OR in Settings → Gallery side lists).
 - **Filter untagged** — show only items with no user tags.
+
+**Looks like** (Look-A-Pedia pack) sits in an **amber Looks like (N)** header frozen at the **top** of Available (above pinned tags). **Hub tags** sit in a **green Hub tags (N)** header under that. Both stay on screen while you scroll, so you can collapse without scrolling back up. Expand either, or type in the side search to show matches. Click filters the grid (`looks:` / `hubtag:`); they cannot be applied. Type the same Hub-tag name and use **Create Tag** if you want that string as a user tag.
 
 Use **Edit** in the Tags column header to open the tag editor **Database** mode (create, rename, merge, purge, categories, YAML). Same window as detail-strip **Set Tags** / **T** — switch **Tag** ↔ **Database** in the mode tabs.
 
@@ -167,7 +176,7 @@ Select rows, then use the **toolbox** at the bottom for cleanup actions: filter 
 Select one or more rows to expand the **toolbox** at the bottom (hover the bar if it is collapsed).
 
 **Detail strip** — select a row for an info card above the toolbox: thumb + status badges (A/H/W/T), facts, and clickable chips. Collapse with the chevron left of the item name; expand again from the Details button (top-left in the toolbox action row). Hover the preview thumb: scroll wheel steps selection; hold right-click and scroll to raise/lower the star rating; double-click to launch or apply. Drag the thin bar at the top of the strip to resize height (preview stays square; path/desc/tags hide when short). Settings → Visuals → **Detail preview side** puts the image left or right. Preferences are remembered.
-- **Description & package tags** — wide+short pane uses a side column (scrollable description + native tags). Tall strip moves those into regular rows under actions; narrow pane keeps a short description row. Turn off **Show description & package tags** in Settings → Visuals to hide them.
+- **Description & package tags** — wide+short pane uses a side column (scrollable description + native tags). Tall strip moves those into regular rows under actions; narrow pane keeps a short description row. **Hub tags** in that line are clickable chips (filter / right-click exclude), same as user-tag chips. Turn off **Show description & package tags** in Settings → Visuals to hide them.
 - **D / M / Dn** — filter grid to dependencies / missing / dependents (hover for tip).
 - **Creator** — filter by creator.
 - **Tag** or tags line — quick-tag menu (Applied | Add). Filter box scopes **Add** list only. Sort button on Add cycles A→Z / Z→A / count 1→9 / 9→1 (remembers). Remove with ✓, or **New tag…**.

@@ -72,6 +72,10 @@ namespace VPB
             }
             if (isLeft)
             {
+                if (_leftCreatorVirtScroll != null && _leftCreatorVirtHooked)
+                {
+                    try { _leftCreatorVirtScroll.onValueChanged.RemoveListener(OnCreatorVirtScrollLeft); } catch { }
+                }
                 leftCategoryTabHolder = null;
                 leftCreatorTabHolder = null;
                 leftCategoryTabsLastSig = null;
@@ -81,6 +85,10 @@ namespace VPB
             }
             else
             {
+                if (_rightCreatorVirtScroll != null && _rightCreatorVirtHooked)
+                {
+                    try { _rightCreatorVirtScroll.onValueChanged.RemoveListener(OnCreatorVirtScrollRight); } catch { }
+                }
                 rightCategoryTabHolder = null;
                 rightCreatorTabHolder = null;
                 rightCategoryTabsLastSig = null;
@@ -220,21 +228,25 @@ namespace VPB
                 _leftCreatorVirtScroll = sr;
                 if (_leftCreatorVirtHooked) return;
                 _leftCreatorVirtHooked = true;
-                sr.onValueChanged.AddListener(_ =>
-                {
-                    try { UpdateCreatorVirtualVisible(true); } catch { }
-                });
+                sr.onValueChanged.AddListener(OnCreatorVirtScrollLeft);
             }
             else
             {
                 _rightCreatorVirtScroll = sr;
                 if (_rightCreatorVirtHooked) return;
                 _rightCreatorVirtHooked = true;
-                sr.onValueChanged.AddListener(_ =>
-                {
-                    try { UpdateCreatorVirtualVisible(false); } catch { }
-                });
+                sr.onValueChanged.AddListener(OnCreatorVirtScrollRight);
             }
+        }
+
+        private void OnCreatorVirtScrollLeft(Vector2 _)
+        {
+            try { UpdateCreatorVirtualVisible(true); } catch { }
+        }
+
+        private void OnCreatorVirtScrollRight(Vector2 _)
+        {
+            try { UpdateCreatorVirtualVisible(false); } catch { }
         }
 
         private float CreatorVirtRowHeight()
@@ -291,6 +303,8 @@ namespace VPB
             SyncRoundedFractionOnTabButtons(rightActiveTabButtons, frac);
             SyncRoundedFractionOnTabButtons(_leftCreatorVirtButtons, frac);
             SyncRoundedFractionOnTabButtons(_rightCreatorVirtButtons, frac);
+            SyncRoundedFractionOnTabButtons(_leftLookFacetVirtButtons, frac);
+            SyncRoundedFractionOnTabButtons(_rightLookFacetVirtButtons, frac);
             SyncRoundedFractionOnTabButtonPool(frac);
             try { ApplyCategoryQuickChromeLayout(ChromeScale); } catch { }
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
@@ -513,12 +527,20 @@ namespace VPB
                 + "|" + (int)_userTagAvailMode
                 + "|" + (VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode ? 1 : 0)
                 + "|" + (_userTagShowUnusedBucket ? 1 : 0)
+                + "|" + (_userTagShowHubBucket ? 1 : 0)
+                + "|" + (_userTagShowLooksBucket ? 1 : 0)
                 + "|" + (userTagsCached ? 1 : 0)
-                + "|sel:" + BuildUserTagSelectionVirtSignature();
+                + "|sel:" + BuildUserTagSelectionVirtSignature()
+                + "|hub:" + (LookFacetHubModeAvailable() ? 1 : 0)
+                + "|" + (VpbLocalDatabase.DataPackIndexReady ? 1 : 0)
+                + "|" + (LookFacetHubModeAvailable() ? ComputeLookFacetCollectSignature(true) : "")
+                + "|look:" + (LookFacetSubjectModeAvailable() ? ComputeLookFacetCollectSignature(false) : "");
         }
 
         private const int UserTagCreateRowCountSentinel = int.MinValue;
         private const int UserTagUnusedBucketHeaderSentinel = int.MinValue + 1;
+        private const int UserTagHubBucketHeaderSentinel = int.MinValue + 2;
+        private const int UserTagLooksBucketHeaderSentinel = int.MinValue + 3;
 
         private void RebuildUserTagVirtViewList(bool isLeft, bool resetScrollToTop)
         {
@@ -619,6 +641,8 @@ namespace VPB
                     if (e.Count <= 0
                         && e.Count != UserTagCreateRowCountSentinel
                         && e.Count != UserTagUnusedBucketHeaderSentinel
+                        && !e.IsHubTag
+                        && !e.IsLooksLike
                         && !UserTagNameIsInIncludeOrExcludeFilter(e.Name))
                     {
                         UserTagSelectionState st = GetUserTagSelectionState(e.Name);
@@ -646,7 +670,9 @@ namespace VPB
             var pinnedUt = new List<UserTagSideTabEntry>(8);
             var normalUt = new List<UserTagSideTabEntry>(filteredUt.Count);
             PartitionUserTagRowsPinnedFirst(filteredUt, pinnedUt, normalUt);
-            for (int pi = 0; pi < pinnedUt.Count; pi++) _userTagStickyRows.Add(pinnedUt[pi]);
+            AppendPackFacetToUserTagVirtView(false, filterUt, sortUt);
+            AppendPackFacetToUserTagVirtView(true, filterUt, sortUt);
+            for (int pi = 0; pi < pinnedUt.Count; pi++) _userTagVirtView.Add(pinnedUt[pi]);
             for (int ni = 0; ni < normalUt.Count; ni++) _userTagVirtView.Add(normalUt[ni]);
 
             if (resetScrollToTop)
@@ -798,9 +824,100 @@ namespace VPB
             EnsureSideTabVirtPool(isLeft ? _leftUserTagVirtButtons : _rightUserTagVirtButtons, parent, desired);
         }
 
+        private void AppendPackFacetToUserTagVirtView(bool hub, string filterUt, SortState sortUt)
+        {
+            if (hub)
+            {
+                if (!LookFacetHubModeAvailable()) return;
+            }
+            else if (!LookFacetSubjectModeAvailable())
+                return;
+            if (!VpbLocalDatabase.DataPackIndexReady) return;
+            if (!EnsureLookFacetRowsForMode(hub)) return;
+            List<CreatorCacheEntry> src = hub ? _lookFacetHubRows : _lookFacetSubjectRows;
+            if (src == null || src.Count == 0) return;
+
+            bool filterOn = !string.IsNullOrEmpty(filterUt);
+            int matchCount = 0;
+            if (filterOn)
+            {
+                for (int i = 0; i < src.Count; i++)
+                {
+                    string n = src[i].Name;
+                    if (string.IsNullOrEmpty(n)) continue;
+                    if (n.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    matchCount++;
+                }
+                if (matchCount == 0) return;
+            }
+            else
+                matchCount = src.Count;
+
+            bool expand = (hub ? _userTagShowHubBucket : _userTagShowLooksBucket) || filterOn;
+            int headerSentinel = hub ? UserTagHubBucketHeaderSentinel : UserTagLooksBucketHeaderSentinel;
+            string hideKey = hub
+                ? "gallery.usertags.hub_bucket_hide"
+                : "gallery.usertags.looks_bucket_hide";
+            string showKey = hub
+                ? "gallery.usertags.hub_bucket"
+                : "gallery.usertags.looks_bucket";
+            string hideFb = hub ? "Hide Hub tags ({0})" : "Hide Looks like ({0})";
+            string showFb = hub ? "Hub tags ({0})" : "Looks like ({0})";
+            _userTagStickyRows.Add(new UserTagSideTabEntry
+            {
+                Name = string.Format(
+                    expand ? VPBTranslation.T(hideKey, hideFb) : VPBTranslation.T(showKey, showFb),
+                    matchCount),
+                Count = headerSentinel,
+                IsHubTag = hub,
+                IsLooksLike = !hub
+            });
+            if (!expand) return;
+
+            var tmp = new List<UserTagSideTabEntry>(matchCount);
+            for (int i = 0; i < src.Count; i++)
+            {
+                CreatorCacheEntry e = src[i];
+                if (string.IsNullOrEmpty(e.Name)) continue;
+                if (filterOn && e.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                tmp.Add(new UserTagSideTabEntry
+                {
+                    Name = e.Name,
+                    Count = e.Count,
+                    IsHubTag = hub,
+                    IsLooksLike = !hub
+                });
+            }
+            if (sortUt != null && sortUt.Type == SortType.Count)
+            {
+                if (sortUt.Direction == SortDirection.Ascending)
+                    tmp.Sort((a, b) => a.Count.CompareTo(b.Count));
+                else
+                    tmp.Sort((a, b) => b.Count.CompareTo(a.Count));
+            }
+            else if (sortUt != null && sortUt.Direction == SortDirection.Ascending)
+                tmp.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            else
+                tmp.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+            for (int i = 0; i < tmp.Count; i++)
+                _userTagVirtView.Add(tmp[i]);
+        }
+
         private void BindUserTagVirtButton(GameObject btnGO, UserTagSideTabEntry ut, Color utAccent, string pickTooltip, bool isLeft)
         {
             if (btnGO == null) return;
+            if (ut.IsLooksLike || ut.Count == UserTagLooksBucketHeaderSentinel)
+            {
+                BindUserTagVirtPackBucketButton(btnGO, ut, isLeft, false);
+                return;
+            }
+            if (ut.IsHubTag || ut.Count == UserTagHubBucketHeaderSentinel)
+            {
+                BindUserTagVirtPackBucketButton(btnGO, ut, isLeft, true);
+                return;
+            }
+            UI.SetControlSelectedRim(btnGO, false);
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagBind++;
             const string CreateLabelKey = "gallery.usertags.create_from_search";
             const string CreateTipKey = "gallery.usertags.create_from_search_tip";
@@ -1017,6 +1134,154 @@ namespace VPB
             dr.DetailStripAppliedReorder = false;
         }
 
+        private void BindUserTagVirtPackBucketButton(GameObject btnGO, UserTagSideTabEntry ut, bool isLeft, bool hub)
+        {
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagBind++;
+            int headerSentinel = hub ? UserTagHubBucketHeaderSentinel : UserTagLooksBucketHeaderSentinel;
+            bool isHeader = ut.Count == headerSentinel;
+            string tagSnap = ut.Name ?? "";
+            TitleSearchChipKind kind = hub ? TitleSearchChipKind.PackHubTag : TitleSearchChipKind.PackSubject;
+            string token = isHeader ? "" : VpbLocalDatabase.DataPackFacetValueToken(tagSnap);
+            bool isInclude = !isHeader && HasTitleSearchPackChip(kind, token);
+            bool isExclude = !isHeader && HasTitleSearchPackChipPolarity(kind, token, TitleSearchChipPolarity.Exclude);
+            Color headerCol = hub ? GalleryUiColorTokens.FacetHub : ColorLooksLike;
+            Color idleCol = hub ? GalleryUiColorTokens.PackTagRow : GalleryUiColorTokens.LooksLikeRow;
+            Color onCol = hub ? ColorHub : ColorLooksLike;
+            Color btnColor = isHeader
+                ? headerCol
+                : (isExclude ? UserTagFilterExcludedColor : (isInclude ? onCol : idleCol));
+            string labelUt = isHeader ? tagSnap : (tagSnap + " (" + ut.Count + ")");
+
+            Button btnComp = btnGO.GetComponent<Button>();
+            if (btnComp != null)
+            {
+                btnComp.onClick.RemoveAllListeners();
+                bool sideLeft = isLeft;
+                bool headerSnap = isHeader;
+                bool hubSnap = hub;
+                string nameSnap = tagSnap;
+                btnComp.onClick.AddListener(() =>
+                {
+                    try
+                    {
+                        UserTagPickDragSource dragSrc = btnGO.GetComponent<UserTagPickDragSource>();
+                        if (dragSrc != null && dragSrc.ConsumedByDrag) return;
+                        if (headerSnap)
+                        {
+                            if (hubSnap) _userTagShowHubBucket = !_userTagShowHubBucket;
+                            else _userTagShowLooksBucket = !_userTagShowLooksBucket;
+                            _userTagVirtViewSig = null;
+                            try { RefreshUserTagsAvailPaneInPlace(sideLeft); } catch { }
+                            return;
+                        }
+                        string tok = VpbLocalDatabase.DataPackFacetValueToken(nameSnap);
+                        if (hubSnap) ToggleTitleSearchPackHubTagChip(tok, true);
+                        else ToggleTitleSearchPackSubjectChip(tok, true);
+                        try { RefreshUserTagsAvailPaneInPlace(sideLeft); } catch { }
+                    }
+                    catch { }
+                });
+            }
+
+            UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
+            if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
+            rightClickDelegate.OnRightClick = null;
+            if (!isHeader)
+            {
+                bool sideLeftRc = isLeft;
+                bool hubRc = hub;
+                string nameRc = tagSnap;
+                rightClickDelegate.OnRightClick = () =>
+                {
+                    try
+                    {
+                        string tok = VpbLocalDatabase.DataPackFacetValueToken(nameRc);
+                        if (hubRc) ToggleTitleSearchPackHubTagExcludeChip(tok, true);
+                        else ToggleTitleSearchPackSubjectExcludeChip(tok, true);
+                        try { RefreshUserTagsAvailPaneInPlace(sideLeftRc); } catch { }
+                    }
+                    catch { }
+                };
+            }
+
+            Image img = btnGO.GetComponent<Image>();
+            if (img != null) img.color = btnColor;
+            UI.SetControlSelectedRim(btnGO, isInclude);
+
+            float s = ChromeScale;
+            Text txt = btnGO.GetComponentInChildren<Text>();
+            if (txt != null)
+            {
+                GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+                txt.verticalOverflow = VerticalWrapMode.Truncate;
+                txt.resizeTextForBestFit = false;
+                RectTransform txtRt = txt.GetComponent<RectTransform>();
+                if (txtRt != null)
+                {
+                    txtRt.offsetMin = new Vector2(0f, txtRt.offsetMin.y);
+                    txtRt.offsetMax = new Vector2(0f, txtRt.offsetMax.y);
+                }
+                RectTransform btnRtUt = btnGO.GetComponent<RectTransform>();
+                float padUt = 10f * s;
+                float btnW = btnRtUt != null ? btnRtUt.rect.width : 0f;
+                float preferW = GalleryUiDesignTokens.TabButtonPreferredWidthRef * s;
+                if (btnW <= preferW + 1f)
+                {
+                    RectTransform parentRt = btnGO.transform.parent as RectTransform;
+                    if (parentRt != null && parentRt.rect.width > btnW + 1f)
+                        btnW = parentRt.rect.width - (GalleryUiDesignTokens.SideTabRowPadRef * 2f * s);
+                }
+                float innerUt = btnW - padUt;
+                if (innerUt <= 2f) innerUt = preferW;
+                txt.text = EllipsizeTextPreferredWidth(txt, labelUt, innerUt);
+            }
+
+            SyncUserTagRowFilterIcon(btnGO, false, s);
+            SyncUserTagRowPinButton(btnGO, tagSnap, true, s, isLeft, appliedRow: false, availSelectionState: UserTagSelectionState.Off);
+
+            LayoutElement le = btnGO.GetComponent<LayoutElement>();
+            if (le == null) le = btnGO.AddComponent<LayoutElement>();
+            le.minWidth = GalleryUiDesignTokens.TabButtonMinWidthRef * s;
+            le.preferredWidth = GalleryUiDesignTokens.TabButtonPreferredWidthRef * s;
+            le.minHeight = SideTabRowHeightPx(s);
+            le.preferredHeight = SideTabRowHeightPx(s);
+            le.flexibleWidth = 1;
+
+            string tip;
+            if (isHeader)
+            {
+                tip = hub
+                    ? VPBTranslation.T(
+                        "gallery.usertags.hub_bucket_tip",
+                        "Show or hide Hub tags from the Hub data pack. Click a tag to filter the grid; they cannot be applied.")
+                    : VPBTranslation.T(
+                        "gallery.usertags.looks_bucket_tip",
+                        "Show or hide Look-A-Pedia names. Click a name to filter the grid; they cannot be applied as tags.");
+            }
+            else
+            {
+                tip = hub
+                    ? VPBTranslation.T(
+                        "gallery.usertags.hub_row_tip",
+                        "Hub tag (read-only). Click filters the grid. Right-click excludes. Same name can still be created as a user tag.")
+                    : VPBTranslation.T(
+                        "gallery.usertags.looks_row_tip",
+                        "Looks like (read-only). Click filters the grid (looks:). Right-click excludes.");
+            }
+            if (txt != null && !string.Equals(txt.text, labelUt, StringComparison.Ordinal))
+                AddTooltipPlain(btnGO, labelUt + "\n\n" + tip);
+            else
+                AddTooltipPlain(btnGO, tip);
+
+            UserTagPickDragSource dr = btnGO.GetComponent<UserTagPickDragSource>();
+            if (dr == null) dr = btnGO.AddComponent<UserTagPickDragSource>();
+            dr.Panel = this;
+            dr.PrimaryTag = "";
+            dr.IsAppliedRowDrag = false;
+            dr.DetailStripAppliedReorder = false;
+        }
+
         private void UpdateUserTagVirtualVisible(bool isLeft, Color utAccent, Transform tabContainer, bool fromScroll = false)
         {
             if (tabContainer == null || !IsUserTagsSideTabOpen(isLeft)) return;
@@ -1163,6 +1428,10 @@ namespace VPB
             {
                 BuildCreatorTabs(container, isLeft);
             }
+            else if (contentType == ContentType.Lookapedia)
+            {
+                BuildLookFacetTabs(container, trackedButtons, isLeft);
+            }
             else if (contentType == ContentType.Path)
             {
                 BuildPathTabs(container, trackedButtons);
@@ -1259,6 +1528,12 @@ namespace VPB
             bool subLeft = leftSubTabContainerGO != null && container == leftSubTabContainerGO.transform;
             bool subRight = rightSubTabContainerGO != null && container == rightSubTabContainerGO.transform;
 
+            if (contentType != ContentType.Lookapedia)
+            {
+                if (mainLeft) TeardownLookFacetPaneOneSide(true);
+                else if (mainRight) TeardownLookFacetPaneOneSide(false);
+                else DestroyChildIfPresent(container, LookFacetVirtHolderName);
+            }
             if (contentType != ContentType.UserTags)
             {
                 DestroyChildIfPresent(container, "VPB_UserTagBulkBlock");

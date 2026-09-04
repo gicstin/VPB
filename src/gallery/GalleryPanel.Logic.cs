@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -307,6 +307,7 @@ namespace VPB
                 bool structured = (br.TagInclude != null && br.TagInclude.Count > 0)
                     || (br.TagExclude != null && br.TagExclude.Count > 0)
                     || (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
+                    || br.HasDataPackAtoms
                     || br.Status != GallerySearchQuery.StatusFlags.None;
                 string[] broad = br.BroadTerms != null && br.BroadTerms.Count > 0
                     ? br.BroadTerms.ToArray()
@@ -354,6 +355,7 @@ namespace VPB
                 }
                 if (br.TagInclude != null && br.TagInclude.Count > 0) continue;
                 if (br.TagExclude != null && br.TagExclude.Count > 0) continue;
+                if (br.HasDataPackAtoms) continue;
                 return true;
             }
             return false;
@@ -369,6 +371,8 @@ namespace VPB
             nameFilterTerms = nameFilterQuery != null ? nameFilterQuery.BroadTermsArray() : new string[0];
             _searchTagKeysCache = null;
             _searchTagKeysCacheFor = null;
+            _searchPackUidsCache = null;
+            _searchPackUidsCacheFor = null;
         }
 
         private void ClearNameFilterState()
@@ -379,7 +383,62 @@ namespace VPB
             nameFilterTerms = new string[0];
             _searchTagKeysCache = null;
             _searchTagKeysCacheFor = null;
+            _searchPackUidsCache = null;
+            _searchPackUidsCacheFor = null;
             ClearTitleSearchChipsState();
+        }
+
+        private Dictionary<string, HashSet<string>> GetSearchPackUidsCached()
+        {
+            string key = nameFilter ?? "";
+            if (_searchPackUidsCache != null && string.Equals(_searchPackUidsCacheFor, key, StringComparison.Ordinal))
+                return _searchPackUidsCache;
+            _searchPackUidsCache = BuildDataPackUidLookupForSearch(nameFilterQuery ?? GallerySearchQuery.Empty);
+            _searchPackUidsCacheFor = key;
+            return _searchPackUidsCache;
+        }
+
+        private static Dictionary<string, HashSet<string>> BuildDataPackUidLookupForSearch(GallerySearchQuery query)
+        {
+            var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            if (query == null || query.IsEmpty) return map;
+            if (!VpbSqlite3.IsAvailable) return map;
+            bool packOn = VpbLocalDatabase.DataPackLookSearchEnabled();
+            if (!packOn && !query.HasDataPackAtoms) return map;
+            try
+            {
+                if (query.HasDataPackAtoms)
+                {
+                    VpbLocalDatabase.TryCollectPackageUidsForDataPackTerms(
+                        query.PackSubjectTerms, GallerySearchQuery.DataPackAtomKind.Subject, map);
+                    VpbLocalDatabase.TryCollectPackageUidsForDataPackTerms(
+                        query.PackHubTagTerms, GallerySearchQuery.DataPackAtomKind.HubTag, map);
+                    VpbLocalDatabase.TryCollectPackageUidsForDataPackTerms(
+                        query.PackAnyTerms, GallerySearchQuery.DataPackAtomKind.Any, map);
+                }
+                if (VpbLocalDatabase.DataPackSubjectSearchEnabled())
+                {
+                    VpbLocalDatabase.TryCollectPackageUidsForDataPackTerms(
+                        BroadTermsLen2(query.BroadTerms), GallerySearchQuery.DataPackAtomKind.Subject, map);
+                    VpbLocalDatabase.TryCollectPackageUidsForDataPackTerms(
+                        BroadTermsLen2(query.BroadExclude), GallerySearchQuery.DataPackAtomKind.Subject, map);
+                }
+            }
+            catch { }
+            return map;
+        }
+
+        private static List<string> BroadTermsLen2(List<string> src)
+        {
+            if (src == null || src.Count == 0) return src;
+            var list = new List<string>(src.Count);
+            for (int i = 0; i < src.Count; i++)
+            {
+                string t = src[i];
+                if (string.IsNullOrEmpty(t) || t.Length < 2) continue;
+                list.Add(t);
+            }
+            return list;
         }
 
         private Dictionary<string, HashSet<string>> GetSearchTagKeysCached()
@@ -470,6 +529,72 @@ namespace VPB
             return false;
         }
 
+        private static bool DataPackAtomsMatch(
+            GallerySearchBranch br,
+            Dictionary<string, HashSet<string>> uidsByTerm,
+            string packageUid)
+        {
+            if (br == null) return true;
+            if (!DataPackListMatches(br.PackSubjectInclude, uidsByTerm, packageUid, false)) return false;
+            if (!DataPackListMatches(br.PackSubjectExclude, uidsByTerm, packageUid, true)) return false;
+            if (!DataPackListMatches(br.PackHubTagInclude, uidsByTerm, packageUid, false)) return false;
+            if (!DataPackListMatches(br.PackHubTagExclude, uidsByTerm, packageUid, true)) return false;
+            if (!DataPackListMatches(br.PackAnyInclude, uidsByTerm, packageUid, false)) return false;
+            if (!DataPackListMatches(br.PackAnyExclude, uidsByTerm, packageUid, true)) return false;
+            return true;
+        }
+
+        private static bool DataPackListMatches(
+            List<string> terms,
+            Dictionary<string, HashSet<string>> uidsByTerm,
+            string packageUid,
+            bool exclude)
+        {
+            if (terms == null || terms.Count == 0) return true;
+
+            bool anyTerm = false;
+            for (int i = 0; i < terms.Count; i++)
+            {
+                string t = terms[i];
+                if (string.IsNullOrEmpty(t)) continue;
+                anyTerm = true;
+                HashSet<string> uids = null;
+                bool hit = uidsByTerm != null
+                    && uidsByTerm.TryGetValue(t, out uids)
+                    && uids != null
+                    && !string.IsNullOrEmpty(packageUid)
+                    && uids.Contains(packageUid);
+                if (exclude)
+                {
+                    if (hit) return false;
+                }
+                else if (hit) return true;
+            }
+            return exclude || !anyTerm;
+        }
+
+        private static string TryGetFileEntryPackageUidForDataPack(FileEntry file)
+        {
+            if (file == null) return "";
+            try
+            {
+                VarFileEntry vfe = file as VarFileEntry;
+                if (vfe != null) return vfe.GetRowPackageUid() ?? "";
+                PackageListEntry ple = file as PackageListEntry;
+                if (ple != null) return ple.GetPackageUidForGalleryUserTags() ?? "";
+            }
+            catch { }
+            return "";
+        }
+
+        private static bool TryGetFileLookOverlay(FileEntry file, out VpbLocalDatabase.DataPackLookOverlay overlay)
+        {
+            overlay = new VpbLocalDatabase.DataPackLookOverlay();
+            string uid = TryGetFileEntryPackageUidForDataPack(file);
+            if (string.IsNullOrEmpty(uid)) return false;
+            return VpbLocalDatabase.TryGetDataPackLookOverlay(uid, out overlay);
+        }
+
         private bool MatchesFileEntrySearchBranch(
             FileEntry file,
             GallerySearchBranch br,
@@ -509,6 +634,13 @@ namespace VPB
                         && !string.IsNullOrEmpty(rowKey) && keys.Contains(rowKey))
                         return false;
                 }
+            }
+
+            if (br.HasDataPackAtoms)
+            {
+                string packUid = TryGetFileEntryPackageUidForDataPack(file);
+                Dictionary<string, HashSet<string>> packUids = GetSearchPackUidsCached();
+                if (!DataPackAtomsMatch(br, packUids, packUid)) return false;
             }
 
             if (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
@@ -597,7 +729,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Same surface as include broad: name/path (scope), creator, uid, or user-tag substring.</summary>
+        /// <summary>Same surface as include broad: name/path (scope), creator, uid, user-tag, or Look-A-Pedia subject.</summary>
         private bool FileEntryMatchesBroadTerm(
             FileEntry file,
             string t,
@@ -634,6 +766,18 @@ namespace VPB
             if (tagKeysByTerm != null && tagKeysByTerm.TryGetValue(t, out keys) && keys != null
                 && !string.IsNullOrEmpty(rowKey) && keys.Contains(rowKey))
                 return true;
+
+            if (t.Length >= 2 && VpbLocalDatabase.DataPackSubjectSearchEnabled())
+            {
+                string packUid = TryGetFileEntryPackageUidForDataPack(file);
+                if (!string.IsNullOrEmpty(packUid))
+                {
+                    Dictionary<string, HashSet<string>> packUids = GetSearchPackUidsCached();
+                    HashSet<string> uids;
+                    if (packUids != null && packUids.TryGetValue(t, out uids) && uids != null && uids.Contains(packUid))
+                        return true;
+                }
+            }
 
             return false;
         }

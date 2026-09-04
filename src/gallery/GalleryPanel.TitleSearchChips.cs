@@ -327,6 +327,7 @@ namespace VPB
             {
                 try { SyncBrowseFilterChipChrome(); } catch { }
             }
+            try { RebindLookFacetVirtHighlightsIfOpen(); } catch { }
 
             if (sourceField != null)
             {
@@ -444,6 +445,13 @@ namespace VPB
             {
                 try { SyncBrowseFilterChipChrome(); } catch { }
             }
+            try { RebindLookFacetVirtHighlightsIfOpen(); } catch { }
+            try
+            {
+                _detailStripHubTagsContentKey = "";
+                DetailStripFillPackageTagsLine(_detailStripBoundFile, null);
+            }
+            catch { }
             if (filterSetsChanged)
             {
                 try { RefreshFiles(true, false, false, "title_tag_bridge_filter"); } catch { }
@@ -473,6 +481,101 @@ namespace VPB
                 catch { }
                 return;
             }
+            ApplySerializedTitleSearchChips();
+        }
+
+        private bool ToggleTitleSearchPackSubjectChip(string token, bool exact)
+        {
+            return ToggleTitleSearchPackChip(TitleSearchChipKind.PackSubject, token, exact);
+        }
+
+        private bool ToggleTitleSearchPackSubjectExcludeChip(string token, bool exact)
+        {
+            return ToggleTitleSearchPackChip(TitleSearchChipKind.PackSubject, token, exact, TitleSearchChipPolarity.Exclude);
+        }
+
+        private bool ToggleTitleSearchPackHubTagChip(string token, bool exact)
+        {
+            return ToggleTitleSearchPackChip(TitleSearchChipKind.PackHubTag, token, exact);
+        }
+
+        private bool ToggleTitleSearchPackHubTagExcludeChip(string token, bool exact)
+        {
+            return ToggleTitleSearchPackChip(TitleSearchChipKind.PackHubTag, token, exact, TitleSearchChipPolarity.Exclude);
+        }
+
+        private bool ToggleTitleSearchPackChip(TitleSearchChipKind kind, string token, bool exact)
+        {
+            return ToggleTitleSearchPackChip(kind, token, exact, TitleSearchChipPolarity.Include);
+        }
+
+        private bool ToggleTitleSearchPackChip(TitleSearchChipKind kind, string token, bool exact, TitleSearchChipPolarity polarity)
+        {
+            if (string.IsNullOrEmpty(token)) return false;
+            if (!HasTitleSearchChips())
+                HydrateTitleSearchChipsFromCurrentFilter();
+
+            int found = -1;
+            for (int i = 0; i < _titleSearchChips.Count; i++)
+            {
+                TitleSearchChip c = _titleSearchChips[i];
+                if (c.Kind != kind) continue;
+                if (c.Polarity != polarity) continue;
+                if (!string.Equals(c.Value, token, StringComparison.OrdinalIgnoreCase)) continue;
+                found = i;
+                break;
+            }
+
+            if (found >= 0)
+            {
+                _titleSearchChips.RemoveAt(found);
+                try { SetTitleSearchDraftText("", null); } catch { }
+                ApplySerializedTitleSearchChips();
+                return false;
+            }
+
+            GalleryTitleSearchChipUtil.TryAdd(
+                _titleSearchChips,
+                kind,
+                polarity,
+                token,
+                0,
+                exact);
+            try { SetTitleSearchDraftText("", null); } catch { }
+            ApplySerializedTitleSearchChips();
+            return true;
+        }
+
+        private bool HasTitleSearchPackChip(TitleSearchChipKind kind, string token)
+        {
+            return HasTitleSearchPackChipPolarity(kind, token, TitleSearchChipPolarity.Include);
+        }
+
+        private bool HasTitleSearchPackChipPolarity(TitleSearchChipKind kind, string token, TitleSearchChipPolarity polarity)
+        {
+            if (string.IsNullOrEmpty(token) || _titleSearchChips == null) return false;
+            for (int i = 0; i < _titleSearchChips.Count; i++)
+            {
+                TitleSearchChip c = _titleSearchChips[i];
+                if (c.Kind != kind) continue;
+                if (c.Polarity != polarity) continue;
+                if (string.Equals(c.Value, token, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        private void ClearTitleSearchPackChips(TitleSearchChipKind kind)
+        {
+            if (_titleSearchChips == null || _titleSearchChips.Count == 0) return;
+            bool any = false;
+            for (int i = _titleSearchChips.Count - 1; i >= 0; i--)
+            {
+                if (_titleSearchChips[i].Kind != kind) continue;
+                _titleSearchChips.RemoveAt(i);
+                any = true;
+            }
+            if (!any) return;
+            try { SetTitleSearchDraftText("", null); } catch { }
             ApplySerializedTitleSearchChips();
         }
 

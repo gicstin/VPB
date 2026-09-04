@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Import Project="VPB.local.props" Condition="Exists('VPB.local.props')" />
@@ -423,6 +423,10 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.PluginsCatalog.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PkgNewest.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PkgLicense.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.DataPacks.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.DataPackPrefs.cs" />
+    <Compile Include="src\datapack\VpbDataPackFile.cs" />
+    <Compile Include="src\datapack\VpbDataPackService.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.HideMarkers.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryLabels.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
@@ -501,6 +505,7 @@
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Core.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Tags.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Lookapedia.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Remove.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Misc.cs" />
     <Compile Include="src\gallery\GalleryPanel.Thumbnails.cs" />

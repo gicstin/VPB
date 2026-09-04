@@ -291,6 +291,8 @@ namespace VPB
                     _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
             }
             _userTagShowUnusedBucket = false;
+            _userTagShowHubBucket = false;
+            _userTagShowLooksBucket = false;
             if (_userTagAvailMode != UserTagAvailMode.FilterUntagged
                 && _userTagAvailMode != UserTagAvailMode.FilterTaggedOnly)
                 try { ClearUntaggedTaggedPinKeys(); } catch { }
@@ -349,6 +351,8 @@ namespace VPB
             activeUserTags.Clear();
             excludedUserTags.Clear();
             _userTagShowUnusedBucket = false;
+            _userTagShowHubBucket = false;
+            _userTagShowLooksBucket = false;
             _userTagAvailMode = ResolveDefaultUserTagAvailMode();
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
                 _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;

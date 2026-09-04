@@ -27,6 +27,7 @@ namespace VPB
         Path = 21,
         History = 22,
         Settings = 23,
+        Lookapedia = 24,
     }
     public enum ApplyMode { SingleClick, DoubleClick }
     public enum TabSide { Hidden, Left, Right }
@@ -56,6 +57,10 @@ namespace VPB
     {
         public string Name;
         public int Count;
+        /// <summary>Hub data-pack tag (read-only filter row). Not a gallery_user_tag.</summary>
+        public bool IsHubTag;
+        /// <summary>Look-A-Pedia subject (read-only filter row). Not a gallery_user_tag.</summary>
+        public bool IsLooksLike;
     }
 
     public class PresetLockStore

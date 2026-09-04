@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace VPB
 {
@@ -15,7 +16,27 @@ namespace VPB
         internal readonly List<string> TagInclude = new List<string>();
         internal readonly List<string> TagExclude = new List<string>();
         internal readonly List<string> CreatorTerms = new List<string>();
+        /// <summary>Data-pack atoms, allocated only when a query actually uses one.</summary>
+        internal List<string> PackSubjectInclude;
+        internal List<string> PackSubjectExclude;
+        internal List<string> PackHubTagInclude;
+        internal List<string> PackHubTagExclude;
+        internal List<string> PackAnyInclude;
+        internal List<string> PackAnyExclude;
         internal GallerySearchQuery.StatusFlags Status = GallerySearchQuery.StatusFlags.None;
+
+        internal bool HasDataPackAtoms
+        {
+            get
+            {
+                return GallerySearchQuery.Any(PackSubjectInclude)
+                    || GallerySearchQuery.Any(PackSubjectExclude)
+                    || GallerySearchQuery.Any(PackHubTagInclude)
+                    || GallerySearchQuery.Any(PackHubTagExclude)
+                    || GallerySearchQuery.Any(PackAnyInclude)
+                    || GallerySearchQuery.Any(PackAnyExclude);
+            }
+        }
 
         internal bool IsEmpty
         {
@@ -26,6 +47,7 @@ namespace VPB
                     && TagInclude.Count == 0
                     && TagExclude.Count == 0
                     && CreatorTerms.Count == 0
+                    && !HasDataPackAtoms
                     && Status == GallerySearchQuery.StatusFlags.None;
             }
         }
@@ -38,8 +60,6 @@ namespace VPB
 
     /// <summary>
     /// Parsed title-bar search AST.
-    /// Bare terms match name/path/creator/uid/user-tags (OR within a term).
-    /// Structured: tag:/# (comma lists), -tag / -#, -bare (broad exclude), creator:/@, status/badge, AND / OR / IF.
     /// </summary>
     internal sealed class GallerySearchQuery
     {
@@ -92,6 +112,34 @@ namespace VPB
 
         internal bool HasStatusFlags { get { return Status != StatusFlags.None; } }
 
+        /// <summary>Which shipped-data-pack field an atom searches.</summary>
+        internal enum DataPackAtomKind
+        {
+            Subject = 0,
+            HubTag = 1,
+            Any = 2,
+        }
+
+        internal readonly List<string> PackSubjectTerms = new List<string>();
+        internal readonly List<string> PackHubTagTerms = new List<string>();
+        internal readonly List<string> PackAnyTerms = new List<string>();
+
+        /// <summary>True when any branch carries a data-pack atom (include or exclude).</summary>
+        internal bool HasDataPackAtoms
+        {
+            get
+            {
+                for (int i = 0; i < Branches.Count; i++)
+                {
+                    GallerySearchBranch br = Branches[i];
+                    if (br != null && br.HasDataPackAtoms) return true;
+                }
+                return false;
+            }
+        }
+
+        internal static bool Any(List<string> list) { return list != null && list.Count > 0; }
+
         /// <summary>Needs SQL refresh (loaded / tagged) rather than pure in-memory name scan.</summary>
         internal bool RequiresSqlRefresh
         {
@@ -111,7 +159,8 @@ namespace VPB
                     || CreatorTerms.Count > 0
                     || HasStatusFlags
                     || BroadTerms.Count > 0
-                    || BroadExclude.Count > 0;
+                    || BroadExclude.Count > 0
+                    || HasDataPackAtoms;
             }
         }
 
@@ -149,7 +198,7 @@ namespace VPB
             string s = raw.Trim();
             if (s.Length == 0) return new GallerySearchQuery();
 
-            string[] parts = s.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            string[] parts = SplitSearchTokens(s);
             if (parts == null || parts.Length == 0) return new GallerySearchQuery();
 
             var q = new GallerySearchQuery();
@@ -175,6 +224,7 @@ namespace VPB
                     continue; // AND default; IF optional preface before status/atoms
 
                 if (TryConsumeStatusToken(lower, branch)) continue;
+                if (TryConsumeDataPackToken(lower, branch)) continue;
 
                 if (lower.StartsWith("-tag:", StringComparison.Ordinal) && lower.Length > 5)
                 {
@@ -263,6 +313,7 @@ namespace VPB
                     for (int i = 0; i < src.TagExclude.Count; i++) AddUnique(br.TagExclude, src.TagExclude[i]);
                 if (src.CreatorTerms != null)
                     for (int i = 0; i < src.CreatorTerms.Count; i++) AddUnique(br.CreatorTerms, src.CreatorTerms[i]);
+                CopyPackAtoms(src, br);
                 br.Status = src.Status;
                 if (!br.IsEmpty) q.Branches.Add(br);
             }
@@ -278,6 +329,9 @@ namespace VPB
             TagInclude.Clear();
             TagExclude.Clear();
             CreatorTerms.Clear();
+            PackSubjectTerms.Clear();
+            PackHubTagTerms.Clear();
+            PackAnyTerms.Clear();
             Status = StatusFlags.None;
             for (int b = 0; b < Branches.Count; b++)
             {
@@ -288,6 +342,12 @@ namespace VPB
                 for (int i = 0; i < br.TagInclude.Count; i++) AddUnique(TagInclude, br.TagInclude[i]);
                 for (int i = 0; i < br.TagExclude.Count; i++) AddUnique(TagExclude, br.TagExclude[i]);
                 for (int i = 0; i < br.CreatorTerms.Count; i++) AddUnique(CreatorTerms, br.CreatorTerms[i]);
+                AddUniqueRange(PackSubjectTerms, br.PackSubjectInclude);
+                AddUniqueRange(PackSubjectTerms, br.PackSubjectExclude);
+                AddUniqueRange(PackHubTagTerms, br.PackHubTagInclude);
+                AddUniqueRange(PackHubTagTerms, br.PackHubTagExclude);
+                AddUniqueRange(PackAnyTerms, br.PackAnyInclude);
+                AddUniqueRange(PackAnyTerms, br.PackAnyExclude);
                 Status |= br.Status;
             }
         }
@@ -339,6 +399,150 @@ namespace VPB
                 if (p.Length == 0) continue;
                 AddUnique(branch.CreatorTerms, p);
             }
+        }
+
+        private static string[] SplitSearchTokens(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return new string[0];
+            var list = new List<string>(8);
+            var sb = new StringBuilder(s.Length);
+            bool inQuote = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '"')
+                {
+                    inQuote = !inQuote;
+                    sb.Append(c);
+                    continue;
+                }
+                if (!inQuote && (c == ' ' || c == '\t' || c == '\r' || c == '\n'))
+                {
+                    if (sb.Length > 0)
+                    {
+                        list.Add(sb.ToString());
+                        sb.Length = 0;
+                    }
+                    continue;
+                }
+                sb.Append(c);
+            }
+            if (sb.Length > 0) list.Add(sb.ToString());
+            if (list.Count == 0) return new string[0];
+            return list.ToArray();
+        }
+
+        private static bool TryConsumeDataPackToken(string lower, GallerySearchBranch branch)
+        {
+            if (branch == null || string.IsNullOrEmpty(lower)) return false;
+
+            bool negate = false;
+            string s = lower;
+            if (s.Length > 1 && s[0] == '-')
+            {
+                negate = true;
+                s = s.Substring(1);
+            }
+
+            if (s.StartsWith("looks:", StringComparison.Ordinal) && s.Length > 6)
+            {
+                AddCommaPackList(branch, s.Substring(6), DataPackAtomKind.Subject, negate);
+                return true;
+            }
+            if (s.StartsWith("hubtag:", StringComparison.Ordinal) && s.Length > 7)
+            {
+                AddCommaPackList(branch, s.Substring(7), DataPackAtomKind.HubTag, negate);
+                return true;
+            }
+            if (s.StartsWith("lap:", StringComparison.Ordinal) && s.Length > 4)
+            {
+                AddCommaPackList(branch, s.Substring(4), DataPackAtomKind.Any, negate);
+                return true;
+            }
+            return false;
+        }
+
+        private static void AddCommaPackList(
+            GallerySearchBranch branch, string body, DataPackAtomKind kind, bool forceExclude)
+        {
+            if (branch == null || string.IsNullOrEmpty(body)) return;
+            string b = body.Trim();
+            if (b.Length >= 2 && b[0] == '"' && b[b.Length - 1] == '"')
+            {
+                b = b.Substring(1, b.Length - 2).Trim();
+                if (b.Length == 0) return;
+                AddPackTerm(branch, kind, forceExclude, "=" + b.ToLowerInvariant());
+                return;
+            }
+
+            string[] parts = b.Split(',');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i];
+                if (p == null) continue;
+                p = p.Trim();
+                if (p.Length == 0) continue;
+
+                bool exclude = forceExclude;
+                if (p[0] == '-')
+                {
+                    exclude = true;
+                    p = p.Substring(1).Trim();
+                }
+                if (p.Length == 0) continue;
+                AddPackTerm(branch, kind, exclude, p.ToLowerInvariant());
+            }
+        }
+
+        internal static void AddPackTerm(
+            GallerySearchBranch branch, DataPackAtomKind kind, bool exclude, string term)
+        {
+            if (branch == null || string.IsNullOrEmpty(term)) return;
+            if (kind == DataPackAtomKind.Subject)
+            {
+                if (exclude) AddUniqueLazy(ref branch.PackSubjectExclude, term);
+                else AddUniqueLazy(ref branch.PackSubjectInclude, term);
+            }
+            else if (kind == DataPackAtomKind.HubTag)
+            {
+                if (exclude) AddUniqueLazy(ref branch.PackHubTagExclude, term);
+                else AddUniqueLazy(ref branch.PackHubTagInclude, term);
+            }
+            else
+            {
+                if (exclude) AddUniqueLazy(ref branch.PackAnyExclude, term);
+                else AddUniqueLazy(ref branch.PackAnyInclude, term);
+            }
+        }
+
+        private static void AddUniqueLazy(ref List<string> list, string value)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            if (list == null) list = new List<string>(2);
+            AddUnique(list, value);
+        }
+
+        private static void CopyPackAtoms(GallerySearchBranch src, GallerySearchBranch dst)
+        {
+            if (src == null || dst == null) return;
+            CopyPackList(src.PackSubjectInclude, ref dst.PackSubjectInclude);
+            CopyPackList(src.PackSubjectExclude, ref dst.PackSubjectExclude);
+            CopyPackList(src.PackHubTagInclude, ref dst.PackHubTagInclude);
+            CopyPackList(src.PackHubTagExclude, ref dst.PackHubTagExclude);
+            CopyPackList(src.PackAnyInclude, ref dst.PackAnyInclude);
+            CopyPackList(src.PackAnyExclude, ref dst.PackAnyExclude);
+        }
+
+        private static void CopyPackList(List<string> src, ref List<string> dst)
+        {
+            if (src == null) return;
+            for (int i = 0; i < src.Count; i++) AddUniqueLazy(ref dst, src[i]);
+        }
+
+        private static void AddUniqueRange(List<string> dest, List<string> src)
+        {
+            if (dest == null || src == null) return;
+            for (int i = 0; i < src.Count; i++) AddUnique(dest, src[i]);
         }
 
         private static void AddUnique(List<string> list, string value)

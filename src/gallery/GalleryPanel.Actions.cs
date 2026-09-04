@@ -1560,14 +1560,26 @@ namespace VPB
                 if (!string.IsNullOrEmpty(cap))
                 {
                     if (!string.IsNullOrEmpty(path))
-                        SetHoverPath(cap + "\n" + path);
+                        SetHoverPath(AppendLookOverlayHoverLine(file, cap + "\n" + path));
                     else
-                        SetHoverPath(cap);
+                        SetHoverPath(AppendLookOverlayHoverLine(file, cap));
                     return;
                 }
             }
 
-            SetHoverPath(path);
+            SetHoverPath(AppendLookOverlayHoverLine(file, path));
+        }
+
+        private static string AppendLookOverlayHoverLine(FileEntry file, string baseText)
+        {
+            VpbLocalDatabase.DataPackLookOverlay overlay;
+            if (!TryGetFileLookOverlay(file, out overlay) || string.IsNullOrEmpty(overlay.Subject))
+                return baseText ?? "";
+            string line = string.Format(
+                VPBTranslation.T("gallery.detail.looks_like_fmt", "Looks like: {0}"),
+                overlay.Subject);
+            if (string.IsNullOrEmpty(baseText)) return line;
+            return baseText + "\n" + line;
         }
 
         /// <summary>
@@ -1916,6 +1928,7 @@ namespace VPB
                                || (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Creator);
             if (creatorTabOpen)
                 try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
+            try { RebindLookFacetVirtHighlightsIfOpen(); } catch { }
         }
 
         private bool PrepareFileEntryGestureSelection(FileEntry file)

@@ -158,6 +158,10 @@ namespace VPB
         private GameObject _detailStripBeforeOldVersSepGO;
         private Text _detailStripDesc;
         private Text _detailStripPackageTags;
+        private GameObject _detailStripPackageTagsChipsHost;
+        private GameObject _detailStripSideHubTagsChipsHost;
+        private string _detailStripHubTagsContentKey = "";
+        private readonly List<string> _detailStripBoundHubTagNames = new List<string>(8);
         private static readonly Color DetailStripLinkColor = DetailStripColorDeps;
         private static readonly Color DetailStripLinkDisabledColor = new Color(0.45f, 0.45f, 0.48f, 0.85f);
         private static readonly Color DetailStripMetaMutedColor = new Color(0.62f, 0.62f, 0.66f, 0.95f);
@@ -231,6 +235,9 @@ namespace VPB
         private string _detailStripTagMenuFilter = "";
         private List<string> _detailStripTagMenuVocabCache;
         private HashSet<string> _detailStripTagMenuAppliedCache;
+        private List<string> _detailStripTagMenuHubCache;
+        private string _detailStripTagMenuHubUid = "";
+        private const int DetailStripHubTagSelectionScanMax = 256;
         /// <summary>Session MRU for Add column (pinned tags still win order).</summary>
         private readonly List<string> _detailStripTagMenuRecent = new List<string>(DetailStripTagMenuRecentMax);
         private Vector2? _detailStripTagMenuSavedPos; // panel center (top-left pivot at runtime)
@@ -251,6 +258,7 @@ namespace VPB
         private bool _detailStripWantDesc;
         private bool _detailStripWantTags;
         private bool _detailStripWantNativeTags;
+        private bool _detailStripWantHubTags;
         private bool _detailStripSideVisible;
         /// <summary>
         /// Sticky tall-strip stack mode (desc/package tags as main rows). Paired with height
@@ -549,6 +557,9 @@ namespace VPB
                 || _detailStripOldVersLink == null
                 || _detailStripDesc == null
                 || _detailStripPackageTags == null
+                || _detailStripPackageTagsChipsHost == null
+                || _detailStripPackageTagsChipsHost.transform.parent == _detailStripPackageTags.transform.parent
+                || _detailStripSideHubTagsChipsHost == null
                 || _detailStripSideColGO == null
                 || _detailStripSideDescScrollGO == null
                 || _detailStripSideDesc == null
@@ -1032,10 +1043,8 @@ namespace VPB
             });
 
             _detailStripPackageTags = DetailStripCreateFlexLine(textCol, "PackageTags", DetailStripColorTag, s, false, lineH);
-            AddDynamicTooltip(_detailStripPackageTags.gameObject, () =>
-                VPBTranslation.T(
-                    "gallery.detail.tip.native_tags",
-                    "Native package tags from meta.json (clothing / hair regions)."));
+            AddDynamicTooltip(_detailStripPackageTags.gameObject, DetailStripPackageTagsTooltip);
+            _detailStripPackageTagsChipsHost = DetailStripCreateHubTagChipsHost(textCol, "HubTagChips", s, lineH);
 
             // Wide-pane right column — scrollable description + native tags (collapses when narrow).
             float sideW = GalleryUiDesignTokens.FooterDetailStripSideMinColWidthRef * s;
@@ -1057,10 +1066,9 @@ namespace VPB
 
             _detailStripSideNativeTags = DetailStripCreateSideBlock(
                 sideCol, "SideNativeTags", DetailStripColorTag, s, lineH, wrap: true);
-            AddDynamicTooltip(_detailStripSideNativeTags.gameObject, () =>
-                VPBTranslation.T(
-                    "gallery.detail.tip.native_tags",
-                    "Native package tags from meta.json (clothing / hair regions)."));
+            AddDynamicTooltip(_detailStripSideNativeTags.gameObject, DetailStripPackageTagsTooltip);
+            _detailStripSideHubTagsChipsHost = DetailStripCreateHubTagChipsHost(
+                sideCol, "SideHubTagChips", s, lineH);
 
             sideCol.SetActive(false);
             _detailStripSideVisible = false;
@@ -1265,6 +1273,10 @@ namespace VPB
             _detailStripBeforeOldVersSepGO = null;
             _detailStripDesc = null;
             _detailStripPackageTags = null;
+            _detailStripPackageTagsChipsHost = null;
+            _detailStripSideHubTagsChipsHost = null;
+            _detailStripHubTagsContentKey = "";
+            _detailStripBoundHubTagNames.Clear();
             _detailStripTags = null;
             _detailStripTagsChipsHost = null;
             _detailStripTagClipboardActionsGO = null;
@@ -1297,6 +1309,7 @@ namespace VPB
             _detailStripWantDesc = false;
             _detailStripWantTags = false;
             _detailStripWantNativeTags = false;
+            _detailStripWantHubTags = false;
             _detailStripSideVisible = false;
             _detailStripSideContentKey = "";
             DetailStripInvalidateAutoHeightLock();
@@ -1321,6 +1334,23 @@ namespace VPB
                 flexibleWidth: 1f, minWidth: 0f, preferredWidth: 0f);
             DetailStripNormalizeRowRect(row);
             return t;
+        }
+
+        private static GameObject DetailStripCreateHubTagChipsHost(GameObject row, string name, float s, float lineH)
+        {
+            if (row == null) return null;
+            if (s <= 0f) s = 1f;
+            GameObject host = UI.CreateChildRT(row, name, AnchorPresets.hStretchTop);
+            UI.AddHLG(host, spacing: 0f, padding: UI.Pad(0, 0, 0, 0, s),
+                childAlignment: TextAnchor.MiddleLeft,
+                childControlWidth: true, childControlHeight: true,
+                childForceExpandWidth: false, childForceExpandHeight: true);
+            UI.AddLE(host, preferredHeight: lineH, minHeight: lineH,
+                flexibleWidth: 1f, minWidth: 0f, preferredWidth: 0f);
+            if (host.GetComponent<RectMask2D>() == null)
+                host.AddComponent<RectMask2D>();
+            host.SetActive(false);
+            return host;
         }
 
         /// <summary>
@@ -2753,6 +2783,7 @@ namespace VPB
             DetailStripSyncTagsRowChrome(lineH, s);
             DetailStripSyncFlexLineChrome(_detailStripPath, lineH, s);
             DetailStripSyncFlexLineChrome(_detailStripPackageTags, lineH, s);
+            try { DetailStripSyncHubTagChipsHostChrome(_detailStripPackageTagsChipsHost, lineH, s); } catch { }
 
             // After pad/spacing/font rescale — clear stale horizontal insets on every band.
             DetailStripNormalizeTextColRows();
@@ -2823,6 +2854,21 @@ namespace VPB
                 textLe.flexibleWidth = 1f;
             }
             DetailStripNormalizeRowRect(row);
+        }
+
+        private static void DetailStripSyncHubTagChipsHostChrome(GameObject host, float lineH, float s)
+        {
+            if (host == null) return;
+            DetailStripSetRowHeight(host, lineH);
+            DetailStripSetLayoutGroup(host, 0f, UI.Pad(0, 0, 0, 0, s));
+            LayoutElement hostLe = host.GetComponent<LayoutElement>();
+            if (hostLe != null)
+            {
+                hostLe.preferredHeight = lineH;
+                hostLe.minHeight = lineH;
+                hostLe.flexibleHeight = 0f;
+                hostLe.flexibleWidth = 1f;
+            }
         }
 
         private void DetailStripSyncTagsRowChrome(float lineH, float s)
@@ -3431,6 +3477,12 @@ namespace VPB
                     h = DetailStripComputeContentHeightRaw(s);
                     if (h <= maxH + 0.5f) return;
                 }
+                if (_detailStripPackageTagsChipsHost != null && _detailStripPackageTagsChipsHost.activeSelf)
+                {
+                    _detailStripPackageTagsChipsHost.SetActive(false);
+                    h = DetailStripComputeContentHeightRaw(s);
+                    if (h <= maxH + 0.5f) return;
+                }
 
                 // Shrink desc lines with ellipsis before hiding — keep one useful line when possible.
                 if (DetailStripFlexLineVisible(_detailStripDesc))
@@ -3674,6 +3726,13 @@ namespace VPB
                 total += DetailStripFlexLineCurrentHeight(_detailStripPackageTags, lineH);
                 parts++;
             }
+            if (includePackageTags && _detailStripPackageTagsChipsHost != null
+                && _detailStripPackageTagsChipsHost.activeSelf)
+            {
+                if (parts > 0) total += gap;
+                total += lineH;
+                parts++;
+            }
 
             // Side column scrolls — never grow strip past left-column content.
             if (!applyHardMin) return total;
@@ -3724,6 +3783,8 @@ namespace VPB
                 DetailStripNormalizeRowRect(_detailStripDesc.transform.parent.gameObject);
             if (_detailStripPackageTags != null && _detailStripPackageTags.transform.parent != null)
                 DetailStripNormalizeRowRect(_detailStripPackageTags.transform.parent.gameObject);
+            if (_detailStripPackageTagsChipsHost != null)
+                DetailStripNormalizeRowRect(_detailStripPackageTagsChipsHost);
         }
 
         private static bool DetailStripFlexLineVisible(Text line)
@@ -4529,6 +4590,50 @@ namespace VPB
                 MaxValueWidth = authorCap
             });
 
+            string looksLike;
+            bool looksMixed;
+            DetailStripResolveSharedOrMixedMeta(
+                multi, DetailStripResolveLooksLikeSubject, out looksLike, out looksMixed);
+            if (!string.IsNullOrEmpty(looksLike) || looksMixed)
+            {
+                string looksValue = looksMixed ? mixed : looksLike;
+                string looksSnap = looksLike;
+                bool looksClick = !looksMixed && !string.IsNullOrEmpty(looksLike);
+                float looksCap = Mathf.Clamp(avail * 0.42f, 96f * s, 220f * s);
+                string looksTip;
+                if (looksMixed)
+                    looksTip = VPBTranslation.T("gallery.detail.tip.looks_like_mixed", "Selection has mixed Look-A-Pedia names");
+                else
+                {
+                    looksTip = string.Format(
+                        VPBTranslation.T(
+                            "gallery.detail.tip.looks_like_fmt",
+                            "Looks like {0}. Click: find more with this name (also type it in search)."),
+                        looksLike);
+                    VpbLocalDatabase.DataPackLookOverlay looksOverlay;
+                    if (TryGetFileLookOverlay(file, out looksOverlay)
+                        && !string.IsNullOrEmpty(looksOverlay.Category))
+                    {
+                        looksTip += "\n" + string.Format(
+                            VPBTranslation.T("gallery.detail.tip.looks_category_fmt", "Look-A-Pedia category: {0}"),
+                            looksOverlay.Category);
+                    }
+                }
+                fields.Add(new DetailStripMetaField
+                {
+                    Label = VPBTranslation.T("gallery.detail.label_looks_like", "Looks like"),
+                    Value = looksValue,
+                    Group = 0,
+                    Enabled = looksClick,
+                    ValueColor = DetailStripColorAuthor,
+                    OnClick = looksClick
+                        ? (UnityAction)(() => DetailStripOnLooksLikeClick(looksSnap))
+                        : null,
+                    Tip = looksTip,
+                    MaxValueWidth = looksCap
+                });
+            }
+
             if (multi)
             {
                 fields.Add(new DetailStripMetaField
@@ -4814,7 +4919,7 @@ namespace VPB
 
         private bool DetailStripWantSideContent()
         {
-            return _detailStripWantDesc || _detailStripWantNativeTags;
+            return _detailStripWantDesc || _detailStripWantNativeTags || _detailStripWantHubTags;
         }
 
         private float DetailStripComputeSideWidth(float s)
@@ -5137,34 +5242,21 @@ namespace VPB
         }
 
         /// <summary>
-        /// Package tags (meta.json regions): SideCol when wide+short; else left row under path.
+        /// Package tags (meta.json regions) plus Look-A-Pedia Hub tags: SideCol when wide+short; else left row under path.
         /// Never merge into user-tags line — user tags stay actionable and above.
+        /// Hub tags render as clickable chips (same filter as Tags list / hubtag:).
         /// </summary>
         private void DetailStripApplyPackageTagsPlacement()
         {
             if (_detailStripPackageTags == null) return;
-            bool showLeft = _detailStripWantNativeTags && !_detailStripSideVisible;
-            if (showLeft)
-            {
-                FileEntry file = _detailStripBoundFile;
-                if (file == null && selectedFiles != null && selectedFiles.Count > 0)
-                    file = selectedFiles[0];
-                string nativeFmt = DetailStripFormatTagNames(DetailStripCollectNativeTags(file));
-                if (string.IsNullOrEmpty(nativeFmt))
-                {
-                    showLeft = false;
-                }
-                else
-                {
-                    _detailStripPackageTags.text = string.Format(
-                        VPBTranslation.T("gallery.detail.native_tags_fmt", "Package tags: {0}"),
-                        nativeFmt);
-                    float s = ChromeScale;
-                    if (s <= 0f) s = 1f;
-                    DetailStripSyncFlexLineChrome(_detailStripPackageTags, DetailStripLineHeight(s), s);
-                }
-            }
-            DetailStripSetFlexLineActive(_detailStripPackageTags, showLeft);
+            FileEntry file = _detailStripBoundFile;
+            if (file == null && selectedFiles != null && selectedFiles.Count > 0)
+                file = selectedFiles[0];
+            DetailStripFillPackageTagsLine(file, null);
+            bool showLeft = !_detailStripSideVisible;
+            DetailStripSetFlexLineActive(_detailStripPackageTags, showLeft && _detailStripWantNativeTags);
+            if (_detailStripPackageTagsChipsHost != null)
+                _detailStripPackageTagsChipsHost.SetActive(showLeft && _detailStripWantHubTags);
         }
 
         private void DetailStripSyncSideColumn(float s)
@@ -5260,8 +5352,8 @@ namespace VPB
 
             if (_detailStripSideNativeTags != null)
             {
-                bool on = show && _detailStripWantNativeTags && !string.IsNullOrEmpty(_detailStripSideNativeTags.text);
-                if (!on)
+                bool nativeOn = show && _detailStripWantNativeTags && !string.IsNullOrEmpty(_detailStripSideNativeTags.text);
+                if (!nativeOn)
                 {
                     if (!_detailStripWantNativeTags) _detailStripSideNativeTags.text = "";
                     _detailStripSideNativeTags.gameObject.SetActive(false);
@@ -5283,6 +5375,8 @@ namespace VPB
                     _detailStripSideNativeTags.gameObject.SetActive(true);
                 }
             }
+            if (_detailStripSideHubTagsChipsHost != null)
+                _detailStripSideHubTagsChipsHost.SetActive(show && _detailStripWantHubTags);
 
             if (_detailStripSideDescScrollGO != null)
             {
@@ -5337,24 +5431,10 @@ namespace VPB
             string desc = DetailStripResolveDescription(file);
             _detailStripWantDesc = !string.IsNullOrEmpty(desc);
 
-            HashSet<string> native = DetailStripCollectNativeTags(file);
-            string nativeFmt = DetailStripFormatTagNames(native);
-            _detailStripWantNativeTags = !string.IsNullOrEmpty(nativeFmt);
-
             if (_detailStripSideDesc != null)
             {
                 if (_detailStripWantDesc)
                     _detailStripSideDesc.text = desc;
-            }
-
-            if (_detailStripSideNativeTags != null)
-            {
-                if (_detailStripWantNativeTags)
-                {
-                    _detailStripSideNativeTags.text = string.Format(
-                        VPBTranslation.T("gallery.detail.native_tags_fmt", "Package tags: {0}"),
-                        nativeFmt);
-                }
             }
 
             _detailStripSideContentKey = DetailStripSideContentKeyForSelection();
@@ -5373,6 +5453,8 @@ namespace VPB
                 _detailStripSideNativeTags.text = "";
                 _detailStripSideNativeTags.gameObject.SetActive(false);
             }
+            if (_detailStripSideHubTagsChipsHost != null)
+                _detailStripSideHubTagsChipsHost.SetActive(false);
         }
 
         private void DetailStripRefreshTagsLineForPlacement()
@@ -6224,14 +6306,13 @@ namespace VPB
                     && !string.Equals(_detailStripPath.text, path, StringComparison.Ordinal))
                     _detailStripPath.text = path;
             }
-            if (_detailStripPackageTags != null && DetailStripFlexLineVisible(_detailStripPackageTags))
+            if (_detailStripPackageTags != null && (
+                DetailStripFlexLineVisible(_detailStripPackageTags)
+                || (_detailStripPackageTagsChipsHost != null && _detailStripPackageTagsChipsHost.activeSelf)))
             {
-                string nativeFmt = DetailStripFormatTagNames(DetailStripCollectNativeTags(file));
-                string shown = !string.IsNullOrEmpty(nativeFmt)
-                    ? string.Format(VPBTranslation.T("gallery.detail.native_tags_fmt", "Package tags: {0}"), nativeFmt)
-                    : "";
-                if (!string.Equals(_detailStripPackageTags.text, shown, StringComparison.Ordinal))
-                    _detailStripPackageTags.text = shown;
+                DetailStripFillPackageTagsLine(file, null);
+                if (!_detailStripSideVisible && _detailStripPackageTagsChipsHost != null)
+                    _detailStripPackageTagsChipsHost.SetActive(_detailStripWantHubTags);
             }
             if (_detailStripDesc != null && DetailStripFlexLineVisible(_detailStripDesc))
             {
@@ -6276,23 +6357,12 @@ namespace VPB
                     }
                     if (_detailStripSideNativeTags != null)
                     {
-                        string nativeFmt = DetailStripFormatTagNames(DetailStripCollectNativeTags(file));
-                        if (!string.IsNullOrEmpty(nativeFmt))
-                        {
-                            string shown = string.Format(
-                                VPBTranslation.T("gallery.detail.native_tags_fmt", "Package tags: {0}"),
-                                nativeFmt);
-                            if (!string.Equals(_detailStripSideNativeTags.text, shown, StringComparison.Ordinal))
-                                _detailStripSideNativeTags.text = shown;
-                            _detailStripSideNativeTags.gameObject.SetActive(true);
-                            _detailStripWantNativeTags = true;
-                        }
-                        else
-                        {
+                        DetailStripFillPackageTagsLine(file, null);
+                        _detailStripSideNativeTags.gameObject.SetActive(_detailStripWantNativeTags);
+                        if (!_detailStripWantNativeTags)
                             _detailStripSideNativeTags.text = "";
-                            _detailStripSideNativeTags.gameObject.SetActive(false);
-                            _detailStripWantNativeTags = false;
-                        }
+                        if (_detailStripSideHubTagsChipsHost != null)
+                            _detailStripSideHubTagsChipsHost.SetActive(_detailStripWantHubTags);
                     }
                 }
             }
@@ -6467,6 +6537,48 @@ namespace VPB
                     _detailStripBoundCreator), 1.8f);
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip creator: " + ex.Message); }
+        }
+
+        private void DetailStripOnLooksLikeClick(string subject)
+        {
+            if (string.IsNullOrEmpty(subject)) return;
+            try
+            {
+                string token = VpbLocalDatabase.DataPackFacetValueToken(subject);
+                if (string.IsNullOrEmpty(token)) return;
+                bool nowOn = ToggleTitleSearchPackSubjectChip(token, true);
+                ShowTemporaryStatus(string.Format(
+                    nowOn
+                        ? VPBTranslation.T("gallery.detail.looks_like_filtered", "Looks like: {0}")
+                        : VPBTranslation.T("gallery.detail.looks_like_filter_cleared", "Looks-like filter cleared: {0}"),
+                    subject), 1.8f);
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip looks-like: " + ex.Message); }
+        }
+
+        private void DetailStripOnHubTagFilterClick(string tagName, bool exclude)
+        {
+            if (string.IsNullOrEmpty(tagName)) return;
+            try
+            {
+                string token = VpbLocalDatabase.DataPackHubTagSearchToken(tagName);
+                if (string.IsNullOrEmpty(token)) return;
+                bool nowOn = exclude
+                    ? ToggleTitleSearchPackHubTagExcludeChip(token, true)
+                    : ToggleTitleSearchPackHubTagChip(token, true);
+                try { RefreshUserTagsAvailPaneInPlace(true); } catch { }
+                try { RefreshUserTagsAvailPaneInPlace(false); } catch { }
+                ShowTemporaryStatus(string.Format(
+                    nowOn
+                        ? (exclude
+                            ? VPBTranslation.T("gallery.detail.hub_tag_excluded", "Hub tag excluded: {0}")
+                            : VPBTranslation.T("gallery.detail.hub_tag_filtered", "Hub tag: {0}"))
+                        : (exclude
+                            ? VPBTranslation.T("gallery.detail.hub_tag_exclude_cleared", "Hub tag exclude cleared: {0}")
+                            : VPBTranslation.T("gallery.detail.hub_tag_filter_cleared", "Hub tag filter cleared: {0}")),
+                    tagName), 1.8f);
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip hub tag: " + ex.Message); }
         }
 
         private void DetailStripOnLicenseClick(string license)
@@ -8475,6 +8587,7 @@ namespace VPB
         {
             _detailStripTagMenuVocabCache = null;
             _detailStripTagMenuAppliedCache = null;
+            _detailStripTagMenuHubCache = null;
         }
 
         private void DetailStripEnsureTagMenuCaches()
@@ -8487,6 +8600,35 @@ namespace VPB
                 try { VpbLocalDatabase.TryReadAllGalleryUserTagNames(_detailStripTagMenuVocabCache); }
                 catch { }
             }
+            if (_detailStripTagMenuHubCache == null)
+            {
+                _detailStripTagMenuHubCache = new List<string>(16);
+                _detailStripTagMenuHubUid = DetailStripResolveSelectionPackageUid();
+                if (!string.IsNullOrEmpty(_detailStripTagMenuHubUid))
+                {
+                    try
+                    {
+                        VpbLocalDatabase.TryReadDataPackHubTagsForPackage(
+                            _detailStripTagMenuHubUid, _detailStripTagMenuHubCache, 0);
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        private string DetailStripResolveSelectionPackageUid()
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0) return "";
+            if (selectedFiles.Count > DetailStripHubTagSelectionScanMax) return "";
+            string uid = "";
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                string u = TryGetFileEntryPackageUidForDataPack(selectedFiles[i]);
+                if (string.IsNullOrEmpty(u)) return "";
+                if (uid.Length == 0) uid = u;
+                else if (!string.Equals(uid, u, StringComparison.OrdinalIgnoreCase)) return "";
+            }
+            return uid;
         }
 
         private HashSet<string> DetailStripCollectAppliedTagsForMenu()
@@ -9197,6 +9339,7 @@ namespace VPB
                     VPBTranslation.T("gallery.detail.tag_applied_empty", "None yet"),
                     rowH, s);
             }
+            DetailStripAddTagMenuHubRows(rowH, s);
 
             List<string> availableOrdered = DetailStripOrderAvailableTagsForMenu(vocab, applied, filter);
             int availTotal = availableOrdered.Count;
@@ -9375,6 +9518,131 @@ namespace VPB
                 nav.RowImage = rowImg;
                 nav.BaseColor = baseColor;
                 _detailStripTagMenuNav.Add(nav);
+            }
+        }
+
+        private void DetailStripAddTagMenuHubRows(float rowH, float s)
+        {
+            if (_detailStripTagMenuAppliedListGO == null) return;
+            List<string> hub = _detailStripTagMenuHubCache;
+            if (hub == null || hub.Count == 0) return;
+
+            string uid = _detailStripTagMenuHubUid ?? "";
+            DetailStripAddTagMenuEmptyRow(
+                _detailStripTagMenuAppliedListGO,
+                VPBTranslation.T("gallery.detail.tag_hub_section", "Hub tags — read-only"),
+                rowH, s);
+
+            int n = 0;
+            for (int i = 0; i < hub.Count; i++)
+            {
+                string tag = hub[i];
+                if (string.IsNullOrEmpty(tag)) continue;
+                if (n >= DetailStripTagMenuMaxRows) break;
+                DetailStripAddHubTagMenuRow(tag, uid, rowH, s);
+                n++;
+            }
+        }
+
+        private void DetailStripAddHubTagMenuRow(string tag, string pkgUid, float rowH, float s)
+        {
+            string tagSnap = tag;
+            string uidSnap = pkgUid ?? "";
+            bool globalHidden = VpbLocalDatabase.IsDataPackTagHiddenGlobally(tagSnap);
+            bool localHidden = VpbLocalDatabase.IsDataPackTagHiddenForPackage(uidSnap, tagSnap);
+            bool hidden = globalHidden || localHidden;
+
+            string label = (hidden ? "◇  " : "◆  ") + tagSnap;
+            if (globalHidden)
+                label += "  " + VPBTranslation.T("gallery.detail.tag_hub_hidden_all", "(hidden everywhere)");
+            else if (localHidden)
+                label += "  " + VPBTranslation.T("gallery.detail.tag_hub_hidden_here", "(hidden here)");
+
+            GameObject row = UI.AddStretchPopupMenuRow(
+                _detailStripTagMenuAppliedListGO.transform,
+                label,
+                () => DetailStripToggleHubTagHidden(tagSnap, uidSnap, globalScope: false),
+                isActive: false,
+                enabled: true,
+                rowHeight: rowH);
+            if (row == null) return;
+
+            Image rowImg = row.GetComponent<Image>();
+            if (rowImg != null)
+                rowImg.color = hidden ? GalleryUiColorTokens.PackTagRowHidden : GalleryUiColorTokens.PackTagRow;
+            Text t = row.GetComponentInChildren<Text>(true);
+            if (t != null)
+            {
+                GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
+                t.color = hidden ? UI.PopupMutedText : GalleryUiColorTokens.PackTagText;
+            }
+
+            AddRightClickDelegate(row, () => DetailStripToggleHubTagHidden(tagSnap, uidSnap, globalScope: true));
+            AddDynamicTooltip(row, () => DetailStripHubTagRowTooltip(tagSnap, uidSnap));
+        }
+
+        private string DetailStripHubTagRowTooltip(string tag, string pkgUid)
+        {
+            bool globalHidden = VpbLocalDatabase.IsDataPackTagHiddenGlobally(tag);
+            bool localHidden = VpbLocalDatabase.IsDataPackTagHiddenForPackage(pkgUid, tag);
+            string head = string.Format(
+                VPBTranslation.T("gallery.detail.tip.hub_tag_fmt",
+                    "\"{0}\" comes from the Hub data pack. It cannot be edited, and it never collides with a user tag of the same name."),
+                tag);
+            if (globalHidden)
+            {
+                return head + "\n" + VPBTranslation.T("gallery.detail.tip.hub_tag_unhide_all",
+                    "Hidden everywhere. Right-click: show it again.");
+            }
+            if (localHidden)
+            {
+                return head + "\n" + VPBTranslation.T("gallery.detail.tip.hub_tag_unhide_here",
+                    "Hidden on this package. Click: show it again. Right-click: hide it everywhere.");
+            }
+            return head + "\n" + VPBTranslation.T("gallery.detail.tip.hub_tag_hide",
+                "Click: hide it on this package. Right-click: hide it everywhere. Hides are yours, and survive a data pack update.");
+        }
+
+        private void DetailStripToggleHubTagHidden(string tag, string pkgUid, bool globalScope)
+        {
+            if (string.IsNullOrEmpty(tag)) return;
+
+            bool wantHidden;
+            if (globalScope)
+            {
+                wantHidden = !VpbLocalDatabase.IsDataPackTagHiddenGlobally(tag);
+                if (!VpbLocalDatabase.SetDataPackTagHidden(null, tag, wantHidden)) return;
+                ShowTemporaryStatus(string.Format(
+                    wantHidden
+                        ? VPBTranslation.T("gallery.detail.hub_tag_hidden_all_fmt", "Hub tag hidden everywhere: {0}")
+                        : VPBTranslation.T("gallery.detail.hub_tag_shown_all_fmt", "Hub tag shown again: {0}"),
+                    tag));
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(pkgUid)) return;
+                if (VpbLocalDatabase.IsDataPackTagHiddenGlobally(tag))
+                {
+                    ShowTemporaryStatus(VPBTranslation.T(
+                        "gallery.detail.hub_tag_blocked_by_global",
+                        "That tag is hidden everywhere — right-click to show it again."), 2.5f);
+                    return;
+                }
+                wantHidden = !VpbLocalDatabase.IsDataPackTagHiddenForPackage(pkgUid, tag);
+                if (!VpbLocalDatabase.SetDataPackTagHidden(pkgUid, tag, wantHidden)) return;
+                ShowTemporaryStatus(string.Format(
+                    wantHidden
+                        ? VPBTranslation.T("gallery.detail.hub_tag_hidden_here_fmt", "Hub tag hidden on this package: {0}")
+                        : VPBTranslation.T("gallery.detail.hub_tag_shown_here_fmt", "Hub tag shown on this package: {0}"),
+                    tag));
+            }
+
+            DetailStripRebuildTagMenuList(fullLayoutSync: false);
+            _detailStripCacheKey = "";
+            try { DetailStripRefresh(); } catch { }
+            if (HasActiveNameFilter())
+            {
+                try { RefreshFiles(true, false, false, "datapack_tag_pref"); } catch { }
             }
         }
 
@@ -9971,6 +10239,113 @@ namespace VPB
             return sb.ToString();
         }
 
+        private void DetailStripFillPackageTagsLine(FileEntry file, HashSet<string> nativePrecollected)
+        {
+            string nativeFmt = DetailStripFormatTagNames(
+                nativePrecollected != null ? nativePrecollected : DetailStripCollectNativeTags(file));
+            DetailStripCollectHubTags(file, _detailStripBoundHubTagNames);
+            _detailStripWantNativeTags = !string.IsNullOrEmpty(nativeFmt);
+            _detailStripWantHubTags = _detailStripBoundHubTagNames.Count > 0;
+
+            string nativeLine = _detailStripWantNativeTags
+                ? string.Format(VPBTranslation.T("gallery.detail.native_tags_fmt", "Package tags: {0}"), nativeFmt)
+                : "";
+            if (_detailStripPackageTags != null)
+                _detailStripPackageTags.text = nativeLine;
+            if (_detailStripSideNativeTags != null)
+                _detailStripSideNativeTags.text = nativeLine;
+
+            string key = nativeLine + "\n" + (nameFilter ?? "");
+            for (int i = 0; i < _detailStripBoundHubTagNames.Count; i++)
+                key += "\n" + _detailStripBoundHubTagNames[i];
+            if (string.Equals(key, _detailStripHubTagsContentKey, StringComparison.Ordinal))
+                return;
+            _detailStripHubTagsContentKey = key;
+            DetailStripRebuildHubTagChips(_detailStripPackageTagsChipsHost);
+            DetailStripRebuildHubTagChips(_detailStripSideHubTagsChipsHost);
+        }
+
+        private static void DetailStripCollectHubTags(FileEntry file, List<string> dest)
+        {
+            dest.Clear();
+            VpbLocalDatabase.DataPackLookOverlay overlay;
+            if (!TryGetFileLookOverlay(file, out overlay) || string.IsNullOrEmpty(overlay.HubTagsFmt))
+                return;
+            string[] parts = overlay.HubTagsFmt.Split(new string[] { ", " }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string t = parts[i] != null ? parts[i].Trim() : "";
+                if (t.Length > 0) dest.Add(t);
+            }
+        }
+
+        private void DetailStripRebuildHubTagChips(GameObject host)
+        {
+            if (host == null) return;
+            UI.DestroyAllChildren(host.transform);
+            int count = _detailStripBoundHubTagNames.Count;
+            if (count <= 0)
+                return;
+
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            float hitH = DetailStripHitHeight(s);
+            Color idleCol = GalleryUiColorTokens.PackTagText;
+            DetailStripCreateTagChipLabel(
+                host,
+                VPBTranslation.T("gallery.detail.hub_tags_label", "Hub tags: "),
+                idleCol, s, hitH, clickable: false, name: "HubTagLabel");
+            for (int i = 0; i < count; i++)
+            {
+                string tagSnap = _detailStripBoundHubTagNames[i];
+                if (string.IsNullOrEmpty(tagSnap)) continue;
+                if (i > 0)
+                    DetailStripAddTagChipSep(host, ", ", s, hitH);
+                string tok = VpbLocalDatabase.DataPackHubTagSearchToken(tagSnap);
+                bool inc = HasTitleSearchPackChip(TitleSearchChipKind.PackHubTag, tok);
+                bool exc = HasTitleSearchPackChipPolarity(TitleSearchChipKind.PackHubTag, tok, TitleSearchChipPolarity.Exclude);
+                Color chipCol = exc ? UserTagFilterExcludedColor : (inc ? UserTagFilterActiveColor : idleCol);
+                Text chip = DetailStripCreateTagChipLabel(
+                    host, tagSnap, chipCol, s, hitH, clickable: true, name: "HubTagChip");
+                AddTooltipPlain(chip.gameObject, string.Format(
+                    VPBTranslation.T(
+                        "gallery.detail.tip.hub_tag_filter_fmt",
+                        "Filter the gallery by Hub tag {0}. Right-click: exclude."),
+                    tagSnap));
+                DetailStripBindClick(chip.gameObject, () => DetailStripOnHubTagFilterClick(tagSnap, false));
+                UIRightClickDelegate rc = chip.gameObject.GetComponent<UIRightClickDelegate>();
+                if (rc == null) rc = chip.gameObject.AddComponent<UIRightClickDelegate>();
+                rc.OnRightClick = () => DetailStripOnHubTagFilterClick(tagSnap, true);
+                Color hoverCol = DetailStripBrighten(chipCol, 0.16f);
+                UIHoverDelegate hover = chip.gameObject.GetComponent<UIHoverDelegate>();
+                if (hover == null) hover = chip.gameObject.AddComponent<UIHoverDelegate>();
+                Color baseCol = chipCol;
+                hover.OnHoverChange += h =>
+                {
+                    if (chip == null) return;
+                    chip.color = h ? hoverCol : baseCol;
+                };
+            }
+        }
+
+        private string DetailStripPackageTagsTooltip()
+        {
+            FileEntry file = _detailStripBoundFile;
+            if (file == null && selectedFiles != null && selectedFiles.Count > 0)
+                file = selectedFiles[0];
+            VpbLocalDatabase.DataPackLookOverlay overlay;
+            bool hub = TryGetFileLookOverlay(file, out overlay) && !string.IsNullOrEmpty(overlay.HubTagsFmt);
+            if (hub)
+            {
+                return VPBTranslation.T(
+                    "gallery.detail.tip.native_and_hub_tags",
+                    "Package tags from meta.json (clothing / hair regions). Hub tags from the data pack — click a Hub tag to filter the gallery (right-click excludes).");
+            }
+            return VPBTranslation.T(
+                "gallery.detail.tip.native_tags",
+                "Native package tags from meta.json (clothing / hair regions).");
+        }
+
         private static string DetailStripResolveRegionTags(FileEntry file)
         {
             HashSet<string> regions = DetailStripCollectNativeTags(file);
@@ -10100,6 +10475,14 @@ namespace VPB
             }
             catch { }
             return flags.Count > 0 ? string.Join(", ", flags.ToArray()) : "";
+        }
+
+        private static string DetailStripResolveLooksLikeSubject(FileEntry file)
+        {
+            VpbLocalDatabase.DataPackLookOverlay overlay;
+            if (!TryGetFileLookOverlay(file, out overlay) || !overlay.Found)
+                return "";
+            return overlay.Subject ?? "";
         }
 
         private string DetailStripResolveCategory(FileEntry file)

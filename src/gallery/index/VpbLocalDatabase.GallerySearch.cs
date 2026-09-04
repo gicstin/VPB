@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -261,6 +261,12 @@ namespace VPB
                 }
             }
 
+            AppendDataPackTerms(sb, binds, br.PackSubjectInclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.Subject, false);
+            AppendDataPackTerms(sb, binds, br.PackSubjectExclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.Subject, true);
+            AppendDataPackTerms(sb, binds, br.PackHubTagInclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.HubTag, false);
+            AppendDataPackTerms(sb, binds, br.PackHubTagExclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.HubTag, true);
+            AppendDataPackTerms(sb, binds, br.PackAnyInclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.Any, false);
+            AppendDataPackTerms(sb, binds, br.PackAnyExclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.Any, true);
             if (br.CreatorTerms != null)
             {
                 for (int i = 0; i < br.CreatorTerms.Count; i++)
@@ -300,6 +306,195 @@ namespace VPB
         /// OR-group body for one broad search term (no leading AND/NOT).
         /// Surfaces: list_path, internal_path, creator, uid, user-tag name LIKE.
         /// </summary>
+        static void AppendDataPackTerms(
+            StringBuilder sb,
+            List<string> binds,
+            List<string> terms,
+            string pkgUidSql,
+            GallerySearchQuery.DataPackAtomKind kind,
+            bool negate)
+        {
+            if (sb == null || binds == null || terms == null || terms.Count == 0) return;
+
+            if (negate)
+            {
+                for (int i = 0; i < terms.Count; i++)
+                {
+                    string t = terms[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    AppendSqlDataPackExists(sb, binds, pkgUidSql, t, kind, true, " AND ");
+                }
+                return;
+            }
+
+            int mark = sb.Length;
+            int bindMark = binds.Count;
+            sb.Append(" AND (");
+            int emitted = 0;
+            for (int i = 0; i < terms.Count; i++)
+            {
+                string t = terms[i];
+                if (string.IsNullOrEmpty(t)) continue;
+                int textAt = sb.Length;
+                int bindAt = binds.Count;
+                if (!AppendSqlDataPackExists(sb, binds, pkgUidSql, t, kind, false, emitted == 0 ? "" : " OR "))
+                {
+                    sb.Length = textAt;
+                    if (binds.Count > bindAt) binds.RemoveRange(bindAt, binds.Count - bindAt);
+                    continue;
+                }
+                emitted++;
+            }
+            if (emitted == 0)
+            {
+                sb.Length = mark;
+                if (binds.Count > bindMark) binds.RemoveRange(bindMark, binds.Count - bindMark);
+                return;
+            }
+            sb.Append(')');
+        }
+
+        internal static bool AppendSqlDataPackExists(
+            StringBuilder sb,
+            List<string> binds,
+            string pkgUidSql,
+            string termLower,
+            GallerySearchQuery.DataPackAtomKind kind,
+            bool negate,
+            string connector)
+        {
+            if (sb == null || binds == null || string.IsNullOrEmpty(termLower)) return false;
+            string uidSql = string.IsNullOrEmpty(pkgUidSql) ? "m.pkg_uid" : pkgUidSql;
+            string lead = connector ?? "";
+
+            bool exact;
+            string body;
+            DataPackTermSplitExact(termLower, out exact, out body);
+            if (string.IsNullOrEmpty(body)) return false;
+
+            if (kind == GallerySearchQuery.DataPackAtomKind.Subject
+                && TryAppendDataPackSubjectUidSet(sb, uidSql, body, exact, negate, lead, false))
+                return true;
+
+            string pat = exact ? body : ("%" + EscapeLike(body) + "%");
+
+            sb.Append(lead).Append(negate ? "NOT EXISTS (" : "EXISTS (");
+            sb.Append("SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=").Append(uidSql).Append(" AND ");
+
+            if (kind == GallerySearchQuery.DataPackAtomKind.HubTag)
+            {
+                sb.Append("EXISTS (SELECT 1 FROM datapack_tag dt WHERE dt.pack_id=dl.pack_id");
+                sb.Append(" AND dt.entry_id=dl.entry_id AND dt.ns='hub' AND ");
+                if (exact) sb.Append("lower(trim(ifnull(dt.tag,''))) = ?");
+                else sb.Append("dt.tag LIKE ? ESCAPE '\\'");
+                AppendDataPackTagNotHiddenSql(sb, "dt.tag", "dl.pkg_uid");
+                sb.Append(')');
+                binds.Add(pat);
+            }
+            else if (kind == GallerySearchQuery.DataPackAtomKind.Subject)
+            {
+                sb.Append("EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
+                sb.Append(" AND de.entry_id=dl.entry_id AND ");
+                if (exact) sb.Append("lower(trim(ifnull(de.subject,''))) = ?");
+                else sb.Append("lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'");
+                sb.Append(')');
+                AppendDataPackSubjectPackScopeSql(sb);
+                binds.Add(pat);
+                AddDataPackSubjectPackScopeBinds(binds);
+            }
+            else
+            {
+                // lap: stays substring even when quoted — any-field expert search.
+                string likePat = "%" + EscapeLike(body) + "%";
+                sb.Append("(EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
+                sb.Append(" AND de.entry_id=dl.entry_id AND (");
+                sb.Append("lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'");
+                sb.Append(" OR lower(ifnull(de.title,'')) LIKE ? ESCAPE '\\'");
+                sb.Append(" OR lower(ifnull(de.creator,'')) LIKE ? ESCAPE '\\'");
+                sb.Append(" OR lower(ifnull(de.category,'')) LIKE ? ESCAPE '\\'");
+                sb.Append(" OR lower(ifnull(de.tag_line,'')) LIKE ? ESCAPE '\\'))");
+                sb.Append(" OR EXISTS (SELECT 1 FROM datapack_tag dt WHERE dt.pack_id=dl.pack_id");
+                sb.Append(" AND dt.entry_id=dl.entry_id AND dt.tag LIKE ? ESCAPE '\\'");
+                if (DataPackTagPrefsActive())
+                {
+                    sb.Append(" AND (dt.ns<>'hub' OR ");
+                    AppendDataPackTagNotHiddenPredicate(sb, "dt.tag", "dl.pkg_uid");
+                    sb.Append(')');
+                }
+                sb.Append("))");
+                for (int i = 0; i < 6; i++) binds.Add(likePat);
+            }
+
+            sb.Append(')');
+            return true;
+        }
+
+        internal static void DataPackTermSplitExact(string termLower, out bool exact, out string body)
+        {
+            exact = false;
+            body = termLower ?? "";
+            if (body.Length > 1 && body[0] == '=')
+            {
+                exact = true;
+                body = body.Substring(1);
+            }
+        }
+
+        internal static bool TryCollectPackageUidsForDataPackTerms(
+            IList<string> terms,
+            GallerySearchQuery.DataPackAtomKind kind,
+            Dictionary<string, HashSet<string>> uidsByTermOut)
+        {
+            if (uidsByTermOut == null) return false;
+            if (terms == null || terms.Count == 0) return true;
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            var pending = new List<string>();
+            for (int i = 0; i < terms.Count; i++)
+            {
+                string t = terms[i];
+                if (string.IsNullOrEmpty(t)) continue;
+                if (uidsByTermOut.ContainsKey(t)) continue;
+                uidsByTermOut[t] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                pending.Add(t);
+            }
+            if (pending.Count == 0) return true;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    var sb = new StringBuilder(384);
+                    var binds = new List<string>(8);
+                    for (int i = 0; i < pending.Count; i++)
+                    {
+                        string term = pending[i];
+                        sb.Length = 0;
+                        binds.Clear();
+                        sb.Append("SELECT DISTINCT m.pkg_uid FROM datapack_link m WHERE 1=1");
+                        AppendSqlDataPackExists(sb, binds, "m.pkg_uid", term, kind, false, " AND ");
+
+                        HashSet<string> uids = uidsByTermOut[term];
+                        using (var st = conn.Prepare(sb.ToString()))
+                        {
+                            for (int b = 0; b < binds.Count; b++) st.BindText(b + 1, binds[b]);
+                            while (st.Step() == VpbSqlite3.SqliteRow)
+                            {
+                                string uid = st.ColumnText(0);
+                                if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static void AppendGalleryBroadTermMatchOrGroup(
             StringBuilder sb,
             List<string> binds,
@@ -331,6 +526,18 @@ namespace VPB
             sb.Append(" AND gut.tag_id IN (SELECT tag_id FROM gallery_user_tag WHERE lower(name) LIKE ? ESCAPE '\\')");
             sb.Append(')');
             binds.Add(esc);
+
+            // Look-A-Pedia subject ("this looks like") — same OR as in-memory FileEntryMatchesBroadTerm.
+            if (DataPackSubjectSearchEnabled()
+                && !TryAppendDataPackSubjectUidSet(sb, "m.pkg_uid", termLower, false, false, " OR ", true))
+            {
+                sb.Append(" OR EXISTS (SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=m.pkg_uid");
+                AppendDataPackSubjectPackScopeSql(sb);
+                sb.Append(" AND EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
+                sb.Append(" AND de.entry_id=dl.entry_id AND lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'))");
+                AddDataPackSubjectPackScopeBinds(binds);
+                binds.Add(esc);
+            }
         }
 
         /// <summary>History browse: append search AST predicates (paths + creator + uid + user tags + status).</summary>
@@ -410,6 +617,17 @@ namespace VPB
                         sb.Append(" AND gut.internal_path=COALESCE(mx.internal_path, mr.internal_path)");
                         sb.Append(" AND gut.tag_id IN (SELECT tag_id FROM gallery_user_tag WHERE lower(name) LIKE ? ESCAPE '\\'))");
                     }
+                    bool packSubjectNeedsBind = false;
+                    if (t.Length >= 2 && DataPackSubjectSearchEnabled()
+                        && !TryAppendDataPackSubjectUidSet(
+                            sb, "COALESCE(mx.pkg_uid, mr.pkg_uid)", t.ToLowerInvariant(), false, false, " OR ", true))
+                    {
+                        packSubjectNeedsBind = true;
+                        sb.Append(" OR EXISTS (SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=COALESCE(mx.pkg_uid, mr.pkg_uid)");
+                        AppendDataPackSubjectPackScopeSql(sb);
+                        sb.Append(" AND EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
+                        sb.Append(" AND de.entry_id=dl.entry_id AND lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'))");
+                    }
                     sb.Append(')');
                     textBinds.Add(esc);
                     textBinds.Add(esc);
@@ -417,6 +635,11 @@ namespace VPB
                     textBinds.Add(esc);
                     textBinds.Add(esc);
                     if (t.Length >= 2) textBinds.Add(esc);
+                    if (packSubjectNeedsBind)
+                    {
+                        AddDataPackSubjectPackScopeBinds(textBinds);
+                        textBinds.Add(esc);
+                    }
                 }
             }
             if (br.BroadExclude != null)
@@ -439,6 +662,17 @@ namespace VPB
                         sb.Append(" AND gut.internal_path=COALESCE(mx.internal_path, mr.internal_path)");
                         sb.Append(" AND gut.tag_id IN (SELECT tag_id FROM gallery_user_tag WHERE lower(name) LIKE ? ESCAPE '\\'))");
                     }
+                    bool packSubjectNeedsBind = false;
+                    if (t.Length >= 2 && DataPackSubjectSearchEnabled()
+                        && !TryAppendDataPackSubjectUidSet(
+                            sb, "COALESCE(mx.pkg_uid, mr.pkg_uid)", t.ToLowerInvariant(), false, false, " OR ", true))
+                    {
+                        packSubjectNeedsBind = true;
+                        sb.Append(" OR EXISTS (SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=COALESCE(mx.pkg_uid, mr.pkg_uid)");
+                        AppendDataPackSubjectPackScopeSql(sb);
+                        sb.Append(" AND EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
+                        sb.Append(" AND de.entry_id=dl.entry_id AND lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'))");
+                    }
                     sb.Append(')');
                     textBinds.Add(esc);
                     textBinds.Add(esc);
@@ -446,6 +680,11 @@ namespace VPB
                     textBinds.Add(esc);
                     textBinds.Add(esc);
                     if (t.Length >= 2) textBinds.Add(esc);
+                    if (packSubjectNeedsBind)
+                    {
+                        AddDataPackSubjectPackScopeBinds(textBinds);
+                        textBinds.Add(esc);
+                    }
                 }
             }
 
@@ -478,6 +717,12 @@ namespace VPB
                 }
             }
 
+            AppendDataPackTerms(sb, textBinds, br.PackSubjectInclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.Subject, false);
+            AppendDataPackTerms(sb, textBinds, br.PackSubjectExclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.Subject, true);
+            AppendDataPackTerms(sb, textBinds, br.PackHubTagInclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.HubTag, false);
+            AppendDataPackTerms(sb, textBinds, br.PackHubTagExclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.HubTag, true);
+            AppendDataPackTerms(sb, textBinds, br.PackAnyInclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.Any, false);
+            AppendDataPackTerms(sb, textBinds, br.PackAnyExclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.Any, true);
             if (br.CreatorTerms != null)
             {
                 for (int i = 0; i < br.CreatorTerms.Count; i++)

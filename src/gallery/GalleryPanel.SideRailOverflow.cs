@@ -198,16 +198,19 @@ namespace VPB
             if (!TryGetSideRailButtonPair(idx, out RectTransform left, out RectTransform right)) return;
             // Defense: hide setting means chips absent; never resurrect by name if orphan lingered.
             bool hideCreator = HideCreatorSideRailButtonsRequested();
+            bool hideLookFacet = true;
             if (left != null)
             {
                 bool want = active;
                 if (want && hideCreator && IsCreatorSideRailButtonGO(left.gameObject)) want = false;
+                if (want && hideLookFacet && IsLookFacetSideRailButtonGO(left.gameObject)) want = false;
                 if (left.gameObject.activeSelf != want) left.gameObject.SetActive(want);
             }
             if (right != null)
             {
                 bool want = active;
                 if (want && hideCreator && IsCreatorSideRailButtonGO(right.gameObject)) want = false;
+                if (want && hideLookFacet && IsLookFacetSideRailButtonGO(right.gameObject)) want = false;
                 if (right.gameObject.activeSelf != want) right.gameObject.SetActive(want);
             }
         }
@@ -573,6 +576,13 @@ namespace VPB
                 tipDefault = "Browse creators (side list). Title bar filters the grid.";
                 return true;
             }
+            if (SideRailGoMatches(go, leftLookFacetBtnImage, rightLookFacetBtnImage, leftLookFacetBtnText, rightLookFacetBtnText)
+                || SideRailGoIs(go, leftLookFacetSideBtnGO, rightLookFacetSideBtnGO))
+            {
+                tipKey = "gallery.tooltip.looks_like_list";
+                tipDefault = "Browse who looks resemble (Look-A-Pedia). Hub tags: switcher above the list search. Click a row to filter the grid.";
+                return true;
+            }
             if (SideRailGoMatches(go, leftPathBtnImage, rightPathBtnImage, leftPathBtnText, rightPathBtnText))
             {
                 tipKey = "gallery.tooltip.path_list";
@@ -616,6 +626,9 @@ namespace VPB
                 return VPBTranslation.T("gallery.side.overflow_category", "Category");
             if (SideRailGoMatches(go, leftCreatorBtnImage, rightCreatorBtnImage, leftCreatorBtnText, rightCreatorBtnText))
                 return VPBTranslation.T("gallery.side.overflow_creator", "Creator");
+            if (SideRailGoMatches(go, leftLookFacetBtnImage, rightLookFacetBtnImage, leftLookFacetBtnText, rightLookFacetBtnText)
+                || SideRailGoIs(go, leftLookFacetSideBtnGO, rightLookFacetSideBtnGO))
+                return VPBTranslation.T("gallery.side.overflow_looks_like", "Looks like");
             if (SideRailGoMatches(go, leftPathBtnImage, rightPathBtnImage, leftPathBtnText, rightPathBtnText))
                 return VPBTranslation.T("gallery.side.overflow_path", "Paths");
             if (SideRailGoMatchesImage(go, leftHistoryBtnImage, rightHistoryBtnImage))

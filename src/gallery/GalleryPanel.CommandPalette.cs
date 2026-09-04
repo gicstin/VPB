@@ -186,6 +186,9 @@ namespace VPB
                     try { ClearAllBrowseFiltersKeepCategory(); }
                     catch { try { RefreshFiles(true); } catch { } }
                 });
+            AddCommandPaletteEntry("looks_like", "gallery.cmd.looks_like", "Looks like & Hub tags", "", GBrowse, "character identity hub tags lookapedia jinx kinx tags",
+                () => { try { OpenUserTagsForPackFacet(); } catch { } },
+                LookFacetPackEnabled);
             AddCommandPaletteEntry("filter_presets", "gallery.cmd.filter_presets", "Filter presets", ScHint(VpbShortcut.FilterPresets), GBrowse, "quick filters qf saved",
                 () =>
                 {

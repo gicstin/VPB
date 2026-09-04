@@ -3514,6 +3514,8 @@ namespace VPB
 
         private void ToggleSideFromRailButton(ContentType type, bool fromLeftRailButton, bool rightClick)
         {
+            if (type == ContentType.Lookapedia)
+                type = ContentType.UserTags;
             if (PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick))
                 ToggleLeft(type);
             else
@@ -3539,6 +3541,8 @@ namespace VPB
             }
             bool hadSettingsPanel = IsSettingsPanelOpen();
             bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
+            if (type == ContentType.Lookapedia)
+                type = ContentType.UserTags;
             // Legacy middle-pane settings only — float Settings stays open with side panes (modeless).
             if (settingsListViewActive)
                 ExitInternalSettingsMode(true);

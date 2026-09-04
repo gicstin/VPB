@@ -461,6 +461,8 @@ namespace VPB
                 && VPBConfig.Instance != null
                 && VPBConfig.Instance.GalleryHideCreatorSideButtons)
                 return null;
+            if (type == ContentType.Lookapedia)
+                return ContentType.UserTags;
             return type;
         }
 
@@ -471,6 +473,7 @@ namespace VPB
             {
                 case ContentType.Category:
                 case ContentType.Creator:
+                case ContentType.Lookapedia:
                 case ContentType.UserTags:
                 case ContentType.Path:
                 case ContentType.History:

@@ -18,6 +18,14 @@ namespace VPB
             // Subscribe to config changes
             if (VPBConfig.Instance != null)
             {
+                try
+                {
+                    VpbDataPackService.RequestInitialSync(
+                        VPBConfig.Instance.DataPackLookapediaEnabled,
+                        VPBConfig.Instance.DataPackHubTagsEnabled);
+                }
+                catch { }
+
                 bool isVR = XrUtils.IsVrActive();
 
                 // First pane may auto-dock; later panes only when the user already docks and an edge is free.
@@ -835,6 +843,7 @@ namespace VPB
                     if (_suppressMainSideSearchValueChanged) return;
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
                     else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
+                    else if (rightActiveContent == ContentType.Lookapedia) lookapediaFilter = val;
                     else if (rightActiveContent == ContentType.UserTags) userTagFilter = val;
                     else if (rightActiveContent == ContentType.Path) pathFilter = val;
                     else if (rightActiveContent == ContentType.History) historyTabFilter = val;
@@ -851,6 +860,10 @@ namespace VPB
                     if (rightActiveContent == ContentType.Creator) {
                         ClearCreatorFilters();
                         OnCreatorFilterChanged(refreshFilesAndTabs: true);
+                    }
+                    else if (rightActiveContent == ContentType.Lookapedia) {
+                        ClearLookapediaListSearch();
+                        try { ApplyLookFacetSideFilterIfOpen(); } catch { }
                     }
                     else if (rightActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
@@ -1118,6 +1131,7 @@ namespace VPB
                     if (_suppressMainSideSearchValueChanged) return;
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
                     else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
+                    else if (leftActiveContent == ContentType.Lookapedia) lookapediaFilter = val;
                     else if (leftActiveContent == ContentType.UserTags) userTagFilter = val;
                     else if (leftActiveContent == ContentType.Path) pathFilter = val;
                     else if (leftActiveContent == ContentType.History) historyTabFilter = val;
@@ -1134,6 +1148,10 @@ namespace VPB
                     if (leftActiveContent == ContentType.Creator) {
                         ClearCreatorFilters();
                         OnCreatorFilterChanged(refreshFilesAndTabs: true);
+                    }
+                    else if (leftActiveContent == ContentType.Lookapedia) {
+                        ClearLookapediaListSearch();
+                        try { ApplyLookFacetSideFilterIfOpen(); } catch { }
                     }
                     else if (leftActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
@@ -1396,12 +1414,13 @@ namespace VPB
                     }
                     rightSideButtons.Add(rightUserTagsBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(rightUserTagsBtn, () => ToggleSideFromRailButton(ContentType.UserTags, false, true));
-                    AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
+                    AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags, plus Looks like / Hub tags from data packs (read-only sections). Filter here; Edit opens tag manager.");
                 }
 
                 // Creator — Path B only when hide setting off (Path A: never create).
                 if (!HideCreatorSideRailButtonsRequested())
                     CreateRightCreatorSideRailButton();
+                CreateRightLookFacetSideRailButton();
 
                 // Path (Blue)
                 {
@@ -1686,12 +1705,13 @@ namespace VPB
                     }
                     leftSideButtons.Add(leftUserTagsBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftUserTagsBtn, () => ToggleSideFromRailButton(ContentType.UserTags, true, true));
-                    AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
+                    AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags, plus Looks like / Hub tags from data packs (read-only sections). Filter here; Edit opens tag manager.");
                 }
 
                 // Creator — Path B only when hide setting off (Path A: never create).
                 if (!HideCreatorSideRailButtonsRequested())
                     CreateLeftCreatorSideRailButton();
+                CreateLeftLookFacetSideRailButton();
 
                 // Path (Blue)
                 {

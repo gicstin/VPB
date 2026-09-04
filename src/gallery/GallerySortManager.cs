@@ -41,7 +41,11 @@ namespace VPB
         /// <summary>Family last updated: first_scanned of the highest-N .var version in creator.packageName.</summary>
         DateUpdated = 19,
         /// <summary>Random order (Fisher–Yates shuffle each time sort is applied).</summary>
-        Random = 20
+        Random = 20,
+        HubDownloads = 21,
+        HubRating = 22,
+        HubReleased = 23,
+        HubUpdated = 24
     }
 
     public enum SortDirection
@@ -265,6 +269,12 @@ namespace VPB
                     LogSortedHeadSample("DateUpdated", state.Direction, files, f => GetFamilyHighestVersionScanned(f, fam));
                     break;
                 }
+                case SortType.HubDownloads:
+                case SortType.HubRating:
+                case SortType.HubReleased:
+                case SortType.HubUpdated:
+                    SortByHubMetric(files, state.Type, state.Direction);
+                    break;
                 case SortType.Random:
                     ShuffleFiles(files);
                     break;
@@ -364,6 +374,74 @@ namespace VPB
             public FileEntry File;
             public DateTime Key;
             public string Name;
+        }
+
+        private static void SortByHubMetric(List<FileEntry> files, SortType type, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+
+            Dictionary<string, VpbLocalDatabase.DataPackPackageMetrics> metrics = null;
+            try { metrics = VpbLocalDatabase.GetDataPackPackageMetrics(); }
+            catch { metrics = null; }
+            if (metrics == null || metrics.Count == 0) return;
+
+            SortByPrecomputedIntStable(files, f =>
+            {
+                string uid = GetHubMetricPackageUid(f);
+                if (string.IsNullOrEmpty(uid)) return 0;
+                VpbLocalDatabase.DataPackPackageMetrics m;
+                if (!metrics.TryGetValue(uid, out m)) return 0;
+                switch (type)
+                {
+                    case SortType.HubDownloads: return m.Downloads;
+                    case SortType.HubRating: return m.RatingX100;
+                    case SortType.HubReleased: return m.ReleasedYmd;
+                    default: return m.UpdatedYmd;
+                }
+            }, dir);
+        }
+
+        private static string GetHubMetricPackageUid(FileEntry file)
+        {
+            if (file == null) return "";
+            try
+            {
+                VarFileEntry vfe = file as VarFileEntry;
+                if (vfe != null) return vfe.GetRowPackageUid() ?? "";
+                PackageListEntry ple = file as PackageListEntry;
+                if (ple != null) return ple.GetPackageUidForGalleryUserTags() ?? "";
+            }
+            catch { }
+            return "";
+        }
+
+        private static void SortByPrecomputedIntStable(List<FileEntry> files, Func<FileEntry, int> getKey, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+            if (getKey == null) return;
+
+            int n = files.Count;
+            var keys = new int[n];
+            var order = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                int k = 0;
+                try { k = getKey(files[i]); } catch { k = 0; }
+                keys[i] = k;
+                order[i] = i;
+            }
+
+            bool asc = dir == SortDirection.Ascending;
+            Array.Sort(order, (ia, ib) =>
+            {
+                int res = asc ? keys[ia].CompareTo(keys[ib]) : keys[ib].CompareTo(keys[ia]);
+                if (res != 0) return res;
+                return ia.CompareTo(ib);
+            });
+
+            var tmp = new FileEntry[n];
+            for (int i = 0; i < n; i++) tmp[i] = files[order[i]];
+            for (int i = 0; i < n; i++) files[i] = tmp[i];
         }
 
         private static void SortByPrecomputedInt(List<FileEntry> files, Func<FileEntry, int> getKey, SortDirection dir)
@@ -1204,6 +1282,12 @@ namespace VPB
                     var tmp = new CreatorCacheEntry[n];
                     for (int i = 0; i < n; i++) tmp[i] = creators[order[i]];
                     for (int i = 0; i < n; i++) creators[i] = tmp[i];
+                    break;
+                default:
+                    if (state.Direction == SortDirection.Descending)
+                        creators.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+                    else
+                        creators.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
                     break;
             }
         }

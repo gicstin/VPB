@@ -5,7 +5,7 @@ using UnityEngine.UI;
 namespace VPB
 {
     /// <summary>
-    /// Facet rail: exclusive browse chips only (Tags / Category / Creator / Path / History / Import).
+    /// Facet rail: exclusive browse chips only (Tags / Category / Creator / Looks like / Path / History / Import).
     /// Window chrome and tools live on title, footer, toolbox.
     /// </summary>
     public partial class GalleryPanel
@@ -42,6 +42,7 @@ namespace VPB
             if (leftHistoryBtnIconImage != null) leftHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
 
             try { SyncSideRailFacetCaptions(); } catch { }
+            try { SyncLookFacetRailVisible(); } catch { }
         }
 
         private void ResolveFacetRailSides(
@@ -142,6 +143,8 @@ namespace VPB
             ApplySideRailIconOnly(rightCategoryBtnImage != null ? rightCategoryBtnImage.gameObject : null);
             ApplySideRailIconOnly(leftCreatorBtnImage != null ? leftCreatorBtnImage.gameObject : null);
             ApplySideRailIconOnly(rightCreatorBtnImage != null ? rightCreatorBtnImage.gameObject : null);
+            ApplySideRailIconOnly(leftLookFacetSideBtnGO);
+            ApplySideRailIconOnly(rightLookFacetSideBtnGO);
             ApplySideRailIconOnly(leftPathBtnImage != null ? leftPathBtnImage.gameObject : null);
             ApplySideRailIconOnly(rightPathBtnImage != null ? rightPathBtnImage.gameObject : null);
             ApplySideRailIconOnly(leftHistoryBtnImage != null ? leftHistoryBtnImage.gameObject : null);

@@ -10,6 +10,7 @@ namespace VPB
             None,
             Category,
             Creator,
+            Lookapedia,
             UserTags,
             Path,
             History,
@@ -51,7 +52,8 @@ namespace VPB
 
             Add(ContentType.Category, "gallery.search.categories", "Filter this list: categories…", SideFilterFieldKind.Category);
             Add(ContentType.Creator, "gallery.search.creators", "Filter this list: creators…", SideFilterFieldKind.Creator);
-            Add(ContentType.UserTags, "gallery.search.user_tags", "Filter this list: tags…", SideFilterFieldKind.UserTags);
+            Add(ContentType.Lookapedia, "gallery.search.looks_like", "Filter this list: looks like / hub tags…", SideFilterFieldKind.Lookapedia);
+            Add(ContentType.UserTags, "gallery.search.user_tags", "Filter this list: tags, looks like, hub tags…", SideFilterFieldKind.UserTags);
             Add(ContentType.UserTagsApplied, "gallery.search.user_tags_applied", "Filter this list: applied tags…");
             Add(ContentType.Path, "gallery.search.paths", "Filter this list: paths…", SideFilterFieldKind.Path);
             Add(ContentType.Tags, "gallery.search.tags", "Filter this list: regions…");
@@ -102,6 +104,7 @@ namespace VPB
             {
                 case SideFilterFieldKind.Category: return categoryFilter ?? "";
                 case SideFilterFieldKind.Creator: return creatorFilter ?? "";
+                case SideFilterFieldKind.Lookapedia: return lookapediaFilter ?? "";
                 case SideFilterFieldKind.UserTags: return userTagFilter ?? "";
                 case SideFilterFieldKind.Path: return pathFilter ?? "";
                 case SideFilterFieldKind.History: return historyTabFilter ?? "";

@@ -15,10 +15,15 @@ namespace VPB
         // Filter chip bar lives in the main grid column only — do not add ActiveFilterChromeTopInsetPx here.
         private float TabScrollTopOffset()
         {
+            return Mathf.Min(TabScrollTopOffsetForSide(true), TabScrollTopOffsetForSide(false));
+        }
+
+        private float TabScrollTopOffsetForSide(bool isLeft)
+        {
             float s = ChromeScale;
             float rowTop = SidePanelFilterRowTopRef * s;
             float headerExtra = 0f;
-            try { headerExtra = SidePanelHeaderExtraTopInset(); } catch { }
+            try { headerExtra = SidePanelHeaderInsetForSide(isLeft, s); } catch { }
             float rowH = GalleryUiDesignTokens.SideTabRowHeightRef * s;
             float gap = GalleryUiDesignTokens.SideTabFilterRowBottomGapRef * s;
             return -(rowTop + headerExtra + rowH + gap);
@@ -195,7 +200,7 @@ namespace VPB
                     leftRT.anchorMin = new Vector2(0, splitY);
                     leftRT.anchorMax = new Vector2(0, 1);
                     leftRT.offsetMin = new Vector2(GalleryUiDesignTokens.SideTabSideMarginRef * ChromeScale, SideTabSplitSeamInset());
-                    leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
+                    leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffsetForSide(true));
 
                     RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                     subRT.anchorMin = new Vector2(0, 0);
@@ -206,11 +211,7 @@ namespace VPB
                     // Populate Top (Category / Hub Category / Status)
                     if (rebuildSideTabLists)
                     {
-                        if (!TryUpdateCategoryCreatorDualBufferMainPane(leftActiveContent.Value, leftTabContainerGO, true))
-                        {
-                            TeardownCategoryCreatorDualBufferOneSide(true);
-                            UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
-                        }
+                        RebuildMainPaneSideTabList(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                     }
 
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
@@ -236,15 +237,11 @@ namespace VPB
                     leftRT.anchorMin = new Vector2(0, 0);
                     leftRT.anchorMax = new Vector2(0, 1);
                     leftRT.offsetMin = new Vector2(GalleryUiDesignTokens.SideTabSideMarginRef * ChromeScale, SideTabDefaultBottomOffset);
-                    leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
+                    leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffsetForSide(true));
 
                     if (rebuildSideTabLists)
                     {
-                        if (!TryUpdateCategoryCreatorDualBufferMainPane(leftActiveContent.Value, leftTabContainerGO, true))
-                        {
-                            TeardownCategoryCreatorDualBufferOneSide(true);
-                            UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
-                        }
+                        RebuildMainPaneSideTabList(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                     }
                     if (leftActiveContent == ContentType.Category)
                     {
@@ -261,6 +258,7 @@ namespace VPB
                 if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
                 if (leftCategoryTabHolder != null) leftCategoryTabHolder.SetActive(false);
                 if (leftCreatorTabHolder != null) leftCreatorTabHolder.SetActive(false);
+                if (leftLookFacetTabHolder != null) leftLookFacetTabHolder.SetActive(false);
             }
 
             if (rightActiveContent.HasValue)
@@ -312,7 +310,7 @@ namespace VPB
                     rightRT.anchorMin = new Vector2(1, splitY);
                     rightRT.anchorMax = new Vector2(1, 1);
                     rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabSplitSeamInset());
-                    rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
+                    rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffsetForSide(false));
 
                     RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                     subRT.anchorMin = new Vector2(1, 0);
@@ -323,11 +321,7 @@ namespace VPB
                     // Populate Top (Category / Hub Category / Status)
                     if (rebuildSideTabLists)
                     {
-                        if (!TryUpdateCategoryCreatorDualBufferMainPane(rightActiveContent.Value, rightTabContainerGO, false))
-                        {
-                            TeardownCategoryCreatorDualBufferOneSide(false);
-                            UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
-                        }
+                        RebuildMainPaneSideTabList(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                     }
 
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
@@ -353,15 +347,11 @@ namespace VPB
                     rightRT.anchorMin = new Vector2(1, 0);
                     rightRT.anchorMax = new Vector2(1, 1);
                     rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabDefaultBottomOffset); // Restore default
-                    rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
+                    rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffsetForSide(false));
 
                     if (rebuildSideTabLists)
                     {
-                        if (!TryUpdateCategoryCreatorDualBufferMainPane(rightActiveContent.Value, rightTabContainerGO, false))
-                        {
-                            TeardownCategoryCreatorDualBufferOneSide(false);
-                            UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
-                        }
+                        RebuildMainPaneSideTabList(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                     }
                     if (rightActiveContent == ContentType.Category)
                     {
@@ -378,6 +368,7 @@ namespace VPB
                 if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
                 if (rightCategoryTabHolder != null) rightCategoryTabHolder.SetActive(false);
                 if (rightCreatorTabHolder != null) rightCreatorTabHolder.SetActive(false);
+                if (rightLookFacetTabHolder != null) rightLookFacetTabHolder.SetActive(false);
             }
 
             SyncSidePaneTopSortButtonVisuals();
@@ -390,6 +381,24 @@ namespace VPB
             // after that — viewport stretch resets unless sticky chrome is reapplied here.
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             MarkGalleryPaneChromeDirty();
+        }
+
+        private void RebuildMainPaneSideTabList(ContentType activeContent, GameObject tabContainer, List<GameObject> trackedButtons, bool isLeft)
+        {
+            if (TryUpdateCategoryCreatorDualBufferMainPane(activeContent, tabContainer, isLeft))
+            {
+                TeardownLookFacetPaneOneSide(isLeft);
+                return;
+            }
+            if (activeContent == ContentType.Lookapedia)
+            {
+                TeardownCategoryCreatorDualBufferOneSide(isLeft);
+                TryUpdateLookFacetMainPane(tabContainer, trackedButtons, isLeft);
+                return;
+            }
+            TeardownCategoryCreatorDualBufferOneSide(isLeft);
+            TeardownLookFacetPaneOneSide(isLeft);
+            UpdateTabs(activeContent, tabContainer, trackedButtons, isLeft);
         }
 
         private bool TryUpdateCategoryCreatorDualBufferMainPane(ContentType activeContent, GameObject tabContainer, bool isLeft)

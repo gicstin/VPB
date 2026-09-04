@@ -67,7 +67,10 @@ namespace VPB
         private float SidePanelHeaderInsetForSide(bool isLeft, float s)
         {
             if (!SidePanelHeaderVisibleForSide(isLeft)) return 0f;
-            return SidePanelHeaderHeightRef * s + SidePanelHeaderGapRef * s;
+            float inset = SidePanelHeaderHeightRef * s + SidePanelHeaderGapRef * s;
+            if (LookFacetModeChromeVisible(isLeft))
+                inset += LookFacetModeRowHeightPx(s) + SidePanelHeaderGapRef * s;
+            return inset;
         }
 
         internal float SidePanelFilterRowYForSide(bool isLeft, float paneScale)
@@ -230,6 +233,7 @@ namespace VPB
             {
                 case ContentType.Category:
                 case ContentType.Creator:
+                case ContentType.Lookapedia:
                 case ContentType.UserTags:
                 case ContentType.Path:
                 case ContentType.History:
@@ -251,6 +255,7 @@ namespace VPB
             {
                 case ContentType.Category: return VPBTranslation.T("gallery.side.category", "Categories");
                 case ContentType.Creator: return VPBTranslation.T("gallery.side.creator", "Creators");
+                case ContentType.Lookapedia: return VPBTranslation.T("gallery.side.hub_tags_and_looks", "Hub Tags & Looks");
                 case ContentType.UserTags: return VPBTranslation.T("gallery.side.tags", "User Tags");
                 case ContentType.Path:
                 {
@@ -276,6 +281,7 @@ namespace VPB
             switch (content)
             {
                 case ContentType.Creator:         return ColorCreator;
+                case ContentType.Lookapedia:      return ColorLooksLike;
                 case ContentType.UserTags:        return ColorUserTagFilter;
                 case ContentType.Path:            return ColorSourceFilter;
                 case ContentType.History:         return ColorSubfilterFilter;
@@ -396,6 +402,7 @@ namespace VPB
             float headerH = SidePanelHeaderHeightRef * s;
             SyncSidePanelHeaderSide(true, s, headerH);
             SyncSidePanelHeaderSide(false, s, headerH);
+            try { SyncLookFacetModeChrome(s); } catch { }
             try { SyncSideTabColumnHorizontalInsets(paneScale); } catch { }
         }
 

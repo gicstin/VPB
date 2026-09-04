@@ -74,6 +74,8 @@ namespace VPB
             try { activeUserTags?.Clear(); } catch { }
             try { excludedUserTags?.Clear(); } catch { }
             _userTagShowUnusedBucket = false;
+            _userTagShowHubBucket = false;
+            _userTagShowLooksBucket = false;
             // Not tagged owned by title-bar Filter (ClearTitleBarBrowseFilters).
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
         }

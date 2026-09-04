@@ -1653,7 +1653,7 @@ namespace VPB
 
             // Scene Local is global Source Local (early gate). No per-category override.
 
-            // Name Filter (bare terms OR user tags; tag:/creator:/status structured).
+            // Name Filter (bare terms OR user tags OR Look-A-Pedia subject; tag:/creator:/looks:/status structured).
             // Only skip SQL-owned time/loaded/tagged for VAR index rows — loose files need in-memory time match.
             // When deferring, RefreshFiles applies the same in-memory pass as live SetNameFilter after the list builds.
             if (HasActiveNameFilter() && !_refreshDeferNameFilterToInMemory)
@@ -2369,6 +2369,8 @@ namespace VPB
                 sb.Append('\u001E');
                 SortState st = GetSortState("Files");
                 sb.Append((int)st.Type).Append('\u001E').Append((int)st.Direction);
+                sb.Append('\u001E');
+                try { sb.Append(VpbDataPackService.StatusRevision); } catch { sb.Append(0); }
                 key = sb.ToString();
                 return true;
             }
