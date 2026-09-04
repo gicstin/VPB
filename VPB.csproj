@@ -409,6 +409,7 @@
     <Compile Include="src\gallery\GalleryTagCountBackgroundScan.cs" />
     <Compile Include="src\gallery\CacheCleanupManager.cs" />
     <Compile Include="src\gallery\index\VpbSqlite3.cs" />
+    <Compile Include="src\gallery\index\VpbUidWhitespaceIdentityRepair.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.ExclusiveDeps.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.HistoryUsage.cs" />
@@ -577,6 +578,7 @@
     <Compile Include="src\util\PoseImportDiagnostics.cs" />
     <Compile Include="src\util\GalleryAtomListingDiagnostics.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
+    <Compile Include="src\gallery\VpbGalleryFamilyDate.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\CategoryFilterState.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />

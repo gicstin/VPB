@@ -32,6 +32,9 @@ namespace VPB
 		/// <summary>Per-uid <c>pkg.first_scanned</c> from SQLite; avoids resolving <see cref="Package"/> for DateAdded/DateUpdated sort.</summary>
 		private long _galleryIndexedFirstScannedTicks = long.MinValue;
 
+		/// <summary>NTFS creation time from SQLite <c>pkg.pctime</c>; bounds package New/Updated dates.</summary>
+		private long _galleryIndexedFileCreationTicks = long.MinValue;
+
 		/// <summary>When set (History grid), exact <c>item_usage.item_key</c> for deletes (matches usage tracking keys).</summary>
 		private string _galleryItemUsageKey;
 
@@ -106,6 +109,12 @@ namespace VPB
 			_galleryIndexedFirstScannedTicks = firstScannedTicksOrMin;
 		}
 
+		public VarFileEntry(string packageUid, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, string indexedVarPathHint, long packageCreationTicksOrMin, long firstScannedTicksOrMin, long packageFileCreationTicksOrMin, string galleryItemUsageKey = null)
+			: this(packageUid, entryName, lastWriteTime, size, indexedGalleryPath, indexedVarPathHint, packageCreationTicksOrMin, firstScannedTicksOrMin, galleryItemUsageKey)
+		{
+			_galleryIndexedFileCreationTicks = packageFileCreationTicksOrMin;
+		}
+
 		/// <summary>Package UID for this row (deferred or resolved), for matching scoped path refresh.</summary>
 		internal string GetRowPackageUid()
 		{
@@ -139,6 +148,21 @@ namespace VPB
 			try
 			{
 				dt = DateTime.FromBinary(_galleryIndexedFirstScannedTicks);
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		internal bool TryGetGalleryIndexedFileCreationTime(out DateTime dt)
+		{
+			dt = DateTime.MinValue;
+			if (_galleryIndexedFileCreationTicks == long.MinValue || _galleryIndexedFileCreationTicks == 0L) return false;
+			try
+			{
+				dt = DateTime.FromBinary(_galleryIndexedFileCreationTicks);
 				return true;
 			}
 			catch

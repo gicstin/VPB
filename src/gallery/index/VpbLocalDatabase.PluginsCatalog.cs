@@ -127,6 +127,7 @@ namespace VPB
                         varHint,
                         r.PackageCreationTicksOrInvalid,
                         r.FirstScannedTicksOrInvalid,
+                        r.PackageFileCreationTicksOrInvalid,
                         null));
                     kept++;
                 }
@@ -181,7 +182,7 @@ namespace VPB
                     string loadedSel = "0";
                     try { if (PkgHasLoadedColumn(conn)) loadedSel = "ifnull(p.loaded,0)"; } catch { }
                     string sql =
-                        "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), "
+                        "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), p.pctime, "
                         + loadedSel + ", ifnull(p.first_scanned, 0) "
                         + "FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE m.category = ?";
                     using (var st = conn.Prepare(sql))
@@ -198,9 +199,10 @@ namespace VPB
                             r.LastWriteTicksOrInvalid = st.ColumnInt64(4);
                             r.PackageSizeOrInvalid = st.ColumnInt64(5);
                             r.PackageCreationTicksOrInvalid = st.ColumnInt64(6);
+                            r.PackageFileCreationTicksOrInvalid = st.ColumnInt64(7);
                             r.ClothingAttrPacked = 0;
-                            r.PackageIsLoaded = st.ColumnInt64(7) != 0;
-                            r.FirstScannedTicksOrInvalid = st.ColumnInt64(8);
+                            r.PackageIsLoaded = st.ColumnInt64(8) != 0;
+                            r.FirstScannedTicksOrInvalid = st.ColumnInt64(9);
                             r.ItemUsageCount = 0;
                             r.ItemLastUsedBinary = 0;
                             if (r.PackageUid.Length > 0 && r.InternalPath.Length > 0)

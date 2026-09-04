@@ -17,6 +17,9 @@ namespace VPB
         /// <summary>Per-uid <c>pkg.first_scanned</c> from SQLite; avoids resolving <see cref="Package"/> for DateAdded/DateUpdated sort.</summary>
         private long _galleryIndexedFirstScannedTicks = long.MinValue;
 
+        /// <summary>NTFS creation time from SQLite <c>pkg.pctime</c>; bounds package New/Updated dates.</summary>
+        private long _galleryIndexedFileCreationTicks = long.MinValue;
+
         public VarPackage Package
         {
             get { EnsurePackageResolved(); return _packageStore; }
@@ -73,12 +76,18 @@ namespace VPB
 
         /// <summary>SQLite fast path with first_scanned for DateAdded/DateUpdated sort.</summary>
         public PackageListEntry(string packageUid, string indexedVarPathHint, DateTime lastWriteTime, long size, long packageCreationTicksOrMin, long firstScannedTicksOrMin)
+            : this(packageUid, indexedVarPathHint, lastWriteTime, size, packageCreationTicksOrMin, firstScannedTicksOrMin, long.MinValue)
+        {
+        }
+
+        public PackageListEntry(string packageUid, string indexedVarPathHint, DateTime lastWriteTime, long size, long packageCreationTicksOrMin, long firstScannedTicksOrMin, long packageFileCreationTicksOrMin)
         {
             if (string.IsNullOrEmpty(packageUid))
                 throw new ArgumentException("packageUid must not be null or empty.", "packageUid");
             _deferredPackageUid = packageUid;
             _deferredVarPathHint = indexedVarPathHint ?? "";
             _galleryIndexedFirstScannedTicks = firstScannedTicksOrMin;
+            _galleryIndexedFileCreationTicks = packageFileCreationTicksOrMin;
             Package = null;
 
             // Ratings are keyed by FileEntry.Uid. For packages on disk that is the package path.
@@ -98,6 +107,21 @@ namespace VPB
             try
             {
                 dt = DateTime.FromBinary(_galleryIndexedFirstScannedTicks);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal bool TryGetGalleryIndexedFileCreationTime(out DateTime dt)
+        {
+            dt = DateTime.MinValue;
+            if (_galleryIndexedFileCreationTicks == long.MinValue || _galleryIndexedFileCreationTicks == 0L) return false;
+            try
+            {
+                dt = DateTime.FromBinary(_galleryIndexedFileCreationTicks);
                 return true;
             }
             catch
