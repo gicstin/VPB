@@ -817,6 +817,19 @@ namespace VPB
         private bool _userTagShowHubBucket;
         /// <summary>User Tags Available list: expand collapsed Looks like bucket (Look-A-Pedia, read-only).</summary>
         private bool _userTagShowLooksBucket;
+        private bool _userTagShowHubCatBucket;
+        private readonly List<CreatorCacheEntry> _hubCatFacetRows = new List<CreatorCacheEntry>(24);
+        private string _hubCatFacetCollectSig;
+        private bool _categoryShowHubTypeBucket;
+        private string _hubTypeBrowseToken = "";
+        private string _pendingHubTypeBrowseToken;
+        private List<string> _hubItemScopeCategories;
+        private List<string> _pendingHubItemScopeCategories;
+        private string _hubBrowseReturnTitle;
+        private string _hubBrowseReturnExtension;
+        private string _hubBrowseReturnPath;
+        private readonly List<CreatorCacheEntry> _hubCatItemFacetRows = new List<CreatorCacheEntry>(24);
+        private string _hubCatItemFacetSig;
         /// <summary>Guard against recursive title↔filter user-tag chip bridging.</summary>
         private bool _bridgingUserTagFilterTitleSearch;
         /// <summary>Not Tagged filter: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
@@ -949,6 +962,17 @@ namespace VPB
             Unknown = 1 << 5,
         }
 
+        [Flags]
+        internal enum SceneHubSubfilter
+        {
+            HubScenes = 1 << 0,
+            HubLooks = 1 << 1,
+            Unclassified = 1 << 2,
+            Other = 1 << 3,
+            DefaultOn = HubScenes | Unclassified,
+            All = HubScenes | HubLooks | Unclassified | Other,
+        }
+
         private enum PosePeopleFilter
         {
             All,
@@ -966,6 +990,9 @@ namespace VPB
         private bool _hairGenderUserOverride;
 
         private AppearanceSubfilter appearanceSubfilter = 0;
+        private SceneHubSubfilter sceneHubSubfilter = SceneHubSubfilter.DefaultOn;
+        private bool _sceneHubSubfilterExplicit;
+        private bool _sceneHubDefaultStatusShown;
 
         private int clothingSubfilterCountAll = 0;
         private int clothingSubfilterCountReal = 0;
@@ -1536,6 +1563,7 @@ namespace VPB
         public static readonly Color ColorCategory = GalleryUiColorTokens.FacetCategory;
         public static readonly Color ColorCreator = GalleryUiColorTokens.FacetCreator;
         public static readonly Color ColorLooksLike = GalleryUiColorTokens.FacetLooksLike;
+        public static readonly Color ColorHubType = GalleryUiColorTokens.FacetHubType;
         public static readonly Color ColorTagFilter = GalleryUiColorTokens.FacetTag;
         public static readonly Color ColorRatingFilter = GalleryUiColorTokens.FacetRating;
         /// <summary>★ Not-rated filter armed (slate; distinct from rated purple accent).</summary>
@@ -1697,3 +1725,4 @@ namespace VPB
         private bool _sceneSaveRehideApplied;
     }
 }
+

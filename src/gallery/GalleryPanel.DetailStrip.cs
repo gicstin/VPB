@@ -50,6 +50,7 @@ namespace VPB
         // Semantic value colors (status / role — not one generic blue).
         private static readonly Color DetailStripColorAuthor = new Color(0.95f, 0.78f, 0.42f, 1f);      // amber identity
         private static readonly Color DetailStripColorCategory = new Color(0.45f, 0.82f, 0.78f, 1f);    // teal taxonomy
+        private static readonly Color DetailStripColorHubType = new Color(0.55f, 0.72f, 0.92f, 1f);     // Hub listing type
         private static readonly Color DetailStripColorFact = new Color(0.72f, 0.78f, 0.88f, 1f);        // cool fact
         private static readonly Color DetailStripColorDeps = new Color(0.55f, 0.78f, 1f, 1f);           // info blue
         private static readonly Color DetailStripColorMissingOk = new Color(0.45f, 0.78f, 0.52f, 1f);   // green
@@ -4634,6 +4635,37 @@ namespace VPB
                 });
             }
 
+            string hubType;
+            bool hubTypeMixed;
+            DetailStripResolveSharedOrMixedMeta(
+                multi, DetailStripResolveHubTypeCategory, out hubType, out hubTypeMixed);
+            if (!string.IsNullOrEmpty(hubType) || hubTypeMixed)
+            {
+                string hubValue = hubTypeMixed ? mixed : hubType;
+                string hubSnap = hubType;
+                bool hubClick = !hubTypeMixed && !string.IsNullOrEmpty(hubType);
+                float hubCap = Mathf.Clamp(avail * 0.32f, 88f * s, 180f * s);
+                fields.Add(new DetailStripMetaField
+                {
+                    Label = VPBTranslation.T("gallery.detail.label_hub_type", "Hub type"),
+                    Value = hubValue,
+                    Group = 0,
+                    Enabled = hubClick,
+                    ValueColor = DetailStripColorHubType,
+                    OnClick = hubClick
+                        ? (UnityAction)(() => DetailStripOnHubTypeClick(hubSnap))
+                        : null,
+                    Tip = hubTypeMixed
+                        ? VPBTranslation.T("gallery.detail.tip.hub_type_mixed", "Selection has mixed Hub listing types")
+                        : string.Format(
+                            VPBTranslation.T(
+                                "gallery.detail.tip.hub_type_fmt",
+                                "Hub listing type: {0}. Click: filter to this type (hubcat:). Not Appearance, not Looks like."),
+                            hubType),
+                    MaxValueWidth = hubCap
+                });
+            }
+
             if (multi)
             {
                 fields.Add(new DetailStripMetaField
@@ -6554,6 +6586,24 @@ namespace VPB
                     subject), 1.8f);
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip looks-like: " + ex.Message); }
+        }
+
+        private void DetailStripOnHubTypeClick(string category)
+        {
+            if (string.IsNullOrEmpty(category)) return;
+            try
+            {
+                string token = VpbLocalDatabase.DataPackHubCategorySearchToken(category);
+                if (string.IsNullOrEmpty(token)) return;
+                bool nowOn = ToggleTitleSearchPackHubCatChip(token, true);
+                string shown = VpbLocalDatabase.DataPackHubCategoryDisplayName(category);
+                ShowTemporaryStatus(string.Format(
+                    nowOn
+                        ? VPBTranslation.T("gallery.detail.hub_type_filtered", "Hub type: {0}")
+                        : VPBTranslation.T("gallery.detail.hub_type_filter_cleared", "Hub type filter cleared: {0}"),
+                    shown), 1.8f);
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip hub type: " + ex.Message); }
         }
 
         private void DetailStripOnHubTagFilterClick(string tagName, bool exclude)
@@ -10483,6 +10533,14 @@ namespace VPB
             if (!TryGetFileLookOverlay(file, out overlay) || !overlay.Found)
                 return "";
             return overlay.Subject ?? "";
+        }
+
+        private static string DetailStripResolveHubTypeCategory(FileEntry file)
+        {
+            VpbLocalDatabase.DataPackLookOverlay overlay;
+            if (!TryGetFileLookOverlay(file, out overlay) || !overlay.Found)
+                return "";
+            return overlay.HubTypeCategory ?? "";
         }
 
         private string DetailStripResolveCategory(FileEntry file)

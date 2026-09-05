@@ -1751,8 +1751,10 @@ namespace VPB
                 UserTagSideTabEntry e = rows[ri];
                 if (string.IsNullOrEmpty(e.Name)) continue;
                 if (e.IsHubTag || e.IsLooksLike
+                    || e.IsHubCategory
                     || e.Count == UserTagHubBucketHeaderSentinel
-                    || e.Count == UserTagLooksBucketHeaderSentinel)
+                    || e.Count == UserTagLooksBucketHeaderSentinel
+                    || e.Count == UserTagHubCatBucketHeaderSentinel)
                 {
                     if (normalOut != null) normalOut.Add(e);
                     continue;
@@ -3113,8 +3115,10 @@ namespace VPB
             if (ut.Count == UserTagCreateRowCountSentinel) return false;
             if (ut.Count == UserTagUnusedBucketHeaderSentinel) return false;
             if (ut.IsHubTag || ut.IsLooksLike
+                || ut.IsHubCategory
                 || ut.Count == UserTagHubBucketHeaderSentinel
-                || ut.Count == UserTagLooksBucketHeaderSentinel) return false;
+                || ut.Count == UserTagLooksBucketHeaderSentinel
+                || ut.Count == UserTagHubCatBucketHeaderSentinel) return false;
             // Expanded Unused bucket shows zero-count rows explicitly.
             if (_userTagShowUnusedBucket) return false;
             if (_userTagSelectionRowCount > 0 && !string.IsNullOrEmpty(ut.Name))

@@ -67,6 +67,7 @@ namespace VPB
             clothingSubfilter = 0;
             hairSubfilter = 0;
             appearanceSubfilter = 0;
+            SetSceneHubSubfilterExplicit(0);
             posePeopleFilter = PosePeopleFilter.All;
             _clothingGenderUserOverride = false;
             _hairGenderUserOverride = false;
@@ -76,6 +77,7 @@ namespace VPB
             _userTagShowUnusedBucket = false;
             _userTagShowHubBucket = false;
             _userTagShowLooksBucket = false;
+            _userTagShowHubCatBucket = false;
             // Not tagged owned by title-bar Filter (ClearTitleBarBrowseFilters).
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
         }

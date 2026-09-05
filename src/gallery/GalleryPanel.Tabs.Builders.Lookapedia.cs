@@ -113,6 +113,8 @@ namespace VPB
                 _userTagShowLooksBucket = true;
             else if (LookFacetHubModeAvailable())
                 _userTagShowHubBucket = true;
+            if (LookFacetHubModeAvailable())
+                _userTagShowHubCatBucket = true;
             _userTagVirtViewSig = null;
             ToggleSideFromRailButton(ContentType.UserTags, true, false);
         }

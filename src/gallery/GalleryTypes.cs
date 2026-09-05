@@ -61,6 +61,8 @@ namespace VPB
         public bool IsHubTag;
         /// <summary>Look-A-Pedia subject (read-only filter row). Not a gallery_user_tag.</summary>
         public bool IsLooksLike;
+        /// <summary>Hub listing type (Looks, Scenes, Clothing…). Read-only filter row.</summary>
+        public bool IsHubCategory;
     }
 
     public class PresetLockStore

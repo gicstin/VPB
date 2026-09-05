@@ -265,6 +265,8 @@ namespace VPB
             AppendDataPackTerms(sb, binds, br.PackSubjectExclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.Subject, true);
             AppendDataPackTerms(sb, binds, br.PackHubTagInclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.HubTag, false);
             AppendDataPackTerms(sb, binds, br.PackHubTagExclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.HubTag, true);
+            AppendDataPackTerms(sb, binds, br.PackHubCatInclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.HubCategory, false);
+            AppendDataPackTerms(sb, binds, br.PackHubCatExclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.HubCategory, true);
             AppendDataPackTerms(sb, binds, br.PackAnyInclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.Any, false);
             AppendDataPackTerms(sb, binds, br.PackAnyExclude, "m.pkg_uid", GallerySearchQuery.DataPackAtomKind.Any, true);
             if (br.CreatorTerms != null)
@@ -379,7 +381,10 @@ namespace VPB
             string pat = exact ? body : ("%" + EscapeLike(body) + "%");
 
             sb.Append(lead).Append(negate ? "NOT EXISTS (" : "EXISTS (");
-            sb.Append("SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=").Append(uidSql).Append(" AND ");
+            sb.Append("SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=").Append(uidSql);
+            if (kind != GallerySearchQuery.DataPackAtomKind.HubCategory)
+                AppendDataPackLinkIdentityOnlySql(sb, "dl");
+            sb.Append(" AND ");
 
             if (kind == GallerySearchQuery.DataPackAtomKind.HubTag)
             {
@@ -401,6 +406,17 @@ namespace VPB
                 AppendDataPackSubjectPackScopeSql(sb);
                 binds.Add(pat);
                 AddDataPackSubjectPackScopeBinds(binds);
+            }
+            else if (kind == GallerySearchQuery.DataPackAtomKind.HubCategory)
+            {
+                sb.Append("EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
+                sb.Append(" AND de.entry_id=dl.entry_id");
+                AppendDataPackHubTypePackScopeSql(sb);
+                sb.Append(" AND ");
+                if (exact) sb.Append("lower(trim(ifnull(de.category,''))) = ?");
+                else sb.Append("lower(ifnull(de.category,'')) LIKE ? ESCAPE '\\'");
+                sb.Append(')');
+                binds.Add(pat);
             }
             else
             {
@@ -532,6 +548,7 @@ namespace VPB
                 && !TryAppendDataPackSubjectUidSet(sb, "m.pkg_uid", termLower, false, false, " OR ", true))
             {
                 sb.Append(" OR EXISTS (SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=m.pkg_uid");
+                AppendDataPackLinkIdentityOnlySql(sb, "dl");
                 AppendDataPackSubjectPackScopeSql(sb);
                 sb.Append(" AND EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
                 sb.Append(" AND de.entry_id=dl.entry_id AND lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'))");
@@ -624,6 +641,7 @@ namespace VPB
                     {
                         packSubjectNeedsBind = true;
                         sb.Append(" OR EXISTS (SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=COALESCE(mx.pkg_uid, mr.pkg_uid)");
+                        AppendDataPackLinkIdentityOnlySql(sb, "dl");
                         AppendDataPackSubjectPackScopeSql(sb);
                         sb.Append(" AND EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
                         sb.Append(" AND de.entry_id=dl.entry_id AND lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'))");
@@ -669,6 +687,7 @@ namespace VPB
                     {
                         packSubjectNeedsBind = true;
                         sb.Append(" OR EXISTS (SELECT 1 FROM datapack_link dl WHERE dl.pkg_uid=COALESCE(mx.pkg_uid, mr.pkg_uid)");
+                        AppendDataPackLinkIdentityOnlySql(sb, "dl");
                         AppendDataPackSubjectPackScopeSql(sb);
                         sb.Append(" AND EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
                         sb.Append(" AND de.entry_id=dl.entry_id AND lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'))");
@@ -721,6 +740,8 @@ namespace VPB
             AppendDataPackTerms(sb, textBinds, br.PackSubjectExclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.Subject, true);
             AppendDataPackTerms(sb, textBinds, br.PackHubTagInclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.HubTag, false);
             AppendDataPackTerms(sb, textBinds, br.PackHubTagExclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.HubTag, true);
+            AppendDataPackTerms(sb, textBinds, br.PackHubCatInclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.HubCategory, false);
+            AppendDataPackTerms(sb, textBinds, br.PackHubCatExclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.HubCategory, true);
             AppendDataPackTerms(sb, textBinds, br.PackAnyInclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.Any, false);
             AppendDataPackTerms(sb, textBinds, br.PackAnyExclude, "COALESCE(mx.pkg_uid, mr.pkg_uid)", GallerySearchQuery.DataPackAtomKind.Any, true);
             if (br.CreatorTerms != null)

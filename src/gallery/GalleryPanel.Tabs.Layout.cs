@@ -59,7 +59,7 @@ namespace VPB
                 bool showTitle = !IsFilterActive;
                 if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
                 if (showTitle)
-                    titleText.text = currentCategoryTitle;
+                    ApplyGalleryTitleText();
             }
             SyncCategoryQuickSwitchChrome();
             try { ApplyTitleBarResponsiveLayout(ChromeScale); } catch { }
@@ -138,7 +138,7 @@ namespace VPB
                 {
                     if (IsSettingsPanelOpen())
                         titleText.text = VPBTranslation.T("settings.title", "Settings");
-                    else titleText.text = currentCategoryTitle;
+                    else ApplyGalleryTitleText();
                 }
             }
 

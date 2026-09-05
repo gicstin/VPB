@@ -21,6 +21,8 @@ namespace VPB
         internal List<string> PackSubjectExclude;
         internal List<string> PackHubTagInclude;
         internal List<string> PackHubTagExclude;
+        internal List<string> PackHubCatInclude;
+        internal List<string> PackHubCatExclude;
         internal List<string> PackAnyInclude;
         internal List<string> PackAnyExclude;
         internal GallerySearchQuery.StatusFlags Status = GallerySearchQuery.StatusFlags.None;
@@ -33,6 +35,8 @@ namespace VPB
                     || GallerySearchQuery.Any(PackSubjectExclude)
                     || GallerySearchQuery.Any(PackHubTagInclude)
                     || GallerySearchQuery.Any(PackHubTagExclude)
+                    || GallerySearchQuery.Any(PackHubCatInclude)
+                    || GallerySearchQuery.Any(PackHubCatExclude)
                     || GallerySearchQuery.Any(PackAnyInclude)
                     || GallerySearchQuery.Any(PackAnyExclude);
             }
@@ -118,10 +122,12 @@ namespace VPB
             Subject = 0,
             HubTag = 1,
             Any = 2,
+            HubCategory = 3,
         }
 
         internal readonly List<string> PackSubjectTerms = new List<string>();
         internal readonly List<string> PackHubTagTerms = new List<string>();
+        internal readonly List<string> PackHubCatTerms = new List<string>();
         internal readonly List<string> PackAnyTerms = new List<string>();
 
         /// <summary>True when any branch carries a data-pack atom (include or exclude).</summary>
@@ -331,6 +337,7 @@ namespace VPB
             CreatorTerms.Clear();
             PackSubjectTerms.Clear();
             PackHubTagTerms.Clear();
+            PackHubCatTerms.Clear();
             PackAnyTerms.Clear();
             Status = StatusFlags.None;
             for (int b = 0; b < Branches.Count; b++)
@@ -346,6 +353,8 @@ namespace VPB
                 AddUniqueRange(PackSubjectTerms, br.PackSubjectExclude);
                 AddUniqueRange(PackHubTagTerms, br.PackHubTagInclude);
                 AddUniqueRange(PackHubTagTerms, br.PackHubTagExclude);
+                AddUniqueRange(PackHubCatTerms, br.PackHubCatInclude);
+                AddUniqueRange(PackHubCatTerms, br.PackHubCatExclude);
                 AddUniqueRange(PackAnyTerms, br.PackAnyInclude);
                 AddUniqueRange(PackAnyTerms, br.PackAnyExclude);
                 Status |= br.Status;
@@ -454,6 +463,11 @@ namespace VPB
                 AddCommaPackList(branch, s.Substring(7), DataPackAtomKind.HubTag, negate);
                 return true;
             }
+            if (s.StartsWith("hubcat:", StringComparison.Ordinal) && s.Length > 7)
+            {
+                AddCommaPackList(branch, s.Substring(7), DataPackAtomKind.HubCategory, negate);
+                return true;
+            }
             if (s.StartsWith("lap:", StringComparison.Ordinal) && s.Length > 4)
             {
                 AddCommaPackList(branch, s.Substring(4), DataPackAtomKind.Any, negate);
@@ -508,6 +522,11 @@ namespace VPB
                 if (exclude) AddUniqueLazy(ref branch.PackHubTagExclude, term);
                 else AddUniqueLazy(ref branch.PackHubTagInclude, term);
             }
+            else if (kind == DataPackAtomKind.HubCategory)
+            {
+                if (exclude) AddUniqueLazy(ref branch.PackHubCatExclude, term);
+                else AddUniqueLazy(ref branch.PackHubCatInclude, term);
+            }
             else
             {
                 if (exclude) AddUniqueLazy(ref branch.PackAnyExclude, term);
@@ -529,6 +548,8 @@ namespace VPB
             CopyPackList(src.PackSubjectExclude, ref dst.PackSubjectExclude);
             CopyPackList(src.PackHubTagInclude, ref dst.PackHubTagInclude);
             CopyPackList(src.PackHubTagExclude, ref dst.PackHubTagExclude);
+            CopyPackList(src.PackHubCatInclude, ref dst.PackHubCatInclude);
+            CopyPackList(src.PackHubCatExclude, ref dst.PackHubCatExclude);
             CopyPackList(src.PackAnyInclude, ref dst.PackAnyInclude);
             CopyPackList(src.PackAnyExclude, ref dst.PackAnyExclude);
         }

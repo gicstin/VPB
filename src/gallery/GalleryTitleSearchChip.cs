@@ -13,6 +13,7 @@ namespace VPB
         PackSubject = 4,
         PackHubTag = 5,
         PackAny = 6,
+        PackHubCat = 7,
     }
 
     internal enum TitleSearchChipPolarity
@@ -40,7 +41,8 @@ namespace VPB
                     || Kind == TitleSearchChipKind.Broad
                     || Kind == TitleSearchChipKind.PackSubject
                     || Kind == TitleSearchChipKind.PackHubTag
-                    || Kind == TitleSearchChipKind.PackAny;
+                    || Kind == TitleSearchChipKind.PackAny
+                    || Kind == TitleSearchChipKind.PackHubCat;
             }
         }
 
@@ -59,6 +61,9 @@ namespace VPB
                     return (Polarity == TitleSearchChipPolarity.Exclude ? "-looks:" : "looks:") + v;
                 case TitleSearchChipKind.PackHubTag:
                     return (Polarity == TitleSearchChipPolarity.Exclude ? "-hubtag:" : "hubtag:") + v;
+                case TitleSearchChipKind.PackHubCat:
+                    return (Polarity == TitleSearchChipPolarity.Exclude ? "-" : "")
+                        + "Hub: " + GalleryHubCategoryNames.Display(v);
                 case TitleSearchChipKind.PackAny:
                     return (Polarity == TitleSearchChipPolarity.Exclude ? "-lap:" : "lap:") + v;
                 default:
@@ -83,6 +88,9 @@ namespace VPB
                         + QuotePackTokenValue(v, Exact);
                 case TitleSearchChipKind.PackHubTag:
                     return (Polarity == TitleSearchChipPolarity.Exclude ? "-hubtag:" : "hubtag:")
+                        + QuotePackTokenValue(v, Exact);
+                case TitleSearchChipKind.PackHubCat:
+                    return (Polarity == TitleSearchChipPolarity.Exclude ? "-hubcat:" : "hubcat:")
                         + QuotePackTokenValue(v, Exact);
                 case TitleSearchChipKind.PackAny:
                     return (Polarity == TitleSearchChipPolarity.Exclude ? "-lap:" : "lap:")
@@ -240,7 +248,8 @@ namespace VPB
                 && kind != TitleSearchChipKind.Broad
                 && kind != TitleSearchChipKind.PackSubject
                 && kind != TitleSearchChipKind.PackHubTag
-                && kind != TitleSearchChipKind.PackAny)
+                && kind != TitleSearchChipKind.PackAny
+                && kind != TitleSearchChipKind.PackHubCat)
             {
                 polarity = TitleSearchChipPolarity.Include;
             }
@@ -310,6 +319,8 @@ namespace VPB
             AppendPackList(dest, br.PackSubjectExclude, TitleSearchChipKind.PackSubject, branchIndex, true);
             AppendPackList(dest, br.PackHubTagInclude, TitleSearchChipKind.PackHubTag, branchIndex, forceExclude);
             AppendPackList(dest, br.PackHubTagExclude, TitleSearchChipKind.PackHubTag, branchIndex, true);
+            AppendPackList(dest, br.PackHubCatInclude, TitleSearchChipKind.PackHubCat, branchIndex, forceExclude);
+            AppendPackList(dest, br.PackHubCatExclude, TitleSearchChipKind.PackHubCat, branchIndex, true);
             AppendPackList(dest, br.PackAnyInclude, TitleSearchChipKind.PackAny, branchIndex, forceExclude);
             AppendPackList(dest, br.PackAnyExclude, TitleSearchChipKind.PackAny, branchIndex, true);
         }

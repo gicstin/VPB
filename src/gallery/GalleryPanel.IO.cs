@@ -410,7 +410,7 @@ namespace VPB
                     if (settingsListViewActive)
                         titleText.text = VPBTranslation.T("settings.title", "Settings");
                     else
-                        titleText.text = currentCategoryTitle;
+                        ApplyGalleryTitleText();
                 }
             }
 
@@ -1481,6 +1481,18 @@ namespace VPB
             return PassesFilters(entry, ignorePosePeopleFilter, false);
         }
 
+        private bool HubItemScopeAllowsEntry(FileEntry entry)
+        {
+            if (_hubItemScopeCategories == null || _hubItemScopeCategories.Count == 0) return true;
+            List<string> scope = EffectiveHubItemScopeCategories();
+            if (scope == null) return true;
+            string ip = null;
+            var ve = entry as VarFileEntry;
+            if (ve != null) ip = ve.InternalPath;
+            if (string.IsNullOrEmpty(ip)) ip = entry.Path;
+            return VpbLocalDatabase.GalleryCategoryScopeContainsPath(scope, ip);
+        }
+
         private bool PassesFilters(FileEntry entry, bool ignorePosePeopleFilter, bool skipClothingGalleryFilters)
         {
             if (entry == null) return false;
@@ -1532,6 +1544,8 @@ namespace VPB
                     return false;
             }
 
+            if (!HubItemScopeAllowsEntry(entry)) return false;
+
             // Hide filtering and sort-only narrowing run in PostFilesListHideAndSortFollowupRoutine after the grid is shown.
             // to avoid per-entry FileManager.FileExists calls blocking the scan drain loop.
 
@@ -1576,6 +1590,19 @@ namespace VPB
                 else if (posePeopleFilter == PosePeopleFilter.Dual)
                 {
                     if (!isDual) return false;
+                }
+            }
+
+            if (IsGalleryScenesCategory(title))
+            {
+                SceneHubSubfilter sceneHubEffective = EffectiveSceneHubSubfilter();
+                if (VpbLocalDatabase.SceneHubSubfilterIsNarrowing(sceneHubEffective))
+                {
+                    Dictionary<string, int> sceneHubMasks;
+                    if (VpbLocalDatabase.TryGetSceneHubBucketMasks(out sceneHubMasks)
+                        && !VpbLocalDatabase.PassesSceneHubSubfilterMask(
+                            sceneHubEffective, sceneHubMasks, TryGetFileEntryPackageUidForDataPack(entry)))
+                        return false;
                 }
             }
 
@@ -1653,7 +1680,7 @@ namespace VPB
 
             // Scene Local is global Source Local (early gate). No per-category override.
 
-            // Name Filter (bare terms OR user tags OR Look-A-Pedia subject; tag:/creator:/looks:/status structured).
+            // Name Filter (bare terms OR user tags OR Look-A-Pedia subject; tag:/creator:/looks:/hubcat:/status structured).
             // Only skip SQL-owned time/loaded/tagged for VAR index rows — loose files need in-memory time match.
             // When deferring, RefreshFiles applies the same in-memory pass as live SetNameFilter after the list builds.
             if (HasActiveNameFilter() && !_refreshDeferNameFilterToInMemory)
@@ -3381,6 +3408,12 @@ namespace VPB
                     || pathForIndexMain.IndexOf("/Clothing", StringComparison.OrdinalIgnoreCase) >= 0
                     || pathForIndexMain.IndexOf("\\Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
                 HairSubfilter sqliteWorkerHairSub = hairSubfilter;
+                SceneHubSubfilter sqliteWorkerSceneHubSub = EffectiveSceneHubSubfilter();
+                List<string> hubItemScopeSnap = null;
+                {
+                    List<string> hubScopeNow = EffectiveHubItemScopeCategories();
+                    if (hubScopeNow != null) hubItemScopeSnap = new List<string>(hubScopeNow);
+                }
                 bool sqliteDrainApplyHairGateOnMain = (titleForIndexMain.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
                     || pathForIndexMain.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
                     || pathForIndexMain.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -3483,7 +3516,9 @@ namespace VPB
                                 pkgVersionFilterForIndexMain,
                                 userTagGridFilterTaggedOnlySnap,
                                 licenseFilterForIndexMain,
-                                sqliteWorkerHairSub);
+                                sqliteWorkerHairSub,
+                                sqliteWorkerSceneHubSub,
+                                hubItemScopeSnap);
                             if (useSqliteIndex && catQueryStats.AppliedPkgVersionFilter
                                 && sqlPkgVersionFilterAppliedFlag != null)
                                 sqlPkgVersionFilterAppliedFlag[0] = 1;

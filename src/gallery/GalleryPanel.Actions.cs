@@ -797,7 +797,9 @@ namespace VPB
             bool packagesChanged = refreshOnNextShow || (!hasLoadedContent && packageTimestampAdvanced);
 
             titleText.text = title;
-            bool paramsChanged = (currentExtension != extension || currentPath != path);
+            string nextHubToken = _pendingHubTypeBrowseToken != null ? _pendingHubTypeBrowseToken : "";
+            bool hubTokenChanging = !string.Equals(nextHubToken, _hubTypeBrowseToken ?? "", StringComparison.Ordinal);
+            bool paramsChanged = (currentExtension != extension || currentPath != path) || hubTokenChanging;
             bool categoryTitleChanged = !string.Equals(title, currentCategoryTitle, StringComparison.Ordinal);
 
             // Navigating to a different category while a Try-On preview is still pending should not
@@ -842,6 +844,11 @@ namespace VPB
 
             currentCategoryTitle = title;
 
+            _hubTypeBrowseToken = nextHubToken;
+            _pendingHubTypeBrowseToken = null;
+            _hubItemScopeCategories = _pendingHubItemScopeCategories;
+            _pendingHubItemScopeCategories = null;
+
             bool sameViewReopen = hasLoadedContent && !paramsChanged;
 
             // Save scroll for the category we're leaving; prime the restore target for the new one.
@@ -871,10 +878,14 @@ namespace VPB
                 if (!string.IsNullOrEmpty(cat.name)) currentPaths = cat.paths;
             }
             if (currentPaths == null) currentPaths = new List<string> { path };
+            ApplyHubItemScopePathsToCurrentPaths();
 
             // Restore per-category filters (or clear to defaults for first visit)
             if (paramsChanged)
                 RestoreCategoryFilterState(title, path);
+            if (!string.IsNullOrEmpty(_hubTypeBrowseToken))
+                EnsureHubTypeBrowseSearchChip(_hubTypeBrowseToken);
+            ApplyGalleryTitleText();
 
             // Auto gender subfilter must apply on category change too (before RefreshFiles builds grid).
             ReconcileAutoGenderForCurrentTarget();
@@ -1478,8 +1489,13 @@ namespace VPB
         }
 
 
-        private static string MakeCategoryScrollKey(string title, string path)
-            => (title ?? "") + "|" + (path ?? "");
+        private string MakeCategoryScrollKey(string title, string path)
+        {
+            string hub = _hubTypeBrowseToken ?? "";
+            if (hub.Length == 0)
+                return (title ?? "") + "|" + (path ?? "");
+            return (title ?? "") + "|" + (path ?? "") + "|hub:" + hub;
+        }
 
         private string ScrollCachePath
         {

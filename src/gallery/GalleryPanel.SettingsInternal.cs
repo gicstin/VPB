@@ -1089,7 +1089,7 @@ namespace VPB
                 Key = "datapacks.hubtags", GroupKey = "plugin_datapacks",
                 Label = VPBTranslation.T("settings.datapack_hubtags", "VaM Hub tags & resource data"),
                 Tooltip = VPBTranslation.T("settings.tip.datapack_hubtags",
-                    "Imports the shipped index of every VaM Hub resource — tags, resource type, pay category, licence, release dates, download counts and ratings — and matches it against packages in your library. Gives packages their Hub tags even for content that was never browsed on the Hub, and feeds the Hub tags section in the Tags list plus hubtag: / lap: search. Same Hub resource id is shared with Look-A-Pedia, so tags and looks-like attach to one listing. Turning this off deletes the imported rows."),
+                    "Imports the shipped index of every VaM Hub resource — tags, resource type, pay category, licence, release dates, download counts and ratings — and matches it against packages in your library. Gives packages their Hub tags even for content that was never browsed on the Hub, and feeds Hub type at the top of Categories plus Hub tags in the Tags list and hubcat: / hubtag: / lap: search. Click Hub type in Categories to browse Looks vs Scenes the way creators listed them (package grid). Same Hub resource id is shared with Look-A-Pedia, so tags and looks-like attach to one listing. Turning this off deletes the imported rows."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DataPackHubTagsEnabled,
                 SetBool = v => {
                     VPBConfig.Instance.DataPackHubTagsEnabled = v;

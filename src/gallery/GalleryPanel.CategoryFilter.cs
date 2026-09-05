@@ -7,9 +7,12 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        private static string MakeCategoryFilterKey(string categoryTitle, string path)
+        private string MakeCategoryFilterKey(string categoryTitle, string path)
         {
-            return (categoryTitle ?? "") + "\u001E" + (path ?? "");
+            string hub = _hubTypeBrowseToken ?? "";
+            if (hub.Length == 0)
+                return (categoryTitle ?? "") + "\u001E" + (path ?? "");
+            return (categoryTitle ?? "") + "\u001E" + (path ?? "") + "\u001E" + hub;
         }
 
         private CategoryFilterState CaptureCurrentFilterState()
@@ -50,6 +53,8 @@ namespace VPB
             s.HairSubfilter = (int)hairSubfilter;
             s.AppearanceSubfilter = (int)appearanceSubfilter;
             s.PosePeopleFilter = (int)posePeopleFilter;
+            s.SceneHubSubfilter = (int)sceneHubSubfilter;
+            s.HasSceneHubSubfilter = _sceneHubSubfilterExplicit;
             var sort = GetSortState("Files");
             if (sort != null) s.FileSortState = sort.Clone();
             s.BrowseHiddenMode = (int)_browseHiddenCycle;
@@ -171,7 +176,7 @@ namespace VPB
             if (_categoryFilterStates.TryGetValue(key, out state) && state != null)
             {
                 ApplyCategoryFilterState(state, restoreUserTagFilter: true);
-                NotifyCategoryFiltersRestored(categoryTitle);
+                FlushSceneHubDefaultStatusOrNotifyRestored(categoryTitle);
                 return;
             }
 
@@ -183,7 +188,7 @@ namespace VPB
                 {
                     _categoryFilterStates[key] = state;
                     ApplyCategoryFilterState(state, restoreUserTagFilter: true);
-                    NotifyCategoryFiltersRestored(categoryTitle);
+                    FlushSceneHubDefaultStatusOrNotifyRestored(categoryTitle);
                     return;
                 }
             }
@@ -293,6 +298,7 @@ namespace VPB
             _userTagShowUnusedBucket = false;
             _userTagShowHubBucket = false;
             _userTagShowLooksBucket = false;
+            _userTagShowHubCatBucket = false;
             if (_userTagAvailMode != UserTagAvailMode.FilterUntagged
                 && _userTagAvailMode != UserTagAvailMode.FilterTaggedOnly)
                 try { ClearUntaggedTaggedPinKeys(); } catch { }
@@ -306,6 +312,7 @@ namespace VPB
             _hairGenderUserOverride = false;
             appearanceSubfilter = (AppearanceSubfilter)state.AppearanceSubfilter;
             posePeopleFilter = (PosePeopleFilter)state.PosePeopleFilter;
+            ApplyRestoredSceneHubSubfilter(state);
 
             if (state.FileSortState != null)
             {
@@ -353,6 +360,7 @@ namespace VPB
             _userTagShowUnusedBucket = false;
             _userTagShowHubBucket = false;
             _userTagShowLooksBucket = false;
+            _userTagShowHubCatBucket = false;
             _userTagAvailMode = ResolveDefaultUserTagAvailMode();
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
                 _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
@@ -365,6 +373,7 @@ namespace VPB
             _hairGenderUserOverride = false;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;
+            ApplyImplicitSceneHubDefaultIfNeeded(true);
             if (_browseAlwaysLoadedCycle != BrowseFilterCycle.Off)
             {
                 BrowseFilterCycle prevAl = _browseAlwaysLoadedCycle;
@@ -401,6 +410,7 @@ namespace VPB
             }
             try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
             SyncBrowseFilterChipChrome();
+            MaybeAnnounceSceneHubDefault();
         }
 
         private void ApplyRestoredSourceFilter(CategoryFilterState state)
@@ -433,6 +443,121 @@ namespace VPB
             if (v <= 0) return BrowseLoadedMode.Off;
             if (v == 1) return BrowseLoadedMode.LoadedOnly;
             return BrowseLoadedMode.UnloadedOnly;
+        }
+
+        internal static bool IsGalleryScenesCategory(string title)
+        {
+            return string.Equals(title, "Scenes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool SceneHubSubfilterActiveOnCurrentCategory()
+        {
+            return _sceneHubSubfilterExplicit
+                && IsGalleryScenesCategory(currentCategoryTitle)
+                && VpbLocalDatabase.SceneHubSubfilterIsNarrowing(EffectiveSceneHubSubfilter());
+        }
+
+        /// <summary>User-driven bucket change: the set stops being the implicit default.</summary>
+        private void SetSceneHubSubfilterExplicit(SceneHubSubfilter value)
+        {
+            sceneHubSubfilter = value;
+            _sceneHubSubfilterExplicit = true;
+        }
+
+        internal SceneHubSubfilter EffectiveSceneHubSubfilter()
+        {
+            if (!LookFacetHubModeAvailable()) return 0;
+            if (!_sceneHubSubfilterExplicit && HasArmedHubCategoryIncludeAtom())
+                return 0;
+            return sceneHubSubfilter;
+        }
+
+        private bool HasArmedHubCategoryIncludeAtom()
+        {
+            return HasArmedHubCategoryIncludeAtom(null);
+        }
+
+        private bool HasArmedHubCategoryIncludeAtom(string token)
+        {
+            if (nameFilterQuery == null || nameFilterQuery.Branches == null) return false;
+            if (nameFilterQuery.PackHubCatTerms.Count == 0) return false;
+            for (int i = 0; i < nameFilterQuery.Branches.Count; i++)
+            {
+                GallerySearchBranch br = nameFilterQuery.Branches[i];
+                if (br == null || br.PackHubCatInclude == null) continue;
+                if (string.IsNullOrEmpty(token))
+                {
+                    if (br.PackHubCatInclude.Count > 0) return true;
+                    continue;
+                }
+                for (int t = 0; t < br.PackHubCatInclude.Count; t++)
+                {
+                    string term = br.PackHubCatInclude[t];
+                    if (string.IsNullOrEmpty(term)) continue;
+                    if (term.Length > 1 && term[0] == '=') term = term.Substring(1);
+                    if (string.Equals(term, token, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            return false;
+        }
+
+        internal bool IsHubTypeBrowseActive()
+        {
+            return !string.IsNullOrEmpty(_hubTypeBrowseToken)
+                && HasArmedHubCategoryIncludeAtom(_hubTypeBrowseToken);
+        }
+
+        internal List<string> EffectiveHubItemScopeCategories()
+        {
+            if (!IsHubTypeBrowseActive()) return null;
+            List<string> s = _hubItemScopeCategories;
+            return (s != null && s.Count > 0) ? s : null;
+        }
+
+        private void ApplyRestoredSceneHubSubfilter(CategoryFilterState state)
+        {
+            if (state != null && state.HasSceneHubSubfilter)
+            {
+                SetSceneHubSubfilterExplicit((SceneHubSubfilter)state.SceneHubSubfilter);
+                return;
+            }
+            ApplyImplicitSceneHubDefaultIfNeeded(true);
+        }
+
+        private void ApplyImplicitSceneHubDefaultIfNeeded(bool announce)
+        {
+            sceneHubSubfilter = SceneHubSubfilter.DefaultOn;
+            _sceneHubSubfilterExplicit = false;
+            if (announce && IsGalleryScenesCategory(currentCategoryTitle))
+                _sceneHubDefaultStatusPending = true;
+        }
+
+        private bool _sceneHubDefaultStatusPending;
+
+        private void FlushSceneHubDefaultStatusOrNotifyRestored(string categoryTitle)
+        {
+            if (MaybeAnnounceSceneHubDefault()) return;
+            NotifyCategoryFiltersRestored(categoryTitle);
+        }
+
+        private bool MaybeAnnounceSceneHubDefault()
+        {
+            if (!_sceneHubDefaultStatusPending) return false;
+            _sceneHubDefaultStatusPending = false;
+            if (_sceneHubDefaultStatusShown) return true;
+            if (!IsGalleryScenesCategory(currentCategoryTitle)) return true;
+            if (!VpbLocalDatabase.SceneHubSubfilterIsNarrowing(EffectiveSceneHubSubfilter())) return true;
+            _sceneHubDefaultStatusShown = true;
+            try
+            {
+                ShowTemporaryStatus(
+                    VPBTranslation.T(
+                        "gallery.scenes.hub_default_status",
+                        "Scenes hides Hub Looks by default. Tags → Hub: Looks shows look-delivery scenes."),
+                    3.6f);
+            }
+            catch { }
+            return true;
         }
     }
 }

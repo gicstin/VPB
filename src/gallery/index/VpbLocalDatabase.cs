@@ -5344,6 +5344,44 @@ namespace VPB
             }
         }
 
+        static CategoryClassifier s_ScopeClassifier;
+        static string s_ScopeClassifierSig;
+        static readonly object s_ScopeClassifierSync = new object();
+
+        internal static bool GalleryCategoryScopeContainsPath(List<string> scope, string internalPath)
+        {
+            if (scope == null || scope.Count == 0) return true;
+            if (string.IsNullOrEmpty(internalPath)) return false;
+
+            CategoryClassifier cl = GetGalleryScopeClassifier();
+            if (cl == null) return true;
+            string cat = cl.Classify(internalPath);
+            if (string.IsNullOrEmpty(cat)) return false;
+            for (int i = 0; i < scope.Count; i++)
+            {
+                if (string.Equals(scope[i], cat, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        static CategoryClassifier GetGalleryScopeClassifier()
+        {
+            string sig;
+            lock (s_Sync) { sig = s_ReadyCategoriesSig; }
+            lock (s_ScopeClassifierSync)
+            {
+                if (s_ScopeClassifier != null
+                    && string.Equals(s_ScopeClassifierSig, sig, StringComparison.Ordinal))
+                    return s_ScopeClassifier;
+                Gallery g = Gallery.singleton;
+                List<Gallery.Category> snap = g != null ? g.CloneCategoriesForIndex() : null;
+                if (snap == null || snap.Count == 0) return null;
+                s_ScopeClassifier = new CategoryClassifier(snap);
+                s_ScopeClassifierSig = sig;
+                return s_ScopeClassifier;
+            }
+        }
+
         private static void RebuildCore()
         {
             if (!VpbSqlite3.IsAvailable)
@@ -6028,6 +6066,7 @@ namespace VPB
             Creator = 0,
             DataPackHubTag = 1,
             DataPackSubject = 2,
+            DataPackHubCategory = 3,
         }
 
         internal static bool TryReadCreatorFileCounts(
@@ -6123,6 +6162,11 @@ namespace VPB
                         groupExpr = "de.subject";
                         groupGuard = "length(trim(ifnull(de.subject,''))) > 0";
                     }
+                    else if (groupMode == FileCountGroupMode.DataPackHubCategory)
+                    {
+                        groupExpr = "de.category";
+                        groupGuard = "length(trim(ifnull(de.category,''))) > 0";
+                    }
                     else
                     {
                         groupExpr = "p.creator";
@@ -6138,13 +6182,18 @@ namespace VPB
                     if (packMode)
                     {
                         sb.Append("CROSS JOIN datapack_link dl ON dl.pkg_uid = m.pkg_uid ");
-                        sb.Append(groupMode == FileCountGroupMode.DataPackHubTag
-                            ? "CROSS JOIN datapack_tag dt ON dt.pack_id=dl.pack_id AND dt.entry_id=dl.entry_id AND dt.ns='hub' "
-                            : "CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
+                        if (groupMode == FileCountGroupMode.DataPackHubTag)
+                            sb.Append("CROSS JOIN datapack_tag dt ON dt.pack_id=dl.pack_id AND dt.entry_id=dl.entry_id AND dt.ns='hub' ");
+                        else
+                            sb.Append("CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
                     }
                     sb.Append("WHERE ").Append(groupGuard);
+                    if (packMode && groupMode != FileCountGroupMode.DataPackHubCategory)
+                        AppendDataPackLinkIdentityOnlySql(sb, "dl");
                     if (groupMode == FileCountGroupMode.DataPackHubTag)
                         AppendDataPackTagNotHiddenSql(sb, "dt.tag", "m.pkg_uid");
+                    if (groupMode == FileCountGroupMode.DataPackHubCategory)
+                        AppendDataPackHubTypePackScopeSql(sb);
                     if (hasCat && !isEverythingC3) sb.Append(" AND m.category = ?");
                     if (isEverythingC3) sb.Append(BuildEverythingNonPreviewAnd("m.internal_path"));
                     if (hasPackagePathFilter)
@@ -6842,9 +6891,25 @@ namespace VPB
             return " AND " + col + " NOT LIKE '%.jpg' AND " + col + " NOT LIKE '%.jpeg' AND " + col + " NOT LIKE '%.png'";
         }
 
-        // Shared WHERE context built by BuildGalleryCategoryWhere.
-        // Holds the non-SELECT, non-ORDER portion of the cat_mem + pkg query so both the paged SELECT
-        // and per-chip COUNT(*) queries can reuse it with only the cloth AND swapped.
+        internal static string BuildEverythingCategoryScopeAnd(bool isEverything, List<string> categoryScope)
+        {
+            if (!isEverything || categoryScope == null || categoryScope.Count == 0) return "";
+            var sb = new StringBuilder(96);
+            sb.Append(" AND m.category IN (");
+            bool first = true;
+            for (int i = 0; i < categoryScope.Count; i++)
+            {
+                string c = categoryScope[i];
+                if (string.IsNullOrEmpty(c)) continue;
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append(SqlLiteral(c));
+            }
+            if (first) return "";
+            sb.Append(')');
+            return sb.ToString();
+        }
+
         internal struct GalleryCategoryWhereContext
         {
             // FROM + WHERE prefix up to and including the cloth AND placeholder point.
@@ -7153,7 +7218,9 @@ namespace VPB
             int pkgVersionFilter = PkgVersionFilterOff,
             bool userTagsTaggedOnly = false,
             string licenseFilter = null,
-            GalleryPanel.HairSubfilter hairSubfilterForSql = 0)
+            GalleryPanel.HairSubfilter hairSubfilterForSql = 0,
+            GalleryPanel.SceneHubSubfilter sceneHubSubfilterForSql = 0,
+            List<string> everythingCategoryScope = null)
         {
             return TryQueryGalleryCategoryRows(
                 categoryTitle, currentExtension, creatorFilter, outRows, out stats,
@@ -7161,7 +7228,8 @@ namespace VPB
                 GallerySearchQuery.FromLegacyNameTerms(nameTerms),
                 pathExclusions, pathInclusions, activeTags, activeUserTags, sortState,
                 userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags, pkgVersionFilter,
-                userTagsTaggedOnly, licenseFilter, hairSubfilterForSql);
+                userTagsTaggedOnly, licenseFilter, hairSubfilterForSql, sceneHubSubfilterForSql,
+                everythingCategoryScope);
         }
 
         internal static bool TryQueryGalleryCategoryRows(
@@ -7184,7 +7252,9 @@ namespace VPB
             int pkgVersionFilter = PkgVersionFilterOff,
             bool userTagsTaggedOnly = false,
             string licenseFilter = null,
-            GalleryPanel.HairSubfilter hairSubfilterForSql = 0)
+            GalleryPanel.HairSubfilter hairSubfilterForSql = 0,
+            GalleryPanel.SceneHubSubfilter sceneHubSubfilterForSql = 0,
+            List<string> everythingCategoryScope = null)
         {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
@@ -7261,6 +7331,7 @@ namespace VPB
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
                     // Grid: default-hide presets when idle (same as PassesHairGalleryFiltersForPath).
                     string hairSqlAnd = BuildHairSubfilterSqlAnd(conn, categoryTitle, hairSubfilterForSql, true);
+                    string sceneHubSqlAnd = BuildSceneHubSubfilterSqlAnd(conn, categoryTitle, sceneHubSubfilterForSql);
                     string loadedSelect = ctx.PkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
 
                     string orderBy = "";
@@ -7287,12 +7358,14 @@ namespace VPB
                     sbSql.Append(", ifnull(p.first_scanned, 0)");
                     sbSql.Append(" FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE ");
                     if (ctx.IsEverything)
-                        sbSql.Append("1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                        sbSql.Append("1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"))
+                             .Append(BuildEverythingCategoryScopeAnd(true, everythingCategoryScope));
                     else
                         sbSql.Append("m.category = ?");
                     sbSql.Append(ctx.CreatorAndFragment);
                     sbSql.Append(clothSqlAnd);
                     sbSql.Append(hairSqlAnd);
+                    sbSql.Append(sceneHubSqlAnd);
                     sbSql.Append(ctx.LoadedAndFragment).Append(ctx.VersionAndFragment).Append(ctx.LicenseAndFragment)
                          .Append(ctx.NameAndFragment)
                          .Append(ctx.SearchTimeAndFragment)

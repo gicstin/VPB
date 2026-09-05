@@ -110,6 +110,8 @@ namespace VPB
         public static readonly Color FacetCreator = new Color(0.64f, 0.50f, 0.22f, 1f);
         /// <summary>Look-A-Pedia identity facet (warmer than Creator so rails separate under squint).</summary>
         public static readonly Color FacetLooksLike = new Color(0.70f, 0.46f, 0.24f, 1f);
+        /// <summary>Hub listing type (Looks / Scenes / Clothing) — cooler than Hub tags green.</summary>
+        public static readonly Color FacetHubType = new Color(0.26f, 0.38f, 0.52f, 1f);
         public static readonly Color FacetTag = new Color(0.52f, 0.30f, 0.54f, 1f);
         public static readonly Color FacetRating = new Color(0.68f, 0.58f, 0.26f, 1f);
         public static readonly Color FacetUnrated = new Color(0.34f, 0.40f, 0.46f, 1f);
@@ -133,6 +135,8 @@ namespace VPB
         public static readonly Color PackTagRowHidden = new Color(0.16f, 0.16f, 0.16f, 1f);
         /// <summary>Idle Looks-like row in Tags Available (header uses <see cref="FacetLooksLike"/>).</summary>
         public static readonly Color LooksLikeRow = new Color(0.32f, 0.22f, 0.12f, 1f);
+        /// <summary>Idle Hub-type row in Tags Available.</summary>
+        public static readonly Color HubTypeRow = new Color(0.14f, 0.20f, 0.28f, 1f);
 
         // ── User-tag editor state ───────────────────────────────────────────
         public static readonly Color UserTagOn = new Color(0.24f, 0.40f, 0.42f, 1f);

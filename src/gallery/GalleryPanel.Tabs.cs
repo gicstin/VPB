@@ -529,6 +529,7 @@ namespace VPB
                 + "|" + (_userTagShowUnusedBucket ? 1 : 0)
                 + "|" + (_userTagShowHubBucket ? 1 : 0)
                 + "|" + (_userTagShowLooksBucket ? 1 : 0)
+                + "|" + (_userTagShowHubCatBucket ? 1 : 0)
                 + "|" + (userTagsCached ? 1 : 0)
                 + "|sel:" + BuildUserTagSelectionVirtSignature()
                 + "|hub:" + (LookFacetHubModeAvailable() ? 1 : 0)
@@ -541,6 +542,14 @@ namespace VPB
         private const int UserTagUnusedBucketHeaderSentinel = int.MinValue + 1;
         private const int UserTagHubBucketHeaderSentinel = int.MinValue + 2;
         private const int UserTagLooksBucketHeaderSentinel = int.MinValue + 3;
+        private const int UserTagHubCatBucketHeaderSentinel = int.MinValue + 4;
+
+        private enum PackAvailBucketKind
+        {
+            LooksLike = 0,
+            HubTag = 1,
+            HubCategory = 2,
+        }
 
         private void RebuildUserTagVirtViewList(bool isLeft, bool resetScrollToTop)
         {
@@ -643,6 +652,7 @@ namespace VPB
                         && e.Count != UserTagUnusedBucketHeaderSentinel
                         && !e.IsHubTag
                         && !e.IsLooksLike
+                        && !e.IsHubCategory
                         && !UserTagNameIsInIncludeOrExcludeFilter(e.Name))
                     {
                         UserTagSelectionState st = GetUserTagSelectionState(e.Name);
@@ -670,6 +680,8 @@ namespace VPB
             var pinnedUt = new List<UserTagSideTabEntry>(8);
             var normalUt = new List<UserTagSideTabEntry>(filteredUt.Count);
             PartitionUserTagRowsPinnedFirst(filteredUt, pinnedUt, normalUt);
+            // Coarsest axis first: what the creator listed it as, then who it looks like, then Hub tags.
+            AppendHubCategoryFacetToUserTagVirtView(filterUt, sortUt);
             AppendPackFacetToUserTagVirtView(false, filterUt, sortUt);
             AppendPackFacetToUserTagVirtView(true, filterUt, sortUt);
             for (int pi = 0; pi < pinnedUt.Count; pi++) _userTagVirtView.Add(pinnedUt[pi]);
@@ -824,6 +836,95 @@ namespace VPB
             EnsureSideTabVirtPool(isLeft ? _leftUserTagVirtButtons : _rightUserTagVirtButtons, parent, desired);
         }
 
+        private void AppendHubCategoryFacetToUserTagVirtView(string filterUt, SortState sortUt)
+        {
+            if (!LookFacetHubModeAvailable()) return;
+            if (!VpbLocalDatabase.DataPackIndexReady) return;
+
+            bool filterOn = !string.IsNullOrEmpty(filterUt);
+            if (!_userTagShowHubCatBucket && !filterOn)
+            {
+                _userTagStickyRows.Add(new UserTagSideTabEntry
+                {
+                    Name = VPBTranslation.T("gallery.usertags.hubcat_bucket_idle", "Hub type"),
+                    Count = UserTagHubCatBucketHeaderSentinel,
+                    IsHubCategory = true
+                });
+                return;
+            }
+
+            if (!EnsureHubCatFacetRows()) return;
+            List<CreatorCacheEntry> src = _hubCatFacetRows;
+            if (src == null || src.Count == 0) return;
+
+            int matchCount = 0;
+            if (filterOn)
+            {
+                for (int i = 0; i < src.Count; i++)
+                {
+                    string n = src[i].Name;
+                    if (string.IsNullOrEmpty(n)) continue;
+                    if (n.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    matchCount++;
+                }
+                if (matchCount == 0) return;
+            }
+            else
+                matchCount = src.Count;
+
+            _userTagStickyRows.Add(new UserTagSideTabEntry
+            {
+                Name = string.Format(
+                    VPBTranslation.T("gallery.usertags.hubcat_bucket_hide", "Hide Hub type ({0})"),
+                    matchCount),
+                Count = UserTagHubCatBucketHeaderSentinel,
+                IsHubCategory = true
+            });
+
+            var tmp = new List<UserTagSideTabEntry>(matchCount);
+            for (int i = 0; i < src.Count; i++)
+            {
+                CreatorCacheEntry e = src[i];
+                if (string.IsNullOrEmpty(e.Name)) continue;
+                if (filterOn && e.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                tmp.Add(new UserTagSideTabEntry
+                {
+                    Name = e.Name,
+                    Count = e.Count,
+                    IsHubCategory = true
+                });
+            }
+            if (sortUt != null && sortUt.Type == SortType.Count)
+            {
+                if (sortUt.Direction == SortDirection.Ascending)
+                    tmp.Sort((a, b) => a.Count.CompareTo(b.Count));
+                else
+                    tmp.Sort((a, b) => b.Count.CompareTo(a.Count));
+            }
+            else if (sortUt != null && sortUt.Direction == SortDirection.Ascending)
+                tmp.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            else
+                tmp.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+            for (int i = 0; i < tmp.Count; i++)
+                _userTagVirtView.Add(tmp[i]);
+        }
+
+        private bool EnsureHubCatFacetRows()
+        {
+            string collectSig = ComputeLookFacetCollectSignature(true) + "|hc";
+            if (string.Equals(_hubCatFacetCollectSig, collectSig, StringComparison.Ordinal)
+                && _hubCatFacetRows != null)
+                return true;
+            if (_hubCatFacetRows == null) return false;
+            if (!VpbLocalDatabase.TryCollectHubCategoryFacetRows(
+                    currentExtension, currentPaths, currentPath, activeTags,
+                    currentCategoryTitle, currentPackagePathFilter, activeUserTags, _hubCatFacetRows))
+                return _hubCatFacetRows.Count > 0;
+            _hubCatFacetCollectSig = collectSig;
+            return true;
+        }
+
         private void AppendPackFacetToUserTagVirtView(bool hub, string filterUt, SortState sortUt)
         {
             if (hub)
@@ -907,14 +1008,19 @@ namespace VPB
         private void BindUserTagVirtButton(GameObject btnGO, UserTagSideTabEntry ut, Color utAccent, string pickTooltip, bool isLeft)
         {
             if (btnGO == null) return;
+            if (ut.IsHubCategory || ut.Count == UserTagHubCatBucketHeaderSentinel)
+            {
+                BindUserTagVirtPackBucketButton(btnGO, ut, isLeft, PackAvailBucketKind.HubCategory);
+                return;
+            }
             if (ut.IsLooksLike || ut.Count == UserTagLooksBucketHeaderSentinel)
             {
-                BindUserTagVirtPackBucketButton(btnGO, ut, isLeft, false);
+                BindUserTagVirtPackBucketButton(btnGO, ut, isLeft, PackAvailBucketKind.LooksLike);
                 return;
             }
             if (ut.IsHubTag || ut.Count == UserTagHubBucketHeaderSentinel)
             {
-                BindUserTagVirtPackBucketButton(btnGO, ut, isLeft, true);
+                BindUserTagVirtPackBucketButton(btnGO, ut, isLeft, PackAvailBucketKind.HubTag);
                 return;
             }
             UI.SetControlSelectedRim(btnGO, false);
@@ -1134,19 +1240,37 @@ namespace VPB
             dr.DetailStripAppliedReorder = false;
         }
 
-        private void BindUserTagVirtPackBucketButton(GameObject btnGO, UserTagSideTabEntry ut, bool isLeft, bool hub)
+        private void BindUserTagVirtPackBucketButton(GameObject btnGO, UserTagSideTabEntry ut, bool isLeft, PackAvailBucketKind kind)
         {
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagBind++;
-            int headerSentinel = hub ? UserTagHubBucketHeaderSentinel : UserTagLooksBucketHeaderSentinel;
+            int headerSentinel = kind == PackAvailBucketKind.HubTag
+                ? UserTagHubBucketHeaderSentinel
+                : (kind == PackAvailBucketKind.HubCategory
+                    ? UserTagHubCatBucketHeaderSentinel
+                    : UserTagLooksBucketHeaderSentinel);
             bool isHeader = ut.Count == headerSentinel;
             string tagSnap = ut.Name ?? "";
-            TitleSearchChipKind kind = hub ? TitleSearchChipKind.PackHubTag : TitleSearchChipKind.PackSubject;
+            TitleSearchChipKind chipKind = kind == PackAvailBucketKind.HubTag
+                ? TitleSearchChipKind.PackHubTag
+                : (kind == PackAvailBucketKind.HubCategory
+                    ? TitleSearchChipKind.PackHubCat
+                    : TitleSearchChipKind.PackSubject);
             string token = isHeader ? "" : VpbLocalDatabase.DataPackFacetValueToken(tagSnap);
-            bool isInclude = !isHeader && HasTitleSearchPackChip(kind, token);
-            bool isExclude = !isHeader && HasTitleSearchPackChipPolarity(kind, token, TitleSearchChipPolarity.Exclude);
-            Color headerCol = hub ? GalleryUiColorTokens.FacetHub : ColorLooksLike;
-            Color idleCol = hub ? GalleryUiColorTokens.PackTagRow : GalleryUiColorTokens.LooksLikeRow;
-            Color onCol = hub ? ColorHub : ColorLooksLike;
+            bool isInclude = !isHeader && HasTitleSearchPackChip(chipKind, token);
+            bool isExclude = !isHeader && HasTitleSearchPackChipPolarity(chipKind, token, TitleSearchChipPolarity.Exclude);
+            Color headerCol = kind == PackAvailBucketKind.HubTag
+                ? GalleryUiColorTokens.FacetHub
+                : (kind == PackAvailBucketKind.HubCategory
+                    ? ColorHubType
+                    : ColorLooksLike);
+            Color idleCol = kind == PackAvailBucketKind.HubTag
+                ? GalleryUiColorTokens.PackTagRow
+                : (kind == PackAvailBucketKind.HubCategory
+                    ? GalleryUiColorTokens.HubTypeRow
+                    : GalleryUiColorTokens.LooksLikeRow);
+            Color onCol = kind == PackAvailBucketKind.HubTag
+                ? ColorHub
+                : (kind == PackAvailBucketKind.HubCategory ? ColorHubType : ColorLooksLike);
             Color btnColor = isHeader
                 ? headerCol
                 : (isExclude ? UserTagFilterExcludedColor : (isInclude ? onCol : idleCol));
@@ -1158,7 +1282,7 @@ namespace VPB
                 btnComp.onClick.RemoveAllListeners();
                 bool sideLeft = isLeft;
                 bool headerSnap = isHeader;
-                bool hubSnap = hub;
+                PackAvailBucketKind kindSnap = kind;
                 string nameSnap = tagSnap;
                 btnComp.onClick.AddListener(() =>
                 {
@@ -1168,14 +1292,16 @@ namespace VPB
                         if (dragSrc != null && dragSrc.ConsumedByDrag) return;
                         if (headerSnap)
                         {
-                            if (hubSnap) _userTagShowHubBucket = !_userTagShowHubBucket;
+                            if (kindSnap == PackAvailBucketKind.HubTag) _userTagShowHubBucket = !_userTagShowHubBucket;
+                            else if (kindSnap == PackAvailBucketKind.HubCategory) _userTagShowHubCatBucket = !_userTagShowHubCatBucket;
                             else _userTagShowLooksBucket = !_userTagShowLooksBucket;
                             _userTagVirtViewSig = null;
                             try { RefreshUserTagsAvailPaneInPlace(sideLeft); } catch { }
                             return;
                         }
                         string tok = VpbLocalDatabase.DataPackFacetValueToken(nameSnap);
-                        if (hubSnap) ToggleTitleSearchPackHubTagChip(tok, true);
+                        if (kindSnap == PackAvailBucketKind.HubTag) ToggleTitleSearchPackHubTagChip(tok, true);
+                        else if (kindSnap == PackAvailBucketKind.HubCategory) ToggleTitleSearchPackHubCatChip(tok, true);
                         else ToggleTitleSearchPackSubjectChip(tok, true);
                         try { RefreshUserTagsAvailPaneInPlace(sideLeft); } catch { }
                     }
@@ -1189,14 +1315,15 @@ namespace VPB
             if (!isHeader)
             {
                 bool sideLeftRc = isLeft;
-                bool hubRc = hub;
+                PackAvailBucketKind kindRc = kind;
                 string nameRc = tagSnap;
                 rightClickDelegate.OnRightClick = () =>
                 {
                     try
                     {
                         string tok = VpbLocalDatabase.DataPackFacetValueToken(nameRc);
-                        if (hubRc) ToggleTitleSearchPackHubTagExcludeChip(tok, true);
+                        if (kindRc == PackAvailBucketKind.HubTag) ToggleTitleSearchPackHubTagExcludeChip(tok, true);
+                        else if (kindRc == PackAvailBucketKind.HubCategory) ToggleTitleSearchPackHubCatExcludeChip(tok, true);
                         else ToggleTitleSearchPackSubjectExcludeChip(tok, true);
                         try { RefreshUserTagsAvailPaneInPlace(sideLeftRc); } catch { }
                     }
@@ -1251,21 +1378,31 @@ namespace VPB
             string tip;
             if (isHeader)
             {
-                tip = hub
-                    ? VPBTranslation.T(
+                if (kind == PackAvailBucketKind.HubTag)
+                    tip = VPBTranslation.T(
                         "gallery.usertags.hub_bucket_tip",
-                        "Show or hide Hub tags from the Hub data pack. Click a tag to filter the grid; they cannot be applied.")
-                    : VPBTranslation.T(
+                        "Show or hide Hub tags from the Hub data pack. Click a tag to filter the grid; they cannot be applied.");
+                else if (kind == PackAvailBucketKind.HubCategory)
+                    tip = VPBTranslation.T(
+                        "gallery.usertags.hubcat_bucket_tip",
+                        "Hub listing type (what the creator uploaded as). Click Looks to find look-delivery packages even when they are scene files. Not Appearance presets. Right-click a type to exclude.");
+                else
+                    tip = VPBTranslation.T(
                         "gallery.usertags.looks_bucket_tip",
                         "Show or hide Look-A-Pedia names. Click a name to filter the grid; they cannot be applied as tags.");
             }
             else
             {
-                tip = hub
-                    ? VPBTranslation.T(
+                if (kind == PackAvailBucketKind.HubTag)
+                    tip = VPBTranslation.T(
                         "gallery.usertags.hub_row_tip",
-                        "Hub tag (read-only). Click filters the grid. Right-click excludes. Same name can still be created as a user tag.")
-                    : VPBTranslation.T(
+                        "Hub tag (read-only). Click filters the grid. Right-click excludes. Same name can still be created as a user tag.");
+                else if (kind == PackAvailBucketKind.HubCategory)
+                    tip = VPBTranslation.T(
+                        "gallery.usertags.hubcat_row_tip",
+                        "Hub type (read-only). Click filters the grid (hubcat:). Right-click excludes. Looks here means Hub listing type, not Looks like / Appearance.");
+                else
+                    tip = VPBTranslation.T(
                         "gallery.usertags.looks_row_tip",
                         "Looks like (read-only). Click filters the grid (looks:). Right-click excludes.");
             }
@@ -1377,7 +1514,9 @@ namespace VPB
         {
             SortState st = GetSortState("Category");
             float scale = ChromeScale;
-            return categorySideTabDataRevision + "|" + (categoryFilter ?? "") + "|" + (currentPath ?? "") + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R") + "|" + (categories != null ? categories.Count : 0);
+            return categorySideTabDataRevision + "|" + (categoryFilter ?? "") + "|" + (currentPath ?? "") + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R") + "|" + (categories != null ? categories.Count : 0)
+                + "|htb" + (_categoryShowHubTypeBucket ? "1" : "0")
+                + "|htt" + (_hubTypeBrowseToken ?? "");
         }
 
         private string ComputeCreatorSideTabSignature()

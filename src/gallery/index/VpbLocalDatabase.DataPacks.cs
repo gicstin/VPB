@@ -25,10 +25,28 @@ namespace VPB
             public bool Found;
             public string Subject;
             public string Category;
+            public string HubTypeCategory;
             public string HubTagsFmt;
         }
 
         internal const int DataPackMatchKindIdent = 2;
+        internal const int DataPackMatchKindNamePrefix = 3;
+        internal const int DataPackMatchKindCategoryOnly = 4;
+        const int DataPackContainmentMinLen = 4;
+
+        internal static void AppendDataPackLinkIdentityOnlySql(StringBuilder sb, string alias)
+        {
+            if (sb == null) return;
+            sb.Append(" AND ").Append(string.IsNullOrEmpty(alias) ? "dl" : alias)
+              .Append(".match_kind<>").Append(DataPackMatchKindCategoryOnly);
+        }
+
+        internal const string DataPackLinkIdentityOnlyAnd = " AND dl.match_kind<>4";
+        const int PkgIdentPrefixMinLen = 5;
+        const int PkgIdentPrefixMaxTokens = 5;
+        const int DataPackIdentAmbiguityCap = 8;
+        const string PkgIdentPrefixVersion = "1";
+        const string PkgIdentPrefixMetaKey = "pkg_ident_prefix_ver";
         const int DataPackOverlayHubTagCap = 8;
         internal const int DataPackMenuHubTagCap = 64;
 
@@ -181,6 +199,7 @@ namespace VPB
                             sb.Append(exact
                                 ? "lower(trim(ifnull(de.subject,''))) = ?"
                                 : "lower(ifnull(de.subject,'')) LIKE ? ESCAPE '\\'");
+                            AppendDataPackLinkIdentityOnlySql(sb, "dl");
                             AppendDataPackSubjectPackScopeSql(sb);
 
                             var list = new List<string>(32);
@@ -301,6 +320,7 @@ namespace VPB
                         "MAX(ifnull(de.first_release,'')), MAX(ifnull(de.last_update,'')) " +
                         "FROM datapack_link dl " +
                         "CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id " +
+                        "WHERE 1=1" + DataPackLinkIdentityOnlyAnd + " " +
                         "GROUP BY dl.pkg_uid"))
                     {
                         while (st.Step() == VpbSqlite3.SqliteRow)
@@ -401,6 +421,201 @@ namespace VPB
             return DataPackFacetValueToken(tag);
         }
 
+        internal static string DataPackHubCategorySearchToken(string category)
+        {
+            return DataPackFacetValueToken(category);
+        }
+
+        internal static void AppendDataPackHubTypePackScopeSql(StringBuilder sb)
+        {
+            if (sb == null) return;
+            sb.Append(" AND (de.pack_id='").Append(VpbDataPackService.HubTagsPackId)
+                .Append("' OR de.pack_id='").Append(VpbDataPackService.HubLivePackId).Append("')");
+        }
+
+        internal enum SceneHubBucket
+        {
+            Unclassified = 0,
+            HubScenes = 1,
+            HubLooks = 2,
+            Other = 3,
+        }
+
+        internal static bool SceneHubSubfilterIsNarrowing(GalleryPanel.SceneHubSubfilter f)
+        {
+            return f != 0 && f != GalleryPanel.SceneHubSubfilter.All;
+        }
+
+        internal static SceneHubBucket ClassifySceneHubBucket(string hubTypeCategory)
+        {
+            if (string.IsNullOrEmpty(hubTypeCategory)) return SceneHubBucket.Unclassified;
+            if (string.Equals(hubTypeCategory, "Looks", StringComparison.OrdinalIgnoreCase))
+                return SceneHubBucket.HubLooks;
+            if (string.Equals(hubTypeCategory, "Scenes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(hubTypeCategory, "Demo + Lite", StringComparison.OrdinalIgnoreCase))
+                return SceneHubBucket.HubScenes;
+            return SceneHubBucket.Other;
+        }
+
+        static Dictionary<string, int> s_SceneHubMaskByUid;
+        static int s_SceneHubMaskRev = -1;
+        static bool s_SceneHubMaskFailed;
+
+        internal static bool TryGetSceneHubBucketMasks(out Dictionary<string, int> map)
+        {
+            map = null;
+            if (!DataPackLookSearchEnabled() || !VpbSqlite3.IsAvailable) return false;
+
+            int rev = VpbDataPackService.StatusRevision;
+            if (s_SceneHubMaskRev != rev)
+            {
+                s_SceneHubMaskByUid = null;
+                s_SceneHubMaskFailed = false;
+                s_SceneHubMaskRev = rev;
+            }
+            if (s_SceneHubMaskFailed) return false;
+            if (s_SceneHubMaskByUid != null)
+            {
+                map = s_SceneHubMaskByUid;
+                return true;
+            }
+
+            long tStart = Stopwatch.GetTimestamp();
+            var built = new Dictionary<string, int>(4096, StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    if (!DataPackTablesPresent(conn))
+                    {
+                        s_SceneHubMaskByUid = built;
+                        map = built;
+                        return true;
+                    }
+                    var sb = new StringBuilder(320);
+                    sb.Append("SELECT DISTINCT dl.pkg_uid, de.category FROM datapack_link dl ");
+                    sb.Append("CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
+                    sb.Append("WHERE length(trim(ifnull(de.category,'')))>0");
+                    AppendDataPackHubTypePackScopeSql(sb);
+                    using (var st = conn.Prepare(sb.ToString()))
+                    {
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string uid = st.ColumnText(0);
+                            if (string.IsNullOrEmpty(uid)) continue;
+                            int bit = (int)SceneHubBucketToFlag(ClassifySceneHubBucket(st.ColumnText(1)));
+                            int cur;
+                            built[uid] = built.TryGetValue(uid, out cur) ? (cur | bit) : bit;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB.DB] scene hub bucket map failed: " + ex.Message); }
+                catch { }
+                s_SceneHubMaskFailed = true;
+                return false;
+            }
+            s_SceneHubMaskByUid = built;
+            map = built;
+            ReportDataPackStepTiming("scene hub bucket map (" + built.Count + ")", tStart, SceneHubMaskBudgetMs);
+            return true;
+        }
+
+        const int SceneHubMaskBudgetMs = 1500;
+
+        static GalleryPanel.SceneHubSubfilter SceneHubBucketToFlag(SceneHubBucket b)
+        {
+            if (b == SceneHubBucket.HubScenes) return GalleryPanel.SceneHubSubfilter.HubScenes;
+            if (b == SceneHubBucket.HubLooks) return GalleryPanel.SceneHubSubfilter.HubLooks;
+            if (b == SceneHubBucket.Other) return GalleryPanel.SceneHubSubfilter.Other;
+            return GalleryPanel.SceneHubSubfilter.Unclassified;
+        }
+
+        internal static bool PassesSceneHubSubfilterMask(
+            GalleryPanel.SceneHubSubfilter f, Dictionary<string, int> map, string pkgUid)
+        {
+            if (!SceneHubSubfilterIsNarrowing(f)) return true;
+            int mask;
+            if (map == null || string.IsNullOrEmpty(pkgUid)
+                || !map.TryGetValue(pkgUid, out mask) || mask == 0)
+                return (f & GalleryPanel.SceneHubSubfilter.Unclassified) != 0;
+            return (((int)f) & mask) != 0;
+        }
+
+        internal static string BuildSceneHubSubfilterSqlAnd(
+            VpbSqlite3.Connection conn,
+            string categoryTitle,
+            GalleryPanel.SceneHubSubfilter f)
+        {
+            if (!GalleryPanel.IsGalleryScenesCategory(categoryTitle)) return "";
+            if (!SceneHubSubfilterIsNarrowing(f)) return "";
+            if (conn == null || !DataPackTablesPresent(conn)) return "";
+
+            bool wantU = (f & GalleryPanel.SceneHubSubfilter.Unclassified) != 0;
+            bool wantS = (f & GalleryPanel.SceneHubSubfilter.HubScenes) != 0;
+            bool wantL = (f & GalleryPanel.SceneHubSubfilter.HubLooks) != 0;
+            bool wantO = (f & GalleryPanel.SceneHubSubfilter.Other) != 0;
+
+            var sb = new StringBuilder(640);
+            sb.Append(" AND (");
+            bool first = true;
+            if (wantU)
+            {
+                first = false;
+                sb.Append("NOT EXISTS (SELECT 1 FROM datapack_link dl ");
+                sb.Append("CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
+                sb.Append("WHERE dl.pkg_uid=m.pkg_uid AND length(trim(ifnull(de.category,'')))>0");
+                AppendDataPackHubTypePackScopeSql(sb);
+                sb.Append(')');
+            }
+            if (wantS)
+            {
+                if (!first) sb.Append(" OR ");
+                first = false;
+                AppendSceneHubCategoryExistsSql(sb, true, false, false);
+            }
+            if (wantL)
+            {
+                if (!first) sb.Append(" OR ");
+                first = false;
+                AppendSceneHubCategoryExistsSql(sb, false, true, false);
+            }
+            if (wantO)
+            {
+                if (!first) sb.Append(" OR ");
+                AppendSceneHubCategoryExistsSql(sb, false, false, true);
+            }
+            sb.Append(')');
+            return sb.ToString();
+        }
+
+        static void AppendSceneHubCategoryExistsSql(StringBuilder sb, bool scenes, bool looks, bool other)
+        {
+            sb.Append("EXISTS (SELECT 1 FROM datapack_link dl ");
+            sb.Append("CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
+            sb.Append("WHERE dl.pkg_uid=m.pkg_uid AND length(trim(ifnull(de.category,'')))>0");
+            AppendDataPackHubTypePackScopeSql(sb);
+            sb.Append(" AND ");
+            if (looks)
+                sb.Append("lower(trim(ifnull(de.category,'')))='looks'");
+            else if (scenes)
+                sb.Append("(lower(trim(ifnull(de.category,'')))='scenes' OR lower(trim(ifnull(de.category,'')))='demo + lite')");
+            else if (other)
+            {
+                sb.Append("lower(trim(ifnull(de.category,''))) NOT IN ('looks','scenes','demo + lite')");
+            }
+            else
+                sb.Append("1=0");
+            sb.Append(')');
+        }
+
+        internal static string DataPackHubCategoryDisplayName(string value)
+        {
+            return GalleryHubCategoryNames.Display(value);
+        }
+
         internal static bool TryCollectLookFacetRows(
             bool hubTags,
             string extensionPipeSeparated,
@@ -439,6 +654,172 @@ namespace VPB
             return true;
         }
 
+        internal static bool TryCollectHubCategoryFacetRows(
+            string extensionPipeSeparated,
+            List<string> pathPrefixes,
+            string singlePathPrefix,
+            HashSet<string> activeTags,
+            string categoryTitle,
+            string packagePathFilter,
+            HashSet<string> activeUserTags,
+            List<CreatorCacheEntry> dest)
+        {
+            if (dest == null) return false;
+            if (!DataPackLookSearchEnabled()) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            bool ok = TryReadGroupedFileCounts(
+                counts,
+                FileCountGroupMode.DataPackHubCategory,
+                extensionPipeSeparated, pathPrefixes, singlePathPrefix,
+                activeTags, categoryTitle, packagePathFilter, activeUserTags);
+
+            if (!ok)
+                return TryCollectHubCategoryPackageFacetRows(dest);
+
+            dest.Clear();
+            foreach (var kv in counts)
+            {
+                if (string.IsNullOrEmpty(kv.Key)) continue;
+                dest.Add(new CreatorCacheEntry
+                {
+                    Name = DataPackHubCategoryDisplayName(kv.Key),
+                    Count = kv.Value
+                });
+            }
+            return true;
+        }
+
+        internal static bool TryCollectHubCategoryPackageFacetRows(List<CreatorCacheEntry> dest)
+        {
+            return FillHubCategoryPackageCounts(dest);
+        }
+
+        internal static bool TryCollectHubCategoryItemFacetRows(
+            List<CreatorCacheEntry> dest,
+            Func<string, List<string>> scopeResolver)
+        {
+            if (dest == null) return false;
+            dest.Clear();
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            var byHubThenCategory = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+            long tStart = Stopwatch.GetTimestamp();
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    if (!DataPackTablesPresent(conn)) return true;
+                    var sb = new StringBuilder(560);
+                    sb.Append("SELECT t.c, m.category, COUNT(*) FROM (");
+                    sb.Append("SELECT DISTINCT dl.pkg_uid AS u, de.category AS c FROM datapack_link dl ");
+                    sb.Append("CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
+                    sb.Append("WHERE length(trim(ifnull(de.category,'')))>0");
+                    AppendDataPackHubTypePackScopeSql(sb);
+                    sb.Append(") t CROSS JOIN cat_mem m ON m.pkg_uid = t.u WHERE 1=1");
+                    sb.Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                    sb.Append(" GROUP BY t.c, m.category");
+                    using (var st = conn.Prepare(sb.ToString()))
+                    {
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string hub = st.ColumnText(0);
+                            string cat = st.ColumnText(1);
+                            if (string.IsNullOrEmpty(hub) || string.IsNullOrEmpty(cat)) continue;
+                            string display = DataPackHubCategoryDisplayName(hub);
+                            if (string.IsNullOrEmpty(display)) continue;
+                            Dictionary<string, int> perCat;
+                            if (!byHubThenCategory.TryGetValue(display, out perCat) || perCat == null)
+                            {
+                                perCat = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                                byHubThenCategory[display] = perCat;
+                            }
+                            int cur;
+                            perCat.TryGetValue(cat, out cur);
+                            perCat[cat] = cur + (int)st.ColumnInt64(2);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB.DB] hub category item facet collect failed: " + ex.Message); } catch { }
+                dest.Clear();
+                return FillHubCategoryPackageCounts(dest);
+            }
+
+            foreach (var kv in byHubThenCategory)
+            {
+                List<string> scope = scopeResolver != null ? scopeResolver(kv.Key) : null;
+                int total = 0;
+                if (scope == null || scope.Count == 0)
+                {
+                    foreach (var c in kv.Value) total += c.Value;
+                }
+                else
+                {
+                    for (int i = 0; i < scope.Count; i++)
+                    {
+                        int n;
+                        if (kv.Value.TryGetValue(scope[i], out n)) total += n;
+                    }
+                }
+                if (total <= 0) continue;
+                dest.Add(new CreatorCacheEntry { Name = kv.Key, Count = total });
+            }
+            dest.Sort(CompareHubCategoryItemRows);
+            ReportDataPackStepTiming("hub category item counts (" + dest.Count + ")", tStart, HubCategoryItemCountBudgetMs);
+            return true;
+        }
+
+        const int HubCategoryItemCountBudgetMs = 2500;
+
+        static int CompareHubCategoryItemRows(CreatorCacheEntry a, CreatorCacheEntry b)
+        {
+            if (a.Count != b.Count) return b.Count.CompareTo(a.Count);
+            return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        }
+
+        static bool FillHubCategoryPackageCounts(List<CreatorCacheEntry> dest)
+        {
+            if (dest == null) return false;
+            dest.Clear();
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    if (!DataPackTablesPresent(conn)) return true;
+                    var sb = new StringBuilder(320);
+                    sb.Append("SELECT de.category, COUNT(DISTINCT dl.pkg_uid) FROM datapack_link dl ");
+                    sb.Append("CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
+                    sb.Append("WHERE length(trim(ifnull(de.category,'')))>0");
+                    AppendDataPackHubTypePackScopeSql(sb);
+                    sb.Append(" GROUP BY de.category ORDER BY COUNT(DISTINCT dl.pkg_uid) DESC, de.category ASC");
+                    using (var st = conn.Prepare(sb.ToString()))
+                    {
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string name = st.ColumnText(0);
+                            if (string.IsNullOrEmpty(name)) continue;
+                            dest.Add(new CreatorCacheEntry
+                            {
+                                Name = DataPackHubCategoryDisplayName(name),
+                                Count = (int)st.ColumnInt64(1)
+                            });
+                        }
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB.DB] hub category facet collect failed: " + ex.Message); } catch { }
+                dest.Clear();
+                return false;
+            }
+        }
+
         static bool FillLookFacetPackageCounts(bool hubTags, List<CreatorCacheEntry> dest)
         {
             var rows = new List<CreatorCacheEntry>(512);
@@ -463,6 +844,7 @@ namespace VPB
                         hsb.Append("SELECT dt.tag, COUNT(DISTINCT dl.pkg_uid) FROM datapack_link dl ");
                         hsb.Append("CROSS JOIN datapack_tag dt ON dt.pack_id=dl.pack_id AND dt.entry_id=dl.entry_id AND dt.ns='hub' ");
                         hsb.Append("WHERE length(trim(ifnull(dt.tag,'')))>0");
+                        AppendDataPackLinkIdentityOnlySql(hsb, "dl");
                         AppendDataPackTagNotHiddenSql(hsb, "dt.tag", "dl.pkg_uid");
                         hsb.Append(" GROUP BY dt.tag");
                         sql = hsb.ToString();
@@ -471,7 +853,8 @@ namespace VPB
                     {
                         sql = "SELECT de.subject, COUNT(DISTINCT dl.pkg_uid) FROM datapack_link dl " +
                               "CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id " +
-                              "WHERE length(trim(ifnull(de.subject,'')))>0 GROUP BY de.subject";
+                              "WHERE length(trim(ifnull(de.subject,'')))>0" + DataPackLinkIdentityOnlyAnd +
+                              " GROUP BY de.subject";
                     }
                     using (var st = conn.Prepare(sql))
                     {
@@ -538,7 +921,8 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_dp_tag_tag ON datapack_tag(tag COLLATE NOCASE);" +
                 "CREATE INDEX IF NOT EXISTS idx_dp_link_pkg ON datapack_link(pkg_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_dp_link_entry ON datapack_link(pack_id, entry_id);" +
-                "CREATE INDEX IF NOT EXISTS idx_dp_entry_resource ON datapack_entry(resource_id);");
+                "CREATE INDEX IF NOT EXISTS idx_dp_entry_resource ON datapack_entry(resource_id);" +
+                "CREATE INDEX IF NOT EXISTS idx_dp_entry_pack_cat ON datapack_entry(pack_id, category);");
 
             EnsureDataPackTagPrefSchema(conn);
 
@@ -562,6 +946,15 @@ namespace VPB
             try { conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_pkg_uid_alias ON pkg(uid_alias);"); }
             catch { }
             try { conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_pkg_ident_key ON pkg(ident_key);"); }
+            catch { }
+            try
+            {
+                conn.ExecUtf8(
+                    "CREATE TABLE IF NOT EXISTS pkg_ident (" +
+                    "pkg_uid TEXT NOT NULL, ident_key TEXT NOT NULL, klen INTEGER NOT NULL," +
+                    "PRIMARY KEY(pkg_uid, ident_key));" +
+                    "CREATE INDEX IF NOT EXISTS idx_pkg_ident_prefix ON pkg_ident(ident_key);");
+            }
             catch { }
         }
 
@@ -615,6 +1008,81 @@ namespace VPB
             return creator + "|" + name;
         }
 
+        static void CollectPkgIdentPrefixKeys(string uid, List<string> destKeys, List<int> destLens)
+        {
+            if (destKeys == null || destLens == null) return;
+            destKeys.Clear();
+            destLens.Clear();
+            if (string.IsNullOrEmpty(uid)) return;
+
+            string s = uid;
+            int dot = s.LastIndexOf('.');
+            if (dot > 0 && dot < s.Length - 1)
+            {
+                bool allDigits = true;
+                for (int i = dot + 1; i < s.Length; i++)
+                {
+                    char c = s[i];
+                    if (c < '0' || c > '9') { allDigits = false; break; }
+                }
+                if (allDigits) s = s.Substring(0, dot);
+            }
+
+            int split = s.IndexOf('.');
+            if (split <= 0 || split >= s.Length - 1) return;
+            string creator = NormalizeIdentPart(s.Substring(0, split));
+            if (creator.Length == 0) return;
+            string name = s.Substring(split + 1);
+
+            var acc = new System.Text.StringBuilder(name.Length);
+            var whole = new System.Text.StringBuilder(name.Length);
+            int tokens = 0;
+            int i2 = 0;
+            while (i2 < name.Length)
+            {
+                if (!IsIdentWordChar(name[i2])) { i2++; continue; }
+                int start = i2;
+                i2++;
+                while (i2 < name.Length && IsIdentWordChar(name[i2]))
+                {
+                    char prev = name[i2 - 1];
+                    char cur = name[i2];
+                    if (cur >= 'A' && cur <= 'Z'
+                        && ((prev >= 'a' && prev <= 'z') || (prev >= '0' && prev <= '9')))
+                        break;
+                    i2++;
+                }
+                for (int k = start; k < i2; k++)
+                {
+                    char c = name[k];
+                    if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+                    whole.Append(c);
+                    if (tokens < PkgIdentPrefixMaxTokens) acc.Append(c);
+                }
+                tokens++;
+                if (tokens <= PkgIdentPrefixMaxTokens && acc.Length >= PkgIdentPrefixMinLen)
+                    AddPkgIdentKey(destKeys, destLens, creator, acc.ToString());
+            }
+
+            if (whole.Length >= 2)
+                AddPkgIdentKey(destKeys, destLens, creator, whole.ToString());
+        }
+
+        static bool IsIdentWordChar(char c)
+        {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+        }
+
+        static void AddPkgIdentKey(List<string> destKeys, List<int> destLens, string creator, string name)
+        {
+            for (int i = 0; i < destLens.Count; i++)
+            {
+                if (destLens[i] == name.Length) return;
+            }
+            destKeys.Add(creator + "|" + name);
+            destLens.Add(name.Length);
+        }
+
         static string NormalizeIdentPart(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";
@@ -661,23 +1129,89 @@ namespace VPB
                     if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
                 }
             }
-            if (uids.Count == 0) return 0;
 
             int written = 0;
-            using (var up = conn.Prepare("UPDATE pkg SET uid_alias=?, ident_key=? WHERE uid=?"))
+            if (uids.Count > 0)
             {
-                for (int i = 0; i < uids.Count; i++)
+                using (var up = conn.Prepare("UPDATE pkg SET uid_alias=?, ident_key=? WHERE uid=?"))
                 {
-                    up.BindText(1, ComputePkgUidAlias(uids[i]));
-                    up.BindText(2, ComputePkgIdentKey(uids[i]));
-                    up.BindText(3, uids[i]);
-                    up.Step();
-                    up.Reset();
-                    written++;
+                    for (int i = 0; i < uids.Count; i++)
+                    {
+                        up.BindText(1, ComputePkgUidAlias(uids[i]));
+                        up.BindText(2, ComputePkgIdentKey(uids[i]));
+                        up.BindText(3, uids[i]);
+                        up.Step();
+                        up.Reset();
+                        written++;
+                    }
                 }
             }
+
+            RefreshPkgIdentPrefixKeys(conn);
             return written;
         }
+
+        static void RefreshPkgIdentPrefixKeys(VpbSqlite3.Connection conn)
+        {
+            if (conn == null) return;
+            long tStart = Stopwatch.GetTimestamp();
+            int inserted = 0;
+            try
+            {
+                EnsurePkgIdentTable(conn);
+                bool rebuildAll = !string.Equals(
+                    MetaGet(conn, PkgIdentPrefixMetaKey), PkgIdentPrefixVersion, StringComparison.Ordinal);
+                conn.ExecUtf8(rebuildAll
+                    ? "DELETE FROM pkg_ident;"
+                    : "DELETE FROM pkg_ident WHERE pkg_uid NOT IN (SELECT uid FROM pkg);");
+
+                var todo = new List<string>(1024);
+                using (var st = conn.Prepare(
+                    "SELECT p.uid FROM pkg p LEFT JOIN pkg_ident pi ON pi.pkg_uid = p.uid " +
+                    "WHERE pi.pkg_uid IS NULL"))
+                {
+                    while (st.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string uid = st.ColumnText(0);
+                        if (!string.IsNullOrEmpty(uid)) todo.Add(uid);
+                    }
+                }
+
+                if (todo.Count > 0)
+                {
+                    var keys = new List<string>(8);
+                    var lens = new List<int>(8);
+                    using (var ins = conn.Prepare(
+                        "INSERT OR IGNORE INTO pkg_ident(pkg_uid,ident_key,klen) VALUES(?,?,?)"))
+                    {
+                        for (int i = 0; i < todo.Count; i++)
+                        {
+                            CollectPkgIdentPrefixKeys(todo[i], keys, lens);
+                            for (int k = 0; k < keys.Count; k++)
+                            {
+                                ins.BindText(1, todo[i]);
+                                ins.BindText(2, keys[k]);
+                                ins.BindInt64(3, lens[k]);
+                                ins.Step();
+                                ins.Reset();
+                                inserted++;
+                            }
+                        }
+                    }
+                }
+
+                if (rebuildAll) MetaSet(conn, PkgIdentPrefixMetaKey, PkgIdentPrefixVersion);
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB.DB] pkg_ident prefix refresh failed: " + ex.Message); }
+                catch { }
+            }
+            if (inserted > 0)
+                ReportDataPackStepTiming("pkg_ident keys (+" + inserted + ")", tStart, PkgIdentRefreshBudgetMs);
+        }
+
+        const int PkgIdentRefreshBudgetMs = 4000;
 
         static int RebuildDataPackLinks(VpbSqlite3.Connection conn, string packId)
         {
@@ -727,6 +1261,9 @@ namespace VPB
                 conn.ExecUtf8(insertIdent + ";");
             }
 
+            AppendDataPackNamePrefixLinks(conn, packId);
+            AppendDataPackCategoryOnlyLinks(conn, packId);
+
             BackfillDataPackResourceIds(conn);
             int inherited = InheritDataPackLinksByResourceId(conn);
             if (inherited > 0)
@@ -736,6 +1273,342 @@ namespace VPB
             }
 
             return (int)ScalarInt64(conn, "SELECT COUNT(*) FROM datapack_link;");
+        }
+
+        static void AppendDataPackNamePrefixLinks(VpbSqlite3.Connection conn, string packId)
+        {
+            if (conn == null) return;
+            bool scoped = !string.IsNullOrEmpty(packId);
+            long tStart = Stopwatch.GetTimestamp();
+            try
+            {
+                EnsurePkgIdentTable(conn);
+
+                const string hitSelect =
+                    "SELECT di.pack_id, pi.pkg_uid, di.entry_id, pi.klen " +
+                    "FROM pkg_ident pi " +
+                    "CROSS JOIN datapack_ident di ON di.ident_key = pi.ident_key " +
+                    "WHERE di.ident_key <> '' " +
+                    "AND NOT EXISTS (SELECT 1 FROM temp.dp_ident_amb a " +
+                    "WHERE a.pack_id = di.pack_id AND a.ident_key = di.ident_key)";
+
+                conn.ExecUtf8(
+                    "DROP TABLE IF EXISTS temp.dp_ident_amb;" +
+                    "CREATE TEMP TABLE dp_ident_amb(pack_id TEXT NOT NULL, ident_key TEXT NOT NULL," +
+                    "PRIMARY KEY(pack_id, ident_key));" +
+                    "INSERT OR IGNORE INTO temp.dp_ident_amb(pack_id, ident_key) " +
+                    "SELECT pack_id, ident_key FROM datapack_ident " +
+                    "GROUP BY pack_id, ident_key HAVING COUNT(*) > " + DataPackIdentAmbiguityCap + ";");
+
+                if (!DataPackPrefixJoinPlanIsSane(conn, hitSelect))
+                {
+                    LogUtil.LogWarning(
+                        "[VPB.DB] name-prefix link tier SKIPPED: planner is not seeking datapack_ident by " +
+                        "idx_dp_ident_key, which is the 570 s plan. Links keep the var and whole-name tiers.");
+                    return;
+                }
+
+                conn.ExecUtf8(
+                    "DROP TABLE IF EXISTS temp.dp_prefix_hit;" +
+                    "CREATE TEMP TABLE dp_prefix_hit(pack_id TEXT NOT NULL, pkg_uid TEXT NOT NULL," +
+                    "entry_id INTEGER NOT NULL, klen INTEGER NOT NULL);" +
+                    "INSERT INTO temp.dp_prefix_hit(pack_id, pkg_uid, entry_id, klen) " + hitSelect + ";" +
+                    "CREATE INDEX temp.idx_dp_prefix_hit ON dp_prefix_hit(pack_id, pkg_uid, klen);" +
+
+                    "DROP TABLE IF EXISTS temp.dp_prefix_pick;" +
+                    "CREATE TEMP TABLE dp_prefix_pick(pack_id TEXT NOT NULL, pkg_uid TEXT NOT NULL," +
+                    "klen INTEGER NOT NULL, PRIMARY KEY(pack_id, pkg_uid));" +
+                    "INSERT OR IGNORE INTO temp.dp_prefix_pick(pack_id, pkg_uid, klen) " +
+                    "SELECT pack_id, pkg_uid, MAX(klen) FROM temp.dp_prefix_hit " +
+                    "GROUP BY pack_id, pkg_uid;");
+
+                string linkSql =
+                    "INSERT OR IGNORE INTO datapack_link(pack_id,pkg_uid,entry_id,match_kind) " +
+                    "SELECT h.pack_id, h.pkg_uid, h.entry_id, " + DataPackMatchKindNamePrefix + " " +
+                    "FROM temp.dp_prefix_hit h " +
+                    "CROSS JOIN temp.dp_prefix_pick pk ON pk.pack_id = h.pack_id " +
+                    "AND pk.pkg_uid = h.pkg_uid AND pk.klen = h.klen";
+
+                if (scoped)
+                {
+                    using (var st = conn.Prepare(linkSql + " WHERE h.pack_id=?"))
+                    {
+                        st.BindText(1, packId);
+                        st.Step();
+                    }
+                }
+                else
+                    conn.ExecUtf8(linkSql + ";");
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB.DB] data pack name-prefix link pass failed: " + ex.Message); }
+                catch { }
+            }
+            finally
+            {
+                try
+                {
+                    conn.ExecUtf8(
+                        "DROP TABLE IF EXISTS temp.dp_prefix_pick;" +
+                        "DROP TABLE IF EXISTS temp.dp_prefix_hit;" +
+                        "DROP TABLE IF EXISTS temp.dp_ident_amb;");
+                }
+                catch { }
+                ReportDataPackStepTiming("name-prefix links", tStart, DataPackPrefixPassBudgetMs);
+            }
+        }
+
+        const int DataPackPrefixPassBudgetMs = 3000;
+
+        struct CategoryOnlyCandidate
+        {
+            public long EntryId;
+            public string NameKey;
+            public string Category;
+        }
+
+        static void AppendDataPackCategoryOnlyLinks(VpbSqlite3.Connection conn, string packId)
+        {
+            if (conn == null) return;
+            long tStart = Stopwatch.GetTimestamp();
+            int inserted = 0;
+            try
+            {
+                var packIds = new List<string>(2);
+                if (!string.IsNullOrEmpty(packId))
+                {
+                    if (IsDataPackHubListingPack(packId)) packIds.Add(packId);
+                }
+                else
+                {
+                    using (var st = conn.Prepare("SELECT pack_id FROM datapack"))
+                    {
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string p = st.ColumnText(0);
+                            if (!string.IsNullOrEmpty(p) && IsDataPackHubListingPack(p)) packIds.Add(p);
+                        }
+                    }
+                }
+                if (packIds.Count == 0) return;
+
+                var alreadyLinked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                using (var st = conn.Prepare(
+                    "SELECT DISTINCT pkg_uid FROM datapack_link WHERE pack_id='"
+                    + VpbDataPackService.HubTagsPackId + "' OR pack_id='"
+                    + VpbDataPackService.HubLivePackId + "'"))
+                {
+                    while (st.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string u = st.ColumnText(0);
+                        if (!string.IsNullOrEmpty(u)) alreadyLinked.Add(u);
+                    }
+                }
+
+                var pkgCreators = new List<string>(4096);
+                var pkgNames = new List<string>(4096);
+                var pkgUids = new List<string>(4096);
+                using (var st = conn.Prepare("SELECT uid, ifnull(ident_key,'') FROM pkg WHERE ifnull(ident_key,'')<>''"))
+                {
+                    while (st.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string uid = st.ColumnText(0);
+                        string key = st.ColumnText(1);
+                        if (string.IsNullOrEmpty(uid) || alreadyLinked.Contains(uid)) continue;
+                        string cr, nm;
+                        if (!TrySplitIdentKey(key, out cr, out nm)) continue;
+                        if (nm.Length < DataPackContainmentMinLen) continue;
+                        pkgUids.Add(uid);
+                        pkgCreators.Add(cr);
+                        pkgNames.Add(nm);
+                    }
+                }
+                if (pkgUids.Count == 0) return;
+
+                for (int pi = 0; pi < packIds.Count; pi++)
+                    inserted += AppendCategoryOnlyLinksForPack(conn, packIds[pi], pkgUids, pkgCreators, pkgNames);
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB.DB] data pack category-only link pass failed: " + ex.Message); }
+                catch { }
+            }
+            finally
+            {
+                if (inserted > 0)
+                    ReportDataPackStepTiming("category-only links (+" + inserted + ")", tStart, DataPackCategoryOnlyBudgetMs);
+            }
+        }
+
+        static int AppendCategoryOnlyLinksForPack(
+            VpbSqlite3.Connection conn,
+            string packId,
+            List<string> pkgUids,
+            List<string> pkgCreators,
+            List<string> pkgNames)
+        {
+            var categories = new Dictionary<long, string>(4096);
+            using (var st = conn.Prepare(
+                "SELECT entry_id, category FROM datapack_entry WHERE pack_id=? " +
+                "AND length(trim(ifnull(category,'')))>0"))
+            {
+                st.BindText(1, packId);
+                while (st.Step() == VpbSqlite3.SqliteRow)
+                    categories[st.ColumnInt64(0)] = st.ColumnText(1);
+            }
+            if (categories.Count == 0) return 0;
+
+            var byCreator = new Dictionary<string, List<CategoryOnlyCandidate>>(2048, StringComparer.Ordinal);
+            using (var st = conn.Prepare("SELECT entry_id, ident_key FROM datapack_ident WHERE pack_id=?"))
+            {
+                st.BindText(1, packId);
+                while (st.Step() == VpbSqlite3.SqliteRow)
+                {
+                    long eid = st.ColumnInt64(0);
+                    string cat;
+                    if (!categories.TryGetValue(eid, out cat)) continue;
+                    string cr, nm;
+                    if (!TrySplitIdentKey(st.ColumnText(1), out cr, out nm)) continue;
+                    if (nm.Length < DataPackContainmentMinLen) continue;
+                    List<CategoryOnlyCandidate> bucket;
+                    if (!byCreator.TryGetValue(cr, out bucket) || bucket == null)
+                    {
+                        bucket = new List<CategoryOnlyCandidate>(8);
+                        byCreator[cr] = bucket;
+                    }
+                    CategoryOnlyCandidate cc;
+                    cc.EntryId = eid;
+                    cc.NameKey = nm;
+                    cc.Category = cat;
+                    bucket.Add(cc);
+                }
+            }
+            if (byCreator.Count == 0) return 0;
+
+            int inserted = 0;
+            using (var ins = conn.Prepare(
+                "INSERT OR IGNORE INTO datapack_link(pack_id,pkg_uid,entry_id,match_kind) VALUES(?,?,?,"
+                + DataPackMatchKindCategoryOnly + ")"))
+            {
+                for (int i = 0; i < pkgUids.Count; i++)
+                {
+                    List<CategoryOnlyCandidate> bucket;
+                    if (!byCreator.TryGetValue(pkgCreators[i], out bucket) || bucket == null) continue;
+
+                    string name = pkgNames[i];
+                    string wonCategory = null;
+                    long wonEntry = 0;
+                    int wonLen = -1;
+                    bool ambiguous = false;
+                    for (int b = 0; b < bucket.Count; b++)
+                    {
+                        CategoryOnlyCandidate cc = bucket[b];
+                        if (name.IndexOf(cc.NameKey, StringComparison.Ordinal) < 0
+                            && cc.NameKey.IndexOf(name, StringComparison.Ordinal) < 0)
+                            continue;
+                        if (wonCategory == null)
+                        {
+                            wonCategory = cc.Category;
+                            wonEntry = cc.EntryId;
+                            wonLen = cc.NameKey.Length;
+                            continue;
+                        }
+                        if (!string.Equals(wonCategory, cc.Category, StringComparison.OrdinalIgnoreCase))
+                        {
+                            ambiguous = true;
+                            break;
+                        }
+                        if (cc.NameKey.Length > wonLen)
+                        {
+                            wonEntry = cc.EntryId;
+                            wonLen = cc.NameKey.Length;
+                        }
+                    }
+                    if (ambiguous || wonCategory == null) continue;
+
+                    ins.BindText(1, packId);
+                    ins.BindText(2, pkgUids[i]);
+                    ins.BindInt64(3, wonEntry);
+                    ins.Step();
+                    ins.Reset();
+                    inserted++;
+                }
+            }
+            return inserted;
+        }
+
+        static bool IsDataPackHubListingPack(string packId)
+        {
+            return string.Equals(packId, VpbDataPackService.HubTagsPackId, StringComparison.Ordinal)
+                || string.Equals(packId, VpbDataPackService.HubLivePackId, StringComparison.Ordinal);
+        }
+
+        static bool TrySplitIdentKey(string identKey, out string creator, out string name)
+        {
+            creator = null;
+            name = null;
+            if (string.IsNullOrEmpty(identKey)) return false;
+            int bar = identKey.IndexOf('|');
+            if (bar <= 0 || bar >= identKey.Length - 1) return false;
+            creator = identKey.Substring(0, bar);
+            name = identKey.Substring(bar + 1);
+            return true;
+        }
+
+        const int DataPackCategoryOnlyBudgetMs = 4000;
+
+        static void ReportDataPackStepTiming(string label, long startTicks, int budgetMs)
+        {
+            try
+            {
+                double ms = (Stopwatch.GetTimestamp() - startTicks) * 1000.0 / Stopwatch.Frequency;
+                if (ms >= budgetMs)
+                    LogUtil.LogWarning("[VPB.DB] data pack " + label + " took " + ms.ToString("F0")
+                        + " ms (budget " + budgetMs + " ms) — check the query plan before shipping.");
+                else
+                    LogUtil.Log("[VPB.DB] data pack " + label + " " + ms.ToString("F0") + " ms");
+            }
+            catch { }
+        }
+
+        static bool DataPackPrefixJoinPlanIsSane(VpbSqlite3.Connection conn, string joinSql)
+        {
+            bool sawIdentTable = false;
+            try
+            {
+                using (var st = conn.Prepare("EXPLAIN QUERY PLAN " + joinSql))
+                {
+                    while (st.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string detail = st.ColumnText(3);
+                        if (string.IsNullOrEmpty(detail)) continue;
+                        if (detail.IndexOf("datapack_ident", StringComparison.Ordinal) < 0) continue;
+                        sawIdentTable = true;
+                        if (detail.IndexOf("idx_dp_ident_key", StringComparison.Ordinal) >= 0)
+                            return true;
+                    }
+                }
+            }
+            catch
+            {
+                return true;
+            }
+            return !sawIdentTable;
+        }
+
+        static void EnsurePkgIdentTable(VpbSqlite3.Connection conn)
+        {
+            if (conn == null) return;
+            try
+            {
+                conn.ExecUtf8(
+                    "CREATE TABLE IF NOT EXISTS pkg_ident (" +
+                    "pkg_uid TEXT NOT NULL, ident_key TEXT NOT NULL, klen INTEGER NOT NULL," +
+                    "PRIMARY KEY(pkg_uid, ident_key));" +
+                    "CREATE INDEX IF NOT EXISTS idx_pkg_ident_prefix ON pkg_ident(ident_key);");
+            }
+            catch { }
         }
 
         static int BackfillDataPackResourceIds(VpbSqlite3.Connection conn)
@@ -1169,7 +2042,8 @@ namespace VPB
                         "SELECT de.subject, de.category " +
                         "FROM datapack_link dl " +
                         "CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id " +
-                        "WHERE dl.pkg_uid=? AND length(trim(ifnull(de.subject,'')))>0 " +
+                        "WHERE dl.pkg_uid=? AND length(trim(ifnull(de.subject,'')))>0" +
+                        DataPackLinkIdentityOnlyAnd + " " +
                         "ORDER BY dl.match_kind ASC LIMIT 1"))
                     {
                         st.BindText(1, pkgUid);
@@ -1180,13 +2054,32 @@ namespace VPB
                         }
                     }
 
+                    using (var st = conn.Prepare(
+                        "SELECT de.category, MIN(dl.match_kind) mk FROM datapack_link dl " +
+                        "CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id " +
+                        "WHERE dl.pkg_uid=? AND length(trim(ifnull(de.category,'')))>0 " +
+                        "AND (de.pack_id='" + VpbDataPackService.HubTagsPackId + "' OR de.pack_id='" + VpbDataPackService.HubLivePackId + "') " +
+                        "GROUP BY lower(trim(de.category)) ORDER BY mk ASC"))
+                    {
+                        st.BindText(1, pkgUid);
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string shown = DataPackHubCategoryDisplayName(st.ColumnText(0) ?? "");
+                            if (shown.Length == 0) continue;
+                            overlay.HubTypeCategory = shown;
+                            break;
+                        }
+                    }
+
                     overlay.Found = !string.IsNullOrEmpty(overlay.Subject)
-                        || !string.IsNullOrEmpty(overlay.Category);
+                        || !string.IsNullOrEmpty(overlay.Category)
+                        || !string.IsNullOrEmpty(overlay.HubTypeCategory);
 
                     var qsb = new StringBuilder(320);
                     qsb.Append("SELECT DISTINCT dt.tag FROM datapack_link dl ");
                     qsb.Append("CROSS JOIN datapack_tag dt ON dt.pack_id=dl.pack_id AND dt.entry_id=dl.entry_id ");
                     qsb.Append("AND dt.ns='hub' WHERE dl.pkg_uid=?");
+                    AppendDataPackLinkIdentityOnlySql(qsb, "dl");
                     AppendDataPackTagNotHiddenSql(qsb, "dt.tag", "dl.pkg_uid");
                     qsb.Append(" ORDER BY dt.tag LIMIT ").Append(DataPackOverlayHubTagCap);
 
@@ -1233,7 +2126,8 @@ namespace VPB
                     using (var st = conn.Prepare(
                         "SELECT DISTINCT dt.tag FROM datapack_link dl " +
                         "CROSS JOIN datapack_tag dt ON dt.pack_id=dl.pack_id AND dt.entry_id=dl.entry_id " +
-                        "AND dt.ns='hub' WHERE dl.pkg_uid=? ORDER BY dt.tag LIMIT " + cap))
+                        "AND dt.ns='hub' WHERE dl.pkg_uid=?" + DataPackLinkIdentityOnlyAnd +
+                        " ORDER BY dt.tag LIMIT " + cap))
                     {
                         st.BindText(1, pkgUid);
                         while (st.Step() == VpbSqlite3.SqliteRow)

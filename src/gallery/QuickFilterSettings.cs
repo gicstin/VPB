@@ -37,6 +37,8 @@ namespace VPB
         public int HairSubfilter = 0;
         public int AppearanceSubfilter = 0;
         public int PosePeopleFilter = 0;
+        public int SceneHubSubfilter = 0;
+        public bool HasSceneHubSubfilter;
         public SortState SortState;
         public int BrowseHiddenMode = 0;
         public int BrowseAlwaysLoadedMode = 0;
@@ -114,6 +116,8 @@ namespace VPB
             node["HairSubfilter"].AsInt = HairSubfilter;
             node["AppearanceSubfilter"].AsInt = AppearanceSubfilter;
             node["PosePeopleFilter"].AsInt = PosePeopleFilter;
+            if (HasSceneHubSubfilter)
+                node["SceneHubSubfilter"].AsInt = SceneHubSubfilter;
             node["BrowseHiddenMode"].AsInt = BrowseHiddenMode;
             node["BrowseAlwaysLoadedMode"].AsInt = BrowseAlwaysLoadedMode;
             node["BrowseOldVersionsMode"].AsInt = BrowseOldVersionsMode;
@@ -323,6 +327,8 @@ namespace VPB
                 dest.HairSubfilter = AgreeIntField(leaves, 7, 0);
                 dest.AppearanceSubfilter = AgreeIntField(leaves, 8, 0);
                 dest.PosePeopleFilter = AgreeIntField(leaves, 9, 0);
+                dest.SceneHubSubfilter = AgreeIntField(leaves, 10, 0);
+                dest.HasSceneHubSubfilter = AnyLeafHasSceneHubSubfilter(leaves);
             }
             else
             {
@@ -331,6 +337,8 @@ namespace VPB
                 dest.HairSubfilter = 0;
                 dest.AppearanceSubfilter = 0;
                 dest.PosePeopleFilter = 0;
+                dest.SceneHubSubfilter = 0;
+                dest.HasSceneHubSubfilter = false;
             }
 
             dest.SceneSourceFilter = "";
@@ -380,7 +388,17 @@ namespace VPB
             }
         }
 
-        /// <summary>field: 0=GlobalSource 1=BrowseHidden 2=AlwaysLoaded 3=OldVersions 4=Loaded 5=Unused 6=Clothing 7=Hair 8=Appearance 9=PosePeople</summary>
+        private static bool AnyLeafHasSceneHubSubfilter(IList<QuickFilterEntry> leaves)
+        {
+            for (int i = 0; i < leaves.Count; i++)
+            {
+                QuickFilterEntry L = leaves[i];
+                if (L != null && L.HasSceneHubSubfilter) return true;
+            }
+            return false;
+        }
+
+        /// <summary>field: 0=GlobalSource 1=BrowseHidden 2=AlwaysLoaded 3=OldVersions 4=Loaded 5=Unused 6=Clothing 7=Hair 8=Appearance 9=PosePeople 10=SceneHub</summary>
         private static int AgreeIntField(IList<QuickFilterEntry> leaves, int field, int fallback)
         {
             bool have = false;
@@ -402,6 +420,7 @@ namespace VPB
                     case 7: cur = L.HairSubfilter; break;
                     case 8: cur = L.AppearanceSubfilter; break;
                     case 9: cur = L.PosePeopleFilter; break;
+                    case 10: cur = L.SceneHubSubfilter; break;
                     default: cur = fallback; break;
                 }
                 if (!have) { v = cur; have = true; continue; }
@@ -482,6 +501,11 @@ namespace VPB
             entry.HairSubfilter = node["HairSubfilter"] != null ? node["HairSubfilter"].AsInt : 0;
             entry.AppearanceSubfilter = node["AppearanceSubfilter"] != null ? node["AppearanceSubfilter"].AsInt : 0;
             entry.PosePeopleFilter = node["PosePeopleFilter"] != null ? node["PosePeopleFilter"].AsInt : 0;
+            if (node["SceneHubSubfilter"] != null)
+            {
+                entry.HasSceneHubSubfilter = true;
+                entry.SceneHubSubfilter = node["SceneHubSubfilter"].AsInt;
+            }
             if (node["BrowseHiddenMode"] != null || node["BrowseAlwaysLoadedMode"] != null || node["BrowseOldVersionsMode"] != null || node["BrowseLoadedMode"] != null || node["BrowseUnusedMode"] != null)
             {
                 entry.BrowseHiddenMode = node["BrowseHiddenMode"] != null ? node["BrowseHiddenMode"].AsInt : 0;

@@ -3594,7 +3594,7 @@ namespace VPB
             SyncActiveContentTypeFromSidePanels();
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             if (!hasHistorySide && hadHistorySide && titleText != null)
-                titleText.text = currentCategoryTitle;
+                ApplyGalleryTitleText();
 
             bool hasSettingsPanel = IsSettingsPanelOpen();
             if (!hadSettingsPanel && hasSettingsPanel)

@@ -414,6 +414,8 @@ namespace VPB
                     VpbLocalDatabase.TryCollectPackageUidsForDataPackTerms(
                         query.PackHubTagTerms, GallerySearchQuery.DataPackAtomKind.HubTag, map);
                     VpbLocalDatabase.TryCollectPackageUidsForDataPackTerms(
+                        query.PackHubCatTerms, GallerySearchQuery.DataPackAtomKind.HubCategory, map);
+                    VpbLocalDatabase.TryCollectPackageUidsForDataPackTerms(
                         query.PackAnyTerms, GallerySearchQuery.DataPackAtomKind.Any, map);
                 }
                 if (VpbLocalDatabase.DataPackSubjectSearchEnabled())
@@ -539,6 +541,8 @@ namespace VPB
             if (!DataPackListMatches(br.PackSubjectExclude, uidsByTerm, packageUid, true)) return false;
             if (!DataPackListMatches(br.PackHubTagInclude, uidsByTerm, packageUid, false)) return false;
             if (!DataPackListMatches(br.PackHubTagExclude, uidsByTerm, packageUid, true)) return false;
+            if (!DataPackListMatches(br.PackHubCatInclude, uidsByTerm, packageUid, false)) return false;
+            if (!DataPackListMatches(br.PackHubCatExclude, uidsByTerm, packageUid, true)) return false;
             if (!DataPackListMatches(br.PackAnyInclude, uidsByTerm, packageUid, false)) return false;
             if (!DataPackListMatches(br.PackAnyExclude, uidsByTerm, packageUid, true)) return false;
             return true;

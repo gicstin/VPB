@@ -189,6 +189,9 @@ namespace VPB
             AddCommandPaletteEntry("looks_like", "gallery.cmd.looks_like", "Looks like & Hub tags", "", GBrowse, "character identity hub tags lookapedia jinx kinx tags",
                 () => { try { OpenUserTagsForPackFacet(); } catch { } },
                 LookFacetPackEnabled);
+            AddCommandPaletteEntry("hub_type", "gallery.cmd.hub_type", "Hub type", "", GBrowse, "hubcat looks scenes clothing listing category hub type",
+                () => { try { OpenCategoryHubTypeFacet(); } catch { } },
+                LookFacetHubModeAvailable);
             AddCommandPaletteEntry("filter_presets", "gallery.cmd.filter_presets", "Filter presets", ScHint(VpbShortcut.FilterPresets), GBrowse, "quick filters qf saved",
                 () =>
                 {

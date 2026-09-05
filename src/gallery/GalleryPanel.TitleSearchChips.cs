@@ -504,6 +504,16 @@ namespace VPB
             return ToggleTitleSearchPackChip(TitleSearchChipKind.PackHubTag, token, exact, TitleSearchChipPolarity.Exclude);
         }
 
+        private bool ToggleTitleSearchPackHubCatChip(string token, bool exact)
+        {
+            return ToggleTitleSearchPackChip(TitleSearchChipKind.PackHubCat, token, exact);
+        }
+
+        private bool ToggleTitleSearchPackHubCatExcludeChip(string token, bool exact)
+        {
+            return ToggleTitleSearchPackChip(TitleSearchChipKind.PackHubCat, token, exact, TitleSearchChipPolarity.Exclude);
+        }
+
         private bool ToggleTitleSearchPackChip(TitleSearchChipKind kind, string token, bool exact)
         {
             return ToggleTitleSearchPackChip(kind, token, exact, TitleSearchChipPolarity.Include);

@@ -181,6 +181,45 @@ namespace VPB
                     }
                 }
             }
+            else if ((IsGalleryScenesCategory(currentCategoryTitle) || IsGalleryScenesCategory(title))
+                && LookFacetHubModeAvailable())
+            {
+                Color inactive = ColorInactiveRow;
+                Color active = ColorFacetActiveRow;
+                SceneHubSubfilter sceneHubShown = EffectiveSceneHubSubfilter();
+                string[] options = new string[] { "Hub: Scenes", "Hub: Looks", "Unclassified", "Other Hub types" };
+                for (int gi = 0; gi < options.Length; gi++)
+                {
+                    string opt = options[gi];
+                    if (!AccordionChildPassesListFilter(opt)) continue;
+                    SceneHubSubfilter flag = 0;
+                    if (opt == "Hub: Scenes") flag = SceneHubSubfilter.HubScenes;
+                    else if (opt == "Hub: Looks") flag = SceneHubSubfilter.HubLooks;
+                    else if (opt == "Unclassified") flag = SceneHubSubfilter.Unclassified;
+                    else if (opt == "Other Hub types") flag = SceneHubSubfilter.Other;
+
+                    bool isActive = (flag != 0) && ((sceneHubShown & flag) != 0);
+                    Color btnColor = isActive ? active : inactive;
+                    string label = opt;
+                    if (opt == "Hub: Scenes")
+                        label = VPBTranslation.T("gallery.scenes.chip_hub_scenes", "Hub: Scenes");
+                    else if (opt == "Hub: Looks")
+                        label = VPBTranslation.T("gallery.scenes.chip_hub_looks", "Hub: Looks");
+                    else if (opt == "Unclassified")
+                        label = VPBTranslation.T("gallery.scenes.chip_unclassified", "Unclassified");
+                    else if (opt == "Other Hub types")
+                        label = VPBTranslation.T("gallery.scenes.chip_hub_other", "Other Hub types");
+
+                    SceneHubSubfilter flagSnap = flag;
+                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                        if (flagSnap != 0)
+                            SetSceneHubSubfilterExplicit(EffectiveSceneHubSubfilter() ^ flagSnap);
+                        tagsCached = false;
+                        RefreshFilesAndTabs();
+                        SyncBrowseFilterChipChrome();
+                    }, trackedButtons);
+                }
+            }
             else if (title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 {

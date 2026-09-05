@@ -7,6 +7,7 @@ namespace VPB
     {
         internal const string LookapediaPackId = "lookapedia";
         internal const string HubTagsPackId = "hubtags";
+        internal const string HubLivePackId = "hublive";
 
         internal const int PackIndexLookapedia = 0;
         internal const int PackIndexHubTags = 1;
