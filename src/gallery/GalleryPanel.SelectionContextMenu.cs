@@ -238,7 +238,14 @@ namespace VPB
                 {
                     if (child == null) continue;
                     var cle = child.GetComponent<LayoutElement>();
-                    if (cle != null) { cle.minHeight = innerRowH; cle.preferredHeight = innerRowH; }
+                    if (cle == null) continue;
+                    cle.minHeight = innerRowH;
+                    cle.preferredHeight = innerRowH;
+                    if (child.name == "GenderBadge")
+                    {
+                        cle.minWidth = innerRowH;
+                        cle.preferredWidth = innerRowH;
+                    }
                 }
             }
         }
@@ -1742,18 +1749,6 @@ namespace VPB
 
         private string GetPersonAtomDisplayLabel(Atom atom, string uid)
         {
-            string gender = "";
-            try
-            {
-                if (atom != null && string.Equals(atom.type, "Person", StringComparison.Ordinal))
-                {
-                    if (AtomGenderUtils.IsFuta(atom)) gender = "[Futa] ";
-                    else if (AtomGenderUtils.IsMale(atom)) gender = "[Male] ";
-                    else if (AtomGenderUtils.IsFemale(atom)) gender = "[Female] ";
-                }
-            }
-            catch { gender = ""; }
-
             try
             {
                 JSONStorable storable = atom?.GetStorableByID("AppearancePresets");
@@ -1765,12 +1760,12 @@ namespace VPB
                     {
                         string presetName = MVR.FileManagementSecure.FileManagerSecure.GetFileName(presetParam.val);
                         if (!string.IsNullOrEmpty(presetName))
-                            return $"{gender}{presetName} ({uid})";
+                            return $"{presetName} ({uid})";
                     }
                 }
             }
             catch { }
-            return $"{gender}{uid}";
+            return uid;
         }
 
         private void RefreshTboxPersonAtomButtons()
@@ -1786,6 +1781,7 @@ namespace VPB
             }
             foreach (var go in tboxPersonAtomBtns) { if (go != null) Destroy(go); }
             tboxPersonAtomBtns.Clear();
+            tboxTargetDropdownGenderBadge = null;
 
             bool hasReal = personAtoms.Count > 0 && personAtoms[0] != null;
             if (!hasReal)
@@ -1806,12 +1802,38 @@ namespace VPB
             rowRT.anchorMin = Vector2.zero; rowRT.anchorMax = Vector2.one;
             rowRT.pivot = new Vector2(0.5f, 0.5f);
             rowRT.offsetMin = rowRT.offsetMax = Vector2.zero;
-            var rowHLG = UI.AddHLG(tboxTargetDropdownRowGO, spacing: UI.GapHair(), childForceExpandHeight: true);
+            var rowHLG = UI.AddHLG(tboxTargetDropdownRowGO, spacing: UI.GapHair(), childForceExpandWidth: false, childForceExpandHeight: true);
             var rowLE = UI.AddLE(tboxTargetDropdownRowGO, minWidth: 140f, minHeight: innerRowH, preferredWidth: 220f, preferredHeight: innerRowH, flexibleWidth: 1f, flexibleHeight: 0f);
             tboxPersonAtomBtns.Add(tboxTargetDropdownRowGO);
 
             float sScale = ChromeScale;
             int dropdownFont = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, sScale, GalleryUiDesignTokens.FontMinRef);
+
+            float badgeSz = innerRowH;
+            GameObject badgeGO = UI.CreateUIButton(
+                tboxTargetDropdownRowGO, badgeSz, badgeSz, "", dropdownFont, 0, 0, AnchorPresets.middleCenter,
+                () => { try { ToggleTboxTargetMenu(); } catch { } });
+            badgeGO.name = "GenderBadge";
+            Image badgeBg = badgeGO.GetComponent<Image>();
+            if (badgeBg != null) badgeBg.color = inactiveColor;
+            Text badgeLabel = badgeGO.GetComponentInChildren<Text>(true);
+            if (badgeLabel != null) badgeLabel.gameObject.SetActive(false);
+            LayoutElement badgeLe = badgeGO.GetComponent<LayoutElement>() ?? badgeGO.AddComponent<LayoutElement>();
+            badgeLe.minWidth = badgeLe.preferredWidth = badgeSz;
+            badgeLe.minHeight = badgeLe.preferredHeight = badgeSz;
+            badgeLe.flexibleWidth = 0f;
+            badgeLe.flexibleHeight = 0f;
+
+            GameObject badgeIconGO = new GameObject("Icon");
+            badgeIconGO.transform.SetParent(badgeGO.transform, false);
+            tboxTargetDropdownGenderBadge = badgeIconGO.AddComponent<Image>();
+            tboxTargetDropdownGenderBadge.raycastTarget = false;
+            tboxTargetDropdownGenderBadge.preserveAspect = true;
+            UI.SizeButtonIcon(
+                badgeIconGO.GetComponent<RectTransform>(),
+                badgeGO.GetComponent<RectTransform>(),
+                GalleryUiDesignTokens.FloatChromeIconPadRef);
+            badgeGO.SetActive(false);
 
             string activeLabel = IsSubSceneTargetMode()
                 ? VPBTranslation.T("gallery.tbox.subscene_target", "SubScene")
@@ -1836,12 +1858,16 @@ namespace VPB
             le.preferredHeight = innerRowH; le.flexibleHeight = 1f;
             tboxTargetDropdownBtnText = btn.GetComponentInChildren<Text>(true);
             if (tboxTargetDropdownBtnText != null) tboxTargetDropdownBtnText.gameObject.SetActive(true);
-            AddTooltipPlain(btn, IsSubSceneTargetMode()
+            string targetTip = IsSubSceneTargetMode()
                 ? VPBTranslation.T("gallery.tbox.subscene_target_select", "Select active SubScene target. Right click: cycle targets")
                 : (IsCuaTargetMode()
                     ? VPBTranslation.T("gallery.tbox.cua_target_select", "Select which Custom Unity Asset atom receives the asset. None = spawn a new one. Right click: cycle targets")
-                    : VPBTranslation.T("gallery.tbox.target_select", "Select active person target. Right click: cycle targets")));
+                    : VPBTranslation.T("gallery.tbox.target_select", "Select active person target. Right click: cycle targets"));
+            AddTooltipPlain(btn, targetTip);
+            AddTooltipPlain(badgeGO, targetTip);
             try { AddRightClickDelegate(btn, () => CycleTarget(true)); } catch { }
+            try { AddRightClickDelegate(badgeGO, () => CycleTarget(true)); } catch { }
+            SyncTboxTargetDropdownGenderBadge();
 
             try
             {
@@ -1850,6 +1876,31 @@ namespace VPB
                 Canvas.ForceUpdateCanvases();
             }
             catch { }
+        }
+
+        private void SyncTboxTargetDropdownGenderBadge()
+        {
+            if (tboxTargetDropdownGenderBadge == null) return;
+
+            Transform wellTr = tboxTargetDropdownGenderBadge.transform.parent;
+            GameObject well = wellTr != null ? wellTr.gameObject : tboxTargetDropdownGenderBadge.gameObject;
+
+            Atom atom = null;
+            try
+            {
+                int i = targetDropdownValue;
+                if (personAtoms != null && i >= 0 && i < personAtoms.Count) atom = personAtoms[i];
+            }
+            catch { atom = null; }
+
+            Sprite spr = UI.LoadGenderIconSprite(AtomGenderUtils.ClassifyForBadge(atom));
+            if (spr == null)
+            {
+                if (well.activeSelf) well.SetActive(false);
+                return;
+            }
+            UI.SetIconSprite(tboxTargetDropdownGenderBadge, spr);
+            if (!well.activeSelf) well.SetActive(true);
         }
 
         private void EnsureTboxTargetMenuBuilt()
@@ -1941,18 +1992,49 @@ namespace VPB
 
                 var rowLE = UI.AddLE(rowGO, preferredHeight: rowH, flexibleWidth: 1f);
 
+                UnityAction pickTarget = () =>
+                {
+                    bool changed = targetDropdownValue != captured;
+                    targetDropdownValue = captured;
+                    UpdateTargetDropdownUI();
+                    CloseTboxTargetMenu();
+                    if (changed) OnTargetAtomChanged("dropdown");
+                };
+
+                Sprite genderSpr = UI.LoadGenderIconSprite(AtomGenderUtils.ClassifyForBadge(atom));
+                float genderSz = Mathf.Min(rowH - 6f, GalleryUiDesignTokens.PersonGenderBadgeRef * sScale);
+                if (genderSpr != null)
+                {
+                    GameObject genderGO = new GameObject("GenderBadge");
+                    genderGO.transform.SetParent(rowGO.transform, false);
+                    Image genderBg = UI.AddGalleryElementRoundedBg(genderGO, UI.PopupRowBackdrop, raycastTarget: true);
+                    UIHoverBorder genderHb = genderGO.AddComponent<UIHoverBorder>();
+                    UI.EnableChromeIdleRim(genderHb);
+                    UI.AddLE(genderGO, minWidth: genderSz, preferredWidth: genderSz, preferredHeight: genderSz,
+                             flexibleWidth: 0f, flexibleHeight: 0f);
+                    Button genderBtn = genderGO.AddComponent<Button>();
+                    genderBtn.transition = Selectable.Transition.None;
+                    if (genderBg != null) genderBtn.targetGraphic = genderBg;
+                    UI.NeutralizeSelectableColorTint(genderBtn);
+                    genderBtn.onClick.AddListener(pickTarget);
+
+                    GameObject genderIconGO = new GameObject("Icon");
+                    genderIconGO.transform.SetParent(genderGO.transform, false);
+                    Image genderImg = genderIconGO.AddComponent<Image>();
+                    genderImg.raycastTarget = false;
+                    genderImg.preserveAspect = true;
+                    UI.SetIconSprite(genderImg, genderSpr);
+                    UI.SizeButtonIcon(
+                        genderIconGO.GetComponent<RectTransform>(),
+                        genderGO.GetComponent<RectTransform>(),
+                        GalleryUiDesignTokens.FloatChromeIconPadRef);
+                }
+
                 string rowLabel = (isCurrent ? "\u2713  " : "    ") + label;
                 GameObject selectBtn = UI.CreateUIButton(
                     rowGO, 0, 0, rowLabel, labelFont, 0, 0,
                     AnchorPresets.stretchAll,
-                    () =>
-                    {
-                        bool changed = targetDropdownValue != captured;
-                        targetDropdownValue = captured;
-                        UpdateTargetDropdownUI();
-                        CloseTboxTargetMenu();
-                        if (changed) OnTargetAtomChanged("dropdown");
-                    });
+                    pickTarget);
 
                 var selectImg = selectBtn.GetComponent<Image>();
                 if (selectImg != null) selectImg.color = new Color(0f, 0f, 0f, 0f);

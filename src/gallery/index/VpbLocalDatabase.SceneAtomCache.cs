@@ -12,7 +12,8 @@ namespace VPB
     // Import sidebar populates its picker (and slices one atom at Apply) without re-parsing the scene.
     internal static partial class VpbLocalDatabase
     {
-        const int SceneAtomCacheSchemaVersion = 2;
+        const int SceneAtomCacheSchemaVersion = 4;
+        internal const int SceneAtomGenderNotComputed = -1;
         const string MetaSceneAtomCacheSchemaKey = "scene_atom_cache_schema_v";
         private static readonly object s_SceneAtomCacheMaintenanceLock = new object();
         private static readonly object s_SceneAtomCacheTrimLock = new object();
@@ -66,6 +67,7 @@ namespace VPB
                 "seq INTEGER NOT NULL," +
                 "atom_json TEXT NOT NULL," +
                 "sig TEXT NOT NULL," +
+                "gender INTEGER NOT NULL DEFAULT -1," +
                 "PRIMARY KEY(scene_key, atom_id));");
             conn.ExecUtf8(
                 "CREATE TABLE IF NOT EXISTS scene_person_atom_usage (" +
@@ -94,6 +96,12 @@ namespace VPB
                     "INSERT OR IGNORE INTO scene_person_atom_usage(scene_key,cached_at,bytes) " +
                     "SELECT scene_key,MIN(rowid),SUM(length(CAST(atom_json AS BLOB))) " +
                     "FROM scene_person_atom GROUP BY scene_key;");
+                if (schemaVersion < 4)
+                {
+                    try { conn.ExecUtf8("ALTER TABLE scene_person_atom ADD COLUMN gender INTEGER NOT NULL DEFAULT -1;"); }
+                    catch { }
+                    conn.ExecUtf8("UPDATE scene_person_atom SET gender=" + SceneAtomGenderNotComputed + ";");
+                }
                 using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
                 {
                     st.BindText(1, MetaSceneAtomCacheSchemaKey);
@@ -246,6 +254,11 @@ namespace VPB
         // caller re-parses and overwrites. Populates outIds in scene order.
         internal static bool TryReadSceneAtomIds(FileEntry entry, List<string> outIds)
         {
+            return TryReadSceneAtomIds(entry, outIds, null);
+        }
+
+        internal static bool TryReadSceneAtomIds(FileEntry entry, List<string> outIds, List<int> outGenders)
+        {
             if (entry == null || outIds == null) return false;
             if (!VpbSqlite3.IsAvailable) return false;
             string sceneKey = entry.Uid;
@@ -261,8 +274,9 @@ namespace VPB
                     // Accumulate locally and only publish on full success: a throw mid-step must not leave the
                     // caller's list half-filled, or its miss branch re-appends and duplicates picker rows.
                     List<string> found = new List<string>(4);
+                    List<int> genders = new List<int>(4);
                     using (var st = conn.Prepare(
-                        "SELECT atom_id FROM scene_person_atom WHERE scene_key=? AND sig=? ORDER BY seq"))
+                        "SELECT atom_id,gender FROM scene_person_atom WHERE scene_key=? AND sig=? ORDER BY seq"))
                     {
                         st.BindText(1, sceneKey);
                         st.BindText(2, sig);
@@ -271,10 +285,12 @@ namespace VPB
                             string id = st.ColumnText(0);
                             if (string.IsNullOrEmpty(id)) continue;
                             found.Add(id);
+                            genders.Add((int)st.ColumnInt64(1));
                         }
                     }
                     if (found.Count == 0) return false;
                     outIds.AddRange(found);
+                    if (outGenders != null) outGenders.AddRange(genders);
                     return true;
                 }
             }
@@ -319,6 +335,16 @@ namespace VPB
             }
         }
 
+        internal static int SceneAtomGenderToPersist(JSONClass node)
+        {
+            int gender = (int)VPB.src.util.LooseVapGenderProbe.ClassifyStorables(node);
+            if (gender != (int)VPB.src.util.LooseVapGenderProbe.Gender.Unknown) return gender;
+            bool mapReady;
+            try { mapReady = VPB.src.util.JSONExtensions.IsCharacterGenderMapInitComplete(); }
+            catch { mapReady = false; }
+            return mapReady ? gender : SceneAtomGenderNotComputed;
+        }
+
         // ids[i] is the SAME pid the picker derives (incl. "Person_"+i fallback) so Apply reads by pid with no re-match.
         // INSERT OR REPLACE tolerates duplicate pids; serialize via JsonSerializationUtil (SimpleJSON .ToString() is O(N^2)).
         internal static void TryWriteSceneAtoms(FileEntry entry, IList<string> ids, IList<JSONClass> nodes)
@@ -352,7 +378,7 @@ namespace VPB
                         }
                         long cachedBytes = 0;
                         using (var ins = conn.Prepare(
-                            "INSERT OR REPLACE INTO scene_person_atom(scene_key,atom_id,seq,atom_json,sig) VALUES(?,?,?,?,?)"))
+                            "INSERT OR REPLACE INTO scene_person_atom(scene_key,atom_id,seq,atom_json,sig,gender) VALUES(?,?,?,?,?,?)"))
                         {
                             for (int i = 0; i < ids.Count; i++)
                             {
@@ -365,6 +391,7 @@ namespace VPB
                                 ins.BindInt64(3, i);
                                 ins.BindText(4, atomJson);
                                 ins.BindText(5, sig);
+                                ins.BindInt64(6, SceneAtomGenderToPersist(node));
                                 ins.Step();
                                 ins.Reset();
                                 cachedBytes += Encoding.UTF8.GetByteCount(atomJson);

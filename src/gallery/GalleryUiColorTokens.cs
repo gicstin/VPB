@@ -146,6 +146,11 @@ namespace VPB
         public static readonly Color UserTagFilterExclude = new Color(0.62f, 0.28f, 0.28f, 1f);
         public static readonly Color UserTagDropGlow = new Color(0.40f, 0.72f, 0.50f, 1f);
 
+        // ── Person gender badge (atom pickers) ──────────────────────────────
+        public static readonly Color GenderMaleGlyph = new Color(0.46f, 0.68f, 0.96f, 1f);
+        public static readonly Color GenderFemaleGlyph = new Color(0.94f, 0.58f, 0.78f, 1f);
+        public static readonly Color GenderFutaGlyph = new Color(0.78f, 0.62f, 0.98f, 1f);
+
         // ── Title-search popup cue ──────────────────────────────────────────
         public static readonly Color TitleSearchPopupIdle = SurfacePanel;
         public static readonly Color TitleSearchPopupCue = new Color(0.36f, 0.36f, 0.38f, 1f);

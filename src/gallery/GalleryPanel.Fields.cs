@@ -1088,6 +1088,7 @@ namespace VPB
         private RectTransform tboxTargetMenuPanelRT;
         private GameObject tboxTargetDropdownRowGO;
         private Text tboxTargetDropdownBtnText;
+        private UnityEngine.UI.Image tboxTargetDropdownGenderBadge;
         private bool tboxTargetMenuOpen;
 
         private AppearanceGender GetAppearanceGender(FileEntry entry)

@@ -2838,6 +2838,17 @@ namespace VPB
             GalleryIconAtlas.Destroy();
         }
 
+        public static Sprite LoadGenderIconSprite(VPB.src.util.LooseVapGenderProbe.Gender gender)
+        {
+            if (gender == VPB.src.util.LooseVapGenderProbe.Gender.Female)
+                return LoadIconSprite("gender-female", GalleryUiColorTokens.GenderFemaleGlyph);
+            if (gender == VPB.src.util.LooseVapGenderProbe.Gender.Futa)
+                return LoadIconSprite("gender-hermaphrodite", GalleryUiColorTokens.GenderFutaGlyph);
+            if (gender == VPB.src.util.LooseVapGenderProbe.Gender.Male)
+                return LoadIconSprite("gender-male", GalleryUiColorTokens.GenderMaleGlyph);
+            return null;
+        }
+
         /// <summary>Loads a Tabler source id (e.g. <c>shirt-off</c>, <c>filled/star</c>).</summary>
         public static Sprite LoadIconSprite(string iconRole, Color? recolorTo = null)
         {

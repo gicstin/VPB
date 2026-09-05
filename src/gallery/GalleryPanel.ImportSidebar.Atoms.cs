@@ -6,6 +6,7 @@ using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
 using MVR.FileManagement;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -17,6 +18,17 @@ namespace VPB
         private const int ImportSidebarMaxRowsPerList = 32;
         private readonly List<GameObject> importSidebarSourceRowPool = new List<GameObject>(ImportSidebarMaxRowsPerList);
         private readonly List<GameObject> importSidebarTargetRowPool = new List<GameObject>(ImportSidebarMaxRowsPerList);
+
+        private sealed class ImportSidebarGenderSlot
+        {
+            public Image Icon;
+            public RectTransform IconRT;
+            public RectTransform LabelRT;
+        }
+        private readonly List<ImportSidebarGenderSlot> importSidebarSourceRowGenderSlots =
+            new List<ImportSidebarGenderSlot>(ImportSidebarMaxRowsPerList);
+        private readonly List<ImportSidebarGenderSlot> importSidebarTargetRowGenderSlots =
+            new List<ImportSidebarGenderSlot>(ImportSidebarMaxRowsPerList);
 
         // SubScene / bulk atom spawn fires onAtomAdded per atom. Coalesce to one rebuild/frame.
         private bool importSidebarTargetRefreshQueued;
@@ -99,6 +111,9 @@ namespace VPB
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
 
+            ImportSidebarGenderSlot genderSlot = CreateImportSidebarRowGenderSlot(row.transform, label);
+            (isSource ? importSidebarSourceRowGenderSlots : importSidebarTargetRowGenderSlots).Add(genderSlot);
+
             int capturedIndex = index;
             bool capturedIsSource = isSource;
             btn.onClick.AddListener(() => OnImportSidebarAtomRowClicked(capturedIndex, capturedIsSource));
@@ -114,6 +129,80 @@ namespace VPB
                 ApplyScaledFont(txtCaptured, ImportSidebarBaseFontSize, s);
             });
             return row;
+        }
+
+        private ImportSidebarGenderSlot CreateImportSidebarRowGenderSlot(Transform row, Text label)
+        {
+            GameObject go = new GameObject("GenderBadge");
+            go.transform.SetParent(row, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 0.5f);
+            rt.anchorMax = new Vector2(0f, 0.5f);
+            rt.pivot = new Vector2(0f, 0.5f);
+
+            Image img = go.AddComponent<Image>();
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+
+            ImportSidebarGenderSlot slot = new ImportSidebarGenderSlot();
+            slot.Icon = img;
+            slot.IconRT = rt;
+            slot.LabelRT = label != null ? label.GetComponent<RectTransform>() : null;
+            go.SetActive(false);
+
+            ImportSidebarGenderSlot captured = slot;
+            innerPaneScaleActions.Add(s => ApplyImportSidebarGenderSlotLayout(captured, s));
+            ApplyImportSidebarGenderSlotLayout(slot, ChromeScale);
+            return slot;
+        }
+
+        private static void ApplyImportSidebarGenderSlotLayout(ImportSidebarGenderSlot slot, float s)
+        {
+            if (slot == null) return;
+            if (s <= 0f) s = 1f;
+            float pad = GalleryUiDesignTokens.ImportSidebarLabelPadLeftRef * s;
+            float iconPad = GalleryUiDesignTokens.FloatChromeIconPadRef * s;
+            float size = Mathf.Max(0f, GalleryUiDesignTokens.PersonGenderBadgeRef * s - iconPad * 2f);
+
+            if (slot.IconRT != null)
+            {
+                slot.IconRT.sizeDelta = new Vector2(size, size);
+                slot.IconRT.anchoredPosition = new Vector2(pad, 0f);
+            }
+            if (slot.LabelRT != null)
+            {
+                bool shown = slot.Icon != null && slot.Icon.gameObject.activeSelf;
+                float left = shown ? pad + size + GalleryUiDesignTokens.TightGapRef * s : pad;
+                slot.LabelRT.offsetMin = new Vector2(left, 0f);
+            }
+        }
+
+        private void SetImportSidebarRowGender(List<ImportSidebarGenderSlot> slots, int index, LooseVapGenderProbe.Gender gender)
+        {
+            if (slots == null || index < 0 || index >= slots.Count) return;
+            ImportSidebarGenderSlot slot = slots[index];
+            if (slot == null || slot.Icon == null) return;
+
+            Sprite spr = UI.LoadGenderIconSprite(gender);
+            if (spr == null)
+            {
+                if (slot.Icon.gameObject.activeSelf) slot.Icon.gameObject.SetActive(false);
+            }
+            else
+            {
+                UI.SetIconSprite(slot.Icon, spr);
+                if (!slot.Icon.gameObject.activeSelf) slot.Icon.gameObject.SetActive(true);
+            }
+            ApplyImportSidebarGenderSlotLayout(slot, ChromeScale);
+        }
+
+        private static LooseVapGenderProbe.Gender ImportSidebarSourceGenderAt(List<int> genders, int index)
+        {
+            if (genders == null || index < 0 || index >= genders.Count) return LooseVapGenderProbe.Gender.Unknown;
+            int g = genders[index];
+            if (g < (int)LooseVapGenderProbe.Gender.Unknown || g > (int)LooseVapGenderProbe.Gender.Futa)
+                return LooseVapGenderProbe.Gender.Unknown;
+            return (LooseVapGenderProbe.Gender)g;
         }
 
         partial void SubscribeToAtomEvents()
@@ -263,16 +352,20 @@ namespace VPB
                 GameObject row = importSidebarTargetRowPool[i];
                 if (i < n)
                 {
-                    SetImportSidebarRowText(row, importSidebarTargetCandidates[i].uid);
+                    Atom a = importSidebarTargetCandidates[i];
+                    SetImportSidebarRowText(row, a.uid);
+                    SetImportSidebarRowGender(importSidebarTargetRowGenderSlots, i, AtomGenderUtils.ClassifyForBadge(a));
                     row.SetActive(true);
                 }
                 else if (i == n)
                 {
                     SetImportSidebarRowText(row, "<New Person Atom>");
+                    SetImportSidebarRowGender(importSidebarTargetRowGenderSlots, i, LooseVapGenderProbe.Gender.Unknown);
                     row.SetActive(true);
                 }
                 else
                 {
+                    SetImportSidebarRowGender(importSidebarTargetRowGenderSlots, i, LooseVapGenderProbe.Gender.Unknown);
                     row.SetActive(false);
                 }
             }
@@ -357,11 +450,17 @@ namespace VPB
                 {
                     string pid = importSidebarSourcePersonIds[i];
                     SetImportSidebarRowText(row, pid);
+                    SetImportSidebarRowGender(importSidebarSourceRowGenderSlots, i,
+                        ImportSidebarSourceGenderAt(importSidebarSourceGenders, i));
                     bool sel = importSidebarSourceAtomId == pid;
                     SetImportSidebarRowSelected(row, sel, !sel && targetUids.Contains(pid));
                     row.SetActive(true);
                 }
-                else row.SetActive(false);
+                else
+                {
+                    SetImportSidebarRowGender(importSidebarSourceRowGenderSlots, i, LooseVapGenderProbe.Gender.Unknown);
+                    row.SetActive(false);
+                }
             }
             // The container is the shared body-scroll content, so never SetActive(false) it (that would hide the
             // target list + options too). Inactive source rows already collapse out of the VLG.
@@ -386,6 +485,7 @@ namespace VPB
             importSidebarSourceScene = entry;
             importSidebarLoadedSceneJSON = null;
             importSidebarSourcePersonIds.Clear();
+            importSidebarSourceGenders.Clear();
             importSidebarSourceAtomId = null;
             importSidebarSourcePersonsPending = false;
 
@@ -398,7 +498,7 @@ namespace VPB
 
             // Cache HIT: person ids from SQLite — UI opens without full-scene parse. Full JSON loads in
             // background for CUA/Atoms chip counts + pickers (Warm path: defer heavy work off the click frame).
-            if (VpbLocalDatabase.TryReadSceneAtomIds(entry, importSidebarSourcePersonIds))
+            if (VpbLocalDatabase.TryReadSceneAtomIds(entry, importSidebarSourcePersonIds, importSidebarSourceGenders))
             {
                 if (importSidebarSourcePersonIds.Count > 0)
                     importSidebarSourceAtomId = importSidebarSourcePersonIds[0];
@@ -527,42 +627,70 @@ namespace VPB
             importSidebarSceneJsonLoading = false;
             importSidebarSceneJsonLoadCo = null;
 
-            if (writePersonCache || importSidebarSourcePersonIds.Count == 0)
-                ExtractAndCachePersonAtomsFromLoadedScene(entry, writePersonCache);
+            bool jsonReady = importSidebarLoadedSceneJSON != null;
+            bool healGenders = jsonReady
+                && !writePersonCache
+                && importSidebarSourcePersonIds.Count > 0
+                && ImportSidebarSourceGendersNeedProbe();
+
+            if (jsonReady && (writePersonCache || healGenders || importSidebarSourcePersonIds.Count == 0))
+                ExtractAndCachePersonAtomsFromLoadedScene(entry, writePersonCache || healGenders);
 
             importSidebarSourcePersonsPending = false;
             ApplyImportSidebarAfterSceneJsonReady();
         }
 
+        private bool ImportSidebarSourceGendersNeedProbe()
+        {
+            if (importSidebarSourceGenders.Count != importSidebarSourcePersonIds.Count) return true;
+            for (int i = 0; i < importSidebarSourceGenders.Count; i++)
+                if (importSidebarSourceGenders[i] == VpbLocalDatabase.SceneAtomGenderNotComputed) return true;
+            return false;
+        }
+
         private void ExtractAndCachePersonAtomsFromLoadedScene(FileEntry entry, bool writePersonCache)
         {
-            importSidebarSourcePersonIds.Clear();
+            List<string> ids = new List<string>(4);
+            List<int> genders = new List<int>(4);
             List<JSONClass> personNodes = new List<JSONClass>(4);
             if (importSidebarLoadedSceneJSON != null && importSidebarLoadedSceneJSON["atoms"] != null)
             {
                 JSONArray atoms = importSidebarLoadedSceneJSON["atoms"].AsArray;
-                for (int i = 0; i < atoms.Count; i++)
+                if (atoms != null)
                 {
-                    JSONClass a = atoms[i].AsObject;
-                    if (a == null) continue;
-                    if (a["type"] != null && a["type"].Value == "Person")
+                    for (int i = 0; i < atoms.Count; i++)
                     {
-                        string pid = (a["id"] != null && !string.IsNullOrEmpty(a["id"].Value))
-                            ? a["id"].Value
-                            : ("Person_" + i);
-                        importSidebarSourcePersonIds.Add(pid);
-                        personNodes.Add(a);
+                        JSONClass a = atoms[i].AsObject;
+                        if (a == null) continue;
+                        if (a["type"] != null && a["type"].Value == "Person")
+                        {
+                            string pid = (a["id"] != null && !string.IsNullOrEmpty(a["id"].Value))
+                                ? a["id"].Value
+                                : ("Person_" + i);
+                            ids.Add(pid);
+                            genders.Add(VpbLocalDatabase.SceneAtomGenderToPersist(a));
+                            personNodes.Add(a);
+                        }
                     }
                 }
-                if (importSidebarSourcePersonIds.Count > 0)
-                {
-                    if (string.IsNullOrEmpty(importSidebarSourceAtomId)
-                        || !importSidebarSourcePersonIds.Contains(importSidebarSourceAtomId))
-                        importSidebarSourceAtomId = importSidebarSourcePersonIds[0];
-                    if (writePersonCache && entry != null)
-                        VpbLocalDatabase.TryWriteSceneAtoms(entry, importSidebarSourcePersonIds, personNodes);
-                }
             }
+
+            if (ids.Count == 0)
+            {
+                if (importSidebarSourcePersonIds.Count > 0) return;
+                RenderSourceList();
+                return;
+            }
+
+            importSidebarSourcePersonIds.Clear();
+            importSidebarSourceGenders.Clear();
+            importSidebarSourcePersonIds.AddRange(ids);
+            importSidebarSourceGenders.AddRange(genders);
+            if (string.IsNullOrEmpty(importSidebarSourceAtomId)
+                || !importSidebarSourcePersonIds.Contains(importSidebarSourceAtomId))
+                importSidebarSourceAtomId = importSidebarSourcePersonIds[0];
+            if (writePersonCache && entry != null)
+                VpbLocalDatabase.TryWriteSceneAtoms(entry, importSidebarSourcePersonIds, personNodes);
             RenderSourceList();
         }
 

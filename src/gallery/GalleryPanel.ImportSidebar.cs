@@ -95,6 +95,7 @@ namespace VPB
         // Cached source scene JSON. Filled async after open (ThreadPool parse); kept until source changes.
         private JSONClass importSidebarLoadedSceneJSON;
         private readonly List<string> importSidebarSourcePersonIds = new List<string>(4);
+        private readonly List<int> importSidebarSourceGenders = new List<int>(4);
         /// <summary>Bumps on source change / cancel so stale background parses are dropped.</summary>
         private int importSidebarSceneJsonLoadGen;
         private Coroutine importSidebarSceneJsonLoadCo;

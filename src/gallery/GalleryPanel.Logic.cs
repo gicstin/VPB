@@ -4413,6 +4413,8 @@ namespace VPB
                     tboxTargetDropdownBtnText.text = label + "  ▲";
                 }
 
+                try { SyncTboxTargetDropdownGenderBadge(); } catch { }
+
                 // If menu open, rebuild checkmarks.
                 if (tboxTargetMenuOpen)
                 {

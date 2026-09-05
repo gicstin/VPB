@@ -2070,21 +2070,10 @@ namespace VPB
                     try { QuickMenuRefreshSlotVisual(i); } catch { }
         }
 
-        private static bool QuickMenuTryGetPersonIsMale(Atom person, out bool isMale)
+        private static VPB.src.util.LooseVapGenderProbe.Gender QuickMenuGetPersonGender(Atom person)
         {
-            isMale = false;
-            if (person == null) return false;
-            try
-            {
-                // Prefer DAZCharacter name heuristic (used elsewhere in VPB).
-                if (person.type == "Person")
-                {
-                    isMale = VPB.src.util.AtomGenderUtils.IsMale(person);
-                    return true;
-                }
-                return false;
-            }
-            catch { return false; }
+            try { return VPB.src.util.AtomGenderUtils.ClassifyForBadge(person); }
+            catch { return VPB.src.util.LooseVapGenderProbe.Gender.Unknown; }
         }
 
         private static string QuickMenuFormatPersonLabel(Atom person)
@@ -2097,9 +2086,12 @@ namespace VPB
                 try { name = person.uid; } catch { name = ""; }
             }
 
-            bool isMale;
-            if (QuickMenuTryGetPersonIsMale(person, out isMale))
-                return (isMale ? "Male: " : "Female: ") + name;
+            switch (QuickMenuGetPersonGender(person))
+            {
+                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return "Male: " + name;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return "Female: " + name;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return "Futa: " + name;
+            }
             return "Person: " + name;
         }
 
@@ -2221,11 +2213,11 @@ namespace VPB
         private static Color QuickMenuTargetAtomColorForPerson(Atom personOrNull)
         {
             if (personOrNull == null) return new Color(1f, 0f, 0f, 0.9f); // red
-            bool isMale;
-            if (QuickMenuTryGetPersonIsMale(personOrNull, out isMale))
+            switch (QuickMenuGetPersonGender(personOrNull))
             {
-                if (isMale) return new Color(0.2f, 0.5f, 1f, 0.9f);  // blue
-                return new Color(1f, 0.3f, 0.7f, 0.9f);               // pink
+                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return new Color(0.2f, 0.5f, 1f, 0.9f);  // blue
+                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return new Color(1f, 0.3f, 0.7f, 0.9f);  // pink
+                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return new Color(0.7f, 0.45f, 1f, 0.9f); // violet
             }
             return new Color(1f, 0f, 0f, 0.9f); // red (unknown)
         }
