@@ -665,21 +665,6 @@ namespace VPB
                 if (evOk) MetaSet(conn, EverythingDematKey, "1");
             }
 
-            VpbUidWhitespaceIdentityRepair.EnsureSchema(conn);
-            const string UidWhitespaceRepairKey = "uid_whitespace_identity_repair_v2_preserve_first_scanned";
-            if (string.IsNullOrEmpty(MetaGet(conn, UidWhitespaceRepairKey)))
-            {
-                int repaired;
-                if (TryRepairPkgRowsWithMismatchedVarPathUid(conn, out repaired))
-                {
-                    if (repaired > 0)
-                    {
-                        try { LogUtil.Log("[VPB.DB] uid/var_path identity repair preserved dates for " + repaired + " stale package rows"); } catch { }
-                    }
-                    MetaSet(conn, UidWhitespaceRepairKey, "1");
-                }
-            }
-
             EnsurePackageManifestSchema(conn);
             EnsureGalleryUserTagTables(conn);
             EnsureFilterPresetTables(conn);
@@ -688,9 +673,26 @@ namespace VPB
             EnsurePkgLicenseSchema(conn);
             EnsureHideMarkerSchema(conn);
             EnsureDataPackSchema(conn);
+            try { EnsureSceneAtomCacheSchema(conn); } catch { }
+
+            VpbUidWhitespaceIdentityRepair.EnsureSchema(conn);
+            const string UidWhitespaceRepairKey = "uid_whitespace_identity_repair_v3_inplace_uid_remap";
+            if (string.IsNullOrEmpty(MetaGet(conn, UidWhitespaceRepairKey)))
+            {
+                int repaired;
+                if (TryRepairPkgRowsWithMismatchedVarPathUid(conn, out repaired))
+                {
+                    if (repaired > 0)
+                    {
+                        try { RestampPkgInventorySignatureAfterUidRepair(conn); } catch { }
+                        try { LogUtil.Log("[VPB.DB] uid/var_path identity repair remapped " + repaired + " package rows in place"); } catch { }
+                    }
+                    MetaSet(conn, UidWhitespaceRepairKey, "1");
+                }
+            }
         }
 
-        /// <summary>Preserves first_scanned under exact on-disk identity while stale package rows rebuild.</summary>
+        /// <summary>In-place uid remap for pkg rows whose uid disagrees with var_path; keeps first_scanned.</summary>
         static bool TryRepairPkgRowsWithMismatchedVarPathUid(VpbSqlite3.Connection conn, out int repaired)
         {
             repaired = 0;
@@ -723,7 +725,23 @@ namespace VPB
 
             try { repaired = VpbUidWhitespaceIdentityRepair.Apply(conn, stale); }
             catch { return false; }
-            return repaired == stale.Count;
+            if (repaired != stale.Count) return false;
+            try { VpbUidWhitespaceIdentityRepair.ConsumeApplied(conn); } catch { }
+            return true;
+        }
+
+        static void RestampPkgInventorySignatureAfterUidRepair(VpbSqlite3.Connection conn)
+        {
+            if (conn == null) return;
+            string dbInv = ComputePackageInventorySignatureFromDatabase(conn);
+            if (string.IsNullOrEmpty(dbInv)) return;
+            MetaSet(conn, "pkg_inv_sig", dbInv);
+            lock (s_Sync)
+            {
+                s_ReadyPkgInvSig = dbInv;
+                s_CachedInvSig = null;
+                s_CachedInvScanBinary = long.MinValue;
+            }
         }
 
         static string UidFromVarPathForRepair(string varPath)
@@ -4403,7 +4421,7 @@ namespace VPB
                         {
                             existingFirstScanned = ReadFirstScannedForRebuild(conn);
                         }
-                        catch { existingFirstScanned = new Dictionary<string, long>(StringComparer.Ordinal); }
+                        catch { existingFirstScanned = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase); }
 
                         bool useBatchCatMem = VamStartupOptimizations.SqlBatchCatMemInserts;
                         CatMemInsertBatcher catMemBatch = useBatchCatMem
@@ -5547,7 +5565,7 @@ namespace VPB
                         {
                             existingFirstScanned = ReadFirstScannedForRebuild(conn);
                         }
-                        catch { existingFirstScanned = new Dictionary<string, long>(StringComparer.Ordinal); }
+                        catch { existingFirstScanned = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase); }
 
                         t0 = Stopwatch.GetTimestamp();
                         conn.ExecUtf8("DELETE FROM cat_mem; DELETE FROM pkg_dep; DELETE FROM pkg;");
