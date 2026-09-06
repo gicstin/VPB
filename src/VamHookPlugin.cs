@@ -1209,6 +1209,9 @@ namespace VPB
             // Assignable-button tip hide grace (instant show; deferred clear only).
             try { QuickMenuAdvanceTooltipHide(); } catch { }
 
+            // Nameplate yields to native HUD overlays (edit menu, Hub, file browsers, …).
+            try { QuickMenuSyncBrandPlate(); } catch { }
+
             // Random hover preview: only does work when a cold category pool trip is owed.
             try { QuickMenuAdvanceRandomPreview(); } catch { }
         }

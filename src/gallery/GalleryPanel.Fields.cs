@@ -969,7 +969,7 @@ namespace VPB
             HubLooks = 1 << 1,
             Unclassified = 1 << 2,
             Other = 1 << 3,
-            DefaultOn = HubScenes | Unclassified,
+            DefaultOn = All,
             All = HubScenes | HubLooks | Unclassified | Other,
         }
 

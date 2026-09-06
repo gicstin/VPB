@@ -231,14 +231,54 @@ namespace VPB
             catch { return -1; }
         }
 
+        private static bool QuickMenuNativeHudOverlayOpen()
+        {
+            SuperController sc;
+            try { sc = SuperController.singleton; }
+            catch { return false; }
+            if (sc == null) return false;
+
+            SuperController.ActiveUI aui;
+            try { aui = sc.activeUI; }
+            catch { return false; }
+
+            if (aui != SuperController.ActiveUI.None && aui != SuperController.ActiveUI.SelectedOptions)
+                return true;
+
+            if (aui == SuperController.ActiveUI.SelectedOptions)
+            {
+                try
+                {
+                    FreeControllerV3 ctrl = sc.GetSelectedController();
+                    if (ctrl != null && !ctrl.guihidden && sc.gameMode == SuperController.GameMode.Edit)
+                        return true;
+                }
+                catch { }
+            }
+
+            try
+            {
+                if (sc.fileBrowserUI != null && sc.fileBrowserUI.window != null && sc.fileBrowserUI.window.activeSelf)
+                    return true;
+                if (sc.mediaFileBrowserUI != null && sc.mediaFileBrowserUI.window != null && sc.mediaFileBrowserUI.window.activeSelf)
+                    return true;
+                if (sc.directoryBrowserUI != null && sc.directoryBrowserUI.window != null && sc.directoryBrowserUI.window.activeSelf)
+                    return true;
+            }
+            catch { }
+
+            return false;
+        }
+
         private void QuickMenuSyncBrandPlate()
         {
             if (m_QmBrandGo == null) return;
-            bool show = string.IsNullOrEmpty(m_QmTooltipCurrent);
+            bool show = string.IsNullOrEmpty(m_QmTooltipCurrent) && !QuickMenuNativeHudOverlayOpen();
             if (m_QmBrandGo.activeSelf != show)
             {
                 if (!show) QuickMenuSetBrandPlateHover(false);
                 m_QmBrandGo.SetActive(show);
+                QuickMenuPositionDeskPreview();
             }
             if (!show) return;
 
