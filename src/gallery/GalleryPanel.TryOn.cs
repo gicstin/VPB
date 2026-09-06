@@ -102,29 +102,16 @@ namespace VPB
 
             try
             {
-                // Changing interaction away from the current try-on: prompt Keep vs Revert.
-                // Esc/Revert discards preview then starts the new try; Keep commits then starts.
-                // Cancel is not offered as "abort apply" here — user already chose a new item;
-                // Esc on the dialog = Revert path (safe default).
+                string autoKeptName = null;
                 if (_tryOnActive)
                 {
-                    _tryOnDeferredNextFile = file;
-                    string keptName = _tryOnCurrentName;
-                    DisplayConfirm(
-                        VPBTranslation.T("gallery.tryon.next_title", "Try-On still open"),
-                        string.Format(
-                            VPBTranslation.T(
-                                "gallery.tryon.next_msg",
-                                "Keep '{0}' before trying the next item?\n\nKeep = commit · Revert / Esc = discard preview, then try next."),
-                            string.IsNullOrEmpty(keptName) ? "…" : keptName),
-                        TryOnConfirmKeepThenDeferred,
-                        TryOnConfirmRevertThenDeferred,
-                        VPBTranslation.T("gallery.tryon.btn_keep", "Keep"),
-                        VPBTranslation.T("gallery.tryon.btn_revert", "Revert"));
-                    return true;
+                    autoKeptName = _tryOnCurrentName;
+                    try { TryOnKeep(); } catch { }
                 }
 
-                return TryOnBeginSessionWithFile(file, kind, target);
+                bool started = TryOnBeginSessionWithFile(file, kind, target);
+                TryOnNotifyAutoKept(autoKeptName);
+                return started;
             }
             catch (Exception ex)
             {
@@ -135,33 +122,20 @@ namespace VPB
             }
         }
 
-        private FileEntry _tryOnDeferredNextFile;
-
-        private void TryOnConfirmKeepThenDeferred()
+        private void TryOnNotifyAutoKept(string keptName)
         {
-            FileEntry next = _tryOnDeferredNextFile;
-            _tryOnDeferredNextFile = null;
-            try { TryOnKeep(); } catch { }
-            TryOnContinueWithFile(next);
-        }
-
-        private void TryOnConfirmRevertThenDeferred()
-        {
-            FileEntry next = _tryOnDeferredNextFile;
-            _tryOnDeferredNextFile = null;
-            try { TryOnRevert(); } catch { }
-            TryOnContinueWithFile(next);
-        }
-
-        private void TryOnContinueWithFile(FileEntry next)
-        {
-            if (next == null) return;
-            TryOnKind kind = TryOnClassify(next);
-            if (kind == TryOnKind.None) return;
-            Atom target = GetBestTargetAtom();
-            if (target == null) return;
-            try { TryOnBeginSessionWithFile(next, kind, target); }
-            catch (Exception ex) { LogUtil.LogError("[VPB] TryOnContinueWithFile: " + ex); }
+            if (string.IsNullOrEmpty(keptName)) return;
+            try
+            {
+                ShowTemporaryStatus(
+                    string.Format(
+                        VPBTranslation.T(
+                            "gallery.tryon.auto_kept",
+                            "Kept '{0}' — Undo restores the previous look."),
+                        keptName),
+                    2f);
+            }
+            catch { }
         }
 
         private bool TryOnBeginSessionWithFile(FileEntry file, TryOnKind kind, Atom target)
@@ -266,7 +240,7 @@ namespace VPB
                         if (a != null) a.Restore(baseline, phys, true, false, null, false, false, true, false);
                     }
                     catch { }
-                });
+                }, VPBTranslation.T("gallery.undo.tryon_keep", "Try-On keep"));
             }
 
             TryOnEndSession(false);
@@ -309,7 +283,6 @@ namespace VPB
         internal void TryOnAbandonForSceneLoad()
         {
             bool wasActive = _tryOnActive;
-            _tryOnDeferredNextFile = null;
             if (_tryOnActive) TryOnEndSession(false);
             if (wasActive)
             {
@@ -338,8 +311,6 @@ namespace VPB
             _tryOnTouchedPhysical = false;
             _tryOnComparing = false;
             _tryOnCurrentName = null;
-            // Drop deferred next-apply only when ending without an explicit Keep/Revert continue path.
-            // Keep/Revert handlers null the deferred file before calling EndSession.
             TryOnHideBar();
             try { RefreshModeAmbientChrome(); } catch { }
             try { ResetArmedApplySemanticsIfIdle(toast: false); } catch { }
@@ -360,7 +331,9 @@ namespace VPB
             try
             {
                 ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.tryon.entered", "Try-On session — Compare / Revert / Keep."),
+                    VPBTranslation.T(
+                        "gallery.tryon.entered",
+                        "Try-On — Compare / Revert / Keep. Browsing on keeps it (Undo reverts)."),
                     1.75f);
             }
             catch { }
@@ -418,8 +391,8 @@ namespace VPB
             if (_tryOnLabel == null) return;
             string name = string.IsNullOrEmpty(_tryOnCurrentName) ? "preset" : _tryOnCurrentName;
             _tryOnLabel.text = _tryOnComparing
-                ? "Try-On: showing ORIGINAL  (" + name + ") — Esc reverts"
-                : "Try-On: " + name + " — Keep / Revert / Esc";
+                ? "Try-On: showing ORIGINAL  (" + name + ") — release Compare to return"
+                : "Try-On: " + name + " — Keep · Revert · Esc discards · moving on keeps it";
         }
 
         private void TryOnEnsureBar()

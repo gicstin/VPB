@@ -231,6 +231,16 @@ namespace VPB
             logSource.LogInfo(log);
         }
 
+        public static void LogVerbose(string log)
+        {
+            try
+            {
+                if (VPBConfig.Instance == null || !VPBConfig.Instance.IsDevMode) return;
+            }
+            catch { return; }
+            logSource.LogInfo(log);
+        }
+
         /// <see cref="VPBLogSource.LogInfo(object)"/>
         /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogInfo")]

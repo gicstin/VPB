@@ -172,7 +172,7 @@ namespace VPB
             {
                 if (method.Name != "SetActiveHairItem") continue;
                 var parameters = method.GetParameters();
-                if (parameters.Length == 3 &&
+                if (parameters.Length >= 3 &&
                     parameters[0].ParameterType == typeof(DAZHairGroup) &&
                     parameters[1].ParameterType == typeof(bool) &&
                     parameters[2].ParameterType == typeof(bool))

@@ -470,7 +470,7 @@ namespace VPB
         {
             if (m_QmPreviewDeskRt == null || m_QmTooltipRT == null) return;
             m_QmPreviewDeskRt.pivot = new Vector2(0.5f, 0f);
-            float tipTop = m_QmTooltipRT.anchoredPosition.y + m_QmTooltipRT.sizeDelta.y;
+            float tipTop = QuickMenuTipLaneTopY();
             m_QmPreviewDeskRt.anchoredPosition = new Vector2(m_QmTooltipRT.anchoredPosition.x, tipTop + QmPreviewDeskGap);
 
             if (QuickMenuIsVrActive())

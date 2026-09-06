@@ -178,6 +178,9 @@ namespace VPB
         public bool GalleryManualRefreshOnly = true;
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
+        public bool ClothingReplaceUseGeometry = true;
+        public int ClothingReplaceStrictness = 2;
+        public bool ClothingReplaceStrictnessUpgraded = false;
         /// <summary>How gallery applies an appearance .vap: replace (full), keep (keep body garments), clothingOnly (garment outfit from preset only), mergeoutfit (keep body; pick clothing items to merge on top).</summary>
         private string _appearanceClothingApplyMode = "replace";
         public string AppearanceClothingApplyMode
@@ -1696,6 +1699,9 @@ namespace VPB
             GalleryManualRefreshOnly = true;
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
+            ClothingReplaceUseGeometry = true;
+            ClothingReplaceStrictness = 2;
+            ClothingReplaceStrictnessUpgraded = true;
             AppearanceClothingApplyMode = "replace";
             SuppressAppearanceScaleChange = false;
             ImportSidebarPrefs = new JSONClass();
@@ -1938,6 +1944,15 @@ namespace VPB
                         if (node["GalleryManualRefreshOnly"] != null) GalleryManualRefreshOnly = node["GalleryManualRefreshOnly"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
+                        if (node["ClothingReplaceUseGeometry"] != null) ClothingReplaceUseGeometry = node["ClothingReplaceUseGeometry"].AsBool;
+                        if (node["ClothingReplaceStrictness"] != null) ClothingReplaceStrictness = node["ClothingReplaceStrictness"].AsInt;
+                        if (node["ClothingReplaceStrictnessUpgraded"] != null)
+                            ClothingReplaceStrictnessUpgraded = node["ClothingReplaceStrictnessUpgraded"].AsBool;
+                        if (!ClothingReplaceStrictnessUpgraded)
+                        {
+                            if (ClothingReplaceStrictness == 1) ClothingReplaceStrictness = 2;
+                            ClothingReplaceStrictnessUpgraded = true;
+                        }
                         if (node["AppearanceClothingApplyMode"] != null)
                             AppearanceClothingApplyMode = node["AppearanceClothingApplyMode"].Value;
                         else if (node["KeepClothingWhenApplyingAppearance"] != null)
@@ -2518,6 +2533,9 @@ namespace VPB
                 node["GalleryManualRefreshOnly"].AsBool = GalleryManualRefreshOnly;
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
+                node["ClothingReplaceUseGeometry"].AsBool = ClothingReplaceUseGeometry;
+                node["ClothingReplaceStrictness"].AsInt = ClothingReplaceStrictness;
+                node["ClothingReplaceStrictnessUpgraded"].AsBool = ClothingReplaceStrictnessUpgraded;
                 node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;
                 node["SuppressAppearanceScaleChange"].AsBool = SuppressAppearanceScaleChange;
                 if (ImportSidebarPrefs != null) node["ImportSidebarPrefs"] = ImportSidebarPrefs;

@@ -2005,13 +2005,6 @@ namespace VPB
                 try { HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary: true); }
                 catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick scan whitelist: " + ex); }
             }
-
-            if (isFixedLocally && VPBConfig.Instance != null && DockHeightMode == 0)
-            {
-                DockHeightMode = 1; // Custom height
-                UpdateFooterHeightState();
-                UpdateLayout();
-            }
         }
 
         internal void OnFileMiddleClick(FileEntry file)

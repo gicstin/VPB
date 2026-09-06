@@ -614,6 +614,8 @@ namespace VPB
             public bool EnableDragDrop;
             public bool GalleryAutoGenderFilter;
             public bool GalleryCollapseOnSceneLaunch;
+            public bool ClothingReplaceUseGeometry;
+            public int ClothingReplaceStrictness;
             public bool VerticalMoveKeysEnabled;
             public bool DataPackLookapediaEnabled;
             public bool DataPackHubTagsEnabled;
@@ -1041,6 +1043,40 @@ namespace VPB
                     VPBConfig.Instance.NormalizeDragDropHoldSettings();
                 }
             });
+            var replaceGeometryDef = new InternalSettingDefinition {
+                Key = "interaction.replaceByFit", GroupKey = "interaction",
+                Label = VPBTranslation.T("settings.replace_by_fit", "Replace by where it fits"),
+                Tooltip = VPBTranslation.T("settings.tip.replace_by_fit", "On (default): Replace mode compares where items actually sit on the body, read from each garment's own mesh binding, so applying shoes cannot take off a shirt. Off: falls back to the older tag and filename matching."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.ClothingReplaceUseGeometry,
+                SetBool = v => { VPBConfig.Instance.ClothingReplaceUseGeometry = v; VPBConfig.Instance.TriggerChange(); }
+            };
+            replaceGeometryDef.SetDefault(true);
+            defs.Add(replaceGeometryDef);
+
+            var replaceStrictnessDef = new InternalSettingDefinition {
+                Key = "interaction.replaceStrictness", GroupKey = "interaction",
+                Label = VPBTranslation.T("settings.replace_strictness", "Replace takes off"),
+                Tooltip = VPBTranslation.T("settings.tip.replace_strictness", "Anything in the way (default): every worn item that shares the new item's place, so a bra clears the dress over it and a dress clears the bra under it. What it hides: only items the new one would cover, which leaves small items layered on top of big ones. Exact swap: only a mutual match, shoes for shoes. None of these can touch an item somewhere else on the body."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Anything in the way", "What it hides", "Exact swap" },
+                GetString = () =>
+                {
+                    int v = VPBConfig.Instance.ClothingReplaceStrictness;
+                    return v <= 0 ? "Exact swap" : (v >= 2 ? "Anything in the way" : "What it hides");
+                },
+                SetString = v =>
+                {
+                    int n = string.Equals(v, "Exact swap", StringComparison.OrdinalIgnoreCase) ? 0
+                          : string.Equals(v, "What it hides", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
+                    VPBConfig.Instance.ClothingReplaceStrictness = n;
+                    VPBConfig.Instance.TriggerChange();
+                },
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.ClothingReplaceUseGeometry
+            };
+            replaceStrictnessDef.SetDefault("Anything in the way");
+            defs.Add(replaceStrictnessDef);
+
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.autoGenderFilter", GroupKey = "categories", SubGroupKey = "options", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_auto_gender_filter", "When ON, Hair/Clothing categories auto-filter Male/Female items to match selected target atom gender."),
@@ -2313,6 +2349,8 @@ namespace VPB
                 EnableDragDrop = VPBConfig.Instance.EnableDragDrop,
                 GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 GalleryCollapseOnSceneLaunch = VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
+                ClothingReplaceUseGeometry = VPBConfig.Instance.ClothingReplaceUseGeometry,
+                ClothingReplaceStrictness = VPBConfig.Instance.ClothingReplaceStrictness,
                 VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
                 DataPackLookapediaEnabled = VPBConfig.Instance.DataPackLookapediaEnabled,
                 DataPackHubTagsEnabled = VPBConfig.Instance.DataPackHubTagsEnabled,
@@ -3412,6 +3450,8 @@ namespace VPB
             VPBConfig.Instance.EnableDragDrop = b.EnableDragDrop;
             VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.GalleryCollapseOnSceneLaunch = b.GalleryCollapseOnSceneLaunch;
+            VPBConfig.Instance.ClothingReplaceUseGeometry = b.ClothingReplaceUseGeometry;
+            VPBConfig.Instance.ClothingReplaceStrictness = b.ClothingReplaceStrictness;
             VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;
             if (VPBConfig.Instance.DataPackLookapediaEnabled != b.DataPackLookapediaEnabled
                 || VPBConfig.Instance.DataPackHubTagsEnabled != b.DataPackHubTagsEnabled)

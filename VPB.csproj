@@ -397,6 +397,7 @@
     <Compile Include="src\VamHookPlugin.Settings.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignFloat.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuBrandPlate.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuRandomPreview.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuVrWatch.cs" />
     <Compile Include="src\ContextMenuPanel.cs" />
@@ -431,6 +432,14 @@
     <Compile Include="src\datapack\VpbDataPackFile.cs" />
     <Compile Include="src\datapack\VpbDataPackService.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.HideMarkers.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.ClothingFootprint.cs" />
+    <Compile Include="src\clothing\VpbBodyRegion.cs" />
+    <Compile Include="src\clothing\VpbSkinRegionMap.cs" />
+    <Compile Include="src\clothing\VpbSkinAreaMap.cs" />
+    <Compile Include="src\clothing\VpbClothingFootprint.cs" />
+    <Compile Include="src\clothing\VpbHairFootprint.cs" />
+    <Compile Include="src\clothing\VpbClothingFootprintCache.cs" />
+    <Compile Include="src\clothing\VpbClothingReplace.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryLabels.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />

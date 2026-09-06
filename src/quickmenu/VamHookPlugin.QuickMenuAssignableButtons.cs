@@ -44,6 +44,7 @@ namespace VPB
             SyncQuickMenuPopupRoundedBg(m_QuickMenuSavePopupRoot, frac);
             RoundedRect tooltipRounded = m_QmTooltipBackdrop as RoundedRect;
             if (tooltipRounded != null) tooltipRounded.cornerRadiusFraction = frac;
+            SyncQuickMenuBrandPlateCornerRadius(frac);
             QuickMenuSyncRandomPreviewCornerRadius(frac);
             try { QuickMenuSyncWatchCornerRadius(frac); } catch { }
             if (m_QuickMenuGridButtons != null)
@@ -289,6 +290,7 @@ namespace VPB
                 m_QmTooltipRT.anchoredPosition = new Vector2(centerX, topEdge + 8f);
                 var sd = m_QmTooltipRT.sizeDelta;
                 m_QmTooltipRT.sizeDelta = new Vector2(QuickMenuGridCell * 4f - QuickMenuGridGap, sd.y);
+                QuickMenuLayoutBrandPlate();
                 QuickMenuPositionDeskPreview();
             }
         }
@@ -347,6 +349,7 @@ namespace VPB
 
                 var sd0 = m_QmTooltipRT.sizeDelta;
                 m_QmTooltipRT.sizeDelta = new Vector2(sd0.x, 0f);
+                QuickMenuSyncBrandPlate();
                 QuickMenuPositionDeskPreview();
                 return;
             }
@@ -374,6 +377,7 @@ namespace VPB
 
             var sd = m_QmTooltipRT.sizeDelta;
             m_QmTooltipRT.sizeDelta = new Vector2(sd.x, h);
+            QuickMenuSyncBrandPlate();
             QuickMenuPositionDeskPreview();
         }
 
@@ -1081,6 +1085,11 @@ namespace VPB
 
         private static void QuickMenuSetIcon(GameObject buttonGO, Sprite icon, float padding)
         {
+            QuickMenuSetIcon(buttonGO, icon, padding, Color.white);
+        }
+
+        private static void QuickMenuSetIcon(GameObject buttonGO, Sprite icon, float padding, Color tint)
+        {
             if (buttonGO == null) return;
 
             // Remove any label; icon-only buttons should not retain stale text across pages.
@@ -1115,6 +1124,7 @@ namespace VPB
                         if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.QmIconSwap++;
                         UI.SetIconSprite(existingImg, icon);
                     }
+                    if (existingImg.color != tint) existingImg.color = tint;
                     Vector2 desiredSize = new Vector2(-padding * 2f, -padding * 2f);
                     if (existingRT.sizeDelta != desiredSize) existingRT.sizeDelta = desiredSize;
                     return;
@@ -1129,6 +1139,7 @@ namespace VPB
             iconGO.transform.SetParent(buttonGO.transform, false);
             Image img = iconGO.AddComponent<Image>();
             UI.SetIconSprite(img, icon);
+            img.color = tint;
             img.preserveAspect = true;
             img.raycastTarget = false;
 
@@ -1137,6 +1148,11 @@ namespace VPB
             rt.anchorMax = Vector2.one;
             rt.sizeDelta = new Vector2(-padding * 2f, -padding * 2f);
             rt.anchoredPosition = Vector2.zero;
+        }
+
+        private static bool QuickMenuIsRandomAction(QuickMenuAssignableAction a)
+        {
+            return a == QuickMenuAssignableAction.Random;
         }
 
         private static void QuickMenuSetLabel(GameObject buttonGO, string text, bool clearIcon)
@@ -1451,6 +1467,8 @@ namespace VPB
                     break;
             }
 
+            bool isRandom = QuickMenuIsRandomAction(action);
+
             if (action == QuickMenuAssignableAction.FpsCounter)
             {
                 // Throttle text refresh to max 2 Hz; slot visuals may update more frequently.
@@ -1488,7 +1506,7 @@ namespace VPB
             else
             {
                 if (m_QmLastAppliedSlotLabels != null) m_QmLastAppliedSlotLabels[idx] = null;
-                QuickMenuSetIcon(go, icon, padding: 6f);
+                QuickMenuSetIcon(go, icon, 6f, isRandom ? GalleryUiColorTokens.RandomGlyph : Color.white);
             }
 
             bool isAssigned = action != QuickMenuAssignableAction.None;
@@ -1499,13 +1517,29 @@ namespace VPB
                 Color hover;
                 if (QuickMenuAssignablesForceOpaque())
                 {
-                    normal = isAssigned ? QmBackdropAssignedOpaque : QmBackdropEmptyOpaque;
-                    hover = isAssigned ? QmBackdropAssignedHoverOpaque : QmBackdropEmptyHoverOpaque;
+                    if (isRandom)
+                    {
+                        normal = GalleryUiColorTokens.RandomWell;
+                        hover = GalleryUiColorTokens.RandomWellHover;
+                    }
+                    else
+                    {
+                        normal = isAssigned ? QmBackdropAssignedOpaque : QmBackdropEmptyOpaque;
+                        hover = isAssigned ? QmBackdropAssignedHoverOpaque : QmBackdropEmptyHoverOpaque;
+                    }
                 }
                 else
                 {
-                    normal = isAssigned ? QmBackdropAssignedTransparent : QmBackdropEmptyTransparent;
-                    hover = isAssigned ? QmBackdropAssignedHoverTransparent : QmBackdropEmptyHoverTransparent;
+                    if (isRandom)
+                    {
+                        normal = GalleryUiColorTokens.RandomWellTransparent;
+                        hover = GalleryUiColorTokens.RandomWellTransparentHover;
+                    }
+                    else
+                    {
+                        normal = isAssigned ? QmBackdropAssignedTransparent : QmBackdropEmptyTransparent;
+                        hover = isAssigned ? QmBackdropAssignedHoverTransparent : QmBackdropEmptyHoverTransparent;
+                    }
                 }
                 QuickMenuApplyBackdropColors(bgImg, normal, hover);
             }

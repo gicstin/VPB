@@ -1206,7 +1206,14 @@ namespace VPB
             try
             {
                 var randomIcon = UI.LoadIconSprite("dice-3", Color.white);
-                if (randomIcon != null) UI.AddIconToButton(tboxLoadRandomBtn, randomIcon, padding: 6f);
+                if (randomIcon != null)
+                {
+                    UI.AddIconToButton(tboxLoadRandomBtn, randomIcon, padding: 6f,
+                        backdropOverride: GalleryUiColorTokens.RandomWell);
+                    Transform randomIconTr = tboxLoadRandomBtn.transform.Find("Icon");
+                    Image randomIconImg = randomIconTr != null ? randomIconTr.GetComponent<Image>() : null;
+                    if (randomIconImg != null) randomIconImg.color = GalleryUiColorTokens.RandomGlyph;
+                }
                 else
                 {
                     Text t = tboxLoadRandomBtn.GetComponentInChildren<Text>(true);

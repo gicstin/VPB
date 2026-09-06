@@ -98,6 +98,13 @@ namespace VPB
         public static readonly Color AccentNew = new Color(0.26f, 0.40f, 0.34f, 1f);
         public static readonly Color AccentFacetGeneric = new Color(0.36f, 0.36f, 0.40f, 1f);
 
+        // ── Random / dice affordance (idle gold lift, not hover-only) ────────
+        public static readonly Color RandomWell = new Color(0.34f, 0.26f, 0.08f, 1f);
+        public static readonly Color RandomWellHover = new Color(0.48f, 0.37f, 0.11f, 1f);
+        public static readonly Color RandomWellTransparent = new Color(0.50f, 0.38f, 0.10f, 0.42f);
+        public static readonly Color RandomWellTransparentHover = new Color(0.62f, 0.48f, 0.14f, 0.62f);
+        public static readonly Color RandomGlyph = new Color(1f, 0.87f, 0.56f, 1f);
+
         // ── Sticky mode ambient (stronger than idle chrome — change blindness) ─
         public static readonly Color ModeToolBanner = new Color(0.20f, 0.28f, 0.34f, 0.97f);
         public static readonly Color ModeApplyStripe = new Color(0.90f, 0.72f, 0.40f, 1f);

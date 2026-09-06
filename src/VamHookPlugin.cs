@@ -650,6 +650,10 @@ namespace VPB
             try { UI.ClearIconSpriteCache(); } catch { }
             try { DAZClothingHook.ResetTransientState(); } catch { }
             try { GalleryLayoutPresetStore.ResetForTeardown(); } catch { }
+            try { VpbClothingFootprintCache.ResetSessionState(); } catch { }
+            try { VpbSkinRegionMap.ResetSessionState(); } catch { }
+            try { VpbHairFootprint.ResetSessionState(); } catch { }
+            try { VpbSkinAreaMap.ResetSessionState(); } catch { }
             try
             {
                 var sc = SuperController.singleton;
@@ -1659,6 +1663,7 @@ namespace VPB
 
                 // Tooltip UI (positioned by QuickMenuApplyGridLayoutFromAnchor / live updates)
                 QuickMenuEnsureTooltipUI();
+                try { QuickMenuEnsureBrandPlate(); } catch { }
                 try { QuickMenuApplyGridLayoutFromAnchor(createCenter); } catch { }
 
                 // Core slot indices are loaded from persisted config in QuickMenuEnsureDefaultsAndLoadFromConfig().

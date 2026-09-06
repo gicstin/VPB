@@ -235,6 +235,11 @@ namespace VPB
             try { target = GetBestTargetAtom(); } catch { target = null; }
             if (target == null) return;
 
+            if (VpbClothingReplace.GeometryEnabled)
+            {
+                return;
+            }
+
             if (family == 1)
             {
                 try { ClothingLoadingUtils.RemoveRealGarmentClothing(target); } catch { }

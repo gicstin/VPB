@@ -631,7 +631,7 @@ namespace VPB
         {
             // Usage recorded in LoadCUAIntoAtom when the asset is actually applied (avoid double-count).
             string normalizedPath = UI.NormalizePath(path);
-            LogUtil.Log($"[DragDropDebug] Loading CUA: {normalizedPath}");
+            LogUtil.LogVerbose($"[DragDropDebug] Loading CUA: {normalizedPath}");
             if (Panel != null) Panel.StartCoroutine(LoadCUACoroutine(normalizedPath));
             else StartCoroutine(LoadCUACoroutine(normalizedPath));
         }
@@ -686,7 +686,7 @@ namespace VPB
 
             if (urlParam != null)
             {
-                LogUtil.Log("[DragDropDebug] Setting assetUrl to " + normalizedPath);
+                LogUtil.LogVerbose("[DragDropDebug] Setting assetUrl to " + normalizedPath);
                 urlParam.val = normalizedPath;
                 
                 // Automatically set assetName if possible
@@ -701,7 +701,7 @@ namespace VPB
                 
                 if (assetNames != null && assetNames.Count > 0)
                 {
-                     LogUtil.Log($"[DragDropDebug] Found {assetNames.Count} assets in bundle.");
+                     LogUtil.LogVerbose($"[DragDropDebug] Found {assetNames.Count} assets in bundle.");
                      JSONStorableString nameParam = targetAtom.GetStringJSONParam("assetName");
                      if (nameParam == null)
                      {
@@ -717,7 +717,7 @@ namespace VPB
                           // Default to the first asset (Position 1)
                           string match = assetNames[0];
                           
-                          LogUtil.Log($"[DragDropDebug] Auto-setting assetName to: {match}");
+                          LogUtil.LogVerbose($"[DragDropDebug] Auto-setting assetName to: {match}");
                           nameParam.val = match;
                      }
                 }
@@ -727,7 +727,7 @@ namespace VPB
                 LogUtil.LogError("[DragDropDebug] assetUrl param not found on " + targetAtom.name);
                 foreach (string sid in targetAtom.GetStorableIDs())
                 {
-                    LogUtil.Log("[DragDropDebug] Storable: " + sid);
+                    LogUtil.LogVerbose("[DragDropDebug] Storable: " + sid);
                     JSONStorable storable = targetAtom.GetStorableByID(sid);
                     if (storable != null)
                     {
