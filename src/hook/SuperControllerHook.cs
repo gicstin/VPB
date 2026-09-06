@@ -2328,16 +2328,21 @@ namespace VPB
                 if (path.IndexOf(":/", StringComparison.Ordinal) <= 0
                     && path.IndexOf(":\\", StringComparison.Ordinal) <= 0) return;
 
-                if (VamOnDemandLoader.s_InOnDemand) return;
-
-                if (MVR.FileManagement.FileManager.GetVarFileEntry(path) != null)
+                MVR.FileManagement.VarFileEntry alias = null;
+                if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref alias) && alias != null)
                 {
                     __result = true;
                     LogIsFileInPackageRecovered(path);
                     return;
                 }
 
-                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+                if (VamOnDemandLoader.s_InOnDemand) return;
+
+                if (MVR.FileManagement.FileManager.GetVarFileEntry(path) != null)
+                {
+                    __result = true;
+                    LogIsFileInPackageRecovered(path);
+                }
             }
             catch (Exception ex)
             {

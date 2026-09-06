@@ -385,35 +385,32 @@ namespace VPB
             AssetBundleCreateRequest abcr = null;
             byte[] bytes = null;
 
-            bool inPackage = false;
-            try { inPackage = MVR.FileManagement.FileManager.IsFileInPackage(path); }
-            catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] IsFileInPackage failed for " + path + ": " + ex.Message); }
+            MVR.FileManagement.VarFileEntry vfe = null;
+            try { vfe = VamOnDemandLoader.TryResolveNativeVarFileEntryForImmediateRead(path); }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] GetVarFileEntry failed for " + path + ": " + ex.Message); }
 
-            if (inPackage)
+            if (vfe != null && vfe.Simulated && vfe.Package != null)
             {
-                MVR.FileManagement.VarFileEntry vfe = null;
-                try { vfe = MVR.FileManagement.FileManager.GetVarFileEntry(path); }
-                catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] GetVarFileEntry failed for " + path + ": " + ex.Message); }
-
-                if (vfe != null && vfe.Simulated)
-                {
-                    string onDisk = vfe.Package.Path + "\\" + vfe.InternalPath;
-                    try { abcr = AssetBundle.LoadFromFileAsync(onDisk); }
-                    catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] LoadFromFileAsync failed for " + onDisk + ": " + ex.Message); }
-                }
-                else if (vfe != null)
-                {
-                    bytes = new byte[vfe.Size];
-                    yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, bytes);
-                    try { abcr = AssetBundle.LoadFromMemoryAsync(bytes); }
-                    catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] LoadFromMemoryAsync failed for " + path + ": " + ex.Message); }
-                    bytes = null;
-                }
+                string onDisk = vfe.Package.Path + "\\" + vfe.InternalPath;
+                try { abcr = AssetBundle.LoadFromFileAsync(onDisk); }
+                catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] LoadFromFileAsync failed for " + onDisk + ": " + ex.Message); }
             }
-            else
+            else if (vfe != null)
+            {
+                bytes = new byte[vfe.Size];
+                yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, bytes);
+                try { abcr = AssetBundle.LoadFromMemoryAsync(bytes); }
+                catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] LoadFromMemoryAsync failed for " + path + ": " + ex.Message); }
+                bytes = null;
+            }
+            else if (!VamOnDemandLoader.LooksLikePackageEntryPath(path))
             {
                 try { abcr = AssetBundle.LoadFromFileAsync(path); }
                 catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] LoadFromFileAsync failed for " + path + ": " + ex.Message); }
+            }
+            else
+            {
+                LogUtil.LogWarning("[VPB.Perf] assetbundle path is in a VAR but native FileEntry is missing: " + path);
             }
 
             if (abcr != null)

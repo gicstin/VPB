@@ -1508,7 +1508,7 @@ namespace VPB
                 || p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase);
         }
 
-        public static string TryRegisterPackageOnDemand(string uid, bool persistUidOverride = false)
+        public static string TryRegisterPackageOnDemand(string uid, bool persistUidOverride = false, bool bypassStartupDefer = false)
         {
             if (string.IsNullOrEmpty(uid)) return null;
             if (!ScanWhitelistManager.Instance.IsEnabled) return null;
@@ -1549,6 +1549,7 @@ namespace VPB
             }
 
             // Non-script / heavy-script policy until READY — queue UID only (resolve on promote).
+            if (!bypassStartupDefer)
             {
                 string deferUidPolicy = NormalizeOnDemandRequestUid(uid);
                 if (!string.IsNullOrEmpty(deferUidPolicy)
@@ -1881,6 +1882,61 @@ namespace VPB
             string uid = UidFromEntryPath(entryPath);
             if (string.IsNullOrEmpty(uid)) return null;
             return TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
+        }
+
+        public static bool LooksLikePackageEntryPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            if (path.IndexOf(":/", StringComparison.Ordinal) > 0) return true;
+            return path.IndexOf(":\\", StringComparison.Ordinal) > 0;
+        }
+
+        public static MVR.FileManagement.VarFileEntry TryResolveNativeVarFileEntryForImmediateRead(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+
+            MVR.FileManagement.VarFileEntry vfe = null;
+            try { vfe = MVR.FileManagement.FileManager.GetVarFileEntry(path); }
+            catch { }
+            if (vfe != null) return vfe;
+
+            if (!LooksLikePackageEntryPath(path)) return null;
+
+            try
+            {
+                if (ScanWhitelistManager.Instance.IsEnabled)
+                {
+                    string uid = UidFromEntryPath(path);
+                    if (!string.IsNullOrEmpty(uid))
+                    {
+                        TryRegisterPackageOnDemand(uid,
+                            persistUidOverride: IsPluginEntryPath(path),
+                            bypassStartupDefer: true);
+                    }
+                }
+
+                vfe = MVR.FileManagement.FileManager.GetVarFileEntry(path);
+                if (vfe != null) return vfe;
+
+                if (TryNativeGetVarFileEntryWithRegisteredUid(path, ref vfe) && vfe != null)
+                    return vfe;
+
+                string rewritten = TryRewriteLatestEntryPath(path, attemptRegister: true);
+                if (!string.IsNullOrEmpty(rewritten)
+                    && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    vfe = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
+                    if (vfe != null) return vfe;
+                }
+
+                string rewrittenBest = TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
+                if (!string.IsNullOrEmpty(rewrittenBest)
+                    && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
+                    vfe = MVR.FileManagement.FileManager.GetVarFileEntry(rewrittenBest);
+            }
+            catch { }
+
+            return vfe;
         }
 
         // Plugins resolve dependency morphs by display name (not by file path), so the reactive
