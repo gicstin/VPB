@@ -59,14 +59,15 @@ namespace VPB
             if (s_LegacyRootSwept) return;
             s_LegacyRootSwept = true;
 
-            if (string.IsNullOrEmpty(s_LegacyRoot)) return;
-
             try
             {
-                int removed = VpbLegacyLayout.SweepPluginsRoot(s_LegacyRoot, LogSweepInfo, LogSweepWarning);
+                int removed = 0;
+                if (!string.IsNullOrEmpty(s_LegacyRoot))
+                    removed += VpbLegacyLayout.SweepPluginsRoot(s_LegacyRoot, LogSweepInfo, LogSweepWarning);
+                removed += VpbLegacyLayout.SweepMpOnlyUnderVpbDir(s_Root, LogSweepInfo);
                 if (removed > 0)
                 {
-                    LogUtil.Log("[VPB] Retired " + removed + " item(s) from the old plugins-root layout; the shipped tree is "
+                    LogUtil.Log("[VPB] Retired " + removed + " leftover layout item(s); the shipped tree is "
                         + s_Root + ". Restart VaM if anything looks stale.");
                 }
             }

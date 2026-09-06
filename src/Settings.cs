@@ -1,5 +1,8 @@
 using BepInEx.Configuration;
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 namespace VPB
 {
@@ -236,6 +239,39 @@ namespace VPB
 
 
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "", "Last opened Gallery page.");
+
+            DropOrphanedMpConfig(config);
+        }
+
+        private static void DropOrphanedMpConfig(ConfigFile config)
+        {
+            if (config == null) return;
+            try
+            {
+                FieldInfo field = typeof(ConfigFile).GetField("OrphanedEntries", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (field == null) return;
+                IDictionary orphans = field.GetValue(config) as IDictionary;
+                if (orphans == null || orphans.Count == 0) return;
+
+                List<object> drop = new List<object>();
+                foreach (DictionaryEntry kv in orphans)
+                {
+                    ConfigDefinition def = kv.Key as ConfigDefinition;
+                    if (def == null) continue;
+                    if (string.Equals(def.Section, "Net", StringComparison.OrdinalIgnoreCase))
+                        drop.Add(kv.Key);
+                    else if (string.Equals(def.Section, "Pose", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(def.Key, "DualAnchorAtMe", StringComparison.OrdinalIgnoreCase))
+                        drop.Add(kv.Key);
+                }
+                if (drop.Count == 0) return;
+                for (int i = 0; i < drop.Count; i++)
+                    orphans.Remove(drop[i]);
+                config.Save();
+            }
+            catch
+            {
+            }
         }
     }
 }
