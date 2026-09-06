@@ -822,12 +822,6 @@ namespace VPB
             }
         }
 
-        static void AddWhitespaceAliasKeys(Dictionary<string, string> map, HashSet<string> keys)
-        {
-            if (map == null || keys == null) return;
-            foreach (KeyValuePair<string, string> kv in map) keys.Add(kv.Key);
-        }
-
         internal static bool TryResolveWhitespaceAliasGroupId(string requestedGroupId, out string actualGroupId)
         {
             lock (packagesLock)
@@ -3339,8 +3333,13 @@ namespace VPB
                     ? new HashSet<string>(packageGroups.Keys, StringComparer.OrdinalIgnoreCase)
                     : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 snapshot = packagesByUid != null ? packagesByUid.Values.ToArray() : new VarPackage[0];
-                AddWhitespaceAliasKeys(s_WhitespaceUidAliases, uidKeys);
-                AddWhitespaceAliasKeys(s_WhitespaceGroupAliases, groupKeys);
+                for (int si = 0; si < snapshot.Length; si++)
+                {
+                    VarPackage sp = snapshot[si];
+                    if (sp == null || string.IsNullOrEmpty(sp.Path)) continue;
+                    string stem = packagePathToUid(CleanFilePath(sp.Path));
+                    if (!string.IsNullOrEmpty(stem)) uidKeys.Add(stem);
+                }
             }
 
             for (int i = 0; i < snapshot.Length; i++)
@@ -3354,7 +3353,7 @@ namespace VPB
                     if (string.IsNullOrEmpty(key)) continue;
                     if (IsLocalDependencyPresentForHubMissingScan(key, uidKeys, groupKeys)) continue;
 
-                    string normalized = NormalizeForHub(CanonicalizeUidSegments(key));
+                    string normalized = NormalizeForHub(key);
                     if (string.IsNullOrEmpty(normalized)) continue;
                     hashSet.Add(normalized);
                 }
@@ -3373,22 +3372,44 @@ namespace VPB
             return new List<string>(list);
 		}
 
-		/// <summary>
-		/// Hub missing-scan presence: package is in VPB registry (AddonPackages or AllPackages).
-		/// Uses group / exact UID maps — not GetPackage — so vamX-absent short-circuit cannot
-		/// false-flag VamXFan / vamX.* content packs that are already on disk.
-		/// </summary>
 		static bool IsLocalDependencyPresentForHubMissingScan(string depId, HashSet<string> uidKeys, HashSet<string> groupKeys)
 		{
 			if (string.IsNullOrEmpty(depId)) return false;
 			if (uidKeys != null && uidKeys.Contains(depId)) return true;
-			string canonical = CanonicalizeUidSegments(depId);
-			if (uidKeys != null
-				&& !string.Equals(canonical, depId, StringComparison.Ordinal)
-				&& uidKeys.Contains(canonical))
-				return true;
-			string group = PackageIDToPackageGroupID(canonical);
+			string group = PackageIDToPackageGroupID(depId);
 			return !string.IsNullOrEmpty(group) && groupKeys != null && groupKeys.Contains(group);
+		}
+
+		public static VarPackage GetExactRegisteredPackage(string uidOrFilename)
+		{
+			if (string.IsNullOrEmpty(uidOrFilename) || uidOrFilename == "null") return null;
+			string stem = packagePathToUid(CleanFilePath(uidOrFilename));
+			if (string.IsNullOrEmpty(stem)) return null;
+			lock (packagesLock)
+			{
+				VarPackage p;
+				if (packagesByUid != null && packagesByUid.TryGetValue(stem, out p) && p != null)
+					return p;
+				if (packagesByPath == null) return null;
+				string wantFn = stem + ".var";
+				foreach (KeyValuePair<string, VarPackage> kv in packagesByPath)
+				{
+					if (kv.Value == null || string.IsNullOrEmpty(kv.Key)) continue;
+					int slash = kv.Key.LastIndexOf('/');
+					string existingFn = slash >= 0 ? kv.Key.Substring(slash + 1) : kv.Key;
+					if (string.Equals(existingFn, wantFn, StringComparison.OrdinalIgnoreCase))
+						return kv.Value;
+				}
+			}
+			return null;
+		}
+
+		internal static VarPackageGroup GetExactPackageGroup(string groupId)
+		{
+			if (string.IsNullOrEmpty(groupId) || packageGroups == null) return null;
+			VarPackageGroup g;
+			packageGroups.TryGetValue(groupId, out g);
+			return g;
 		}
 
 		public static bool IsSecureReadPath(string path)

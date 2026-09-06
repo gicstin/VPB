@@ -2325,14 +2325,13 @@ namespace VPB
                 if (!string.IsNullOrEmpty(pinned)) int.TryParse(pinned, out concreteVer);
             }
 
-            // .latest (and loose rows) → concrete Author.Name.N.var from Hub latest_version/filename.
             if (concreteVer > 0)
             {
                 string concreteFn = group + "." + concreteVer + ".var";
                 bool filenameBad = string.IsNullOrEmpty(filename) || filename == "null"
                     || filename.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) >= 0
                     || !Regex.IsMatch(filename, "\\.([0-9]+)\\.var$", RegexOptions.IgnoreCase);
-                if (requestLatest || filenameBad)
+                if (filenameBad)
                     j["filename"] = concreteFn;
                 j["version"] = concreteVer.ToString();
                 if (string.IsNullOrEmpty(latestVersion) || latestVersion == "null")
@@ -2444,6 +2443,11 @@ namespace VPB
                 if (serverPackages != null)
                     serverPackages.TryGetValue(checkMissingPackageName, out jSONClass);
                 jSONClass = ResolveFindPackagesEntry(checkMissingPackageName, jSONClass);
+
+                string resolvedFn = jSONClass != null ? jSONClass["filename"] : null;
+                if (FileManager.GetExactRegisteredPackage(resolvedFn) != null
+                    || FileManager.GetExactRegisteredPackage(checkMissingPackageName) != null)
+                    continue;
 
                 HubResourcePackage hubResourcePackage = new HubResourcePackage(jSONClass, this, true);
                 RectTransform rectTransform = CreateDownloadPrefabInstance();
