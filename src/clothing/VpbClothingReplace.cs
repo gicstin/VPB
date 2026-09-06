@@ -370,7 +370,7 @@ namespace VPB
                 catch { }
             }
 
-            return true;
+            return displaced.Count > 0;
         }
 
     }

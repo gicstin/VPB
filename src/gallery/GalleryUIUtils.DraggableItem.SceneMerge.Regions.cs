@@ -128,6 +128,13 @@ namespace VPB
              if (name.Contains("glove")) regions.Add("hands");
              
              if (name.Contains("hat") || name.Contains("cap") || name.Contains("mask") || name.Contains("glasses")) regions.Add("head");
+             if (name.Contains("earring") || name.Contains("piercing") || name.Contains("necklace")
+                 || name.Contains("choker") || name.Contains("bracelet") || name.Contains("anklet")
+                 || name.Contains("jewelry") || name.Contains("jewellery") || name.Contains("accessory"))
+             {
+                 regions.Add("accessory");
+                 regions.Add("jewelry");
+             }
              
              return regions;
         }

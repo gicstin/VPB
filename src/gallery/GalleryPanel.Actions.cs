@@ -437,6 +437,14 @@ namespace VPB
             return filtered;
         }
 
+        internal List<FileEntry> GetRandomCandidatePool()
+        {
+            var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+                ? currentFilteredFiles
+                : lastFilteredFiles;
+            return FilterRandomPoolForCurrentCategory(pool);
+        }
+
         /// <param name="excludeIdentityKey">
         /// When set and pool has 2+ items, never pick this identity (path/uid). Retries then linear scan.
         /// </param>
@@ -463,23 +471,11 @@ namespace VPB
                     overrideHeld = true;
                 }
 
-                // Prefer the currently visible list (includes top search + filter-mode search).
-                // lastFilteredFiles is a post-refresh snapshot and does not change when the user searches.
-                var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
-                    ? currentFilteredFiles
-                    : lastFilteredFiles;
+                var pool = GetRandomCandidatePool();
 
                 if (pool == null || pool.Count == 0)
                 {
                     LogUtil.LogWarning("[VPB] Load Random: no items available.");
-                    return;
-                }
-
-                // Category-safe pool: Appearance must not pick SubScene/Scene rows if list was polluted.
-                pool = FilterRandomPoolForCurrentCategory(pool);
-                if (pool == null || pool.Count == 0)
-                {
-                    LogUtil.LogWarning("[VPB] Load Random: no category-matching items in filtered view.");
                     return;
                 }
 

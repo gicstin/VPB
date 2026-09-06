@@ -5,21 +5,9 @@ using MVR.FileManagement;
 
 namespace VPB
 {
-    /// <summary>
-    /// Hover preview for random buttons (desktop quick-menu grid + VR wrist watch + gallery toolbox):
-    /// pointing at a random button draws the item it would launch and shows its thumbnail; clicking
-    /// launches exactly that item; leaving and returning draws a new one.
-    ///
-    /// Desktop quick-actions card sits above the tooltip bar (grid is bottom-left HUD chrome).
-    /// Toolbox Random greys the file grid and shows a centered card. Empty pool still shows a card.
-    ///
-    /// Cost control: the current-view pool is sampled by rejection (no copy). A category the gallery is not
-    /// showing needs one navigate+refresh, so that runs at most once per category per TTL, only after a
-    /// short hover dwell, and its result is kept as a small reel that later hovers pop for free.
-    /// </summary>
     public partial class VamHookPlugin
     {
-        private const int QmPreviewReelMax = 12;
+        private const int QmPreviewReelInitialCap = 12;
         private const float QmPreviewReelTtlSec = 90f;
         private const float QmPreviewColdDwellSec = 0.35f;
         private const float QmPreviewRearmSec = 0.75f;
@@ -37,6 +25,8 @@ namespace VPB
         private const float QmPreviewPad = 6f;
         private const float QmPreviewLabelH = 18f;
         private const float QmPreviewSubLabelH = 15f;
+        private const float QmPreviewFilterStripH = 30f;
+        private const int QmPreviewFilterFont = 20;
         // Fixed px at HUD local scale 1. A fraction of a panel this big rounds the backdrop into a lozenge.
         private const float QmPreviewCornerPx = 6f;
 
@@ -46,8 +36,8 @@ namespace VPB
 
         private sealed class QmPreviewReel
         {
-            public readonly List<FileEntry> Items = new List<FileEntry>(QmPreviewReelMax);
-            public int Next;
+            public readonly List<FileEntry> Items = new List<FileEntry>(QmPreviewReelInitialCap);
+            public string FilterCaption;
             public float ExpiresRt;
             public int Epoch;
         }
@@ -72,6 +62,7 @@ namespace VPB
         private RawImage m_QmPreviewDeskImg;
         private Text m_QmPreviewDeskLabel;
         private Text m_QmPreviewDeskSubLabel;
+        private Text m_QmPreviewDeskFilterLabel;
 
         private GameObject m_QmPreviewWatchGo;
         private RectTransform m_QmPreviewWatchRt;
@@ -79,6 +70,7 @@ namespace VPB
         private RawImage m_QmPreviewWatchImg;
         private Text m_QmPreviewWatchLabel;
         private Text m_QmPreviewWatchSubLabel;
+        private Text m_QmPreviewWatchFilterLabel;
         private Vector3[] m_QmPreviewWorldCorners;
 
         private static bool QuickMenuRandomPreviewEnabled()
@@ -272,13 +264,13 @@ namespace VPB
             int serial = m_QmPreviewSerial;
             m_QmPreviewBuilding = true;
             m_QmPreviewBuildStartRt = Time.unscaledTime;
-            panel.QuickMenu_PrepareRandomSampleForCategory(category, reel.Items, QmPreviewReelMax, count =>
+            panel.QuickMenu_PrepareRandomSampleForCategory(category, reel.Items, count =>
             {
                 m_QmPreviewBuilding = false;
-                reel.Next = 0;
                 reel.Epoch = GalleryFileListSnapshotCache.Epoch;
                 reel.ExpiresRt = Time.unscaledTime + QmPreviewReelTtlSec;
-                if (count <= 0)
+                reel.FilterCaption = panel.QuickMenu_CopiedRandomPoolFilterCaption;
+                if (count <= 0 && string.IsNullOrEmpty(reel.FilterCaption))
                 {
                     QuickMenuDropPreviewReel(category);
                     if (serial != m_QmPreviewSerial) return;
@@ -289,7 +281,7 @@ namespace VPB
 
                 if (serial != m_QmPreviewSerial) return; // pointer moved on — keep the reel, drop the show
                 m_QmPreviewWaiting = false;
-                m_QmPreviewPick = QuickMenuTakeFromReel(reel);
+                m_QmPreviewPick = count > 0 ? QuickMenuTakeFromReel(reel) : null;
                 QuickMenuApplyRandomPreviewVisual();
             });
         }
@@ -341,8 +333,7 @@ namespace VPB
             QmPreviewReel reel;
             if (m_QmPreviewReels.TryGetValue(key, out reel) && reel != null)
             {
-                bool stale = reel.Items.Count == 0
-                    || Time.unscaledTime >= reel.ExpiresRt
+                bool stale = Time.unscaledTime >= reel.ExpiresRt
                     || reel.Epoch != GalleryFileListSnapshotCache.Epoch;
                 if (!stale) return reel;
                 if (!createIfMissing)
@@ -351,7 +342,7 @@ namespace VPB
                     return null;
                 }
                 reel.Items.Clear();
-                reel.Next = 0;
+                reel.FilterCaption = null;
                 return reel;
             }
 
@@ -370,13 +361,10 @@ namespace VPB
         private FileEntry QuickMenuTakeFromReel(QmPreviewReel reel)
         {
             if (reel == null || reel.Items.Count == 0) return null;
-            if (reel.Next >= reel.Items.Count) reel.Next = 0;
-            FileEntry pick = reel.Items[reel.Next++];
-            if (pick == null && reel.Items.Count > 1)
-            {
-                if (reel.Next >= reel.Items.Count) reel.Next = 0;
-                pick = reel.Items[reel.Next++];
-            }
+            string scope = m_QmPreviewCategory;
+            if (string.IsNullOrEmpty(scope)) scope = VpbRandomHistory.ViewScope;
+            string extra = VpbRandomHistory.IdentityOf(m_QmPreviewLastPick);
+            FileEntry pick = VpbRandomHistory.Pick(scope, reel.Items, extra, false);
             m_QmPreviewLastPick = pick;
             return pick;
         }
@@ -384,7 +372,7 @@ namespace VPB
         // ---------------------------------------------------------------- widgets
 
         private void QuickMenuBuildRandomPreviewWidget(Transform parent, string name, float thumb, int font,
-            out GameObject go, out RectTransform rt, out Image bg, out RawImage img, out Text label, out Text subLabel)
+            out GameObject go, out RectTransform rt, out Image bg, out RawImage img, out Text label, out Text subLabel, out Text filterLabel)
         {
             float captionH = QmPreviewLabelH + QmPreviewSubLabelH;
             float w = thumb + QmPreviewPad * 2f;
@@ -429,6 +417,8 @@ namespace VPB
                 new Vector2(0f, QmPreviewPad * 0.5f), "PreviewSubLabel");
             if (subLabel != null) subLabel.resizeTextForBestFit = false;
 
+            filterLabel = GalleryPanel.QuickMenu_CreateFilterHeader(go, QmPreviewFilterFont, QmPreviewFilterStripH);
+
             go.SetActive(false);
         }
 
@@ -447,7 +437,7 @@ namespace VPB
             QuickMenuBuildRandomPreviewWidget(m_QuickMenuCanvas.transform, "VPB_QM_RandomPreview",
                 QmPreviewDeskThumb, QmPreviewDeskFont,
                 out m_QmPreviewDeskGo, out m_QmPreviewDeskRt, out m_QmPreviewDeskBg, out m_QmPreviewDeskImg,
-                out m_QmPreviewDeskLabel, out m_QmPreviewDeskSubLabel);
+                out m_QmPreviewDeskLabel, out m_QmPreviewDeskSubLabel, out m_QmPreviewDeskFilterLabel);
             QuickMenuPositionDeskPreview();
         }
 
@@ -457,7 +447,7 @@ namespace VPB
             QuickMenuBuildRandomPreviewWidget(root.transform, "RandomPreview",
                 QmPreviewWatchThumb, QmPreviewWatchFont,
                 out m_QmPreviewWatchGo, out m_QmPreviewWatchRt, out m_QmPreviewWatchBg, out m_QmPreviewWatchImg,
-                out m_QmPreviewWatchLabel, out m_QmPreviewWatchSubLabel);
+                out m_QmPreviewWatchLabel, out m_QmPreviewWatchSubLabel, out m_QmPreviewWatchFilterLabel);
             if (m_QmPreviewWatchRt != null)
             {
                 m_QmPreviewWatchRt.pivot = new Vector2(0.5f, 0f);
@@ -575,6 +565,7 @@ namespace VPB
             m_QmPreviewWatchImg = null;
             m_QmPreviewWatchLabel = null;
             m_QmPreviewWatchSubLabel = null;
+            m_QmPreviewWatchFilterLabel = null;
             if (m_QmPreviewOnWatch) QuickMenuEndRandomPreview();
         }
 
@@ -602,6 +593,7 @@ namespace VPB
             RawImage img = showWatch ? m_QmPreviewWatchImg : m_QmPreviewDeskImg;
             Text label = showWatch ? m_QmPreviewWatchLabel : m_QmPreviewDeskLabel;
             Text subLabel = showWatch ? m_QmPreviewWatchSubLabel : m_QmPreviewDeskSubLabel;
+            Text filterLabel = showWatch ? m_QmPreviewWatchFilterLabel : m_QmPreviewDeskFilterLabel;
             if (go == null) return;
 
             if (showDesk) QuickMenuPositionDeskPreview();
@@ -613,6 +605,9 @@ namespace VPB
             }
 
             var panel = QuickMenuGetTargetPanel();
+            RectTransform cardRt = showWatch ? m_QmPreviewWatchRt : m_QmPreviewDeskRt;
+            float thumb = showWatch ? QmPreviewWatchThumb : QmPreviewDeskThumb;
+
             if (m_QmPreviewPick == null)
             {
                 if (panel != null && img != null) panel.QuickMenu_ClearPreviewThumbnail(img);
@@ -620,12 +615,15 @@ namespace VPB
                 {
                     QuickMenuSetPreviewLabel(label, VPBTranslation.T("hook.qmpreview.picking", "Picking…"));
                     QuickMenuSetPreviewLabel(subLabel, "");
+                    GalleryPanel.QuickMenu_ApplyFilterStrip(filterLabel, null);
                 }
                 else
                 {
                     QuickMenuSetPreviewLabel(label, VPBTranslation.T("hook.qmpreview.empty", "No items"));
                     QuickMenuSetPreviewLabel(subLabel, VPBTranslation.T("hook.qmpreview.empty_sub", "Nothing in this pool"));
+                    GalleryPanel.QuickMenu_ApplyFilterStrip(filterLabel, QuickMenuResolveFilterCaption(panel));
                 }
+                QuickMenuLayoutPreviewWidget(cardRt, thumb, QuickMenuFilterHeaderOn(filterLabel));
                 return;
             }
 
@@ -641,6 +639,39 @@ namespace VPB
             }
             QuickMenuSetPreviewLabel(label, primary);
             QuickMenuSetPreviewLabel(subLabel, secondary);
+            GalleryPanel.QuickMenu_ApplyFilterStrip(filterLabel, QuickMenuResolveFilterCaption(panel));
+            QuickMenuLayoutPreviewWidget(cardRt, thumb, QuickMenuFilterHeaderOn(filterLabel));
+        }
+
+        private static bool QuickMenuFilterHeaderOn(Text filterLabel)
+        {
+            if (filterLabel == null || filterLabel.transform.parent == null) return false;
+            return filterLabel.transform.parent.gameObject.activeSelf;
+        }
+
+        private void QuickMenuLayoutPreviewWidget(RectTransform cardRt, float thumb, bool headerOn)
+        {
+            if (cardRt == null) return;
+            float headerH = headerOn ? QmPreviewFilterStripH : 0f;
+            float captionH = QmPreviewLabelH + QmPreviewSubLabelH;
+            float w = thumb + QmPreviewPad * 2f;
+            float h = thumb + QmPreviewPad * 2f + captionH + headerH;
+            cardRt.sizeDelta = new Vector2(w, h);
+            Transform thumbTr = cardRt.Find("Thumb");
+            RectTransform thumbRt = thumbTr as RectTransform;
+            if (thumbRt != null)
+                thumbRt.anchoredPosition = new Vector2(0f, captionH * 0.5f - headerH * 0.5f);
+        }
+
+        private string QuickMenuResolveFilterCaption(GalleryPanel panel)
+        {
+            if (panel == null) return null;
+            string cat = m_QmPreviewCategory;
+            if (string.IsNullOrEmpty(cat) || panel.QuickMenu_IsShowingRandomCategory(cat))
+                return panel.QuickMenu_FormatRandomPoolFilterCaption();
+            QmPreviewReel reel = QuickMenuGetPreviewReel(cat, false);
+            if (reel != null) return reel.FilterCaption;
+            return null;
         }
 
         private void QuickMenuHidePreviewWidget(GameObject go, RawImage img)

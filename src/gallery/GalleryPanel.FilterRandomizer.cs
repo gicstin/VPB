@@ -313,9 +313,7 @@ namespace VPB
                     yield return WaitForFilterRefresh(gen);
                     if (gen != _filterRandomizeGen) yield break;
 
-                    var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
-                        ? currentFilteredFiles
-                        : lastFilteredFiles;
+                    var pool = GetRandomCandidatePool();
 
                     if (pool == null || pool.Count == 0)
                     {
