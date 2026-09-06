@@ -560,8 +560,7 @@ namespace VPB
             }
             if (SideRailGoIs(go, leftRemoveModeSideBtn, rightRemoveModeSideBtn))
             {
-                tipKey = "gallery.tooltip.remove_mode";
-                tipDefault = "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.";
+                GetRemoveRailTooltip(out tipKey, out tipDefault);
                 return true;
             }
             if (SideRailGoMatches(go, leftCategoryBtnImage, rightCategoryBtnImage, leftCategoryBtnText, rightCategoryBtnText))
@@ -621,7 +620,7 @@ namespace VPB
             if (SideRailGoIs(go, leftUserTagsSideBtn, rightUserTagsSideBtn))
                 return VPBTranslation.T("gallery.side.overflow_tags", "User Tags");
             if (SideRailGoIs(go, leftRemoveModeSideBtn, rightRemoveModeSideBtn))
-                return VPBTranslation.T("gallery.side.overflow_remove_mode", "Scene Eraser");
+                return GetRemoveRailOverflowLabel();
             if (SideRailGoMatches(go, leftCategoryBtnImage, rightCategoryBtnImage, leftCategoryBtnText, rightCategoryBtnText))
                 return VPBTranslation.T("gallery.side.overflow_category", "Category");
             if (SideRailGoMatches(go, leftCreatorBtnImage, rightCreatorBtnImage, leftCreatorBtnText, rightCreatorBtnText))

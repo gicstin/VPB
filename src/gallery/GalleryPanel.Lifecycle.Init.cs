@@ -1254,6 +1254,8 @@ namespace VPB
                     galleryReplaceSprite = UI.LoadIconSprite("replace", sideTint);
                     galleryRemoveSprite = UI.LoadIconSprite("user-minus", sideTint)
                         ?? UI.LoadIconSprite("backspace", sideTint);
+                    galleryRemoveModeSprite = UI.LoadIconSprite("trash", UI.SideRailIconGlyphTint)
+                        ?? galleryRemoveSprite;
                     galleryRemoveClothingSprite = UI.LoadIconSprite("shirt-off", sideTint)
                         ?? galleryRemoveSprite;
                     galleryRemoveHairSprite = UI.LoadIconSprite("scissors-off", sideTint)
@@ -1475,9 +1477,8 @@ namespace VPB
                     Color colorRemoveModeRail = RemoveModeRailBackdrop;
                     float rmW = sideIconBtn;
                     float rmH = sideIconBtn;
-                    Sprite rmSpr = null;
-                    try { rmSpr = UI.LoadIconSprite("trash", UI.SideRailIconGlyphTint); } catch { }
-                    GameObject rightRemoveModeBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveMode(false, false));
+                    Sprite rmSpr = galleryRemoveModeSprite;
+                    GameObject rightRemoveModeBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveRailButton(false, false));
                     rightRemoveModeSideBtn = rightRemoveModeBtn;
                     Image rmImg = rightRemoveModeBtn.GetComponent<Image>();
                     Text rmTxt = rightRemoveModeBtn.GetComponentInChildren<Text>(true);
@@ -1492,15 +1493,15 @@ namespace VPB
                         rmImg.color = colorRemoveModeRail;
                         if (rmTxt != null)
                         {
-                            rmTxt.text = VPBTranslation.T("gallery.side.remove_mode_short", "Eraser");
+                            rmTxt.text = GetRemoveRailShortLabel();
                             rmTxt.fontSize = btnFontSize;
                             rmTxt.gameObject.SetActive(true);
                         }
                     }
                     rightRemoveModeBtnOutline = RemoveModeAddRailOutline(rightRemoveModeBtn);
                     rightSideButtons.Add(rightRemoveModeBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(rightRemoveModeBtn, () => ToggleRemoveMode(false, true));
-                    AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Scene Eraser: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene. Esc exits.");
+                    AddRightClickDelegate(rightRemoveModeBtn, () => ToggleRemoveRailButton(false, true));
+                    AddDynamicTooltip(rightRemoveModeBtn, GetRemoveRailTooltipText);
                 }
 
                 {
@@ -1762,9 +1763,8 @@ namespace VPB
                     Color colorRemoveModeRailL = RemoveModeRailBackdrop;
                     float rmW = sideIconBtn;
                     float rmH = sideIconBtn;
-                    Sprite rmSprL = null;
-                    try { rmSprL = UI.LoadIconSprite("trash", UI.SideRailIconGlyphTint); } catch { }
-                    GameObject leftRemoveModeBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveMode(true, false));
+                    Sprite rmSprL = galleryRemoveModeSprite;
+                    GameObject leftRemoveModeBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveRailButton(true, false));
                     leftRemoveModeSideBtn = leftRemoveModeBtn;
                     Image rmImgL = leftRemoveModeBtn.GetComponent<Image>();
                     Text rmTxtL = leftRemoveModeBtn.GetComponentInChildren<Text>(true);
@@ -1779,15 +1779,16 @@ namespace VPB
                         rmImgL.color = colorRemoveModeRailL;
                         if (rmTxtL != null)
                         {
-                            rmTxtL.text = VPBTranslation.T("gallery.side.remove_mode_short", "Eraser");
+                            rmTxtL.text = GetRemoveRailShortLabel();
                             rmTxtL.fontSize = btnFontSize;
                             rmTxtL.gameObject.SetActive(true);
                         }
                     }
                     leftRemoveModeBtnOutline = RemoveModeAddRailOutline(leftRemoveModeBtn);
                     leftSideButtons.Add(leftRemoveModeBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(leftRemoveModeBtn, () => ToggleRemoveMode(true, true));
-                    AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Scene Eraser: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene. Esc exits.");
+                    AddRightClickDelegate(leftRemoveModeBtn, () => ToggleRemoveRailButton(true, true));
+                    AddDynamicTooltip(leftRemoveModeBtn, GetRemoveRailTooltipText);
+                    try { SyncRemoveRailButtonChrome(); } catch { }
                 }
 
                 {

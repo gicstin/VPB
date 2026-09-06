@@ -1880,10 +1880,8 @@ namespace VPB
             RefreshSceneImportSideButtonVisibility();
 
             string title = currentCategoryTitle ?? "";
-            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isClothing, isHair, isScene;
+            GetRemoveCategoryFlags(out isClothing, out isHair, out isScene);
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
             bool showSave = true;
 
@@ -1909,6 +1907,7 @@ namespace VPB
             {
                 try { EnsureRemoveSiderailOpenForCurrentCategory(); } catch { }
             }
+            try { SyncRemoveRailButtonChrome(); } catch { }
 
             // Update arrow indicators immediately (not only after submenu hover).
             bool anyClothingChanged = false;

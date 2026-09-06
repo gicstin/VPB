@@ -1494,6 +1494,7 @@ namespace VPB
         private Sprite galleryAddSprite;
         private Sprite galleryReplaceSprite;
         private Sprite galleryRemoveSprite;
+        private Sprite galleryRemoveModeSprite;
         private Sprite galleryRemoveClothingSprite;
         private Sprite galleryRemoveHairSprite;
 

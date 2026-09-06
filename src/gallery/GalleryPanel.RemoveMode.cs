@@ -13,6 +13,8 @@ namespace VPB
     {
         private enum RemoveTargetKind { None, ClothingItem, HairItem, Atom }
 
+        private enum RemoveRailJob { SceneEraser, UnequipClothing, UnequipHair }
+
         private sealed class RemoveTarget
         {
             public RemoveTargetKind kind;
@@ -234,6 +236,210 @@ namespace VPB
             else RemoveModeEnter(PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick));
         }
 
+        internal void ToggleRemoveRailButton(bool fromLeftRailButton, bool rightClick = false)
+        {
+            RemoveRailJob job = GetRemoveRailJob();
+            bool useLeft = PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick);
+            if (job == RemoveRailJob.UnequipClothing)
+            {
+                if (_removeModeActive) RemoveModeExit();
+                ToggleClothingSubmenuFromSideButtons(null, useLeft);
+                return;
+            }
+            if (job == RemoveRailJob.UnequipHair)
+            {
+                if (_removeModeActive) RemoveModeExit();
+                ToggleHairSubmenuFromSideButtons(null, useLeft);
+                return;
+            }
+            ToggleRemoveMode(fromLeftRailButton, rightClick);
+        }
+
+        private void GetRemoveCategoryFlags(out bool isClothing, out bool isHair, out bool isScene)
+        {
+            string title = currentCategoryTitle ?? "";
+            isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+            isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (isClothing || isHair || isScene || isSubScene) return;
+            ApplyHubTypeRemoveCategoryFlags(ref isClothing, ref isHair, ref isScene);
+        }
+
+        private bool TryGetHubTypeRemoveDisplayName(out string hub)
+        {
+            hub = null;
+            if (!string.IsNullOrEmpty(_hubTypeBrowseToken))
+            {
+                hub = VpbLocalDatabase.DataPackHubCategoryDisplayName(_hubTypeBrowseToken);
+                if (!string.IsNullOrEmpty(hub)) return true;
+            }
+            try
+            {
+                string shown = titleText != null ? titleText.text : null;
+                if (!string.IsNullOrEmpty(shown)
+                    && shown.StartsWith("Hub:", StringComparison.OrdinalIgnoreCase)
+                    && shown.Length > 4)
+                {
+                    hub = shown.Substring(4).Trim();
+                    if (!string.IsNullOrEmpty(hub)) return true;
+                }
+            }
+            catch { }
+
+            string token = TryGetSinglePackHubCatIncludeToken();
+            if (string.IsNullOrEmpty(token)) return false;
+            hub = VpbLocalDatabase.DataPackHubCategoryDisplayName(token);
+            return !string.IsNullOrEmpty(hub);
+        }
+
+        private string TryGetSinglePackHubCatIncludeToken()
+        {
+            if (nameFilterQuery == null || nameFilterQuery.Branches == null) return null;
+            string found = null;
+            int n = 0;
+            for (int i = 0; i < nameFilterQuery.Branches.Count; i++)
+            {
+                GallerySearchBranch br = nameFilterQuery.Branches[i];
+                if (br == null || br.PackHubCatInclude == null) continue;
+                for (int t = 0; t < br.PackHubCatInclude.Count; t++)
+                {
+                    string term = br.PackHubCatInclude[t];
+                    if (string.IsNullOrEmpty(term)) continue;
+                    if (term.Length > 1 && term[0] == '=') term = term.Substring(1);
+                    n++;
+                    if (n > 1) return null;
+                    found = term;
+                }
+            }
+            return found;
+        }
+
+        private void ApplyHubTypeRemoveCategoryFlags(ref bool isClothing, ref bool isHair, ref bool isScene)
+        {
+            string hub;
+            if (!TryGetHubTypeRemoveDisplayName(out hub)) return;
+
+            string[] cats = GalleryHubTypeItemScope.CategoriesFor(hub);
+            if (cats != null)
+            {
+                for (int i = 0; i < cats.Length; i++)
+                {
+                    string c = cats[i];
+                    if (string.IsNullOrEmpty(c)) continue;
+                    if (c.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
+                        isClothing = true;
+                    else if (c.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+                        isHair = true;
+                }
+            }
+
+            if (string.Equals(hub, "Scenes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(hub, "Demo + Lite", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(hub, "Comics + Storytelling", StringComparison.OrdinalIgnoreCase))
+                isScene = true;
+        }
+
+        private RemoveRailJob GetRemoveRailJob()
+        {
+            bool isClothing, isHair, isScene;
+            GetRemoveCategoryFlags(out isClothing, out isHair, out isScene);
+            if (isClothing) return RemoveRailJob.UnequipClothing;
+            if (isHair) return RemoveRailJob.UnequipHair;
+            return RemoveRailJob.SceneEraser;
+        }
+
+        private void GetRemoveRailTooltip(out string key, out string englishDefault)
+        {
+            switch (GetRemoveRailJob())
+            {
+                case RemoveRailJob.UnequipClothing:
+                    key = "gallery.tooltip.remove_clothing";
+                    englishDefault = "Unequip clothing items (preview list). Hover a row to preview takeoff, click to remove.";
+                    return;
+                case RemoveRailJob.UnequipHair:
+                    key = "gallery.tooltip.remove_hair";
+                    englishDefault = "Unequip hair items (preview list). Hover a row to preview takeoff, click to remove.";
+                    return;
+                default:
+                    key = "gallery.tooltip.remove_mode";
+                    englishDefault = "Scene Eraser: point at an item to fade it, click to remove. Esc exits.";
+                    return;
+            }
+        }
+
+        private string GetRemoveRailTooltipText()
+        {
+            string key, englishDefault;
+            GetRemoveRailTooltip(out key, out englishDefault);
+            return VPBTranslation.T(key, englishDefault);
+        }
+
+        private string GetRemoveRailOverflowLabel()
+        {
+            switch (GetRemoveRailJob())
+            {
+                case RemoveRailJob.UnequipClothing:
+                    return SidePanelHeaderTranslation("gallery.side.remove_clothing", "Unequip Clothing");
+                case RemoveRailJob.UnequipHair:
+                    return SidePanelHeaderTranslation("gallery.side.remove_hair", "Unequip Hair");
+                default:
+                    return VPBTranslation.T("gallery.side.overflow_remove_mode", "Scene Eraser");
+            }
+        }
+
+        private string GetRemoveRailShortLabel()
+        {
+            switch (GetRemoveRailJob())
+            {
+                case RemoveRailJob.UnequipClothing:
+                    return SidePanelHeaderTranslation("gallery.side.remove_clothing", "Unequip Clothing");
+                case RemoveRailJob.UnequipHair:
+                    return SidePanelHeaderTranslation("gallery.side.remove_hair", "Unequip Hair");
+                default:
+                    return VPBTranslation.T("gallery.side.remove_mode_short", "Eraser");
+            }
+        }
+
+        private Sprite GetRemoveRailIconSprite()
+        {
+            switch (GetRemoveRailJob())
+            {
+                case RemoveRailJob.UnequipClothing:
+                    if (galleryRemoveClothingSprite != null) return galleryRemoveClothingSprite;
+                    break;
+                case RemoveRailJob.UnequipHair:
+                    if (galleryRemoveHairSprite != null) return galleryRemoveHairSprite;
+                    break;
+            }
+            return galleryRemoveModeSprite;
+        }
+
+        private void SyncRemoveRailButtonChrome()
+        {
+            Sprite spr = GetRemoveRailIconSprite();
+            if (spr != null)
+            {
+                if (rightRemoveModeBtnIconImage != null) rightRemoveModeBtnIconImage.sprite = spr;
+                if (leftRemoveModeBtnIconImage != null) leftRemoveModeBtnIconImage.sprite = spr;
+            }
+            else
+            {
+                string shortLabel = GetRemoveRailShortLabel();
+                TrySetRemoveRailFallbackText(rightRemoveModeSideBtn, shortLabel);
+                TrySetRemoveRailFallbackText(leftRemoveModeSideBtn, shortLabel);
+            }
+        }
+
+        private static void TrySetRemoveRailFallbackText(GameObject btn, string text)
+        {
+            if (btn == null || string.IsNullOrEmpty(text)) return;
+            Text t = btn.GetComponentInChildren<Text>(true);
+            if (t == null) return;
+            t.text = text;
+        }
+
         private void RemoveModeEnter(bool useLeftSide)
         {
             _removeModeSiderailUseLeft = useLeftSide;
@@ -282,11 +488,8 @@ namespace VPB
         /// <summary>Open clothing/hair/atom remove list siderail to match current gallery category (with Remove Mode).</summary>
         private void EnsureRemoveSiderailOpenForCurrentCategory()
         {
-            string title = currentCategoryTitle ?? "";
-            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isClothing, isHair, isScene;
+            GetRemoveCategoryFlags(out isClothing, out isHair, out isScene);
 
             if (!isClothing && !isHair && !isScene)
             {
