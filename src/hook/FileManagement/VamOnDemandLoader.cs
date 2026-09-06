@@ -1726,21 +1726,62 @@ namespace VPB
             string uid = p.Substring(0, colonIdx);
             if (string.IsNullOrEmpty(uid)) return null;
 
-            // Only rewrite casing when we can resolve the same UID/version.
             try
             {
-                VarPackage pkg = FileManager.GetPackage(uid, ensureInstalled: false);
-                if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) return null;
+                string registeredUid;
+                if (!FileManager.TryMapLookupUidToRegisteredUid(uid, out registeredUid)
+                    || string.IsNullOrEmpty(registeredUid))
+                    return null;
 
-                if (string.Equals(pkg.Uid, uid, StringComparison.Ordinal)) return null;
-                if (!string.Equals(pkg.Uid, uid, StringComparison.OrdinalIgnoreCase)) return null;
-
-                string rewritten = pkg.Uid + p.Substring(colonIdx);
+                string rewritten = registeredUid + p.Substring(colonIdx);
                 LogPathRewriteProbeLimited(p, rewritten,
-                    "[VPB OnDemand] Rewrote entry UID by case-insensitive package lookup: req=" + p + " -> " + rewritten);
+                    "[VPB OnDemand] Rewrote entry UID to registered package: req=" + p + " -> " + rewritten);
                 return rewritten;
             }
             catch { return null; }
+        }
+
+        internal static bool TryNativeGetPackageWithRegisteredUid(
+            string requestedUid,
+            ref MVR.FileManagement.VarPackage result)
+        {
+            string registeredUid;
+            if (!FileManager.TryMapLookupUidToRegisteredUid(requestedUid, out registeredUid))
+                return false;
+            result = MVR.FileManagement.FileManager.GetPackage(registeredUid);
+            return result != null;
+        }
+
+        internal static bool TryNativeIsPackageWithRegisteredUid(string requestedUid, ref bool result)
+        {
+            string registeredUid;
+            if (!FileManager.TryMapLookupUidToRegisteredUid(requestedUid, out registeredUid))
+                return false;
+            result = MVR.FileManagement.FileManager.IsPackage(registeredUid);
+            return result;
+        }
+
+        internal static bool TryNativeGetPackageGroupWithRegisteredUid(
+            string requestedGroupId,
+            ref MVR.FileManagement.VarPackageGroup result)
+        {
+            string registeredGroupId;
+            if (!FileManager.TryMapLookupGroupIdToRegisteredGroupId(requestedGroupId, out registeredGroupId))
+                return false;
+            result = MVR.FileManagement.FileManager.GetPackageGroup(registeredGroupId);
+            return result != null;
+        }
+
+        internal static bool TryNativeGetVarFileEntryWithRegisteredUid(
+            string path,
+            ref MVR.FileManagement.VarFileEntry result)
+        {
+            string rewritten = TryRewriteEntryPathUidByCaseInsensitiveLookup(path);
+            if (string.IsNullOrEmpty(rewritten)
+                || string.Equals(rewritten, path, StringComparison.Ordinal))
+                return false;
+            result = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
+            return result != null;
         }
 
         public static string RewriteEntryPathToBestAvailable(string entryPath, bool attemptRegister)
@@ -2199,6 +2240,17 @@ namespace VPB
             string all = NormalizePath(Path.Combine("AllPackages", filename));
             if (File.Exists(all)) return all;
 
+            string registeredUid;
+            if (FileManager.TryMapLookupUidToRegisteredUid(uid, out registeredUid)
+                && !string.IsNullOrEmpty(registeredUid))
+            {
+                string aliasFilename = registeredUid + ".var";
+                string aliasAddon = NormalizePath(Path.Combine("AddonPackages", aliasFilename));
+                if (File.Exists(aliasAddon)) return aliasAddon;
+                string aliasAll = NormalizePath(Path.Combine("AllPackages", aliasFilename));
+                if (File.Exists(aliasAll)) return aliasAll;
+            }
+
             // Recursive walk is expensive on large libraries — never during Refresh / pre-ready.
             if (VamScanFilter.IsVamRefreshInProgress
                 || (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged()))
@@ -2212,6 +2264,13 @@ namespace VPB
                     string[] matches = Directory.GetFiles(root, filename, SearchOption.AllDirectories);
                     if (matches != null && matches.Length > 0)
                         return NormalizePath(matches[0]);
+                    if (!string.IsNullOrEmpty(registeredUid)
+                        && !string.Equals(registeredUid + ".var", filename, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string[] aliasMatches = Directory.GetFiles(root, registeredUid + ".var", SearchOption.AllDirectories);
+                        if (aliasMatches != null && aliasMatches.Length > 0)
+                            return NormalizePath(aliasMatches[0]);
+                    }
                 }
                 catch { }
             }

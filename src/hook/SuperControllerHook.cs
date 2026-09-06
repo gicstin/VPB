@@ -1166,6 +1166,13 @@ namespace VPB
                         return;
                     }
 
+                    MVR.FileManagement.VarFileEntry aliasEntry = null;
+                    if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref aliasEntry))
+                    {
+                        result = true;
+                        return;
+                    }
+
                     // VaM may check FileExists against a *.latest:/... plugin path even
                     // after the package registered under its concrete UID.
                     string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
@@ -1209,12 +1216,22 @@ namespace VPB
         public static void PreOpenStream(ref string path)
         {
             long t0 = VamSceneLoadPhaseProfiler.Active ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
-            string rewritten = RewriteVdsPathIfNeeded(path);
-            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            try
             {
-                path = rewritten;
+                string rewritten = RewriteVdsPathIfNeeded(path);
+                if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+                {
+                    path = rewritten;
+                }
+                TryRewriteBareCustomPath(ref path);
+                string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
+                if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+                    path = best;
             }
-            TryRewriteBareCustomPath(ref path);
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] PreOpenStream swallowed exception for path='" + path + "': " + ex.GetType().Name + ": " + ex.Message);
+            }
             if (t0 != 0L)
                 VamSceneLoadPhaseProfiler.AddHookCost(VamSceneLoadPhaseProfiler.HookBucket.OpenStream,
                     System.Diagnostics.Stopwatch.GetTimestamp() - t0);
@@ -1231,12 +1248,22 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStreamReader", new Type[] { typeof(string), typeof(bool) })]
         public static void PreOpenStreamReader(ref string path)
         {
-            string rewritten = RewriteVdsPathIfNeeded(path);
-            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            try
             {
-                path = rewritten;
+                string rewritten = RewriteVdsPathIfNeeded(path);
+                if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+                {
+                    path = rewritten;
+                }
+                TryRewriteBareCustomPath(ref path);
+                string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
+                if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+                    path = best;
             }
-            TryRewriteBareCustomPath(ref path);
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] PreOpenStreamReader swallowed exception for path='" + path + "': " + ex.GetType().Name + ": " + ex.Message);
+            }
         }
 
         [HarmonyPostfix]
@@ -2224,6 +2251,10 @@ namespace VPB
             {
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHook++;
                 if (__result != null) return;
+
+                if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref __result))
+                    return;
+
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 bool entered;
@@ -2246,6 +2277,9 @@ namespace VPB
 
                     __result = MVR.FileManagement.FileManager.GetVarFileEntry(path);
                     if (__result != null) return;
+
+                    if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref __result))
+                        return;
 
                     // Some VaM call sites pass *.latest:/... and do not resolve aliases
                     // after registration. Retry with a concrete UID path when possible.
@@ -2295,13 +2329,15 @@ namespace VPB
                     && path.IndexOf(":\\", StringComparison.Ordinal) <= 0) return;
 
                 if (VamOnDemandLoader.s_InOnDemand) return;
-                if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 if (MVR.FileManagement.FileManager.GetVarFileEntry(path) != null)
                 {
                     __result = true;
                     LogIsFileInPackageRecovered(path);
+                    return;
                 }
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
             }
             catch (Exception ex)
             {
@@ -2329,10 +2365,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Issue #12: plugins calling native <c>FileManager.GetPackage</c> must see scan-excluded
-        /// packages once requested. Register on demand and retry (no full catalog Refresh here).
-        /// Preserves native semantics: exact UID miss stays null (no silent version swap).
         /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetPackage", new Type[] { typeof(string) })]
@@ -2341,9 +2373,14 @@ namespace VPB
             try
             {
                 if (__result != null) return;
-                if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (string.IsNullOrEmpty(packageUidOrPath)) return;
+                if (VamStartupOptimizations.TryShortCircuitAbsentVamXGetPackage(packageUidOrPath)) return;
                 if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
+
+                if (VamOnDemandLoader.TryNativeGetPackageWithRegisteredUid(packageUidOrPath, ref __result))
+                    return;
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 // Native Refresh / pre-first-Refresh: leave miss as null. Do NOT enqueue —
                 // VaM walks every package and GetPackage/IsPackage miss thousands of times;
@@ -2360,6 +2397,9 @@ namespace VPB
                     VamOnDemandLoader.TryRegisterPackageOnDemand(packageUidOrPath);
                     __result = MVR.FileManagement.FileManager.GetPackage(packageUidOrPath);
                     if (__result != null) return;
+
+                    if (VamOnDemandLoader.TryNativeGetPackageWithRegisteredUid(packageUidOrPath, ref __result))
+                        return;
 
                     // Native .latest resolves via package group — ensure a concrete version is registered.
                     if (packageUidOrPath.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
@@ -2386,10 +2426,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Issue #12: <c>IsPackage</c> probes must match GetPackage on-demand registration.
-        /// Never returns true for a different UID than requested.
-        /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "IsPackage", new Type[] { typeof(string) })]
         public static void PostIsPackageOnDemand(string packageUidOrPath, ref bool __result)
@@ -2397,9 +2433,14 @@ namespace VPB
             try
             {
                 if (__result) return;
-                if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (string.IsNullOrEmpty(packageUidOrPath)) return;
+                if (VamStartupOptimizations.TryShortCircuitAbsentVamXGetPackage(packageUidOrPath)) return;
                 if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
+
+                if (VamOnDemandLoader.TryNativeIsPackageWithRegisteredUid(packageUidOrPath, ref __result))
+                    return;
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 // Same as GetPackage: no enqueue during Refresh (probe noise → register storm).
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
@@ -2414,6 +2455,9 @@ namespace VPB
                     VamOnDemandLoader.TryRegisterPackageOnDemand(packageUidOrPath);
                     __result = MVR.FileManagement.FileManager.IsPackage(packageUidOrPath);
                     if (__result) return;
+
+                    if (VamOnDemandLoader.TryNativeIsPackageWithRegisteredUid(packageUidOrPath, ref __result))
+                        return;
 
                     if (packageUidOrPath.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                     {
@@ -2448,9 +2492,13 @@ namespace VPB
             try
             {
                 if (__result != null) return;
-                if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (string.IsNullOrEmpty(packageGroupUid)) return;
                 if (packageGroupUid.IndexOf('.') < 0) return;
+
+                if (VamOnDemandLoader.TryNativeGetPackageGroupWithRegisteredUid(packageGroupUid, ref __result))
+                    return;
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 // Same as GetPackage: no enqueue during Refresh.
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
@@ -2468,6 +2516,9 @@ namespace VPB
                         latestReq = packageGroupUid + ".latest";
                     VamOnDemandLoader.TryRegisterPackageOnDemand(latestReq);
                     __result = MVR.FileManagement.FileManager.GetPackageGroup(packageGroupUid);
+                    if (__result != null) return;
+
+                    VamOnDemandLoader.TryNativeGetPackageGroupWithRegisteredUid(packageGroupUid, ref __result);
                 }
                 finally
                 {

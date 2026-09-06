@@ -3874,7 +3874,7 @@ namespace VPB
 
         static Dictionary<string, long> ReadFirstScannedForRebuild(VpbSqlite3.Connection conn)
         {
-            var result = new Dictionary<string, long>(StringComparer.Ordinal);
+            var result = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             using (var sel = conn.Prepare("SELECT uid, first_scanned FROM pkg"))
             {
                 while (sel.Step() == VpbSqlite3.SqliteRow)
@@ -8765,13 +8765,18 @@ namespace VPB
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
-                using (var st = conn.Prepare("SELECT ifnull(var_path,'') FROM pkg WHERE uid = ? LIMIT 1"))
                 {
-                    st.BindText(1, uid);
-                    if (st.Step() != VpbSqlite3.SqliteRow) return false;
-                    string p = st.ColumnText(0) ?? "";
-                    if (string.IsNullOrEmpty(p)) return false;
-                    varPath = p;
+                    string path = SelectVarPathForUid(conn, uid);
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        string registeredUid;
+                        if (FileManager.TryMapLookupUidToRegisteredUid(uid, out registeredUid)
+                            && !string.IsNullOrEmpty(registeredUid)
+                            && !string.Equals(registeredUid, uid, StringComparison.OrdinalIgnoreCase))
+                            path = SelectVarPathForUid(conn, registeredUid);
+                    }
+                    if (string.IsNullOrEmpty(path)) return false;
+                    varPath = path;
                     return true;
                 }
             }
@@ -8779,6 +8784,18 @@ namespace VPB
             {
                 varPath = null;
                 return false;
+            }
+        }
+
+        static string SelectVarPathForUid(VpbSqlite3.Connection conn, string uid)
+        {
+            if (conn == null || string.IsNullOrEmpty(uid)) return null;
+            using (var st = conn.Prepare("SELECT ifnull(var_path,'') FROM pkg WHERE uid = ? LIMIT 1"))
+            {
+                st.BindText(1, uid);
+                if (st.Step() != VpbSqlite3.SqliteRow) return null;
+                string p = st.ColumnText(0) ?? "";
+                return string.IsNullOrEmpty(p) ? null : p;
             }
         }
 

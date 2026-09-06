@@ -836,6 +836,108 @@ namespace VPB
             }
         }
 
+        internal static bool TryMapLookupUidToRegisteredUid(string requestedUid, out string registeredUid)
+        {
+            registeredUid = null;
+            if (string.IsNullOrEmpty(requestedUid)) return false;
+
+            lock (packagesLock)
+            {
+                VarPackage exact;
+                if (packagesByUid != null && packagesByUid.TryGetValue(requestedUid, out exact) && exact != null)
+                {
+                    registeredUid = exact.Uid;
+                    return !string.IsNullOrEmpty(registeredUid)
+                        && !string.Equals(registeredUid, requestedUid, StringComparison.Ordinal);
+                }
+            }
+
+            string aliasUid;
+            if (TryResolveWhitespaceAliasUid(requestedUid, out aliasUid))
+            {
+                registeredUid = aliasUid;
+                return true;
+            }
+
+            if (!UidHasWhitespace(requestedUid)) return false;
+
+            string segmented = CanonicalizeUidSegments(requestedUid);
+            if (!string.IsNullOrEmpty(segmented)
+                && !string.Equals(segmented, requestedUid, StringComparison.Ordinal))
+            {
+                lock (packagesLock)
+                {
+                    VarPackage pkg;
+                    if (packagesByUid != null && packagesByUid.TryGetValue(segmented, out pkg) && pkg != null)
+                    {
+                        registeredUid = pkg.Uid;
+                        return !string.IsNullOrEmpty(registeredUid)
+                            && !string.Equals(registeredUid, requestedUid, StringComparison.Ordinal);
+                    }
+                }
+            }
+
+            string stripped = StripAllWhitespace(requestedUid);
+            if (string.IsNullOrEmpty(stripped)
+                || string.Equals(stripped, requestedUid, StringComparison.Ordinal)
+                || string.Equals(stripped, segmented, StringComparison.Ordinal))
+                return false;
+
+            lock (packagesLock)
+            {
+                VarPackage strippedPkg;
+                if (packagesByUid != null && packagesByUid.TryGetValue(stripped, out strippedPkg) && strippedPkg != null)
+                {
+                    registeredUid = strippedPkg.Uid;
+                    return !string.IsNullOrEmpty(registeredUid)
+                        && !string.Equals(registeredUid, requestedUid, StringComparison.Ordinal);
+                }
+            }
+            return false;
+        }
+
+        internal static bool TryMapLookupGroupIdToRegisteredGroupId(string requestedGroupId, out string registeredGroupId)
+        {
+            registeredGroupId = null;
+            if (string.IsNullOrEmpty(requestedGroupId)) return false;
+
+            lock (packagesLock)
+            {
+                VarPackageGroup exact;
+                if (packageGroups != null && packageGroups.TryGetValue(requestedGroupId, out exact) && exact != null)
+                {
+                    registeredGroupId = exact.Name;
+                    return !string.IsNullOrEmpty(registeredGroupId)
+                        && !string.Equals(registeredGroupId, requestedGroupId, StringComparison.Ordinal);
+                }
+            }
+
+            string aliasGroupId;
+            if (TryResolveWhitespaceAliasGroupId(requestedGroupId, out aliasGroupId))
+            {
+                registeredGroupId = aliasGroupId;
+                return true;
+            }
+
+            if (!UidHasWhitespace(requestedGroupId)) return false;
+            string segmented = CanonicalizeUidSegments(requestedGroupId);
+            if (string.IsNullOrEmpty(segmented)
+                || string.Equals(segmented, requestedGroupId, StringComparison.Ordinal))
+                return false;
+
+            lock (packagesLock)
+            {
+                VarPackageGroup pkgGroup;
+                if (packageGroups != null && packageGroups.TryGetValue(segmented, out pkgGroup) && pkgGroup != null)
+                {
+                    registeredGroupId = pkgGroup.Name;
+                    return !string.IsNullOrEmpty(registeredGroupId)
+                        && !string.Equals(registeredGroupId, requestedGroupId, StringComparison.Ordinal);
+                }
+            }
+            return false;
+        }
+
         static string StripAllWhitespace(string s)
         {
             if (string.IsNullOrEmpty(s)) return s;
