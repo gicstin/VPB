@@ -316,6 +316,7 @@
     <Compile Include="src\gallery\GalleryPanel.Modal.RemapAtomUids.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\MVRPluginManagerHook.cs" />
+    <Compile Include="src\hook\PostMagicUiCameraFix.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />
     <Compile Include="src\hook\JSONOptimization.cs" />
     <Compile Include="src\hook\ImageProcessingOptimization.cs" />

@@ -422,6 +422,7 @@ namespace VPB
             m_Harmony.PatchAll(typeof(HubResourcePackageHook));
             m_Harmony.PatchAll(typeof(SuperControllerHook));
             m_Harmony.PatchAll(typeof(MVRPluginManagerHook));
+            PostMagicUiCameraFix.Apply(m_Harmony);
             VamStartupProfilerPatches.ApplySafe(m_Harmony);
             VamStartupOptimizationPatches.Apply(m_Harmony);
             VamLoadPerfHooks.Apply(m_Harmony);
