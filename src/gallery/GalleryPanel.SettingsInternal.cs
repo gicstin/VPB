@@ -1449,7 +1449,7 @@ namespace VPB
             defs.Add(new InternalSettingDefinition {
                 Key = "helpers.returnToSceneViewOnStartup", GroupKey = "helpers",
                 Label = VPBTranslation.T("settings.helpers_return_to_scene_on_startup", "Return to scene view on startup"),
-                Tooltip = VPBTranslation.T("settings.tip.helpers_return_to_scene_on_startup", "On startup, skip VaM main menu (World UI) and go straight to scene view — same as Return To Scene View."),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_return_to_scene_on_startup", "On startup, skip VaM main menu (World UI) and go straight to scene view — same as Return To Scene View. Ignored when a startup scene is set; that scene loads instead."),
                 ControlType = InternalSettingControlType.Toggle,
                 GetBool = () => {
                     try {
@@ -1465,6 +1465,50 @@ namespace VPB
                         Settings.SaveConfig();
                     } catch { }
                 }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.startupScenePath", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_startup_scene", "Startup scene"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_startup_scene", "Scene VaM loads once after World UI is ready, skipping the main menu. Empty / None = stay on the menu (or return-to-scene-view if that is on). Set from the gallery: right-click one scene → Set as startup scene. Hover the value for the stored path."),
+                ControlType = InternalSettingControlType.ReadOnlyText,
+                GetString = () => {
+                    string p = VpbStartupScene.GetPath();
+                    if (string.IsNullOrEmpty(p))
+                        return VPBTranslation.T("settings.helpers_startup_scene_none", "None");
+                    return p;
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.clearStartupScene", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_clear_startup_scene", "Clear startup scene"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_clear_startup_scene", "Stop auto-loading a scene at VaM start. Same as gallery right-click → Clear startup scene."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () => {
+                    string previous = VpbStartupScene.GetPath();
+                    if (string.IsNullOrEmpty(previous))
+                    {
+                        ShowTemporaryStatus(
+                            VPBTranslation.T("gallery.startup.none", "No startup scene is set."),
+                            2f);
+                        return;
+                    }
+                    VpbStartupScene.SetPath("");
+                    NotifyStartupSceneSettingChanged();
+                    ShowTemporaryStatus(
+                        VPBTranslation.T("gallery.startup.cleared", "Startup scene cleared."),
+                        2.5f);
+                    PushUndo(() =>
+                    {
+                        VpbStartupScene.SetPath(previous);
+                        NotifyStartupSceneSettingChanged();
+                        ShowTemporaryStatus(
+                            string.Format(
+                                VPBTranslation.T("gallery.startup.set", "Startup scene: {0}"),
+                                VpbStartupScene.DisplayNameFromPath(previous)),
+                            2.5f);
+                    }, VPBTranslation.T("gallery.undo.clear_startup_scene", "Clear startup scene"));
+                },
+                RowVisible = () => VpbStartupScene.HasPath()
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "helpers.blockInGameMessages", GroupKey = "helpers",
@@ -3332,7 +3376,8 @@ namespace VPB
                         btnLabel = VPBTranslation.T("settings.row.manage", "MANAGE");
                     else if (string.Equals(def.Key, "plugin.qm_positions", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.adjust", "ADJUST");
-                    else if (isSceneAtomCache)
+                    else if (isSceneAtomCache
+                        || string.Equals(def.Key, "helpers.clearStartupScene", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.clear", "CLEAR");
                     GameObject actionGO = CreateMiniButton(controls.transform, btnLabel, 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
                         if (def.ActionEnabled != null && !def.ActionEnabled()) return;

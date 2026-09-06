@@ -125,6 +125,7 @@ namespace VPB
         public ConfigEntry<bool> PreferLightClothingHairCatalogBeforeNativeRefresh;
         public ConfigEntry<bool> HairSwapKeepVisibleUntilLoaded;
         public ConfigEntry<bool> ReturnToSceneViewOnStartup;
+        public ConfigEntry<string> StartupScenePath;
         public ConfigEntry<bool> ForceLatestDependencies;
         public ConfigEntry<string> ForceLatestDependencyPackageGroups;
         public ConfigEntry<string> ForceLatestDependencyIgnorePackageGroups;
@@ -182,7 +183,8 @@ namespace VPB
             SkipPackageMorphRefreshOnClothingHairCatalog = config.Bind<bool>("Settings", "SkipPackageMorphRefreshOnClothingHairCatalog", true, "During on-demand clothing/hair catalog FileManager.Refresh, skip DAZ RefreshPackageMorphs. Avoids ~18s/person morph re-ingest (e.g. Naturalis/TittyMagic) when only clothing/hair packages were registered. Morph packages still trigger full morph refresh. Disable if new morphs from a clothing .var are missing after dress.");
             PreferLightClothingHairCatalogBeforeNativeRefresh = config.Bind<bool>("Settings", "PreferLightClothingHairCatalogBeforeNativeRefresh", true, "Before forced native FileManager.Refresh on clothing/hair apply, try DAZ RefreshClothingItems/RefreshHairItems on the target Person. If the clothing/hair param already exists, cancel the pending native refresh (avoids multi-second Person refresh × all atoms).");
             HairSwapKeepVisibleUntilLoaded = config.Bind<bool>("Helpers", "HairSwapKeepVisibleUntilLoaded", true, "During hair preset replace, keep previous hair visible until new hair finishes loading. Outgoing hair collisions are disabled first; outgoing mesh is hidden only after incoming hair is ready.");
-            ReturnToSceneViewOnStartup = config.Bind<bool>("Helpers", "ReturnToSceneViewOnStartup", false, "On startup, skip VaM main menu (World UI) and return to scene view (same as Return To Scene View).");
+            ReturnToSceneViewOnStartup = config.Bind<bool>("Helpers", "ReturnToSceneViewOnStartup", false, "On startup, skip VaM main menu (World UI) and return to scene view (same as Return To Scene View). Ignored when StartupScenePath is set — that scene loads instead.");
+            StartupScenePath = config.Bind<string>("Helpers", "StartupScenePath", "", "Scene JSON path or package uid (Author.Pkg.N:/Saves/scene/....json) loaded once after World UI is ready. Empty = VaM main menu. Set from gallery: right-click one scene → Set as startup scene.");
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
             ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Comma/space separated list of package groups (Author.Package) to ignore (do not force) even when ForceLatestDependencies is enabled.");

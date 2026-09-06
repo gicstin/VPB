@@ -1358,10 +1358,21 @@ namespace VPB
             catch (Exception ex) { LogUtil.LogWarning("[VPB] ReturnToSceneViewOnStartup failed: " + ex.Message); }
         }
 
+        static void TryScheduleStartupSceneLoad(SuperController sc)
+        {
+            try
+            {
+                if (VpbStartupScene.TryScheduleLoad(sc))
+                    s_ReturnToSceneViewOnStartupApplied = true;
+            }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB] Startup scene schedule failed: " + ex.Message); }
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "ActivateWorldUI")]
         public static void PostActivateWorldUI(SuperController __instance)
         {
+            TryScheduleStartupSceneLoad(__instance);
             TryReturnToSceneViewOnStartup(__instance);
             LogUtil.LogStartupReadyOnce("World UI activated");
             LogUtil.MarkScenePhaseWorldUiActivated();

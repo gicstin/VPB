@@ -3024,6 +3024,8 @@ namespace VPB
             LayoutElement userTagsBadgeLE = UI.AddLE(userTagsBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             userTagsBadgeGO.SetActive(false);
 
+            EnsureStartupSceneBadge(btnGO, null);
+
             // Deps badge (inactive on grid; detail strip owns deps). Kept for pooled-cell layout slots.
             GameObject depsBadgeGO = new GameObject("DepsBadge");
             depsBadgeGO.transform.SetParent(btnGO.transform, false);
@@ -3334,12 +3336,12 @@ namespace VPB
         }
 
         /// <summary>List: badges in ListBadges (layout packs inactive). Grid: compact top-left slots for visible badges.</summary>
-        private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showAutoInstall, bool showHide, bool showWhitelist, bool showUserTags)
+        private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showStartup, bool showAutoInstall, bool showHide, bool showWhitelist, bool showUserTags)
         {
             if (btnGO == null) return;
             FileButtonBinder b = FileButtonBinder.GetOrAdd(btnGO);
             string[] names = FileButtonBinder.TopLeftBadgeNames;
-            bool[] show = { showAutoInstall, showHide, showWhitelist, showUserTags };
+            bool[] show = { showStartup, showAutoInstall, showHide, showWhitelist, showUserTags };
 
             if (layoutMode == GalleryLayoutMode.Grid)
             {
@@ -3828,6 +3830,8 @@ namespace VPB
                 }
                 else if (isSelected)
                     img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
+                else if (VpbStartupScene.MatchesGalleryRow(file, VpbStartupScene.CategoryLooksLikeScenes(currentCategoryTitle)))
+                    img.color = GalleryStartupCellTint;
                 else
                     img.color = Color.gray;
             }
@@ -4278,6 +4282,8 @@ namespace VPB
                 if (ratingTr != null)
                     ratingTr.gameObject.SetActive(true);
 
+                bool showStartupBadge = ApplyStartupSceneBadgeVisual(btnGO, file);
+
                 bool showAutoInstallBadge = file.IsAutoInstall();
                 Transform aiBadgeTr = b != null ? b.autoInstallBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "AutoInstallBadge");
                 if (aiBadgeTr != null)
@@ -4296,11 +4302,11 @@ namespace VPB
                 if (userTagsBadgeTr != null)
                     userTagsBadgeTr.gameObject.SetActive(showUserTagsBadge);
 
-                ApplyDynamicTopLeftBadgeLayout(btnGO, showAutoInstallBadge, showHideBadge, showScanWlBadge, showUserTagsBadge);
+                ApplyDynamicTopLeftBadgeLayout(btnGO, showStartupBadge, showAutoInstallBadge, showHideBadge, showScanWlBadge, showUserTagsBadge);
 
                 // An empty strip still reserves its row height in the VLG and pushes the Details line
                 // out of a compact row; deactivate it so the group ignores it when no badge shows.
-                bool anyListBadge = showAutoInstallBadge || showHideBadge || showScanWlBadge || showUserTagsBadge;
+                bool anyListBadge = showStartupBadge || showAutoInstallBadge || showHideBadge || showScanWlBadge || showUserTagsBadge;
                 if (listRowTr != null)
                 {
                     Transform listBadgesRowTr = b != null ? b.listBadgesTr : listRowTr.Find("ListBadges");
@@ -4310,7 +4316,7 @@ namespace VPB
             }
             else
             {
-                // Grid: only W badge is ambient status. Other badges stay off (detail strip / hover rating).
+                // Grid: W + startup-scene badges are ambient status. Other badges stay off.
                 if (ratingTr != null)
                     ratingTr.gameObject.SetActive(false);
 
@@ -4323,7 +4329,8 @@ namespace VPB
 
                 Transform scanExBadgeTr = b != null ? b.scanExcludedBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
                 bool showScanWlBadge = ApplyScanWhitelistBadgeVisual(scanExBadgeTr != null ? scanExBadgeTr.gameObject : null, file);
-                ApplyDynamicTopLeftBadgeLayout(btnGO, false, false, showScanWlBadge, false);
+                bool showStartupBadge = ApplyStartupSceneBadgeVisual(btnGO, file);
+                ApplyDynamicTopLeftBadgeLayout(btnGO, showStartupBadge, false, false, showScanWlBadge, false);
             }
 
             // List Row Bind

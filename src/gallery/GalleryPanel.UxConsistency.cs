@@ -324,6 +324,8 @@ namespace VPB
                     try { DetailStripToggleExpanded(); } catch { }
                 });
 
+            GridCtxAddStartupSceneActions();
+
             GridCtxAddSeparator();
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.copy_names", "Copy Names"),

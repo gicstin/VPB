@@ -280,6 +280,7 @@
     <Compile Include="src\util\VPBLogger.cs" />
     <Compile Include="src\util\VpbLegacyLayout.cs" />
     <Compile Include="src\util\VpbPaths.cs" />
+    <Compile Include="src\util\VpbStartupScene.cs" />
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\VpbScrollTuning.cs" />
     <Compile Include="src\util\VpbRandom.cs" />
@@ -496,6 +497,7 @@
     <Compile Include="src\gallery\GalleryPanel.TaskChrome.cs" />
     <Compile Include="src\gallery\GalleryPanel.RiskPolicy.cs" />
     <Compile Include="src\gallery\GalleryPanel.UxConsistency.cs" />
+    <Compile Include="src\gallery\GalleryPanel.StartupScene.cs" />
     <Compile Include="src\gallery\GalleryPanel.KeyboardFocus.cs" />
     <Compile Include="src\gallery\GalleryPanel.CommandPalette.cs" />
     <Compile Include="src\gallery\GalleryPanel.TryOn.cs" />
