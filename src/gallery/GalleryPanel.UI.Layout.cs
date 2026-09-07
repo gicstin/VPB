@@ -1875,6 +1875,8 @@ namespace VPB
             return false;
         }
 
+        private readonly HashSet<string> _sideContextClothingScratch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         private void UpdateSideContextActions()
         {
             RefreshSceneImportSideButtonVisibility();
@@ -1922,26 +1924,27 @@ namespace VPB
                     if (atoms != null) foreach (Atom tgt in atoms)
                     {
                         if (tgt == null || !SceneUtils.IsPersonLikeAtom(tgt)) continue;
-                        HashSet<string> currentUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        // Polling is frequent; only changed snapshots need their own set.
+                        HashSet<string> currentUids = _sideContextClothingScratch;
+                        currentUids.Clear();
                         JSONStorable geometry = tgt.GetStorableByID("geometry");
                         if (geometry != null)
                         {
+                            bool canRestorePreview = (!string.IsNullOrEmpty(previewRemoveClothingAtomUid)
+                                && !string.IsNullOrEmpty(previewRemoveClothingItemUid)
+                                && string.Equals(previewRemoveClothingAtomUid, tgt.uid, StringComparison.OrdinalIgnoreCase)
+                                && previewRemoveClothingPrevGeometryVal.HasValue
+                                && previewRemoveClothingPrevGeometryVal.Value);
                             foreach (var name in geometry.GetBoolParamNames())
                             {
                                 if (string.IsNullOrEmpty(name) || !name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                                string clothingUid = name.Substring(9);
-                                if (!clothingUid.Contains("/")) continue;
-
-                                bool isPreviewItem = (!string.IsNullOrEmpty(previewRemoveClothingAtomUid)
-                                    && !string.IsNullOrEmpty(previewRemoveClothingItemUid)
-                                    && string.Equals(previewRemoveClothingAtomUid, tgt.uid, StringComparison.OrdinalIgnoreCase)
-                                    && string.Equals(previewRemoveClothingItemUid, clothingUid, StringComparison.OrdinalIgnoreCase)
-                                    && previewRemoveClothingPrevGeometryVal.HasValue
-                                    && previewRemoveClothingPrevGeometryVal.Value);
-
+                                if (name.IndexOf('/', 9) < 0) continue;
                                 JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
-                                bool isActive = jsb != null && (jsb.val || isPreviewItem);
-                                if (isActive)
+                                if (jsb == null) continue;
+                                bool isActive = jsb.val;
+                                if (!isActive && !canRestorePreview) continue;
+                                string clothingUid = name.Substring(9);
+                                if (isActive || (canRestorePreview && string.Equals(previewRemoveClothingItemUid, clothingUid, StringComparison.OrdinalIgnoreCase)))
                                 {
                                     count++;
                                     currentUids.Add(clothingUid);
@@ -1956,20 +1959,17 @@ namespace VPB
                         }
 
                         // Detect changes for auto-refresh.
-                        if (!_lastActiveClothingUids.TryGetValue(tgt.uid, out var lastUids))
-                        {
-                            lastUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        }
-
-                        if (!currentUids.SetEquals(lastUids))
+                        bool hadSnapshot = _lastActiveClothingUids.TryGetValue(tgt.uid, out var lastUids);
+                        if (hadSnapshot ? !currentUids.SetEquals(lastUids) : currentUids.Count > 0)
                         {
                             anyClothingChanged = true;
-                            _lastActiveClothingUids[tgt.uid] = currentUids;
+                            _lastActiveClothingUids[tgt.uid] = new HashSet<string>(currentUids, StringComparer.OrdinalIgnoreCase);
                         }
                     }
                 }
                 catch { }
 
+                _sideContextClothingScratch.Clear();
                 if (isClothing) UpdateRemoveClothingButtonLabels(count);
 
                 // Auto-refresh the side tab if the list changed and the tab is open.

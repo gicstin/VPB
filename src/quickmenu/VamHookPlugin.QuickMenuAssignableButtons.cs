@@ -1213,6 +1213,45 @@ namespace VPB
             if (hh != null) { hh.normal = normal; hh.hover = hover; }
         }
 
+        private bool QuickMenuRefreshFpsLabel(int idx, GameObject go)
+        {
+            if (go == null) return false;
+            QuickMenuEnsureSlotLabelCache();
+            // Throttle text refresh to max 2 Hz; slot visuals may update more frequently.
+            const float interval = 0.5f;
+            float now = 0f;
+            try { now = Time.unscaledTime; } catch { now = 0f; }
+
+            if (string.IsNullOrEmpty(m_QmFpsCachedLabel) || (now - m_QmFpsLastLabelUpdateTime) >= interval)
+            {
+                m_QmFpsLastLabelUpdateTime = now;
+
+                float fps = 0f;
+                try
+                {
+                    float dt = Time.unscaledDeltaTime;
+                    if (dt <= 0f) dt = Time.deltaTime;
+                    fps = 1f / Mathf.Max(0.00001f, dt);
+                }
+                catch { fps = 0f; }
+
+                // Display as an integer 0..999 (no decimals), per quick-menu compact constraint.
+                if (fps > 999f) fps = 999f;
+                if (fps < 0f) fps = 0f;
+                m_QmFpsCachedLabel = ((int)(fps + 0.5f)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            // Only touch UI text if it actually changed (avoids per-frame layout dirties).
+            string last = (m_QmLastAppliedSlotLabels != null) ? m_QmLastAppliedSlotLabels[idx] : null;
+            if (last != m_QmFpsCachedLabel)
+            {
+                if (m_QmLastAppliedSlotLabels != null) m_QmLastAppliedSlotLabels[idx] = m_QmFpsCachedLabel;
+                QuickMenuSetLabel(go, m_QmFpsCachedLabel, clearIcon: true);
+                return true;
+            }
+            return false;
+        }
+
         private void QuickMenuRefreshSlotVisual(int idx)
         {
             if (idx < 0 || idx >= QuickMenuGridSlotCount) return;
@@ -1471,37 +1510,7 @@ namespace VPB
 
             if (action == QuickMenuAssignableAction.FpsCounter)
             {
-                // Throttle text refresh to max 2 Hz; slot visuals may update more frequently.
-                const float interval = 0.5f;
-                float now = 0f;
-                try { now = Time.unscaledTime; } catch { now = 0f; }
-
-                if (string.IsNullOrEmpty(m_QmFpsCachedLabel) || (now - m_QmFpsLastLabelUpdateTime) >= interval)
-                {
-                    m_QmFpsLastLabelUpdateTime = now;
-
-                    float fps = 0f;
-                    try
-                    {
-                        float dt = Time.unscaledDeltaTime;
-                        if (dt <= 0f) dt = Time.deltaTime;
-                        fps = 1f / Mathf.Max(0.00001f, dt);
-                    }
-                    catch { fps = 0f; }
-
-                    // Display as an integer 0..999 (no decimals), per quick-menu compact constraint.
-                    if (fps > 999f) fps = 999f;
-                    if (fps < 0f) fps = 0f;
-                    m_QmFpsCachedLabel = ((int)(fps + 0.5f)).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                }
-
-                // Only touch UI text if it actually changed (avoids per-frame layout dirties).
-                string last = (m_QmLastAppliedSlotLabels != null) ? m_QmLastAppliedSlotLabels[idx] : null;
-                if (last != m_QmFpsCachedLabel)
-                {
-                    if (m_QmLastAppliedSlotLabels != null) m_QmLastAppliedSlotLabels[idx] = m_QmFpsCachedLabel;
-                    QuickMenuSetLabel(go, m_QmFpsCachedLabel, clearIcon: true);
-                }
+                QuickMenuRefreshFpsLabel(idx, go);
             }
             else
             {
