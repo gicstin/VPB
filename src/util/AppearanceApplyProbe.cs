@@ -16,17 +16,21 @@ namespace VPB.src.util
 
         static Stopwatch _sw;
         static string _tag;
+        static string _detail;
         static long _lastMs;
         static int _phase;
+        static bool Detailed => VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true;
 
         public static void Begin(string tag, string detail = null)
         {
             _tag = tag ?? "?";
+            _detail = detail;
             _phase = 0;
             _lastMs = 0;
             if (_sw == null) _sw = new Stopwatch();
             _sw.Reset();
             _sw.Start();
+            if (!Detailed) return;
             try
             {
                 LogUtil.Log(Prefix + " BEGIN tag=" + _tag
@@ -44,6 +48,7 @@ namespace VPB.src.util
             long now = _sw.ElapsedMilliseconds;
             long delta = now - _lastMs;
             _lastMs = now;
+            if (!Detailed) return;
             try
             {
                 LogUtil.Log(Prefix + " P" + _phase + " +" + delta + "ms (total=" + now + "ms) "
@@ -63,14 +68,18 @@ namespace VPB.src.util
             }
             try
             {
-                LogUtil.Log(Prefix + " END tag=" + (_tag ?? "?")
+                var level = result == "ok" ? BepInEx.Logging.LogLevel.Message
+                    : result == "exception" ? BepInEx.Logging.LogLevel.Error : BepInEx.Logging.LogLevel.Warning;
+                VPBLogger.Main.Log(level, Prefix + " END tag=" + (_tag ?? "?")
                     + " result=" + (result ?? "?")
                     + " totalMs=" + total
                     + " phases=" + _phase
-                    + (string.IsNullOrEmpty(detail) ? "" : (" | " + detail)));
+                    + (string.IsNullOrEmpty(_detail) ? "" : (" | " + _detail))
+                    + (string.IsNullOrEmpty(detail) ? "" : (" | " + detail)), false);
             }
             catch { }
             _tag = null;
+            _detail = null;
         }
 
         public static void Warn(string msg)
@@ -108,21 +117,24 @@ namespace VPB.src.util
         {
             try
             {
-                var sb = new StringBuilder(256);
-                sb.Append(Prefix).Append(" ROUTE cat='").Append(category ?? "")
-                    .Append("' action=").Append(chosenAction ?? "?")
-                    .Append(" itemType=").Append(itemType ?? "?")
-                    .Append(" target=").Append(string.IsNullOrEmpty(targetUid) ? "(none)" : targetUid)
-                    .Append(" flags[app=").Append(pathAppearance ? 1 : 0)
-                    .Append(" pose=").Append(pathPose ? 1 : 0)
-                    .Append(" skin=").Append(pathSkin ? 1 : 0)
-                    .Append(" breast=").Append(pathBreast ? 1 : 0)
-                    .Append(" glute=").Append(pathGlute ? 1 : 0)
-                    .Append(" morph=").Append(pathMorphs ? 1 : 0)
-                    .Append(" hair=").Append(pathHair ? 1 : 0)
-                    .Append(" cloth=").Append(pathClothing ? 1 : 0)
-                    .Append("] path=").Append(path ?? "");
-                LogUtil.Log(sb.ToString());
+                if (Detailed)
+                {
+                    var sb = new StringBuilder(256);
+                    sb.Append(Prefix).Append(" ROUTE cat='").Append(category ?? "")
+                        .Append("' action=").Append(chosenAction ?? "?")
+                        .Append(" itemType=").Append(itemType ?? "?")
+                        .Append(" target=").Append(string.IsNullOrEmpty(targetUid) ? "(none)" : targetUid)
+                        .Append(" flags[app=").Append(pathAppearance ? 1 : 0)
+                        .Append(" pose=").Append(pathPose ? 1 : 0)
+                        .Append(" skin=").Append(pathSkin ? 1 : 0)
+                        .Append(" breast=").Append(pathBreast ? 1 : 0)
+                        .Append(" glute=").Append(pathGlute ? 1 : 0)
+                        .Append(" morph=").Append(pathMorphs ? 1 : 0)
+                        .Append(" hair=").Append(pathHair ? 1 : 0)
+                        .Append(" cloth=").Append(pathClothing ? 1 : 0)
+                        .Append("] path=").Append(path ?? "");
+                    LogUtil.Log(sb.ToString());
+                }
 
                 // Category vs path mismatch — common "appearance click did nothing useful" case.
                 string cat = category ?? "";
@@ -191,7 +203,7 @@ namespace VPB.src.util
                 }
                 if (sibling != null)
                 {
-                    LogUtil.Log(Prefix + " REMAP " + matched.Trim('/') + " -> Appearance | from="
+                    if (Detailed) LogUtil.Log(Prefix + " REMAP " + matched.Trim('/') + " -> Appearance | from="
                         + uid + " | to=" + (sibling.Uid ?? sibling.Path));
                     return sibling;
                 }
@@ -212,6 +224,7 @@ namespace VPB.src.util
 
         public static string SummarizePreset(JSONClass preset)
         {
+            if (!Detailed) return string.Empty;
             if (preset == null) return "preset=null";
             var storables = preset["storables"] as SimpleJSON.JSONArray;
             int n = storables != null ? storables.Count : 0;

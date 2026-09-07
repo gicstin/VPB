@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -147,7 +148,7 @@ namespace VPB
             
             try
             {
-                LogUtil.Log("[Gallery] Applying Dual Pose...");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] Applying Dual Pose...");
                 
                 string p1Id = dualPoseNode["Person1"]?.Value;
                 string p2Id = dualPoseNode["Person2"]?.Value;
@@ -256,13 +257,13 @@ namespace VPB
                 
                 if (targetAtom != null && targetData != null)
                 {
-                     LogUtil.Log($"[Gallery] Applying dual pose to target {targetAtom.name}");
+                     if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[Gallery] Applying dual pose to target {targetAtom.name}");
                      ApplyPoseToAtom(targetAtom, targetData);
                 }
                 
                 if (partnerAtom != null && partnerData != null)
                 {
-                     LogUtil.Log($"[Gallery] Applying dual pose to partner {partnerAtom.name}");
+                     if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[Gallery] Applying dual pose to partner {partnerAtom.name}");
                      ApplyPoseToAtom(partnerAtom, partnerData);
                 }
             }

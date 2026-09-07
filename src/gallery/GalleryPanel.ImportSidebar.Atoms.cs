@@ -222,13 +222,13 @@ namespace VPB
             SuperController.singleton.onAtomRemovedHandlers += OnImportSidebarAtomRemoved;
             SuperController.singleton.onSceneLoadedHandlers -= OnImportSidebarSceneLoaded;
             SuperController.singleton.onSceneLoadedHandlers += OnImportSidebarSceneLoaded;
-            LogUtil.Log("[VPB import][diag] subscribed atom/scene handlers");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] subscribed atom/scene handlers");
         }
 
         private void OnImportSidebarSceneLoaded()
         {
             // Log BEFORE the guard so the log proves whether the handler fires at all (the open question for issue #2).
-            LogUtil.Log($"[VPB import][diag] onSceneLoaded fired; built={importSidebarBuilt} persons={CountLivePersonAtoms()}");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB import][diag] onSceneLoaded fired; built={importSidebarBuilt} persons={CountLivePersonAtoms()}");
             if (!importSidebarBuilt) return;
             RefreshTargetCandidatesImmediate();
             RefreshApplyButtonEnabled();
@@ -246,7 +246,7 @@ namespace VPB
                 if (!importSidebarBuilt) yield break;
                 int persons = CountLivePersonAtoms();
                 if (attempt == 0 || persons != importSidebarLastLoggedPersonCount)
-                    LogUtil.Log($"[VPB import][diag] onSceneLoaded deferred refresh attempt={attempt}; persons={persons}");
+                    { if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB import][diag] onSceneLoaded deferred refresh attempt={attempt}; persons={persons}"); }
                 RefreshTargetCandidatesImmediate();
                 RefreshApplyButtonEnabled();
                 if (persons > 0) yield break;
@@ -319,7 +319,7 @@ namespace VPB
             if (n != importSidebarLastLoggedPersonCount)
             {
                 importSidebarLastLoggedPersonCount = n;
-                LogUtil.Log("[VPB import][diag] RefreshTargetCandidates: " + n + " person(s)");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] RefreshTargetCandidates: " + n + " person(s)");
             }
             RenderTargetList();
         }

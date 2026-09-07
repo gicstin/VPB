@@ -210,9 +210,11 @@ namespace VPB.src.util
                     bool placed = destControlWorld != null && WriteControlWorld(node, destControlWorld);
                     placements.Add(new Placement { LiveId = idMap[id], AnchorBone = anchorBone, LocalOffset = localOffset });
 
-                    LogUtil.Log($"[VPB][CUA] {id}: anchor '{anchorBone}' srcScale={sourceScale:F4} local={localOffset.Position} "
+                    if (!placed || VPBLogger.Verbose) VPBLogger.Main.Log(
+                        placed ? BepInEx.Logging.LogLevel.Info : BepInEx.Logging.LogLevel.Warning,
+                        $"[VPB][CUA] {id}: anchor '{anchorBone}' srcScale={sourceScale:F4} local={localOffset.Position} "
                         + $"srcReconBone={(srcBoneW != null ? srcBoneW.Position.ToString("F4") : "?")} "
-                        + $"liveDestBone={(liveBone != null ? liveBone.position.ToString("F4") : "MISSING")} placed={placed}.");
+                        + $"liveDestBone={(liveBone != null ? liveBone.position.ToString("F4") : "MISSING")} placed={placed}.", false);
                 }
                 else if (offPersonRelativeToPerson && srcPersonRootST != null && destPersonRootST != null)
                 {
@@ -226,18 +228,18 @@ namespace VPB.src.util
                         SimpleTransform localToPerson = srcPersonRootST.InverseTransformPoint(srcCtrlWorld);
                         SimpleTransform destWorld = destPersonRootST.TransformPoint(localToPerson);
                         WriteControlWorld(node, destWorld);
-                        LogUtil.Log($"[VPB][CUA] {id}: off-person relative to person local={localToPerson.Position} "
+                        if (VPBLogger.Verbose) LogUtil.Log($"[VPB][CUA] {id}: off-person relative to person local={localToPerson.Position} "
                             + $"dest={destWorld.Position}.");
                     }
                     else
                     {
-                        LogUtil.Log($"[VPB][CUA] {id}: free-standing, no control transform; keeping source world position.");
+                        VPBLogger.Main.LogWarning($"[VPB][CUA] {id}: free-standing, no control transform; keeping source world position.", false);
                     }
                 }
                 else
                 {
                     // Free-standing prop/furniture: keep the source world position baked into the node's control.
-                    LogUtil.Log($"[VPB][CUA] {id}: free-standing, keeping source world position.");
+                    if (VPBLogger.Verbose) LogUtil.Log($"[VPB][CUA] {id}: free-standing, keeping source world position.");
                 }
                 outAtoms.Add(node);
             }
@@ -360,7 +362,9 @@ namespace VPB.src.util
                     else held++;
                     yield return null;
                 }
-                LogUtil.Log($"[VPB][CUA] '{pl.LiveId}': ParentLink -> '{target.uid}':{boneRB.name} held={held} at {mc.transform.position.ToString("F4")}.");
+                if (held < 5 || VPBLogger.Verbose) VPBLogger.Main.Log(
+                    held < 5 ? BepInEx.Logging.LogLevel.Warning : BepInEx.Logging.LogLevel.Info,
+                    $"[VPB][CUA] '{pl.LiveId}': ParentLink -> '{target.uid}':{boneRB.name} held={held} settled={held >= 5} at {mc.transform.position.ToString("F4")}.", false);
             }
         }
 

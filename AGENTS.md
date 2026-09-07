@@ -1,5 +1,9 @@
 # Agent instructions — VPB
 
+## Logging
+
+Add logs when they help users understand results or diagnose failures, especially in high-risk features. Put noisy detail behind verbose flags; keep failures visible in normal mode. Follow [Documentation/Logging.md](Documentation/Logging.md) when adding or changing logs.
+
 Read this before changing code. Full test documentation: [tests/README.md](tests/README.md).
 
 ## Build and verify

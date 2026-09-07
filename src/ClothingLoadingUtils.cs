@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -575,7 +576,7 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveClothingByWearClass({classToRemove}): target={target.uid} ({target.type})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingByWearClass({classToRemove}): target={target.uid} ({target.type})");
 
             try
             {
@@ -1560,17 +1561,17 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveAllClothing: target={target.uid} ({target.type})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllClothing: target={target.uid} ({target.type})");
 
             bool cleared = false;
             try
             {
                 JSONStorable clothing = target.GetStorableByID("Clothing");
-                LogUtil.Log($"[VPB] RemoveAllClothing: Clothing storable {(clothing != null ? "found" : "NOT found")}");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllClothing: Clothing storable {(clothing != null ? "found" : "NOT found")}");
                 if (clothing != null)
                 {
                     EnsureClothingClearCached(clothing);
-                    LogUtil.Log($"[VPB] RemoveAllClothing: Clear() method {(s_ClothingClearMethod != null ? "found" : "NOT found")} on {clothing.GetType().FullName}");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllClothing: Clear() method {(s_ClothingClearMethod != null ? "found" : "NOT found")} on {clothing.GetType().FullName}");
                     if (s_ClothingClearMethod != null)
                     {
                         s_ClothingClearMethod.Invoke(clothing, null);
@@ -1634,17 +1635,17 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveAllHair: target={target.uid} ({target.type})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllHair: target={target.uid} ({target.type})");
 
             bool cleared = false;
             try
             {
                 JSONStorable hair = target.GetStorableByID("Hair");
-                LogUtil.Log($"[VPB] RemoveAllHair: Hair storable {(hair != null ? "found" : "NOT found")}");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllHair: Hair storable {(hair != null ? "found" : "NOT found")}");
                 if (hair != null)
                 {
                     EnsureHairClearCached(hair);
-                    LogUtil.Log($"[VPB] RemoveAllHair: Clear() method {(s_HairClearMethod != null ? "found" : "NOT found")} on {hair.GetType().FullName}");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllHair: Clear() method {(s_HairClearMethod != null ? "found" : "NOT found")} on {hair.GetType().FullName}");
                     if (s_HairClearMethod != null)
                     {
                         s_HairClearMethod.Invoke(hair, null);

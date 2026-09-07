@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -107,7 +108,7 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
             MethodInfo loadMethod = typeof(SubScene).GetMethod(
                 "LoadSubSceneWithPath",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -171,13 +172,13 @@ namespace VPB
             {
                 Atom a = toRemove[i];
                 string uid = a != null ? a.uid : "?";
-                LogUtil.Log($"[VPB] Replace mode: RemoveAtom SubScene {i + 1}/{toRemove.Count} '{uid}' begin");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] Replace mode: RemoveAtom SubScene {i + 1}/{toRemove.Count} '{uid}' begin");
                 float t0 = Time.realtimeSinceStartup;
                 try { if (a != null) SuperController.singleton.RemoveAtom(a); } catch (Exception ex)
                 {
                     LogUtil.LogWarning("[VPB] Replace mode: RemoveAtom failed '" + uid + "': " + ex.Message);
                 }
-                LogUtil.Log($"[VPB] Replace mode: RemoveAtom SubScene {i + 1}/{toRemove.Count} '{uid}' done ms="
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] Replace mode: RemoveAtom SubScene {i + 1}/{toRemove.Count} '{uid}' done ms="
                     + ((Time.realtimeSinceStartup - t0) * 1000f).ToString("F0"));
                 yield return null;
                 yield return null;
@@ -388,7 +389,7 @@ namespace VPB
                 {
                     try
                     {
-                        LogUtil.Log("[VPB] Undo capture: itemType=" + itemType + " atomType=" + atom.type + " entryPath=" + (FileEntry != null ? FileEntry.Path : "<null>"));
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Undo capture: itemType=" + itemType + " atomType=" + atom.type + " entryPath=" + (FileEntry != null ? FileEntry.Path : "<null>"));
                     }
                     catch { }
 
@@ -1084,7 +1085,7 @@ namespace VPB
             JSONStorableBool param = geometry.GetBoolJSONParam(paramName);
             if (param != null)
             {
-                LogUtil.Log($"{logPrefix} found clothing param: {paramName}, setting to true.");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"{logPrefix} found clothing param: {paramName}, setting to true.");
                 param.val = true;
                 return true;
             }
@@ -1093,7 +1094,7 @@ namespace VPB
             param = geometry.GetBoolJSONParam(paramName);
             if (param != null)
             {
-                LogUtil.Log($"{logPrefix} found hair param: {paramName}, setting to true.");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"{logPrefix} found hair param: {paramName}, setting to true.");
                 param.val = true;
                 return true;
             }
@@ -1115,7 +1116,7 @@ namespace VPB
                         var p = geometry.GetBoolJSONParam(n);
                         if (p != null)
                         {
-                            LogUtil.Log($"{logPrefix} found param by suffix match: {n}, setting to true.");
+                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"{logPrefix} found param by suffix match: {n}, setting to true.");
                             p.val = true;
                             return true;
                         }
@@ -1209,7 +1210,7 @@ namespace VPB
             VamOnDemandLoader.CancelPendingCoalescedVamRefresh("light_clothing_hair_catalog_ready");
             try
             {
-                LogUtil.Log("[VPB OnDemand] Light clothing/hair catalog ready — skipped native FileManager.Refresh");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB OnDemand] Light clothing/hair catalog ready — skipped native FileManager.Refresh");
             }
             catch { }
             return true;
