@@ -19,6 +19,33 @@ namespace VPB
             internal int Width;
             internal int Height;
             internal TextureFormat Format;
+            internal OnDemandZstdWriteQueue.Reservation Memory;
+            private bool abandoned;
+
+            internal byte[] ClaimRaw()
+            {
+                lock (this)
+                {
+                    if (abandoned || !Success || !Memory.IsCurrent) return null;
+                    byte[] result = Raw;
+                    Raw = null;
+                    return result;
+                }
+            }
+
+            internal void Abandon()
+            {
+                lock (this) { abandoned = true; Raw = null; }
+            }
+
+            internal void Complete(int state)
+            {
+                lock (this)
+                {
+                    if (abandoned || !Memory.IsCurrent) Raw = null;
+                    State = state;
+                }
+            }
 
             internal bool IsDone => State != 0;
             internal bool Success => State == 2;
@@ -39,9 +66,10 @@ namespace VPB
             bool createAlphaFromGrayscale,
             bool createNormalFromBump,
             float bumpStrength,
-            bool invert)
+            bool invert,
+            OnDemandZstdWriteQueue.Reservation memory)
         {
-            var job = new Job();
+            var job = new Job { Memory = memory };
             if (string.IsNullOrEmpty(imgUidPath))
             {
                 job.State = StateFailed;
@@ -49,7 +77,21 @@ namespace VPB
                 return job;
             }
 
-            ThreadPool.QueueUserWorkItem(_ => Run(job, imgUidPath, setSize, setWidth, setHeight, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, bumpStrength, invert));
+            if (memory == null || !memory.HoldWorker())
+            {
+                job.Error = "Cancelled";
+                job.State = StateFailed;
+                return job;
+            }
+            bool queued = false;
+            try { queued = ThreadPool.QueueUserWorkItem(_ => Run(job, imgUidPath, setSize, setWidth, setHeight, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, bumpStrength, invert)); }
+            catch (Exception ex) { job.Error = ex.Message; }
+            if (!queued)
+            {
+                job.Error = job.Error ?? "Decode worker submission failed";
+                job.Complete(StateFailed);
+                memory.ReleaseWorker();
+            }
             return job;
         }
 
@@ -67,11 +109,12 @@ namespace VPB
             float bumpStrength,
             bool invert)
         {
+            int completion = StateFailed;
             try
             {
+                if (!job.Memory.IsCurrent) return;
                 if (!FileManager.FileExists(imgUidPath))
                 {
-                    job.State = StateFailed;
                     job.Error = "Path not found: " + imgUidPath;
                     return;
                 }
@@ -79,7 +122,6 @@ namespace VPB
                 byte[] fileBytes = FileManager.ReadAllBytes(imgUidPath);
                 if (fileBytes == null || fileBytes.Length == 0)
                 {
-                    job.State = StateFailed;
                     job.Error = "Empty file: " + imgUidPath;
                     return;
                 }
@@ -111,7 +153,6 @@ namespace VPB
                             out rawLen,
                             out decodeErr))
                     {
-                        job.State = StateFailed;
                         job.Error = decodeErr ?? "VaM decode failed";
                         return;
                     }
@@ -121,13 +162,17 @@ namespace VPB
                     job.Width = w;
                     job.Height = h;
                     job.Format = fmt;
-                    job.State = StateSucceeded;
+                    completion = StateSucceeded;
                 }
             }
             catch (Exception ex)
             {
-                job.State = StateFailed;
                 job.Error = ex.Message;
+            }
+            finally
+            {
+                job.Complete(completion);
+                job.Memory.ReleaseWorker();
             }
         }
     }

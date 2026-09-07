@@ -16,8 +16,106 @@ namespace VPB
     /// </summary>
     internal static class OnDemandZstdWriteQueue
     {
+        // One route owns its future scratch too, so decoded producers cannot starve writers.
+        internal sealed class Reservation
+        {
+            internal long Bytes;
+            internal int Session;
+            internal int References = 1;
+            internal bool ProducerOwned = true;
+            internal bool WriterOwned;
+            internal bool Exclusive;
+
+            internal bool IsCurrent
+            {
+                get { lock (QueueLock) { return References > 0 && Session == s_Session && !s_Cancel && !VpbShutdown.IsQuitting; } }
+            }
+
+            internal bool HoldWorker()
+            {
+                lock (QueueLock)
+                {
+                    if (!IsCurrent || !ProducerOwned) return false;
+                    References++;
+                    return true;
+                }
+            }
+
+            internal void ReleaseWorker()
+            {
+                lock (QueueLock) { ReleaseReference(); }
+            }
+
+            internal void ReleaseProducer()
+            {
+                lock (QueueLock)
+                {
+                    if (!ProducerOwned) return;
+                    ProducerOwned = false;
+                    ReleaseReference();
+                }
+            }
+
+            internal bool TransferToWriter()
+            {
+                lock (QueueLock)
+                {
+                    if (!IsCurrent || !ProducerOwned) return false;
+                    ProducerOwned = false;
+                    WriterOwned = true;
+                    return true;
+                }
+            }
+
+            private void ReleaseReference()
+            {
+                if (References <= 0) return;
+                if (--References != 0) return;
+                s_ReservedBytes -= Bytes;
+                s_Reservations--;
+                if (Exclusive) s_ExclusiveReservation = false;
+            }
+
+            internal void ReleaseWriter()
+            {
+                lock (QueueLock)
+                {
+                    if (!WriterOwned) return;
+                    WriterOwned = false;
+                    ReleaseReference();
+                }
+            }
+        }
+
+        internal static bool CanReserve(long bytes, bool exclusive, long reserved, int count, bool hasExclusive)
+        {
+            if (bytes <= 0 || reserved < 0 || count < 0 || hasExclusive) return false;
+            if (exclusive || bytes > MaxPendingPayloadBytes) return count == 0 && reserved == 0;
+            return reserved <= MaxPendingPayloadBytes - bytes;
+        }
+
+        internal static Reservation TryReserve(long bytes, bool exclusive)
+        {
+            lock (QueueLock)
+            {
+                if (s_Cancel || VpbShutdown.IsQuitting || !CanReserve(bytes, exclusive, s_ReservedBytes, s_Reservations, s_ExclusiveReservation)) return null;
+                var result = new Reservation { Bytes = bytes, Session = s_Session, Exclusive = exclusive || bytes > MaxPendingPayloadBytes };
+                s_ReservedBytes += bytes;
+                s_Reservations++;
+                s_ExclusiveReservation = result.Exclusive;
+                return result;
+            }
+        }
+
+        internal static int CurrentSession { get { lock (QueueLock) { return s_Session; } } }
+        internal static bool IsSessionCurrent(int session)
+        {
+            lock (QueueLock) { return session == s_Session && !s_Cancel && !VpbShutdown.IsQuitting; }
+        }
+
         private sealed class Job
         {
+            public Reservation Memory;
             public string ZstdPath;
             /// <summary>In-memory DXT/raw payload. Null when <see cref="NativeSourcePath"/> set.</summary>
             public byte[] Payload;
@@ -44,6 +142,10 @@ namespace VPB
         private static int s_MaxWriters = 2;
         private static long s_PayloadBytes;
         private static volatile bool s_Cancel;
+        private static int s_Session;
+        private static long s_ReservedBytes;
+        private static int s_Reservations;
+        private static bool s_ExclusiveReservation;
         private const int MaxPendingJobs = 24;
         private const long MaxPendingPayloadBytes = 512L * 1024 * 1024;
 
@@ -62,21 +164,25 @@ namespace VPB
             get { return PendingCount <= 0; }
         }
 
-        internal static void GetTelemetryCounts(out int queuedJobs, out int activeWriters, out long payloadBytes)
+        internal static void GetTelemetryCounts(out int queuedJobs, out int activeWriters, out long payloadBytes,
+            out long reservedBytes, out int reservations, out bool exclusiveReservation)
         {
             lock (QueueLock)
             {
                 queuedJobs = Thread.VolatileRead(ref s_Queued);
                 activeWriters = Thread.VolatileRead(ref s_ActiveWriters);
                 payloadBytes = s_PayloadBytes;
+                reservedBytes = s_ReservedBytes;
+                reservations = s_Reservations;
+                exclusiveReservation = s_ExclusiveReservation;
             }
         }
 
         internal static IEnumerator CoWaitForCapacity(int payloadBytes)
         {
-            if (payloadBytes <= 0 || payloadBytes > MaxPendingPayloadBytes) yield break;
+            if (payloadBytes <= 0) yield break;
             while (!s_Cancel && !VpbShutdown.IsQuitting
-                && (PendingCount >= MaxPendingJobs || Interlocked.Read(ref s_PayloadBytes) + payloadBytes > MaxPendingPayloadBytes))
+                && PendingCount >= MaxPendingJobs)
                 yield return null;
         }
 
@@ -84,7 +190,7 @@ namespace VPB
         {
             if (VpbShutdown.IsQuitting) return;
             try { VpbShutdown.Register("zstd-write-queue", RequestCancel); } catch { }
-            s_Cancel = false;
+            lock (QueueLock) { s_Session++; s_Cancel = false; }
             s_MaxWriters = ResolveMaxWriters();
             TryBoostThreadPool();
         }
@@ -150,7 +256,8 @@ namespace VPB
             int sourceHeight,
             int level,
             bool rewrite,
-            string deleteNativePathAfterSuccess)
+            string deleteNativePathAfterSuccess,
+            Reservation memory)
         {
             if (s_Cancel || string.IsNullOrEmpty(zstdPath) || payload == null || payload.Length == 0 || width <= 0 || height <= 0)
                 return false;
@@ -160,6 +267,7 @@ namespace VPB
 
             var job = new Job
             {
+                Memory = memory,
                 ZstdPath = zstdPath,
                 Payload = payload,
                 NativeSourcePath = null,
@@ -208,8 +316,15 @@ namespace VPB
             if (!ImageLoadingMgr.TryAcquireZstdWritePath(zstdPath))
                 return false;
 
+            Reservation memory = TryReserve(MaxPendingPayloadBytes, true);
+            if (memory == null)
+            {
+                ImageLoadingMgr.ReleaseZstdWritePath(zstdPath);
+                return false;
+            }
             var job = new Job
             {
+                Memory = memory,
                 ZstdPath = zstdPath,
                 Payload = null,
                 NativeSourcePath = nativePath,
@@ -227,7 +342,9 @@ namespace VPB
                 DeleteNativePathAfterSuccess = deleteNativePathAfterSuccess
             };
 
-            return EnqueueJob(job);
+            bool accepted = EnqueueJob(job);
+            if (!accepted) memory.ReleaseProducer();
+            return accepted;
         }
 
         private static bool EnqueueJob(Job job)
@@ -237,10 +354,15 @@ namespace VPB
             {
                 int payloadBytes = job != null && job.Payload != null ? job.Payload.Length : 0;
                 if (!s_Cancel && PendingCount < MaxPendingJobs
-                    && payloadBytes <= MaxPendingPayloadBytes
-                    && s_PayloadBytes + payloadBytes <= MaxPendingPayloadBytes)
+                    && job.Memory != null && job.Memory.TransferToWriter())
                 {
-                    Queue.Enqueue(job);
+                    try { Queue.Enqueue(job); }
+                    catch
+                    {
+                        job.Memory.ReleaseWriter();
+                        ImageLoadingMgr.ReleaseZstdWritePath(job.ZstdPath);
+                        throw;
+                    }
                     Interlocked.Increment(ref s_Queued);
                     s_PayloadBytes += payloadBytes;
                     queued = true;
@@ -327,9 +449,8 @@ namespace VPB
             try
             {
                 if (job == null) return;
-                if (s_Cancel || VpbShutdown.IsQuitting)
+                if (s_Cancel || VpbShutdown.IsQuitting || !job.Memory.IsCurrent)
                 {
-                    ReleaseJob(job);
                     NativeTextureOnDemandCache.NotifyZstdWriteFailed();
                     return;
                 }
@@ -344,7 +465,7 @@ namespace VPB
                 long compressedLen;
                 long diskBytes;
                 bool ok = WriteJob(job, out compressedLen, out diskBytes);
-                if (ok)
+                if (ok && job.Memory.IsCurrent)
                 {
                     NativeTextureOnDemandCache.NotifyZstdWriteCompleted(
                         originalLen,
@@ -363,19 +484,18 @@ namespace VPB
                     NativeTextureOnDemandCache.NotifyZstdWriteFailed();
                 }
 
-                ReleaseJob(job);
             }
             catch
             {
                 try { NativeTextureOnDemandCache.NotifyZstdWriteFailed(); } catch { }
-                try { ReleaseJob(job); } catch { }
             }
             finally
             {
+                // ThreadPool threads outlive this job and can otherwise retain native workspaces indefinitely.
+                DisposeThreadCompressor();
+                ReleaseJob(job);
                 Interlocked.Decrement(ref s_ActiveWriters);
-                if (s_Cancel)
-                    DisposeThreadCompressor();
-                else
+                if (!s_Cancel)
                     TrySpawnWriters();
             }
         }
@@ -384,7 +504,7 @@ namespace VPB
         {
             compressedLen = 0;
             diskBytes = 0;
-            if (s_Cancel) return false;
+            if (s_Cancel || !job.Memory.IsCurrent) return false;
             string zstdPath = job.ZstdPath;
             if (string.IsNullOrEmpty(zstdPath)) return false;
 
@@ -393,11 +513,11 @@ namespace VPB
             {
                 try
                 {
-                    if (s_Cancel) return false;
+                    if (s_Cancel || !job.Memory.IsCurrent) return false;
                     if (!File.Exists(job.NativeSourcePath)) return false;
                     long rawLen = new FileInfo(job.NativeSourcePath).Length;
                     ZstdCompressor.SaveCacheFromFile(zstdPath, job.NativeSourcePath, job.Level);
-                    if (s_Cancel) return false;
+                    if (s_Cancel || !job.Memory.IsCurrent) return false;
                     if (!File.Exists(zstdPath)) return false;
                     compressedLen = new FileInfo(zstdPath).Length;
 
@@ -412,7 +532,7 @@ namespace VPB
                     }
                     catch { diskBytes = compressedLen; }
 
-                    return !s_Cancel;
+                    return !s_Cancel && job.Memory.IsCurrent;
                 }
                 catch (Exception ex)
                 {
@@ -423,11 +543,11 @@ namespace VPB
 
             byte[] raw = job.Payload;
             if (raw == null || raw.Length == 0) return false;
-            if (s_Cancel) return false;
+            if (s_Cancel || !job.Memory.IsCurrent) return false;
 
             byte[] compressed = CompressWithThreadCompressor(raw, job.Level);
             if (compressed == null || compressed.Length == 0) return false;
-            if (s_Cancel) return false;
+            if (s_Cancel || !job.Memory.IsCurrent) return false;
             compressedLen = compressed.Length;
 
             try
@@ -567,6 +687,7 @@ namespace VPB
             }
             catch
             {
+                DisposeThreadCompressor();
                 try { return ZstdCompressor.Compress(raw, level); }
                 catch { return null; }
             }
@@ -584,6 +705,7 @@ namespace VPB
                     if (s_PayloadBytes < 0) s_PayloadBytes = 0;
                     job.Payload = null;
                 }
+                if (job.Memory != null) job.Memory.ReleaseWriter();
             }
         }
 

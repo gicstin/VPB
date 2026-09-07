@@ -952,8 +952,43 @@ namespace VPB
             return m + ":" + ss.ToString("00");
         }
 
+        private static MonoBehaviour ResolveCacheBuildHost()
+        {
+            var host = Messager.singleton;
+            return host != null && host.gameObject != null && host.gameObject.activeInHierarchy ? host : null;
+        }
+
+        private static void StartPersistentCacheBuild(MonoBehaviour host, IEnumerator root)
+        {
+            VpbShutdown.Register("on-demand-build", RequestCancel);
+            try { host.StartCoroutine(RunPersistentCacheBuild(root, OnDemandZstdWriteQueue.CurrentSession)); }
+            catch (Exception ex)
+            {
+                RequestCancel();
+                s_OnDemandBusy = false;
+                LogUtil.LogWarning("[VPB OnDemand] Cannot start cache build: " + ex.Message);
+            }
+        }
+
+        private static IEnumerator RunPersistentCacheBuild(IEnumerator root, int session)
+        {
+            var pump = new NestedPump(root);
+            try
+            {
+                while (!s_CancelRequested && OnDemandZstdWriteQueue.IsSessionCurrent(session) && pump.AdvanceUntilYieldOrDone())
+                    yield return null;
+            }
+            finally
+            {
+                pump.DisposeAll();
+                s_OnDemandBusy = false;
+                if (s_CancelRequested && !s_BatchMode) EndUiJob("Texture caching cancelled");
+            }
+        }
+
         public static void TryBuildSceneCacheOnDemand(MonoBehaviour host)
         {
+            host = ResolveCacheBuildHost();
             if (host == null) return;
 
             if (s_OnDemandBusy)
@@ -971,11 +1006,12 @@ namespace VPB
 
             if (!s_BatchMode) BeginUiJob("Caching Textures...");
             s_OnDemandBusy = true;
-            host.StartCoroutine(BuildSceneCacheCoroutine(scenePath));
+            StartPersistentCacheBuild(host, BuildSceneCacheCoroutine(scenePath));
         }
 
         public static void TryBuildSceneCacheOnDemand(MonoBehaviour host, string scenePath)
         {
+            host = ResolveCacheBuildHost();
             if (host == null) return;
 
             if (s_OnDemandBusy)
@@ -993,11 +1029,12 @@ namespace VPB
 
             if (!s_BatchMode) BeginUiJob("Caching Textures...");
             s_OnDemandBusy = true;
-            host.StartCoroutine(BuildSceneCacheCoroutine(normalized));
+            StartPersistentCacheBuild(host, BuildSceneCacheCoroutine(normalized));
         }
 
         public static void TryBuildPackageCacheOnDemand(MonoBehaviour host, string packagePath)
         {
+            host = ResolveCacheBuildHost();
             if (host == null) return;
 
             if (s_OnDemandBusy)
@@ -1014,7 +1051,7 @@ namespace VPB
 
             if (!s_BatchMode) BeginUiJob("Caching Textures...");
             s_OnDemandBusy = true;
-            host.StartCoroutine(BuildPackageCacheCoroutine(packagePath));
+            StartPersistentCacheBuild(host, BuildPackageCacheCoroutine(packagePath));
         }
 
         public static void TryPurgePackageCacheOnDemand(MonoBehaviour host, string packagePath)
@@ -2712,13 +2749,36 @@ namespace VPB
                     if (length > 0 && length < toRead) toRead = (int)length;
                     if (toRead < 16) return false;
 
-                    byte[] buf = new byte[toRead];
+                    int prefixLength = Math.Min(24, toRead);
+                    byte[] buf = new byte[prefixLength];
                     int off = 0;
-                    while (off < toRead)
+                    while (off < prefixLength)
                     {
-                        int n = stream.Read(buf, off, toRead - off);
+                        int n = stream.Read(buf, off, prefixLength - off);
                         if (n <= 0) break;
                         off += n;
+                    }
+
+                    int prefixWidth, prefixHeight;
+                    if (off == 24 && buf[0] == 0x89 && buf[1] == 0x50 && buf[2] == 0x4E && buf[3] == 0x47
+                        && TryParseImageDimensionsFromBuffer(buf, off, out prefixWidth, out prefixHeight))
+                    {
+                        width = prefixWidth;
+                        height = prefixHeight;
+                        return true;
+                    }
+
+                    if (off == prefixLength && toRead > prefixLength)
+                    {
+                        byte[] fullBuffer = new byte[toRead];
+                        Array.Copy(buf, fullBuffer, off);
+                        buf = fullBuffer;
+                        while (off < toRead)
+                        {
+                            int n = stream.Read(buf, off, toRead - off);
+                            if (n <= 0) break;
+                            off += n;
+                        }
                     }
 
                     if (off < 16) return false;
@@ -2871,13 +2931,16 @@ namespace VPB
             int targetHeight,
             bool decodeFromSource,
             bool suppressNativeDiskWrite,
-            OnDemandLoaderResultSlot slot)
+            OnDemandLoaderResultSlot slot,
+            OnDemandZstdWriteQueue.Reservation memory,
+            bool capturePayload = true)
         {
             slot.Value = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
+            if (!memory.IsCurrent) yield break;
 
             if (!decodeFromSource)
             {
-                slot.Value = BuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, false, suppressNativeDiskWrite);
+                slot.Value = BuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, false, suppressNativeDiskWrite, capturePayload);
                 yield break;
             }
 
@@ -2892,11 +2955,13 @@ namespace VPB
                 flags.createAlphaFromGrayscale,
                 flags.createNormalFromBump,
                 flags.bumpStrength,
-                flags.invert);
+                flags.invert, memory);
 
+            try
+            {
             while (job != null && !job.IsDone)
             {
-                if (s_CancelRequested)
+                if (s_CancelRequested || !memory.IsCurrent)
                 {
                     slot.Value = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
                     slot.Value.error = "Cancelled";
@@ -2907,12 +2972,13 @@ namespace VPB
 
             if (job != null && job.Success)
             {
-                byte[] raw = job.Raw;
+                byte[] raw = job.ClaimRaw();
+                if (raw == null) yield break;
                 int rawLen = job.RawLength;
                 int w = job.Width;
                 int h = job.Height;
                 TextureFormat fmt = job.Format;
-                job.Raw = null;
+
 
                 slot.Value = CustomImageLoaderThreaded.BuildOnDemandFinishFromDecoded(
                     imgUidPath,
@@ -2929,11 +2995,14 @@ namespace VPB
                     flags.invert,
                     flags.bumpStrength,
                     suppressNativeDiskWrite,
-                    true);
+                    true,
+                    capturePayload);
                 yield break;
             }
 
-            slot.Value = BuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, true, suppressNativeDiskWrite);
+            if (memory.IsCurrent) slot.Value = BuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, true, suppressNativeDiskWrite, capturePayload);
+            }
+            finally { if (job != null) job.Abandon(); }
         }
 
         private static CustomImageLoaderThreaded.OnDemandCacheBuildResult BuildViaLoader(
@@ -2942,7 +3011,8 @@ namespace VPB
             int targetWidth,
             int targetHeight,
             bool decodeFromSourceOnly,
-            bool suppressNativeDiskWrite)
+            bool suppressNativeDiskWrite,
+            bool capturePayload)
         {
             return CustomImageLoaderThreaded.BuildOnDemandViaLoader(
                 imgUidPath,
@@ -2956,7 +3026,8 @@ namespace VPB
                 targetWidth,
                 targetHeight,
                 decodeFromSourceOnly,
-                suppressNativeDiskWrite);
+                suppressNativeDiskWrite,
+                capturePayload);
         }
 
         private static string GetNativeCachePathDynamic(string imgPath, TextureFlags flags, long explicitSize, DateTime explicitLastWriteTime, int targetWidth = 0, int targetHeight = 0)
@@ -3148,6 +3219,7 @@ namespace VPB
         private static IEnumerator WriteNativeCacheForImageVariantsCoroutine(string imgUidPath, string internalPath, List<TextureFlags> variants, long entrySize, DateTime entryTime)
         {
             if (string.IsNullOrEmpty(imgUidPath) || string.IsNullOrEmpty(internalPath) || variants == null || variants.Count == 0) yield break;
+            int session = OnDemandZstdWriteQueue.CurrentSession;
 
             EnterSuppressZstdMissLookupLog();
             try
@@ -3449,9 +3521,27 @@ namespace VPB
                     CustomImageLoaderThreaded.OnDemandCacheBuildResult loaderZstd = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
                     var loaderSlot = new OnDemandLoaderResultSlot();
 
+                    bool exclusive;
+                    bool dual = needNative && needZstd && wantsZstdDownscale;
+                    int estimateW = !needNative && wantsZstdDownscale ? zstdTargetW : targetWidth;
+                    int estimateH = !needNative && wantsZstdDownscale ? zstdTargetH : targetHeight;
+                    long estimatedBytes = EstimateManagedRoute(imgUidPath, cachePath, flags, estimateW, estimateH,
+                        dual ? zstdTargetW : 0, dual ? zstdTargetH : 0, needZstd, out exclusive);
+                    OnDemandZstdWriteQueue.Reservation memory = null;
+                    while (memory == null)
+                    {
+                        if (s_CancelRequested || !OnDemandZstdWriteQueue.IsSessionCurrent(session)) yield break;
+                        memory = OnDemandZstdWriteQueue.TryReserve(estimatedBytes, exclusive);
+                        if (memory == null) yield return null;
+                    }
+                    try
+                    {
+                    Trace("MemoryAdmission: managedEstimate=" + estimatedBytes + " exclusive=" + memory.Exclusive
+                        + " (excludes GDI/Unity/native-zstd and retained pool)");
+
                     if (needNative && needZstd && wantsZstdDownscale)
                     {
-                        yield return CoBuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, true, false, loaderSlot);
+                        yield return CoBuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, true, false, loaderSlot, memory);
                         loaderNative = loaderSlot.Value;
                         if (!loaderNative.success)
                         {
@@ -3466,7 +3556,7 @@ namespace VPB
                         }
                         else
                         {
-                            yield return CoBuildViaLoader(imgUidPath, flags, zstdTargetW, zstdTargetH, true, true, loaderSlot);
+                            yield return CoBuildViaLoader(imgUidPath, flags, zstdTargetW, zstdTargetH, true, true, loaderSlot, memory);
                             loaderZstd = loaderSlot.Value;
                             if (!loaderZstd.success)
                             {
@@ -3479,7 +3569,8 @@ namespace VPB
                     {
                         int buildW = (needZstd && wantsZstdDownscale && !needNative) ? zstdTargetW : targetWidth;
                         int buildH = (needZstd && wantsZstdDownscale && !needNative) ? zstdTargetH : targetHeight;
-                        yield return CoBuildViaLoader(imgUidPath, flags, buildW, buildH, decodeFromSource, suppressNativeDiskWrite, loaderSlot);
+                        // Only the Zstd writer consumes a managed snapshot after Finish wrote native cache.
+                        yield return CoBuildViaLoader(imgUidPath, flags, buildW, buildH, decodeFromSource, suppressNativeDiskWrite, loaderSlot, memory, needZstd);
                         var built = loaderSlot.Value;
                         if (!built.success)
                         {
@@ -3493,6 +3584,7 @@ namespace VPB
 
                         if (needNative) loaderNative = built;
                         if (needZstd) loaderZstd = built;
+                        built.payload = null;
                     }
 
                     if (needNative)
@@ -3604,11 +3696,15 @@ namespace VPB
                                 zstdSourceH,
                                 level,
                                 rewriteZstd,
-                                deleteNativeAfter))
+                                deleteNativeAfter,
+                                memory))
                             {
                                 NotifyZstdWriteFailed();
                                 Trace("ZstdEnqueueFail: path='" + (zstdWritePath ?? string.Empty) + "'");
                             }
+                            loaderNative.payload = null;
+                            loaderSlot.Value = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
+                            payloadForWorker = null;
                         }
                         catch
                         {
@@ -3621,7 +3717,17 @@ namespace VPB
                         s_ZstdSkips++;
                     }
 
-                AfterZstd:
+                AfterZstd: ;
+
+                    }
+                    finally
+                    {
+                        payloadZstd = null;
+                        loaderNative.payload = null;
+                        loaderZstd.payload = null;
+                        loaderSlot.Value = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
+                        memory.ReleaseProducer();
+                    }
 
                     UpdateUiStatusThrottled();
 

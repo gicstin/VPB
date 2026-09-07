@@ -1281,7 +1281,8 @@ namespace VPB
             bool invert,
             float bumpStrength,
             bool suppressNativeDiskWrite,
-            bool takeOwnershipOfDecodedRaw = false)
+            bool takeOwnershipOfDecodedRaw = false,
+            bool capturePayload = true)
         {
             var result = new OnDemandCacheBuildResult();
             CustomImageLoaderThreaded loader = singleton;
@@ -1357,7 +1358,7 @@ namespace VPB
 
                 try
                 {
-                    result.payload = qi.tex.GetRawTextureData();
+                    if (capturePayload) result.payload = qi.tex.GetRawTextureData();
                 }
                 catch (Exception ex)
                 {
@@ -1375,7 +1376,9 @@ namespace VPB
                     }
                 }
 
-                result.success = result.payload != null && result.payload.Length > 0;
+                result.success = capturePayload
+                    ? result.payload != null && result.payload.Length > 0
+                    : result.wroteNativeCache;
 
                 return result;
             }
@@ -1414,7 +1417,8 @@ namespace VPB
             int targetWidth,
             int targetHeight,
             bool decodeFromSourceOnly,
-            bool suppressNativeDiskWrite)
+            bool suppressNativeDiskWrite,
+            bool capturePayload = true)
         {
             var result = new OnDemandCacheBuildResult();
             CustomImageLoaderThreaded loader = singleton;
@@ -1502,7 +1506,7 @@ namespace VPB
 
                 try
                 {
-                    result.payload = qi.tex.GetRawTextureData();
+                    if (capturePayload) result.payload = qi.tex.GetRawTextureData();
                 }
                 catch (Exception ex)
                 {
@@ -1531,7 +1535,9 @@ namespace VPB
                     }
                 }
 
-                result.success = result.payload != null && result.payload.Length > 0;
+                result.success = capturePayload
+                    ? result.payload != null && result.payload.Length > 0
+                    : result.wroteNativeCache;
 
                 return result;
             }
