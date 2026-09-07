@@ -1777,9 +1777,15 @@ namespace VPB
             catch { }
         }
 
-        internal static void TryRecordCacheHitsBatch(IEnumerable<string> cachePaths)
+        internal struct CacheUsagePkgRow
         {
-            if (!VpbSqlite3.IsAvailable || cachePaths == null) return;
+            public string CachePath;
+            public string PackageUid;
+        }
+
+        internal static bool TryRecordCacheUsageBatch(IEnumerable<string> cachePaths, IEnumerable<CacheUsagePkgRow> rows)
+        {
+            if (!VpbSqlite3.IsAvailable || cachePaths == null) return false;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -1797,50 +1803,28 @@ namespace VPB
                                 st.Reset();
                                 st.BindText(1, path);
                                 st.BindInt64(2, now);
-                                st.Step();
+                                if (st.Step() != VpbSqlite3.SqliteDone)
+                                    throw new InvalidOperationException("Cache hit write did not complete");
                             }
                         }
-                        conn.ExecUtf8("COMMIT;");
-                    }
-                    catch
-                    {
-                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
-                        throw;
-                    }
-                }
-            }
-            catch { }
-        }
-
-        internal struct CacheUsagePkgRow
-        {
-            public string CachePath;
-            public string PackageUid;
-        }
-
-        internal static void TryRecordCacheUsagePackagesBatch(IEnumerable<CacheUsagePkgRow> rows)
-        {
-            if (!VpbSqlite3.IsAvailable || rows == null) return;
-            try
-            {
-                using (var conn = new VpbSqlite3.Connection(DbPath))
-                {
-                    EnsureSchema(conn);
-                    conn.ExecUtf8("BEGIN IMMEDIATE;");
-                    try
-                    {
-                        using (var st = conn.Prepare("INSERT OR IGNORE INTO cache_usage_pkg(cache_path, pkg_uid) VALUES(?, ?)"))
+                        if (rows != null)
                         {
-                            foreach (var r in rows)
+                            using (var st = conn.Prepare("INSERT OR IGNORE INTO cache_usage_pkg(cache_path, pkg_uid) VALUES(?, ?)"))
                             {
-                                if (string.IsNullOrEmpty(r.CachePath) || string.IsNullOrEmpty(r.PackageUid)) continue;
-                                st.Reset();
-                                st.BindText(1, r.CachePath);
-                                st.BindText(2, r.PackageUid);
-                                st.Step();
+                                foreach (var row in rows)
+                                {
+                                    if (string.IsNullOrEmpty(row.CachePath) || string.IsNullOrEmpty(row.PackageUid)) continue;
+                                    st.Reset();
+                                    st.BindText(1, row.CachePath);
+                                    st.BindText(2, row.PackageUid);
+                                    if (st.Step() != VpbSqlite3.SqliteDone)
+                                        throw new InvalidOperationException("Cache package mapping write did not complete");
+                                }
                             }
                         }
+                        // Hits and exemption mappings must commit together before the cohort is retired.
                         conn.ExecUtf8("COMMIT;");
+                        return true;
                     }
                     catch
                     {
@@ -1849,9 +1833,12 @@ namespace VPB
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] Cache usage batch deferred: " + ex.Message);
+                return false;
+            }
         }
-
         internal static void TryGetCacheUsagePackages(string cachePath, List<string> outUids)
         {
             if (outUids == null) return;
@@ -1968,29 +1955,58 @@ namespace VPB
 
         internal static void TryDeleteCacheUsage(string cachePath)
         {
-            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(cachePath)) return;
-            try
+            using (var session = new CacheUsageDeleteSession())
+                session.TryDelete(cachePath);
+        }
+
+        internal sealed class CacheUsageDeleteSession : IDisposable
+        {
+            private VpbSqlite3.Connection connection;
+
+            internal void TryDelete(string cachePath)
             {
-                using (var conn = new VpbSqlite3.Connection(DbPath))
+                if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(cachePath)) return;
+                try
                 {
-                    EnsureSchema(conn);
+                    if (connection == null)
+                    {
+                        var opened = new VpbSqlite3.Connection(DbPath);
+                        try
+                        {
+                            EnsureSchema(opened);
+                            connection = opened;
+                        }
+                        catch
+                        {
+                            opened.Dispose();
+                            throw;
+                        }
+                    }
                     try
                     {
-                        using (var st2 = conn.Prepare("DELETE FROM cache_usage_pkg WHERE cache_path = ?"))
+                        using (var st = connection.Prepare("DELETE FROM cache_usage_pkg WHERE cache_path = ?"))
                         {
-                            st2.BindText(1, cachePath);
-                            st2.Step();
+                            st.BindText(1, cachePath);
+                            st.Step();
                         }
                     }
                     catch { }
-                    using (var st = conn.Prepare("DELETE FROM cache_usage WHERE cache_path = ?"))
+                    using (var st = connection.Prepare("DELETE FROM cache_usage WHERE cache_path = ?"))
                     {
                         st.BindText(1, cachePath);
                         st.Step();
                     }
                 }
+                catch { }
             }
-            catch { }
+
+            public void Dispose()
+            {
+                var opened = connection;
+                connection = null;
+                try { if (opened != null) opened.Dispose(); }
+                catch { }
+            }
         }
 
         internal struct SystemFileRow
