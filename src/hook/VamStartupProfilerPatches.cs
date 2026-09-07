@@ -243,6 +243,7 @@ namespace VPB
                 ApplyCorePatchesManually(harmony);
             }
             ApplyOptionalPatches(harmony);
+            VamCatalogRefreshProfiler.Apply(harmony);
         }
 
         static void ApplyCorePatchesManually(Harmony harmony)

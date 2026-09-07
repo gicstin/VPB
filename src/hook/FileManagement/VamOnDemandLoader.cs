@@ -1472,8 +1472,16 @@ namespace VPB
             bool skipMorphs = ShouldSkipPackageMorphRefreshForCatalogUpdate();
             Action run = delegate
             {
-                PausePhysicsForCatalogRefresh();
-                MVR.FileManagement.FileManager.Refresh();
+                var timingScope = VamCatalogRefreshProfiler.Begin(reason);
+                try
+                {
+                    PausePhysicsForCatalogRefresh();
+                    MVR.FileManagement.FileManager.Refresh();
+                }
+                finally
+                {
+                    VamCatalogRefreshProfiler.End(timingScope);
+                }
             };
 
             if (skipMorphs)

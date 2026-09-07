@@ -309,6 +309,7 @@
     <Compile Include="src\hook\VamStartupOptimizationPatches.cs" />
     <Compile Include="src\hook\perf\VamLoadPerfHooks.cs" />
     <Compile Include="src\hook\perf\VamSceneLoadPhaseProfiler.cs" />
+    <Compile Include="src\hook\perf\VamCatalogRefreshProfiler.cs" />
     <Compile Include="src\hook\perf\VamAssetBundleQueue.cs" />
     <Compile Include="src\hook\perf\VamFrameAttributionProfiler.cs" />
     <Compile Include="src\util\LooseVapGenderProbe.cs" />
@@ -339,6 +340,7 @@
     <Compile Include="src\hook\VpbProgressService.cs" />
     <Compile Include="src\hook\VpbShutdown.cs" />
     <Compile Include="src\hook\SceneLoadNativeUiBridge.cs" />
+    <Compile Include="src\hook\VpbVrUiDiagnostics.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
     <Compile Include="src\hook\TurboJpegNative.cs" />
     <Compile Include="src\hook\TurboJpegStats.cs" />
