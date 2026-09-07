@@ -255,7 +255,7 @@ namespace VPB
         private static string NormalizeOnDemandRequestUid(string uidOrPath)
         {
             if (string.IsNullOrEmpty(uidOrPath)) return null;
-            string s = uidOrPath.Trim();
+            string s = uidOrPath.Trim().Replace('\\', '/');
             if (s.Length == 0) return null;
             if (s.StartsWith(UidOnlyPathPrefix, StringComparison.Ordinal))
                 s = s.Substring(UidOnlyPathPrefix.Length);
@@ -277,7 +277,7 @@ namespace VPB
             {
                 s = s.Substring(0, s.Length - latestSuffix.Length);
             }
-            return s;
+            return s.IndexOf('/') >= 0 ? null : s;
         }
 
         /// <summary>Returns true when this UID was newly queued.</summary>
@@ -1526,9 +1526,8 @@ namespace VPB
             if (!VamScanFilter.HasRegisterMethodAccess) return null;
             if (!persistUidOverride && IsRawVarFilesystemPath(uid)) return null;
 
-            string normalized = NormalizeOnDemandRequestUid(uid);
-            if (!string.IsNullOrEmpty(normalized))
-                uid = normalized;
+            uid = NormalizeOnDemandRequestUid(uid);
+            if (string.IsNullOrEmpty(uid)) return null;
 
             // Already registered this session — but only skip if VaM still has the package.
             // Native Refresh under scan whitelist can drop it while this set still contains the UID.
@@ -2691,7 +2690,6 @@ namespace VPB
             {
                 LogUtil.LogWarning("[VPB OnDemand] Forced FileManager.Refresh failed: " + ex.Message);
             }
-
             return true;
         }
 
