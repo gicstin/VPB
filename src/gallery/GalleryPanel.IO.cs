@@ -125,7 +125,7 @@ namespace VPB
             if (string.IsNullOrEmpty(key) || creators == null || counts == null) return;
             lock (s_SharedSideMetaLock)
             {
-                if (s_SharedSideMetaByKey.Count >= SharedSideMetaMaxEntries)
+                if (s_SharedSideMetaByKey.Count >= SharedSideMetaMaxEntries && !s_SharedSideMetaByKey.ContainsKey(key))
                     s_SharedSideMetaByKey.Clear();
                 s_SharedSideMetaByKey[key] = new SharedSideMetaSnapshot
                 {
@@ -2282,7 +2282,7 @@ namespace VPB
             categoriesCached = false;
             creatorsCached = false;
             _deferSideTabCountsForceRefresh = true;
-            if (!IsVisible && !hasLoadedContent) return;
+            if (!IsVisible) return;
             if (_packageDeltaSideTabsCoroutine != null) return;
             _packageDeltaSideTabsCoroutine = StartCoroutine(CoRefreshSideTabsAfterPackageDelta());
         }
@@ -2291,12 +2291,8 @@ namespace VPB
         {
             yield return null;
             _packageDeltaSideTabsCoroutine = null;
-            try { CacheCategoryCounts(); } catch { }
-            try { CacheCreators(); } catch { }
-            // ApplyPackageDelta already cleared userTagsCached; fill amounts once cat_mem is current.
-            try { CacheUserTagsSideTab(); } catch { }
-            if (!IsVisible && !hasLoadedContent) yield break;
-            try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true); } catch { }
+            // Reopen can already have refreshed counts during this yield.
+            EnsureSideTabsFreshForPackageScan();
         }
 
         /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>

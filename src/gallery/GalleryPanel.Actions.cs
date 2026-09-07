@@ -1244,6 +1244,7 @@ namespace VPB
         private void ApplyImmediateVisibility(bool v)
         {
             if (canvas == null) return;
+            bool wasVisible = canvas.enabled;
             canvas.enabled = v;
             var raycaster = canvas.GetComponent<GraphicRaycaster>();
             if (raycaster != null) raycaster.enabled = v;
@@ -1251,6 +1252,9 @@ namespace VPB
             bool wantSubtree = ShouldContentSubtreeBeActive();
             if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != wantSubtree)
                 backgroundBoxGO.SetActive(wantSubtree);
+            // Menu gating can restore a loaded pane without going through Show().
+            if (v && !wasVisible && hasLoadedContent)
+                ScheduleDeferredSideTabsFreshAfterReopen();
         }
 
         // Desired active state for the gallery content subtree (backgroundBoxGO).

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -1371,9 +1371,14 @@ namespace VPB
         /// <summary>Rebuild category/creator tabs when package scan advanced since last side-tab count build.</summary>
         private void EnsureSideTabsFreshForPackageScan()
         {
+            if (!IsVisible) return;
             bool countsRefreshed = false;
-            try { countsRefreshed = EnsureSideTabCountsFreshAfterGridReady(force: false); } catch { }
-            if (!IsVisible && !hasLoadedContent) return;
+            try
+            {
+                countsRefreshed = EnsureSideTabCountsFreshAfterGridReady(force: _deferSideTabCountsForceRefresh);
+                _deferSideTabCountsForceRefresh = false;
+            }
+            catch { }
             // rebuildSubPaneSideTabLists must be true when main strips rebuild — (true, false) clears split sub lists with no refill.
             if (countsRefreshed)
             {

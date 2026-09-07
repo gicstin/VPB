@@ -12,8 +12,23 @@ namespace VPB
     {
         public string ExpectedTag;
         public Texture2D CurrentTexture;
+        public Action ResumeLoad;
         /// <summary>Decode retries for this binding (resets when ExpectedTag changes or load succeeds).</summary>
         public int ThumbRetryCount;
+
+        private void OnEnable()
+        {
+            if (ResumeLoad != null) StartCoroutine(ResumeAfterRebind());
+        }
+
+        private IEnumerator ResumeAfterRebind()
+        {
+            Action resume = ResumeLoad;
+            // A pooled cell receives its new row after activation; never reload that old row.
+            yield return null;
+            if (ResumeLoad == resume && CurrentTexture == null && resume != null)
+                resume();
+        }
 
         private void OnDisable()
         {
@@ -31,6 +46,7 @@ namespace VPB
         private void OnDestroy()
         {
             OnDisable();
+            ResumeLoad = null;
         }
     }
 
@@ -960,6 +976,7 @@ namespace VPB
                 if (bind.ExpectedTag != expectedTag)
                     bind.ThumbRetryCount = 0;
                 bind.ExpectedTag = expectedTag;
+                bind.ResumeLoad = () => LoadThumbnail(file, target, gridThumbnailContext, turboJpegThumbnailDenom, thumbnailUnityDecodeOnly);
 
                 if (bind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
                 {
@@ -977,6 +994,9 @@ namespace VPB
                 }
                 catch { }
             }
+
+            // Hidden binds resume on activation; they must not pin textures in the loader.
+            if (target == null || !target.gameObject.activeInHierarchy) return;
 
             // 1. Memory Cache (tier: optional full-res for hover; else TurboJPEG scale from grid columns)
             int thumbTd = turboJpegThumbnailDenom > 0
@@ -1021,7 +1041,7 @@ namespace VPB
                 if (res != null && res.tex != null && !res.cancel)
                 {
                     ThumbnailBindingTag cbBind = bindForCallback;
-                    if (cbBind != null && cbBind.ExpectedTag == expectedTag && target != null)
+                    if (cbBind != null && cbBind.ExpectedTag == expectedTag && target != null && target.gameObject.activeInHierarchy)
                     {
                         if (cbBind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
                             CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(cbBind.CurrentTexture);
@@ -1058,7 +1078,7 @@ namespace VPB
 
         private void RequestThumbnailRetryAfterFailure(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly, bool aggressiveSkipCache)
         {
-            if (target == null) return;
+            if (target == null || !target.gameObject.activeInHierarchy) return;
             ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
             if (b == null || b.ExpectedTag != expectedTag) return;
             if (b.ThumbRetryCount >= MaxThumbnailDecodeRetries) return;
@@ -1070,7 +1090,7 @@ namespace VPB
         {
             float delay = aggressiveSkipCache ? 0.02f : 0.10f;
             yield return new WaitForSecondsRealtime(delay);
-            if (target == null) yield break;
+            if (target == null || !target.gameObject.activeInHierarchy) yield break;
             ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
             if (b == null || b.ExpectedTag != expectedTag) yield break;
             if (capturedGroupId != currentLoadingGroupId) yield break;
@@ -1098,7 +1118,7 @@ namespace VPB
             while (true)
             {
                 yield return new WaitForSecondsRealtime(wait);
-                if (target == null) yield break;
+                if (target == null || !target.gameObject.activeInHierarchy) yield break;
                 ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
                 if (b == null || b.ExpectedTag != expectedTag) yield break;
                 if (capturedGroupId != currentLoadingGroupId) yield break;
@@ -1139,6 +1159,7 @@ namespace VPB
                 if (bind != null)
                 {
                     bind.ExpectedTag = null;
+                    bind.ResumeLoad = null;
                     if (bind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
                     {
                         CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(bind.CurrentTexture);
@@ -1190,6 +1211,7 @@ namespace VPB
 
             ThumbnailBindingTag bind = target.GetComponent<ThumbnailBindingTag>();
             if (bind == null) bind = target.gameObject.AddComponent<ThumbnailBindingTag>();
+            bind.ResumeLoad = null;
 
             // Already showing this Hub thumbnail — keep it
             if (bind.ExpectedTag == expectedTag && target.texture != null)

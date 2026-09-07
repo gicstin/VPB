@@ -40,10 +40,12 @@ namespace VPB
             public string FilterCaption;
             public float ExpiresRt;
             public int Epoch;
+            public bool Pending;
         }
 
         private Dictionary<string, QmPreviewReel> m_QmPreviewReels;
         private List<FileEntry> m_QmPreviewScratch;
+        private float m_QmPreviewPruneAt;
 
         private QuickMenuAssignableAction m_QmPreviewAction = QuickMenuAssignableAction.None;
         private string m_QmPreviewCategory;
@@ -51,7 +53,7 @@ namespace VPB
         private FileEntry m_QmPreviewLastPick;
         private bool m_QmPreviewOnWatch;
         private bool m_QmPreviewWaiting;
-        private bool m_QmPreviewBuilding;
+        private QmPreviewReel m_QmPreviewBuildingReel;
         private float m_QmPreviewBuildStartRt;
         private float m_QmPreviewColdAt = -1f;
         private int m_QmPreviewSerial;
@@ -208,9 +210,9 @@ namespace VPB
             return pick;
         }
 
-        /// <summary>Per-frame tick. Returns immediately unless a deferred preview draw is owed.</summary>
         private void QuickMenuAdvanceRandomPreview()
         {
+            QuickMenuPrunePreviewReels();
             if (!QuickMenuRandomPreviewEnabled())
             {
                 if (m_QmPreviewAction != QuickMenuAssignableAction.None
@@ -218,11 +220,11 @@ namespace VPB
                     QuickMenuEndRandomPreview();
                 return;
             }
-            if (m_QmPreviewBuilding)
+            if (m_QmPreviewBuildingReel != null)
             {
                 // A panel torn down mid-build would never call back and would wedge every later hover.
                 if (Time.unscaledTime - m_QmPreviewBuildStartRt < QmPreviewBuildGiveUpSec) return;
-                m_QmPreviewBuilding = false;
+                m_QmPreviewBuildingReel = null;
             }
             if (m_QmPreviewColdAt < 0f) return;
             if (Time.unscaledTime < m_QmPreviewColdAt) return;
@@ -260,13 +262,24 @@ namespace VPB
                 return;
             }
 
+            QuickMenuBuildPreviewReel(panel, category);
+        }
+
+        private void QuickMenuBuildPreviewReel(GalleryPanel panel, string category)
+        {
             QmPreviewReel reel = QuickMenuGetPreviewReel(category, true);
             int serial = m_QmPreviewSerial;
-            m_QmPreviewBuilding = true;
+            reel.Pending = true;
+            m_QmPreviewBuildingReel = reel;
             m_QmPreviewBuildStartRt = Time.unscaledTime;
             panel.QuickMenu_PrepareRandomSampleForCategory(category, reel.Items, count =>
             {
-                m_QmPreviewBuilding = false;
+                if (ReferenceEquals(m_QmPreviewBuildingReel, reel)) m_QmPreviewBuildingReel = null;
+                reel.Pending = false;
+                QmPreviewReel current;
+                if (m_QmPreviewReels == null
+                    || !m_QmPreviewReels.TryGetValue(QuickMenuPreviewReelKey(category), out current)
+                    || !ReferenceEquals(current, reel)) return;
                 reel.Epoch = GalleryFileListSnapshotCache.Epoch;
                 reel.ExpiresRt = Time.unscaledTime + QmPreviewReelTtlSec;
                 reel.FilterCaption = panel.QuickMenu_CopiedRandomPoolFilterCaption;
@@ -333,17 +346,14 @@ namespace VPB
             QmPreviewReel reel;
             if (m_QmPreviewReels.TryGetValue(key, out reel) && reel != null)
             {
-                bool stale = Time.unscaledTime >= reel.ExpiresRt
+                bool stale = reel.Pending || Time.unscaledTime >= reel.ExpiresRt
                     || reel.Epoch != GalleryFileListSnapshotCache.Epoch;
                 if (!stale) return reel;
                 if (!createIfMissing)
                 {
-                    m_QmPreviewReels.Remove(key);
+                    if (!reel.Pending) m_QmPreviewReels.Remove(key);
                     return null;
                 }
-                reel.Items.Clear();
-                reel.FilterCaption = null;
-                return reel;
             }
 
             if (!createIfMissing) return null;
@@ -356,6 +366,30 @@ namespace VPB
         {
             if (m_QmPreviewReels == null) return;
             m_QmPreviewReels.Remove(QuickMenuPreviewReelKey(category));
+        }
+
+        private void QuickMenuPrunePreviewReels()
+        {
+            if (m_QmPreviewReels == null || m_QmPreviewReels.Count == 0) return;
+            float now = Time.unscaledTime;
+            if (now < m_QmPreviewPruneAt) return;
+            m_QmPreviewPruneAt = now + 1f;
+
+            while (true)
+            {
+                string expiredKey = null;
+                foreach (var entry in m_QmPreviewReels)
+                {
+                    QmPreviewReel reel = entry.Value;
+                    if (!reel.Pending && (now >= reel.ExpiresRt || reel.Epoch != GalleryFileListSnapshotCache.Epoch))
+                    {
+                        expiredKey = entry.Key;
+                        break;
+                    }
+                }
+                if (expiredKey == null) break;
+                m_QmPreviewReels.Remove(expiredKey);
+            }
         }
 
         private FileEntry QuickMenuTakeFromReel(QmPreviewReel reel)

@@ -68,7 +68,7 @@ namespace VPB
             if (string.IsNullOrEmpty(key) || files == null) return;
             lock (s_Lock)
             {
-                if (s_ByKey.Count >= MaxEntries)
+                if (s_ByKey.Count >= MaxEntries && !s_ByKey.ContainsKey(key))
                     s_ByKey.Clear();
                 s_ByKey[key] = new List<FileEntry>(files);
             }
