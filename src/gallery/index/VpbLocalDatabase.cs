@@ -629,6 +629,7 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN first_scanned INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN no_cat INTEGER;");
+            try { conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_pkg_missing_first_scanned ON pkg(uid,wtime) WHERE first_scanned IS NULL;"); } catch { }
 
             // Backfill NULL first_scanned from wtime as a best-effort "when user got this" proxy.
             // wtime is FileInfo.LastWriteTime.ToBinary() (Local kind); convert to UTC binary so
@@ -2209,7 +2210,17 @@ namespace VPB
         internal static bool TryReadLooseSceneDeps(string filePath, long expectedWtimeBinary, long expectedSize, HashSet<string> outDeps)
         {
             if (outDeps == null) return false;
-            outDeps.Clear();
+            return TryReadLooseSceneDepsCore(filePath, expectedWtimeBinary, expectedSize, outDeps);
+        }
+
+        internal static bool HasFreshLooseSceneDeps(string filePath, long expectedWtimeBinary, long expectedSize)
+        {
+            return TryReadLooseSceneDepsCore(filePath, expectedWtimeBinary, expectedSize, null);
+        }
+
+        private static bool TryReadLooseSceneDepsCore(string filePath, long expectedWtimeBinary, long expectedSize, HashSet<string> outDeps)
+        {
+            if (outDeps != null) outDeps.Clear();
             if (!VpbSqlite3.IsAvailable) return false;
             if (string.IsNullOrEmpty(filePath)) return false;
             try
@@ -2217,34 +2228,80 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    using (var st = conn.Prepare("SELECT wtime, size, deps FROM loose_deps WHERE path = ?"))
-                    {
-                        st.BindText(1, filePath);
-                        if (st.Step() != VpbSqlite3.SqliteRow) return false;
-
-                        long wt = long.MinValue, sz = long.MinValue;
-                        string wtxt = st.ColumnText(0);
-                        string sztxt = st.ColumnText(1);
-                        if (string.IsNullOrEmpty(wtxt) || !long.TryParse(wtxt, out wt)) return false;
-                        if (string.IsNullOrEmpty(sztxt) || !long.TryParse(sztxt, out sz)) return false;
-                        if (wt != expectedWtimeBinary || sz != expectedSize) return false;
-
-                        string deps = st.ColumnText(2) ?? "";
-                        if (deps.Length == 0) return true;
-                        string[] parts = deps.Split('|');
-                        for (int i = 0; i < parts.Length; i++)
-                        {
-                            string p = parts[i];
-                            if (!string.IsNullOrEmpty(p)) outDeps.Add(p);
-                        }
-                        return true;
-                    }
+                    return TryReadLooseSceneDeps(conn, filePath, expectedWtimeBinary, expectedSize, outDeps);
                 }
             }
             catch
             {
-                outDeps.Clear();
+                if (outDeps != null) outDeps.Clear();
                 return false;
+            }
+        }
+
+        private static bool TryReadLooseSceneDeps(VpbSqlite3.Connection conn, string filePath, long expectedWtimeBinary, long expectedSize, HashSet<string> outDeps)
+        {
+            using (var st = conn.Prepare("SELECT wtime, size, deps FROM loose_deps WHERE path = ?"))
+            {
+                st.BindText(1, filePath);
+                if (st.Step() != VpbSqlite3.SqliteRow) return false;
+
+                long wt = long.MinValue, sz = long.MinValue;
+                string wtxt = st.ColumnText(0);
+                string sztxt = st.ColumnText(1);
+                if (string.IsNullOrEmpty(wtxt) || !long.TryParse(wtxt, out wt)) return false;
+                if (string.IsNullOrEmpty(sztxt) || !long.TryParse(sztxt, out sz)) return false;
+                if (wt != expectedWtimeBinary || sz != expectedSize) return false;
+
+                if (outDeps == null) return true;
+                string deps = st.ColumnText(2) ?? "";
+                if (deps.Length == 0) return true;
+                string[] parts = deps.Split('|');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    string p = parts[i];
+                    if (!string.IsNullOrEmpty(p)) outDeps.Add(p);
+                }
+                return true;
+            }
+        }
+
+        internal sealed class LooseSceneDepsReadSession : IDisposable
+        {
+            private VpbSqlite3.Connection connection;
+            private int reads;
+
+            internal bool HasFresh(string filePath, long expectedWtimeBinary, long expectedSize)
+            {
+                if (string.IsNullOrEmpty(filePath) || !VpbSqlite3.IsAvailable)
+                {
+                    Dispose();
+                    return false;
+                }
+                try
+                {
+                    if (connection == null)
+                    {
+                        connection = new VpbSqlite3.Connection(DbPath);
+                        EnsureSchema(connection);
+                    }
+                    bool fresh = TryReadLooseSceneDeps(connection, filePath, expectedWtimeBinary, expectedSize, null);
+                    // Fresh statements retain live reads; bounded reuse avoids repeating schema setup for every hit.
+                    if (!fresh || ++reads >= 32) Dispose();
+                    return fresh;
+                }
+                catch
+                {
+                    Dispose();
+                    return false;
+                }
+            }
+
+            public void Dispose()
+            {
+                var opened = connection;
+                connection = null;
+                reads = 0;
+                if (opened != null) opened.Dispose();
             }
         }
 

@@ -122,53 +122,67 @@ namespace VPB
         /// </summary>
         public static void StartBackgroundWarmLooseDepsCache()
         {
+            if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
             if (Interlocked.CompareExchange(ref _looseDepsWarmRunning, 1, 0) != 0) return;
-            ThreadPool.QueueUserWorkItem(_ =>
+            bool queued = false;
+            try
             {
-                try { WarmLooseDepsCacheCore(); }
-                catch (Exception ex) { LogUtil.LogError("[VPB] Loose-deps warm failed: " + ex); }
-                finally { Interlocked.Exchange(ref _looseDepsWarmRunning, 0); }
-            });
+                queued = ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { WarmLooseDepsCacheCore(); }
+                    catch (Exception ex) { LogUtil.LogError("[VPB] Loose-deps warm failed: " + ex); }
+                    finally { Interlocked.Exchange(ref _looseDepsWarmRunning, 0); }
+                });
+            }
+            finally
+            {
+                if (!queued) Interlocked.Exchange(ref _looseDepsWarmRunning, 0);
+            }
         }
 
         private static void WarmLooseDepsCacheCore()
         {
+            if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             int seen = 0, hit = 0, written = 0;
-            var probe = new HashSet<string>();
             for (int r = 0; r < LooseDepsWarmRoots.Length; r++)
             {
+                if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
                 string root = LooseDepsWarmRoots[r];
                 if (!Directory.Exists(root)) continue;
                 var files = new List<string>();
                 try { FileManager.SafeGetFiles(root, "*.json", files); } catch { continue; }
-                for (int i = 0; i < files.Count; i++)
+                using (var reads = new VpbLocalDatabase.LooseSceneDepsReadSession())
                 {
-                    string path = files[i];
-                    if (string.IsNullOrEmpty(path)) continue;
-                    seen++;
-                    try
+                    for (int i = 0; i < files.Count; i++)
                     {
-                        var fi = new FileInfo(path);
-                        if (!fi.Exists) continue;
-                        long wt = fi.LastWriteTimeUtc.ToBinary();
-                        long sz = fi.Length;
-
-                        probe.Clear();
-                        if (VpbLocalDatabase.TryReadLooseSceneDeps(path, wt, sz, probe))
+                        if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
+                        string path = files[i];
+                        if (string.IsNullOrEmpty(path)) { reads.Dispose(); continue; }
+                        seen++;
+                        try
                         {
-                            hit++;
-                            continue;
+                            var fi = new FileInfo(path);
+                            if (!fi.Exists) { reads.Dispose(); continue; }
+                            long wt = fi.LastWriteTimeUtc.ToBinary();
+                            long sz = fi.Length;
+
+                            if (reads.HasFresh(path, wt, sz))
+                            {
+                                hit++;
+                                continue;
+                            }
+
+                            var deps = DependencyExtractor.ExtractDependenciesFromFile(path, 150, 1500);
+                            if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
+                            VpbLocalDatabase.WriteLooseSceneDeps(path, wt, sz, deps ?? new HashSet<string>());
+                            written++;
+
+                            // Throttle so a Timeline-laden library doesn't burn a CPU core for minutes straight.
+                            if ((written & 7) == 0) Thread.Sleep(10);
                         }
-
-                        var deps = DependencyExtractor.ExtractDependenciesFromFile(path, 150, 1500);
-                        VpbLocalDatabase.WriteLooseSceneDeps(path, wt, sz, deps ?? new HashSet<string>());
-                        written++;
-
-                        // Throttle so a Timeline-laden library doesn't burn a CPU core for minutes straight.
-                        if ((written & 7) == 0) Thread.Sleep(10);
+                        catch { reads.Dispose(); }
                     }
-                    catch { }
                 }
             }
             LogUtil.Log("[VPB] Loose-deps warm DONE | seen=" + seen + " | hit=" + hit + " | written=" + written + " | ms=" + sw.ElapsedMilliseconds);
