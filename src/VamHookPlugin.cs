@@ -383,7 +383,7 @@ namespace VPB
             {
                 VPBConfig.ReloadFromDisk();
                 var cfg = VPBConfig.Instance;
-                LogUtil.Log("[VPBConfig] Awake loaded | path=" + cfg.ConfigPathForDebug + " | LastGalleryCategory=" + cfg.LastGalleryCategory + " | DragDropReplaceMode=" + cfg.DragDropReplaceMode);
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPBConfig] Awake loaded | path=" + cfg.ConfigPathForDebug + " | LastGalleryCategory=" + cfg.LastGalleryCategory + " | DragDropReplaceMode=" + cfg.DragDropReplaceMode);
             }
             catch { }
 
@@ -601,6 +601,8 @@ namespace VPB
                     var alPackages = AutoLoadPackagesManager.Instance.GetAutoLoadPackages();
                     if (alPackages.Count == 0) return;
 
+                    var logClock = System.Diagnostics.Stopwatch.StartNew();
+                    int matched = 0, movedCount = 0, alreadyPresent = 0, itemErrors = 0;
                     List<string> fileList = new List<string>();
                     FileManager.SafeGetFiles("AllPackages", "*.var", fileList);
                     string[] files = fileList.ToArray();
@@ -611,6 +613,7 @@ namespace VPB
                         string name = Path.GetFileNameWithoutExtension(file);
                         if (alPackages.Contains(name))
                         {
+                            matched++;
                             string relativePath = file.Replace('\\', '/');
                             string targetPath = "AddonPackages" + relativePath.Substring("AllPackages".Length);
 
@@ -623,13 +626,16 @@ namespace VPB
                                 {
                                     File.Move(file, targetPath);
                                     moved = true;
-                                    LogUtil.Log("[VPB] Auto-Loaded package: " + name);
+                                    movedCount++;
+                                    if (VPBLogger.Verbose) LogUtil.Log("[VPB] Auto-Loaded package: " + name);
                                 }
                                 catch (Exception ex)
                                 {
+                                    itemErrors++;
                                     LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message);
                                 }
                             }
+                            else alreadyPresent++;
                         }
                     }
 
@@ -637,6 +643,9 @@ namespace VPB
                     {
                         m_PendingAutoLoadRefresh = true;
                     }
+                    VPBLogger.Files.LogMessage("[VPB] Auto-load scan complete requested=" + alPackages.Count
+                        + " matching_files=" + matched + " moved=" + movedCount + " already_present=" + alreadyPresent
+                        + " item_errors=" + itemErrors + " elapsed_ms=" + logClock.ElapsedMilliseconds, false);
                 }
                 catch (Exception ex)
                 {

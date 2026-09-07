@@ -11,6 +11,7 @@ using HarmonyLib;
 using Prime31.MessageKit;
 using GPUTools.Hair.Scripts.Settings;
 using SimpleJSON;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -18,10 +19,6 @@ namespace VPB
     {
         private static readonly Regex s_HubResourcePathRegex =
             new Regex(@"^/resources/(?<id>\d+)(/|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly object pluginCreateLock = new object();
-        private static readonly Dictionary<int, Stopwatch> pluginCreateSwByThread = new Dictionary<int, Stopwatch>();
-        private static readonly Dictionary<int, string> pluginCreateNameByThread = new Dictionary<int, string>();
 
         // Registry of confirmed simulation texture paths extracted from preset files
         private static HashSet<string> simTextureRegistry = new HashSet<string>();
@@ -111,7 +108,7 @@ namespace VPB
                     {
                         string textureUrl = value.Value;
                         RegisterSimTexture(textureUrl, presetPath);
-                        LogUtil.Log($"[VPB SIM] Registered sim texture from key '{key}': {textureUrl}");
+                        if (VPBLogger.Verbose) LogUtil.Log($"[VPB SIM] Registered sim texture from key '{key}': {textureUrl}");
                     }
 
                     // Check if this entry has simEnabled="true"
@@ -129,7 +126,7 @@ namespace VPB
                             if (!string.IsNullOrEmpty(textureUrl))
                             {
                                 RegisterSimTexture(textureUrl, presetPath);
-                                LogUtil.Log($"[VPB SIM] Registered sim texture from preset: {textureUrl}");
+                                if (VPBLogger.Verbose) LogUtil.Log($"[VPB SIM] Registered sim texture from preset: {textureUrl}");
                             }
                         }
                     }
@@ -1448,8 +1445,9 @@ namespace VPB
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVRPluginManager), "CreateScriptController")]
-        public static void PreCreateScriptController(object mvrp, object type)
+        public static void PreCreateScriptController(object mvrp, object type, out KeyValuePair<long, string> __state)
         {
+            __state = default(KeyValuePair<long, string>);
             try
             {
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.ScriptCtrlCreate++;
@@ -1503,42 +1501,30 @@ namespace VPB
 
                 string scriptType = type != null ? type.ToString() : "unknown";
                 int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
-                var sw = Stopwatch.StartNew();
-                lock (pluginCreateLock)
-                {
-                    pluginCreateSwByThread[tid] = sw;
-                    pluginCreateNameByThread[tid] = pluginName + "|" + scriptType;
-                }
-                LogUtil.Log("[VPB.Startup] plugin_create START tid=" + tid + " plugin=" + pluginName + " type=" + scriptType);
+                __state = new KeyValuePair<long, string>(Stopwatch.GetTimestamp(), pluginName + "|" + scriptType);
+                if (VPBLogger.Verbose) LogUtil.Log("[VPB.Startup] plugin_create START tid=" + tid + " plugin=" + pluginName + " type=" + scriptType);
             }
             catch { }
         }
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(MVRPluginManager), "CreateScriptController")]
-        public static Exception FinalizeCreateScriptController(Exception __exception)
+        public static Exception FinalizeCreateScriptController(Exception __exception, KeyValuePair<long, string> __state)
         {
             try
             {
                 int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
-                Stopwatch sw = null;
-                string name = "unknown";
-                lock (pluginCreateLock)
-                {
-                    if (pluginCreateSwByThread.TryGetValue(tid, out sw))
-                        pluginCreateSwByThread.Remove(tid);
-                    if (pluginCreateNameByThread.TryGetValue(tid, out name))
-                        pluginCreateNameByThread.Remove(tid);
-                }
-                long ms = 0;
-                try { if (sw != null) { sw.Stop(); ms = sw.ElapsedMilliseconds; } } catch { }
+                string name = __state.Value ?? "unknown";
+                double ms = __state.Key == 0 ? 0 : (Stopwatch.GetTimestamp() - __state.Key) * 1000.0 / Stopwatch.Frequency;
+                if (__state.Key != 0) LogUtil.PerfAdd("plugin_create", ms, 0, __exception != null);
+                string duration = __state.Key == 0 ? "unavailable" : ms.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
                 if (__exception == null)
                 {
-                    LogUtil.Log("[VPB.Startup] plugin_create DONE tid=" + tid + " target=" + name + " ms=" + ms);
+                    if (VPBLogger.Verbose) LogUtil.Log("[VPB.Startup] plugin_create DONE tid=" + tid + " target=" + name + " ms=" + duration);
                 }
                 else
                 {
-                    LogUtil.LogWarning("[VPB.Startup] plugin_create FAIL tid=" + tid + " target=" + name + " ms=" + ms + " ex=" + __exception.GetType().Name + ": " + __exception.Message);
+                    LogUtil.LogWarning("[VPB.Startup] plugin_create FAIL tid=" + tid + " target=" + name + " ms=" + duration + " ex=" + __exception.GetType().Name + ": " + __exception.Message);
                 }
             }
             catch { }
@@ -1564,7 +1550,7 @@ namespace VPB
         public static void PreLoadInternal(SuperController __instance,
             string saveName, bool loadMerge, bool editMode)
         {
-            LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
+            if (VPBLogger.Verbose) LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             LogUtil.BeginSceneLoad(saveName);
             LogUtil.MarkScenePhasePreLoadInternal();
             try { ThirdPartyFixHook.TryClearInGameLogsOnSceneLaunch(__instance, loadMerge); } catch { }
@@ -2113,14 +2099,14 @@ namespace VPB
                             if (tex != null && !IsTextureReadableCompat(tex))
                             {
                                 string tag = IsCharacterTextureQueuedImage(__instance) ? "CHAR" : "SIM";
-                                LogUtil.Log("[VPB " + tag + "] PostFinish: Fixing up non-readable texture: " + __instance.imgPath);
+                                if (VPBLogger.Verbose) LogUtil.Log("[VPB " + tag + "] PostFinish: Fixing up non-readable texture: " + __instance.imgPath);
 
                                 Texture2D readableTex = EnsureCpuReadableTexture(tex, __instance.linear, __instance.createMipMaps, null);
                                 if (readableTex != null && readableTex != tex)
                                 {
                                     UnityEngine.Object.Destroy(tex);
                                     __instance.tex = readableTex;
-                                    LogUtil.Log("[VPB " + tag + "] PostFinish: Fixed texture to be readable: " + __instance.imgPath);
+                                    if (VPBLogger.Verbose) LogUtil.Log("[VPB " + tag + "] PostFinish: Fixed texture to be readable: " + __instance.imgPath);
                                 }
                             }
                         }

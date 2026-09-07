@@ -1,6 +1,7 @@
 using ICSharpCode.SharpZipLib.Core;
 using ICSharpCode.SharpZipLib.Zip;
 using System;
+using VPB.src.util;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -647,11 +648,12 @@ namespace VPB
             }
 
             regSw.Stop();
-            if (regCount >= 1000)
+            if (regCount >= 1000 || removeSet.Count > 0)
             {
                 try
                 {
                     LogUtil.Log(VamStartupOptimizations.LogTag + " RegisterPackage bulk count=" + regCount
+                        + " unregistered=" + removeSet.Count
                         + " ms=" + regSw.ElapsedMilliseconds
                         + " skipFileIdDedup=" + (skipFileIdDedup ? "1" : "0")
                         + " warmRestore=" + (registryWarmRestore ? "1" : "0"));
@@ -1121,7 +1123,9 @@ namespace VPB
             }
             try
             {
-                LogUtil.Log("[VPB.HubDownload] RegisterHubDownloadedPackage path='" + cleanPath
+                if (registered == null)
+                    VPBLogger.Files.LogWarning("[VPB.HubDownload] RegisterHubDownloadedPackage failed path='" + cleanPath + "'", false);
+                else if (VPBLogger.Verbose) LogUtil.Log("[VPB.HubDownload] RegisterHubDownloadedPackage path='" + cleanPath
                     + "' uid='" + (registered != null ? registered.Uid : "")
                     + "' notifyInv=" + (notifyInventoryChange ? "1" : "0"));
             }
@@ -1347,9 +1351,9 @@ namespace VPB
 
         public static void UnregisterPackage(VarPackage vp)
         {
-            LogUtil.Log("UnregisterPackage " + vp.Path);
             if (vp != null)
             {
+                if (VPBLogger.Verbose) LogUtil.Log("UnregisterPackage " + vp.Path);
                 if (vp.Group != null)
                 {
                     vp.Group.RemovePackage(vp);
@@ -1596,7 +1600,7 @@ namespace VPB
             if (unknown > 0)
             {
                 InvalidateMorphOwnerIndex();
-                LogUtil.Log("[VPB MorphIndex] incomplete unknown_packages=" + unknown);
+                VPBLogger.Files.LogWarning("[VPB MorphIndex] incomplete unknown_packages=" + unknown, false);
                 return;
             }
             foreach (string path in ambiguous)
@@ -2536,8 +2540,9 @@ namespace VPB
 				{
 					string path = pkg.Path;
 					UnregisterPackage(pkg);
-					RemoveToInvalid(path, "InvalidZip");
-				}
+                    RemoveToInvalid(path, "InvalidZip");
+                }
+                VPBLogger.Files.LogMessage("Invalid package cleanup complete unregistered=" + invalid.Count, false);
 			}
 
 			VamStartupProfiler.EndScope("vpb_StartScanCo_scan");
@@ -4225,7 +4230,6 @@ namespace VPB
 			bool moved = package.InstallRecursive();
 			if (moved)
 			{
-				LogUtil.Log($"[VPB] Dependencies installed/verified for: {package.Uid}");
 				FileManagerBridge.Refresh("dependency_install", RefreshScope.Both);
 			}
 		}

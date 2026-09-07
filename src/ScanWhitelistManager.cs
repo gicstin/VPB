@@ -248,7 +248,7 @@ namespace VPB
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError("[VPB] ScanWhitelistManager: Error saving scan_whitelist.json: " + ex.Message);
+                    VPB.src.util.VPBLogger.Files.LogError("[VPB] ScanWhitelistManager: Error saving scan_whitelist.json: " + ex.Message, false);
                 }
             }
         }
