@@ -1715,9 +1715,9 @@ namespace VPB
                     && ___immediateTextureCache.TryGetValue(qi.cacheSignature, out owned)
                     && object.ReferenceEquals(owned, qi.tex)
                     && ImageLoadingMgr.singleton != null
-                    && ImageLoadingMgr.singleton.TryGetTextureCachePath(qi.tex, out vpbCachePath))
+                    && ImageLoadingMgr.singleton.TryGetTextureOwnershipPath(qi.tex, out vpbCachePath))
                 {
-                    ImageLoadingMgr.singleton.ReleaseTextureCacheReference(vpbCachePath);
+                    ImageLoadingMgr.singleton.ReleaseTextureCacheReference(vpbCachePath, qi.tex);
                 }
             }
             catch { }
@@ -1737,7 +1737,7 @@ namespace VPB
 
             ImageLoadingMgr mgr = ImageLoadingMgr.singleton;
             string vpbCachePath;
-            if (mgr == null || !mgr.TryGetTextureCachePath(tex, out vpbCachePath)) return;
+            if (mgr == null || !mgr.TryGetTextureOwnershipPath(tex, out vpbCachePath)) return;
 
             try
             {
@@ -1755,7 +1755,7 @@ namespace VPB
                 }
 
                 ___textureTrackedCache.Add(tex, true);
-                mgr.ReleaseTextureCacheReference(vpbCachePath);
+                mgr.ReleaseTextureCacheReference(vpbCachePath, tex);
             }
             catch (Exception ex)
             {
@@ -2040,6 +2040,7 @@ namespace VPB
                 // Skip cache on requeue: if cache invalidation failed (file locked / permissions),
                 // VaM's loader would re-read the same corrupt cache, fail again, and bounce back here.
                 try { qi.skipCache = true; } catch { }
+                if (qi.cancel) return;
                 var loader = ImageLoaderThreaded.singleton;
                 if (loader == null)
                 {

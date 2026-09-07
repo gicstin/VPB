@@ -407,9 +407,18 @@ namespace VPB
             bool genMipsOnApply = ShouldGenerateMipsOnApply(createMipMaps, data.Length, w, h, fmt);
             bool isSimTexture = forceReadable;
             var tex = new Texture2D(w, h, fmt, mipAlloc || genMipsOnApply, linear);
-            SafeLoadRawTextureData(tex, data, w, h, fmt);
-            tex.Apply(genMipsOnApply, markNonReadable && !isSimTexture);
-            return tex;
+            try
+            {
+                SafeLoadRawTextureData(tex, data, w, h, fmt);
+                tex.Apply(genMipsOnApply, markNonReadable && !isSimTexture);
+                return tex;
+            }
+            catch
+            {
+                // Only this fresh, unreturned texture is still exclusively owned here.
+                try { UnityEngine.Object.Destroy(tex); } catch { }
+                throw;
+            }
         }
 
         private static readonly char[] s_InvalidFileNameChars = System.IO.Path.GetInvalidFileNameChars();
