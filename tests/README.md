@@ -181,12 +181,10 @@ is what `TryEnsureMetaJsonLiteFields` reads into `PackageMetaTags`, and the
 `"packageTags": { "clothing": [...], "hair": [...] }` arrays used by the manifest tables.
 `WithMeta` writes both; assert against the one the code under test actually reads.
 
-**A content file with no sibling preview image is invisible to the gallery.** `VarPackage.Scan`
-only caches a `.json` or `.vam` entry when a `.jpg` of the same base name is in the archive
-(`.vap` is exempt). Fixtures that forget the image produce a package with a `pkg` row and no
-`cat_mem` rows, which looks exactly like a classification bug. `IndexFixture.SceneVar` /
-`ClothingVar` / `HairVar` include the image; `PreviewlessVar` deliberately does not, and
-`ContentWithNoSiblingPreviewImageIsNotIndexed` pins the behaviour.
+**Scene and subscene JSON remains indexable without a preview image.** Other `.json` and
+`.vam` entries need a sibling `.jpg`; `.vap` entries are also exempt. `PreviewlessVar`
+contains a scene and clothing item without images. `PreviewlessScenesAreIndexedButPreviewlessClothingIsNot`
+checks that the scene remains visible while the clothing item stays excluded.
 
 ### Building an index to assert against
 

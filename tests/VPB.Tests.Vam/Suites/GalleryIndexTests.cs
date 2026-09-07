@@ -279,7 +279,7 @@ namespace VPB.Tests
         }
 
         [Fact]
-        public void ContentWithNoSiblingPreviewImageIsNotIndexed()
+        public void PreviewlessScenesAreIndexedButPreviewlessClothingIsNot()
         {
             using (var install = new TempInstall("idx_nopreview"))
             {
@@ -294,9 +294,10 @@ namespace VPB.Tests
                     _out.WriteLine("scene rows: " + string.Join(", ", scenes.ToArray()));
 
                     Assert.Contains("Beta.WithThumbs.1", scenes);
-                    Assert.DoesNotContain("Alpha.NoThumbs.1", scenes);
+                    Assert.Contains("Alpha.NoThumbs.1", scenes);
+                    Assert.Equal(2, scenes.Count);
                     Assert.Equal(0, db.Scalar(
-                        "SELECT COUNT(*) FROM cat_mem WHERE pkg_uid='Alpha.NoThumbs.1' AND category<>'EVERYTHING'"));
+                        "SELECT COUNT(*) FROM cat_mem WHERE pkg_uid='Alpha.NoThumbs.1' AND category NOT IN ('EVERYTHING','Scenes')"));
                     Assert.Equal(1, db.Scalar("SELECT COUNT(*) FROM pkg WHERE uid='Alpha.NoThumbs.1'"));
                 }
             }
