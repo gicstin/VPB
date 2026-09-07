@@ -566,10 +566,11 @@ namespace VPB
                 catch { }
 
                 VarPackage registered = null;
-                bool deferRefresh = browser != null && browser.ShouldDeferDownloadRefresh;
+                bool deferRefresh = browser != null;
+                if (deferRefresh) browser.DeferRefreshUntilQueueDrains();
                 try
                 {
-                    // Batch Hub downloads: register live, skip per-file inventory notify + full refresh.
+                    // Hub rows need immediate registration; category indexing waits for the worker scan.
                     registered = FileManager.RegisterHubDownloadedPackage(
                         localPackagePath,
                         notifyInventoryChange: !deferRefresh);
@@ -589,17 +590,10 @@ namespace VPB
                 }
                 else
                 {
-                    // Single Hub download: light path (register already done) — no full library scan.
+                    // Without a Hub queue, still run the content scan before publishing gallery readiness.
                     try
                     {
-                        var one = new List<string>(1);
-                        if (registered != null && !string.IsNullOrEmpty(registered.Uid))
-                            one.Add(registered.Uid);
-                        FileManager.InvalidateAllMissingDepsCounts();
-                        try { DependencyGraph.Invalidate(); } catch { }
-                        FileManagerBridge.Refresh("hub_download", RefreshScope.InstallOnly, one.Count > 0 ? one : null);
-                        try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
-                        try { if (browser != null) browser.RefreshResources(); } catch { }
+                        FileManager.ScheduleHubDownloadRefresh();
                     }
                     catch { }
                 }

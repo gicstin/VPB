@@ -49,6 +49,9 @@ namespace VPB
         Coroutine m_RefreshCo = null;
         Coroutine m_StartScanCo = null;
         Coroutine m_MvrRefreshCo = null;
+        Coroutine m_HubDownloadRefreshCo = null;
+        readonly HashSet<VarPackage> m_HubDownloadedPackages = new HashSet<VarPackage>();
+        VarPackage[] m_HubPackagesAwaitingScan;
         bool m_MvrRefreshPending = false;
         bool m_RefreshPending = false;
         bool m_RefreshPendingInit = false;
@@ -1095,7 +1098,7 @@ namespace VPB
         /// before the coalesced FileManager refresh finishes. Also appends path inventory for later cache hits.
         /// </summary>
         /// <param name="notifyInventoryChange">
-        /// When false (batch Hub downloads), skip per-file gallery SQL gate invalidate — caller notifies once after queue drains.
+        /// When false, the Hub queue schedules the content scan after its downloads drain.
         /// </param>
         public static VarPackage RegisterHubDownloadedPackage(string varPath, bool notifyInventoryChange = true)
         {
@@ -1109,17 +1112,14 @@ namespace VPB
                 if (packagesByPath != null)
                     packagesByPath.TryGetValue(cleanPath, out existing);
             }
-            if (existing != null)
-            {
-                try { VpbLocalDatabase.TryAppendVarPathInventory(cleanPath); } catch { }
-                return existing;
-            }
-
-            VarPackage registered = RegisterPackage(cleanPath);
+            VarPackage registered = existing ?? RegisterPackage(cleanPath);
             try { VpbLocalDatabase.TryAppendVarPathInventory(cleanPath); } catch { }
-            if (registered != null && notifyInventoryChange)
+            if (registered != null)
             {
-                try { VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(1, 0); } catch { }
+                // Keep downloads separate until scanning finishes so opening a gallery cannot acknowledge unscanned content.
+                if (singleton != null) singleton.m_HubDownloadedPackages.Add(registered);
+                VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(1, 0, scheduleUpdate: false);
+                if (notifyInventoryChange) ScheduleHubDownloadRefresh();
             }
             try
             {
@@ -1131,6 +1131,25 @@ namespace VPB
             }
             catch { }
             return registered;
+        }
+
+        internal static void ScheduleHubDownloadRefresh()
+        {
+            if (singleton == null || VpbShutdown.IsQuitting || singleton.m_HubDownloadRefreshCo != null) return;
+            singleton.m_HubDownloadRefreshCo = singleton.StartCoroutine(singleton.HubDownloadRefreshCo());
+        }
+
+        private IEnumerator HubDownloadRefreshCo()
+        {
+            yield return null;
+            // StartScan stops its previous coroutine; wait so existing ZIP workers cannot overlap a new scan.
+            while (IsScanning && !VpbShutdown.IsQuitting) yield return null;
+            m_HubDownloadRefreshCo = null;
+            if (VpbShutdown.IsQuitting) yield break;
+            m_HubPackagesAwaitingScan = m_HubDownloadedPackages.ToArray();
+            m_HubDownloadedPackages.Clear();
+            InvalidateAllMissingDepsCounts();
+            FileManagerBridge.Refresh("hub_deferred_downloads", RefreshScope.Both);
         }
 
         /// <summary>Clear lazy MissingDepsCount caches so gallery badges recount after Hub installs.</summary>
@@ -2577,6 +2596,18 @@ namespace VPB
 			InvalidateInternalPathIndex();
 			try { ScheduleDeferredMorphIndexMigration(); } catch { }
 			try { ScheduleDeferredCslistReferencedPersist(); } catch { }
+
+            // Immediate Hub registration makes these invisible to disk diff; publish only after ZIP caches are ready.
+            if (m_HubPackagesAwaitingScan != null)
+            {
+                foreach (VarPackage pkg in m_HubPackagesAwaitingScan)
+                {
+                    VarPackage current;
+                    if (packagesByUid.TryGetValue(pkg.Uid, out current) && ReferenceEquals(current, pkg)
+                        && !lastAddedPackages.Contains(pkg)) lastAddedPackages.Add(pkg);
+                }
+                m_HubPackagesAwaitingScan = null;
+            }
 
 			// Update time BEFORE calling handlers so handlers (and any UI code they trigger) see the latest time
 			lastPackageRefreshTime = DateTime.Now;

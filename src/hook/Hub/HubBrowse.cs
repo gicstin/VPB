@@ -2804,7 +2804,6 @@ namespace VPB
         }
 
         private bool _deferredRefreshAfterDownloads;
-        private HashSet<string> _deferredDownloadUids;
         private int _deferredDownloadRegisterCount;
 
         /// <summary>True while Hub downloads should register only — no per-file full library refresh.</summary>
@@ -2816,16 +2815,11 @@ namespace VPB
         public void DeferRefreshUntilQueueDrains()
         {
             _deferredRefreshAfterDownloads = true;
-            if (_deferredDownloadUids == null)
-                _deferredDownloadUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
         public void NoteDeferredDownloadUid(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return;
-            if (_deferredDownloadUids == null)
-                _deferredDownloadUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            _deferredDownloadUids.Add(uid);
             _deferredDownloadRegisterCount++;
         }
 
@@ -2837,29 +2831,11 @@ namespace VPB
 
             _deferredRefreshAfterDownloads = false;
 
-            HashSet<string> uids = _deferredDownloadUids;
             int registerCount = _deferredDownloadRegisterCount;
-            _deferredDownloadUids = null;
             _deferredDownloadRegisterCount = 0;
 
-            // Packages already live via RegisterHubDownloadedPackage — avoid full AddonPackages walk.
-            try
-            {
-                if (registerCount > 0)
-                    VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(registerCount, 0);
-            }
-            catch { }
-            try { FileManager.InvalidateAllMissingDepsCounts(); } catch { }
-            try { DependencyGraph.Invalidate(); } catch { }
-
-            try
-            {
-                FileManagerBridge.Refresh(
-                    "hub_deferred_downloads",
-                    RefreshScope.InstallOnly,
-                    uids);
-            }
-            catch { }
+            // InstallOnly assumes unchanged content and never scans new ZIP entries for Scenes/category membership.
+            if (registerCount > 0) FileManager.ScheduleHubDownloadRefresh();
 
             try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
             RefreshResources();

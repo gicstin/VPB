@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -423,6 +423,35 @@ namespace VPB
             if (totalPkgs <= 0) return false;
             long maxGap = Math.Max(32L, totalPkgs / 500L);
             return missing <= maxGap;
+        }
+
+        private static bool HasRecoverableCategoryGaps(VpbSqlite3.Connection conn)
+        {
+            var missingUids = new List<string>();
+            using (var st = conn.Prepare(
+                "SELECT uid FROM pkg WHERE COALESCE(no_cat,0)=0 AND uid NOT IN (SELECT pkg_uid FROM cat_mem)"))
+            {
+                while (st.Step() == VpbSqlite3.SqliteRow)
+                    missingUids.Add(st.ColumnText(0));
+            }
+            for (int i = 0; i < missingUids.Count; i++)
+            {
+                VarPackage pkg;
+                lock (FileManager.packagesLock)
+                {
+                    if (FileManager.PackagesByUid == null
+                        || !FileManager.PackagesByUid.TryGetValue(missingUids[i], out pkg)) continue;
+                }
+                if (pkg == null) continue;
+                List<string> names;
+                List<long> ticks;
+                List<long> sizes;
+                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) continue;
+                // A scanned meta.json always has category membership; corrupt or unscanned gaps still tolerate retry.
+                for (int j = 0; j < names.Count; j++)
+                    if (string.Equals(names[j], "meta.json", StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         /// <summary>True when pkg row count + inventory sig match and cat_mem coverage is complete or within gap.</summary>
@@ -3517,7 +3546,8 @@ namespace VPB
                             int.TryParse(stPkg.ColumnText(0), out pkgCount);
                     }
                     pkgsMissingCatMem = CountPackagesMissingCatMem(conn);
-                    if (!IsAcceptableMissingCatMem(pkgsMissingCatMem, pkgCount))
+                    if (!IsAcceptableMissingCatMem(pkgsMissingCatMem, pkgCount)
+                        || (pkgsMissingCatMem > 0 && HasRecoverableCategoryGaps(conn)))
                     {
                         try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: packages_missing_cat_mem=" + pkgsMissingCatMem); } catch { }
                         return false;
@@ -3724,12 +3754,24 @@ namespace VPB
 
             using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned,family,ver,is_newest,license,no_cat) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"))
             using (var insDep = conn.Prepare("INSERT OR IGNORE INTO pkg_dep(src_uid,dep_uid) VALUES(?,?)"))
+            using (var delMem = conn.Prepare("DELETE FROM cat_mem WHERE pkg_uid=?"))
+            using (var delDep = conn.Prepare("DELETE FROM pkg_dep WHERE src_uid=?"))
             {
                 long depTicksIgnored = 0;
                 for (int pi = 0; pi < pkgArray.Length; pi++)
                 {
                     VarPackage pkg = pkgArray[pi];
                     if (pkg == null) continue;
+                    List<string> names;
+                    List<long> ticks;
+                    List<long> sizes;
+                    if (ComputeNoCatFlagForInsert(pkg) != 0
+                        || pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes))
+                    {
+                        // Replaced VARs keep UID and first-seen date, but their old outgoing content must not survive.
+                        delMem.BindText(1, pkg.Uid); delMem.Step(); delMem.Reset();
+                        delDep.BindText(1, pkg.Uid); delDep.Step(); delDep.Reset();
+                    }
                     InsertPackageIndexPkgAndDepRows(pkg, existingFirstScanned, insPkg, insDep, ref nPkgInserted, ref nDepInserted, ref depTicksIgnored);
                 }
 
@@ -3926,7 +3968,8 @@ namespace VPB
                                 Math.Max((long)liveCount, pkgCount)))
                             return true;
                         long missingCat = CountPackagesMissingCatMem(conn);
-                        if (!IsAcceptableMissingCatMem(missingCat, pkgCount))
+                        if (!IsAcceptableMissingCatMem(missingCat, pkgCount)
+                            || (missingCat > 0 && HasRecoverableCategoryGaps(conn)))
                             return true;
                     }
                 }
