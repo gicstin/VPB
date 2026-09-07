@@ -166,16 +166,26 @@ namespace VPB
         private sealed class WrapGeom
         {
             public DAZDynamicItem item;
-            public Vector3[] verts;
-            public int[] tris;
+            public RemoveModeTriangle[] triangles;
             public Vector3 min;
             public Vector3 max;
+        }
+
+        private struct RemoveModeTriangle
+        {
+            public Vector3 v0;
+            public Vector3 e1;
+            public Vector3 e2;
         }
 
         // Per body atom: its baked garment geometry. Built lazily on first hover and reused every
         // frame while the scene is frozen; cleared on enter/exit and after any removal so a changed
         // garment set is re-baked exactly once.
         private readonly Dictionary<Atom, List<WrapGeom>> _wrapGeomCache = new Dictionary<Atom, List<WrapGeom>>();
+        private const float RemoveModeHoverInterval = 1f / 30f;
+        private float _removeNextHoverTime;
+        private RemoveTarget _removeHoverTarget;
+        private bool _removeHoverValid;
 
         // Side buttons (for square-chrome sizing) + their outline and icon image (recolored by state).
         private GameObject rightRemoveModeSideBtn;
@@ -819,6 +829,11 @@ namespace VPB
                 _removeHighlightedIdentity = newIdentity;
                 _removeHelpCached = target != null ? ("Click to remove " + target.DisplayName()) : null;
             }
+            if (desktop)
+            {
+                _removeHoverTarget = target;
+                _removeHoverValid = true;
+            }
 
             // Re-assert help every frame: VaM SyncHelpText overwrites with its own point target
             // (e.g. "wall") while remove mode is active. Reuse cached string — no per-frame concat.
@@ -1115,17 +1130,21 @@ namespace VPB
 
             if (desktop)
             {
-                Camera cam = sc.MonitorCenterCamera != null ? sc.MonitorCenterCamera : Camera.main;
-                if (cam == null) return null;
-                Ray ray = cam.ScreenPointToRay(Input.mousePosition);
-                RemoveTarget t = ResolveTargetForRay(ray);
                 // GetMouseSelect() alone proved unreliable here (clicks never registered), so also
                 // accept a raw left-mouse-down. The gallery-window guard above already prevents this
                 // from firing while the pointer is over the panel.
                 bool sel = false; try { sel = sc.GetMouseSelect(); } catch { }
                 bool down = false; try { down = Input.GetMouseButtonDown(0); } catch { }
                 clickThisFrame = sel || down;
-                return t;
+                // Hover can lag one sample; deletion must always resolve the current ray.
+                float now = Time.unscaledTime;
+                if (!clickThisFrame && _removeHoverValid && now < _removeNextHoverTime
+                    && (_removeHoverTarget == null || _removeHoverTarget.identity != null))
+                    return _removeHoverTarget;
+                _removeNextHoverTime = now + RemoveModeHoverInterval;
+                Camera cam = sc.MonitorCenterCamera != null ? sc.MonitorCenterCamera : Camera.main;
+                if (cam == null) return null;
+                return ResolveTargetForRay(cam.ScreenPointToRay(Input.mousePosition));
             }
 
             RemoveTarget best = null;
@@ -1325,7 +1344,7 @@ namespace VPB
             for (int g = 0; g < geoms.Count; g++)
             {
                 WrapGeom geom = geoms[g];
-                if (geom == null || geom.verts == null || geom.tris == null) continue;
+                if (geom == null || geom.triangles == null) continue;
 
                 // A garment removed (or undone) mid-session changes which items are live; skip any
                 // baked geometry whose item is no longer active rather than re-bake every frame.
@@ -1335,7 +1354,7 @@ namespace VPB
 
                 if (!RayHitsAabb(o, d, geom.min, geom.max)) continue;
 
-                if (RayMeshNearest(o, d, geom.verts, geom.tris, out float t) && t < bestT)
+                if (RayMeshNearest(o, d, geom.triangles, out float t) && t < bestT)
                 {
                     bestT = t;
                     best = geom.item;
@@ -1404,7 +1423,7 @@ namespace VPB
                     if (p.z < mn.z) mn.z = p.z; else if (p.z > mx.z) mx.z = p.z;
                 }
 
-                geoms.Add(new WrapGeom { item = item, verts = verts, tris = tris, min = mn, max = mx });
+                geoms.Add(new WrapGeom { item = item, triangles = BakeRemoveModeTriangles(verts, tris), min = mn, max = mx });
             }
 
             return geoms;
@@ -1438,20 +1457,40 @@ namespace VPB
             return true;
         }
 
-        // Nearest double-sided ray/triangle hit over a mesh (Moller-Trumbore). t is in world units.
-        private static bool RayMeshNearest(Vector3 o, Vector3 d, Vector3[] verts, int[] tris, out float bestT)
+        private static RemoveModeTriangle[] BakeRemoveModeTriangles(Vector3[] verts, int[] tris)
         {
-            bestT = float.MaxValue;
-            bool found = false;
             int vcount = verts.Length;
-            const float EPS = 1e-7f;
+            int count = 0;
             for (int i = 0; i + 2 < tris.Length; i += 3)
             {
                 int i0 = tris[i], i1 = tris[i + 1], i2 = tris[i + 2];
                 if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vcount || i1 >= vcount || i2 >= vcount) continue;
-                Vector3 v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
-                Vector3 e1 = v1 - v0;
-                Vector3 e2 = v2 - v0;
+                count++;
+            }
+            // Exact allocation avoids retaining the indexed arrays or a second triangle buffer.
+            var result = new RemoveModeTriangle[count];
+            int next = 0;
+            for (int i = 0; i + 2 < tris.Length; i += 3)
+            {
+                int i0 = tris[i], i1 = tris[i + 1], i2 = tris[i + 2];
+                if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vcount || i1 >= vcount || i2 >= vcount) continue;
+                Vector3 v0 = verts[i0];
+                result[next++] = new RemoveModeTriangle { v0 = v0, e1 = verts[i1] - v0, e2 = verts[i2] - v0 };
+            }
+            return result;
+        }
+
+        // Nearest double-sided ray/triangle hit over a mesh (Moller-Trumbore). t is in world units.
+        private static bool RayMeshNearest(Vector3 o, Vector3 d, RemoveModeTriangle[] triangles, out float bestT)
+        {
+            bestT = float.MaxValue;
+            bool found = false;
+            const float EPS = 1e-7f;
+            for (int i = 0; i < triangles.Length; i++)
+            {
+                Vector3 v0 = triangles[i].v0;
+                Vector3 e1 = triangles[i].e1;
+                Vector3 e2 = triangles[i].e2;
                 Vector3 p = Vector3.Cross(d, e2);
                 float det = Vector3.Dot(e1, p);
                 if (det > -EPS && det < EPS) continue;
@@ -1472,6 +1511,8 @@ namespace VPB
         {
             try { if (_removeHighlight != null) _removeHighlight.Clear(); } catch { }
             _removeHighlightedIdentity = null;
+            _removeHoverTarget = null;
+            _removeHoverValid = false;
         }
 
         private void RemoveModeExecuteRemoval(RemoveTarget target)
