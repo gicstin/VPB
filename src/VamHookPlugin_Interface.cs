@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System.IO;
 using System;
 using System.Collections.Generic;
@@ -59,7 +60,7 @@ namespace VPB
             if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
             {
                 lastPageName = VPBConfig.Instance.LastGalleryCategory;
-                LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
                 return;
             }
             string diskLast = "";
@@ -67,14 +68,14 @@ namespace VPB
             if (!string.IsNullOrEmpty(diskLast))
             {
                 lastPageName = diskLast;
-                LogUtil.Log("[Gallery] OpenGallery using disk LastGalleryCategory='" + lastPageName + "'");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] OpenGallery using disk LastGalleryCategory='" + lastPageName + "'");
                 return;
             }
             if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
             {
                 lastPageName = Settings.Instance.LastGalleryPage.Value;
                 if (!string.IsNullOrEmpty(lastPageName))
-                    LogUtil.Log("[Gallery] OpenGallery using Settings.LastGalleryPage='" + lastPageName + "'");
+                    { if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] OpenGallery using Settings.LastGalleryPage='" + lastPageName + "'"); }
             }
         }
 
@@ -88,7 +89,7 @@ namespace VPB
                 // Minimize/Hide left panes alive — unhide in place. Do not re-resolve InitialGalleryCategory.
                 if (Gallery.singleton.TryRestoreExistingPanelsKeepingState())
                 {
-                    LogUtil.Log("[Gallery] OpenGallery restored existing pane state (skip InitialGalleryCategory)");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] OpenGallery restored existing pane state (skip InitialGalleryCategory)");
                     return;
                 }
 
@@ -111,7 +112,7 @@ namespace VPB
                 if (string.IsNullOrEmpty(lastPageName))
                 {
                     lastPageName = "Scenes";
-                    LogUtil.Log("[Gallery] OpenGallery defaulting to Scenes" + (isFirstOpen ? " (startup)" : " (session reopen)"));
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] OpenGallery defaulting to Scenes" + (isFirstOpen ? " (startup)" : " (session reopen)"));
                 }
 
                 if (!string.IsNullOrEmpty(lastPageName) && m_GalleryCategories != null)
@@ -138,14 +139,14 @@ namespace VPB
                     if (string.Equals(lastPageName, "Scene", StringComparison.OrdinalIgnoreCase))
                         lastPageName = "Scenes";
 
-                    LogUtil.Log("[Gallery] OpenGallery restore raw='" + rawLastPageName + "' normalized='" + lastPageName
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] OpenGallery restore raw='" + rawLastPageName + "' normalized='" + lastPageName
                         + "' firstOpen=" + (isFirstOpen ? "1" : "0"));
 
                     foreach (var cat in m_GalleryCategories)
                     {
                         if (string.Equals(cat.name, lastPageName, StringComparison.OrdinalIgnoreCase))
                         {
-                            LogUtil.Log("[Gallery] OpenGallery matched category='" + cat.name + "' path='" + cat.path + "'");
+                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] OpenGallery matched category='" + cat.name + "' path='" + cat.path + "'");
                             Gallery.singleton.Show(cat.name, cat.extension, cat.path);
                             Gallery.MarkSessionInitialCategoryApplied();
                             return;
@@ -203,7 +204,7 @@ namespace VPB
 		}
         void OpenFileBrowser(string msg)
         {
-            LogUtil.Log("receive OpenFileBrowser "+ msg);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("receive OpenFileBrowser "+ msg);
         }
 
         private bool m_GalleryCatsInited = false;

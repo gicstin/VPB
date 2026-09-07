@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -502,7 +503,7 @@ namespace VPB
                 }
                 if (imgPath != null && imgPath.StartsWith("http"))
                 {
-                    LogUtil.Log("[VPB] [Loader] Thread processing: " + imgPath);
+                    if (VPBLogger.Verbose) LogUtil.Log("[VPB] [Loader] Thread processing: " + imgPath);
                 }
 				if (imgPath != null && imgPath != "NULL")
 				{
@@ -2566,14 +2567,14 @@ namespace VPB
                 numRealQueuedImages--;
 
                 if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
-                    LogUtil.Log(ByteArrayPool.GetStatus());
+                    { if (VPBLogger.Verbose) LogUtil.Log(ByteArrayPool.GetStatus()); }
 
                 if (numRealQueuedImages == 0)
                 {
                     progress = 0;
                     progressMax = 0;
                     if (progressHUD != null) progressHUD.SetActive(false);
-                    if (ByteArrayPool.TotalRented > 0) LogUtil.Log(ByteArrayPool.GetStatus());
+                    if (ByteArrayPool.TotalRented > 0) { if (VPBLogger.Verbose) LogUtil.Log(ByteArrayPool.GetStatus()); }
                 }
                 else
                 {
@@ -2609,7 +2610,7 @@ namespace VPB
             }
             // Callbacks must stay RawImage/bind-only (gallery closure). Do not rebind UI listeners here.
             value.DoCallback();
-            if (value.imgPath != null && value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath);
+            if (value.imgPath != null && value.imgPath.StartsWith("http")) { if (VPBLogger.Verbose) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath); }
             pool.Return(value);
         }
 
@@ -2695,7 +2696,7 @@ namespace VPB
 						value.webRequest = UnityWebRequest.Get(value.imgPath);
                         value.webRequest.timeout = 30;
 						value.webRequest.SendWebRequest();
-                        if (value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Started WebRequest: " + value.imgPath);
+                        if (value.imgPath.StartsWith("http")) { if (VPBLogger.Verbose) LogUtil.Log("[VPB] [Loader] Started WebRequest: " + value.imgPath); }
 					}
 					if (value.webRequest.isDone)
 					{
@@ -2703,7 +2704,7 @@ namespace VPB
 						{
 							if (value.webRequest.responseCode == 200)
 							{
-                                if (value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] WebRequest Success: " + value.imgPath);
+                                if (value.imgPath.StartsWith("http")) { if (VPBLogger.Verbose) LogUtil.Log("[VPB] [Loader] WebRequest Success: " + value.imgPath); }
 								value.webRequestData = value.webRequest.downloadHandler.data;
 								value.webRequestDone = true;
 							}

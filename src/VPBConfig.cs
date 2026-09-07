@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
@@ -1675,7 +1675,7 @@ namespace VPB
             _loadedFromExistingConfig = false;
             Stopwatch loadSw = Stopwatch.StartNew();
             _lightweightGalleryTabRefreshSlotsRemaining = 0;
-            VPBLogger.Config.LogInfo("Starting Load() from: " + cfgPath);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) VPBLogger.Config.LogInfo("Starting Load() from: " + cfgPath);
             // Reset to defaults before loading
             EnableButtonGaps = true;
             EnableGalleryElementRounding = true;
@@ -2455,7 +2455,7 @@ namespace VPB
                             !string.IsNullOrEmpty(LastGalleryCategory))
                         {
                             s_LastLoggedLoadedGalleryCategory = LastGalleryCategory;
-                            VPBLogger.Config.LogInfo("Loaded LastGalleryCategory='" + LastGalleryCategory + "' from " + ConfigPath);
+                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) VPBLogger.Config.LogInfo("Loaded LastGalleryCategory='" + LastGalleryCategory + "' from " + ConfigPath);
                         }
                     }
                     catch { }

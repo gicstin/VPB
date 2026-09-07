@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -1811,7 +1812,7 @@ namespace VPB
                     }
                     catch { }
                 }
-                LogUtil.Log("[VPB] RetryRefreshAfterNoCacheDelay: retrying refresh for packages with missing cache.");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB] RetryRefreshAfterNoCacheDelay: retrying refresh for packages with missing cache.");
                 // isRetry=true keeps _cacheRetryPending=true so this retry cannot spawn another retry.
                 RefreshFiles(false, false, isRetry: true);
             }
@@ -1855,7 +1856,7 @@ namespace VPB
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
             {
-                LogUtil.Log("[VPB] GalleryPanel.RefreshFiles: SKIPPED (suppressed)");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB] GalleryPanel.RefreshFiles: SKIPPED (suppressed)");
                 CompletePaneLoadTimingIfPending("(refresh suppressed)");
                 return;
             }
@@ -1937,7 +1938,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (stale Path filter cleared)");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (stale Path filter cleared)");
                 }
                 catch { }
                 pathsCached = false;
@@ -1951,7 +1952,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (not loaded yet) title='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (not loaded yet) title='"
                         + (currentCategoryTitle ?? "") + "'");
                 }
                 catch { }
@@ -1975,7 +1976,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta START title='" + (currentCategoryTitle ?? "")
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta START title='" + (currentCategoryTitle ?? "")
                     + "' ext='" + (currentExtension ?? "") + "' path='" + (currentPath ?? "")
                     + "' added=" + (added != null ? added.Count : 0)
                     + " removed=" + (removed != null ? removed.Count : 0)
@@ -2169,7 +2170,7 @@ namespace VPB
                 {
                     try
                     {
-                        LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta append entries=" + newEntries.Count
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta append entries=" + newEntries.Count
                             + " title='" + (currentCategoryTitle ?? "") + "'");
                     }
                     catch { }
@@ -2207,7 +2208,7 @@ namespace VPB
                 refreshOnNextShow = false;
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta NO_CHANGE title='" + (currentCategoryTitle ?? "")
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta NO_CHANGE title='" + (currentCategoryTitle ?? "")
                         + "' skippedNoCache=" + (skippedForNoCache ? "1" : "0"));
                 }
                 catch { }
@@ -2255,7 +2256,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta CHANGED gridAfter="
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta CHANGED gridAfter="
                     + (currentFilteredFiles != null ? currentFilteredFiles.Count : 0)
                     + " title='" + (currentCategoryTitle ?? "") + "'");
             }
@@ -2267,7 +2268,7 @@ namespace VPB
         {
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta SKIP reason=" + reason
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta SKIP reason=" + reason
                     + " title='" + (currentCategoryTitle ?? "") + "'");
             }
             catch { }
@@ -4763,7 +4764,7 @@ namespace VPB
                     }
                     catch { }
                 }
-                LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; scheduling one-shot retry.");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; scheduling one-shot retry.");
                 _cacheRetryPending = true;
                 StartCoroutine(RetryRefreshAfterNoCacheDelay());
             }

@@ -3749,7 +3749,7 @@ namespace VPB
                     try { lastPageName = VPBConfig.ReadLastGalleryCategoryFromDisk(); } catch { lastPageName = null; }
                 }
             }
-            LogUtil.Log("[Gallery] SetCategories: currentPath='" + currentPath + "' memoryLastCat='" + (VPBConfig.Instance != null ? VPBConfig.Instance.LastGalleryCategory : "null") + "' resolvedLastPage='" + (lastPageName ?? "null") + "' sessionMem=" + (Gallery.SessionBrowseMemoryActive ? "1" : "0"));
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] SetCategories: currentPath='" + currentPath + "' memoryLastCat='" + (VPBConfig.Instance != null ? VPBConfig.Instance.LastGalleryCategory : "null") + "' resolvedLastPage='" + (lastPageName ?? "null") + "' sessionMem=" + (Gallery.SessionBrowseMemoryActive ? "1" : "0"));
 
             if (string.IsNullOrEmpty(currentPath) && !string.IsNullOrEmpty(lastPageName))
             {
@@ -3792,7 +3792,7 @@ namespace VPB
                 activeTags.Clear();
             }
 
-            LogUtil.Log("[Gallery] SetCategories resolved: currentPath='" + currentPath + "' currentCategoryTitle='" + currentCategoryTitle + "'");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] SetCategories resolved: currentPath='" + currentPath + "' currentCategoryTitle='" + currentCategoryTitle + "'");
             // Full UpdateTabs() runs synchronous CacheCategoryCounts/CacheCreators and can take many seconds on large libraries.
             // New panes defer that work to RefreshFilesRoutine (background cache + one UpdateTabs at the end).
             if (hasLoadedContent)

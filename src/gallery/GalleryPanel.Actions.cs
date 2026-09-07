@@ -728,7 +728,7 @@ namespace VPB
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool needsInit = canvas == null;
-            LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
             _userHidden = false;
             ClearFloatsOnlyForShow();
 
@@ -762,7 +762,7 @@ namespace VPB
             }
 
             if (needsInit) Init();
-            LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
             // Legacy middle-pane settings only — float Settings is modeless (keep open across Show).
             bool exitedSettingsMode = settingsListViewActive;
@@ -910,7 +910,7 @@ namespace VPB
             {
                 if (shouldRefresh && Gallery.IsSuppressed())
                 {
-                    LogUtil.Log("[VPB] GalleryPanel.Show: Skipping RefreshFiles (suppressed)");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[VPB] GalleryPanel.Show: Skipping RefreshFiles (suppressed)");
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
                     shouldRefresh = false;
                 }
@@ -936,7 +936,7 @@ namespace VPB
                 try { ScheduleDeferredSideTabsFreshAfterReopen(); } catch { }
                 try { TryApplyPendingPackageDeltaOnShow(); } catch { }
                 CancelGalleryCategoryTypeNavigationTiming("same_view_reopen");
-                LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
                 return;
             }
 
@@ -974,7 +974,7 @@ namespace VPB
                 if (startupDeferredInitialRefresh)
                 {
                     _sideTabsNeedFullRebuildAfterFirstRefresh = true;
-                    LogUtil.Log("[VPB] GalleryPanel.Show: deferred initial RefreshFiles until startup ready");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[VPB] GalleryPanel.Show: deferred initial RefreshFiles until startup ready");
                 }
                 LogGalleryCategoryTypeNavPhase("Show_skip_RefreshFiles");
                 try { TryApplyPendingPackageDeltaOnShow(); } catch { }
@@ -1017,7 +1017,7 @@ namespace VPB
                 CompletePaneLoadTimingIfPending("(Show finished without async refresh)");
             if (refreshCoroutine == null)
                 FinalizeGalleryCategoryTypeNavigationSync("(Show end, no async refresh)");
-            LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
         }
 
         private Coroutine deferredStartupRefreshCoroutine;
@@ -2034,7 +2034,7 @@ namespace VPB
                     copyName = vfe.Package.Uid + ".var";
                 }
                 
-                LogUtil.Log("[VPB] Copying to clipboard: " + copyName);
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Copying to clipboard: " + copyName);
                 GUIUtility.systemCopyBuffer = copyName;
                 ShowTemporaryStatus("Copied to clipboard: " + copyName, 2f);
                 return;
@@ -2590,7 +2590,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] TryApplyPendingPackageDeltaOnShow title='"
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] TryApplyPendingPackageDeltaOnShow title='"
                     + (currentCategoryTitle ?? "") + "' added=" + (added != null ? added.Count : 0));
             }
             catch { }
@@ -2615,7 +2615,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated deferred (package scan in progress) title='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated deferred (package scan in progress) title='"
                         + (currentCategoryTitle ?? "") + "'");
                 }
                 catch { }
@@ -2630,7 +2630,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated SKIP (delta already applied) title='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated SKIP (delta already applied) title='"
                         + (currentCategoryTitle ?? "") + "'");
                 }
                 catch { }
@@ -2664,7 +2664,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated ApplyPackageDelta title='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated ApplyPackageDelta title='"
                         + (currentCategoryTitle ?? "") + "' added=" + (added != null ? added.Count : 0));
                 }
                 catch { }
@@ -2679,7 +2679,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated RefreshFiles title='"
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated RefreshFiles title='"
                     + (currentCategoryTitle ?? "") + "' deltaApplied=" + (lastPackageDeltaChangedGrid ? "1" : "0")
                     + " pendingAdded=" + (added != null ? added.Count : 0));
             }

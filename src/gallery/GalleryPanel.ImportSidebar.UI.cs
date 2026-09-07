@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using UnityEngine;
 using UnityEngine.UI;
@@ -60,7 +61,7 @@ namespace VPB
             // [diag] Root is created active and only deactivated at the end, so a mid-build throw leaves a half-rendered header; stage logs pin the throw, the catch destroys the partial tree so failure is a clean no-op.
             try
             {
-                LogUtil.Log("[VPB import][diag] build: start");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] build: start");
 
                 importSidebarRoot = new GameObject("VPB_ImportSidebar");
                 importSidebarRoot.transform.SetParent(parent, false);
@@ -76,15 +77,15 @@ namespace VPB
                 int siblingIndex = ResolveImportSidebarSiblingIndex(parent);
                 importSidebarRoot.transform.SetSiblingIndex(siblingIndex);
 
-                LogUtil.Log("[VPB import][diag] build: header");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] build: header");
                 BuildImportSidebarHeader();
-                LogUtil.Log("[VPB import][diag] build: body scroll");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] build: body scroll");
                 BuildImportSidebarBodyScroll();
-                LogUtil.Log("[VPB import][diag] build: pinned apply");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] build: pinned apply");
                 BuildImportSidebarPinnedApply();
-                LogUtil.Log("[VPB import][diag] build: wizard body");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] build: wizard body");
                 BuildImportSidebarWizardBody();
-                LogUtil.Log("[VPB import][diag] build: float chrome");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] build: float chrome");
                 BuildImportSidebarFloatChrome();
                 LoadImportSidebarFloatGeometryFromConfig();
                 // Match QuickFilters / Settings: reparent to float host BEFORE applying float
@@ -109,7 +110,7 @@ namespace VPB
                 try { ApplyInnerPaneScaleLegacyActions(ChromeScale); } catch { }
                 RebuildImportSidebarContent();
                 importSidebarRoot.SetActive(false);
-                LogUtil.Log("[VPB import][diag] build: complete OK");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] build: complete OK");
             }
             catch (System.Exception ex)
             {

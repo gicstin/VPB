@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -541,7 +542,7 @@ namespace VPB
                 SyncDeleteButton();
                 try
                 {
-                    LogUtil.Log("[VPB.HubDownload] skip save, exact package already on disk name='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log("[VPB.HubDownload] skip save, exact package already on disk name='"
                         + (resolvedVarName ?? "") + "' disp='" + (dispositionName ?? "") + "'");
                 }
                 catch { }
