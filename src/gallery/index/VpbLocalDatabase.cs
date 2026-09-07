@@ -340,9 +340,19 @@ namespace VPB
                 }
                 catch
                 {
-                    return ResolveDatabaseFilePath(Application.temporaryCachePath);
+                    string fallback = null;
+                    try { fallback = UnityTemporaryCachePath(); } catch { }
+                    if (string.IsNullOrEmpty(fallback))
+                        fallback = Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
+                    return ResolveDatabaseFilePath(fallback);
                 }
             }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static string UnityTemporaryCachePath()
+        {
+            return Application.temporaryCachePath;
         }
 
         internal static string GetLocalDatabasePathForDiagnostics()
@@ -3534,14 +3544,8 @@ namespace VPB
             }
         }
 
-        static bool TryValidateDatabaseMetaForIncremental(VpbSqlite3.Connection conn, out string catSig)
+        static bool TryValidateDatabaseMetaForIncremental(VpbSqlite3.Connection conn, string catSig)
         {
-            catSig = null;
-            Gallery g = Gallery.singleton;
-            if (g == null) return false;
-            List<Gallery.Category> catSnap = g.CloneCategoriesForIndex();
-            if (catSnap == null || catSnap.Count == 0) return false;
-            catSig = BuildCategoriesSignature(catSnap);
             if (string.IsNullOrEmpty(catSig)) return false;
 
             string metaVer = MetaGet(conn, "schema_version");
@@ -4370,23 +4374,35 @@ namespace VPB
             IList<string> removedUidsOnly,
             long scanAtStart)
         {
+            return TryIncrementalGalleryIndexUpdateCoreWith(
+                added, removedPackages, removedUidsOnly, scanAtStart,
+                ReadLiveCategories, ReadLiveRefreshClock, ReadLivePackageSnapshot);
+        }
+
+        internal static bool TryIncrementalGalleryIndexUpdateCoreWith(
+            IList<VarPackage> added,
+            IList<VarPackage> removedPackages,
+            IList<string> removedUidsOnly,
+            long scanAtStart,
+            Func<List<Gallery.Category>> categoriesProvider,
+            Func<DateTime> refreshClockProvider,
+            Func<Dictionary<string, VarPackage>> packagesProvider)
+        {
+            if (categoriesProvider == null) categoriesProvider = ReadLiveCategories;
+            if (refreshClockProvider == null) refreshClockProvider = ReadLiveRefreshClock;
+            if (packagesProvider == null) packagesProvider = ReadLivePackageSnapshot;
+
             if (!VpbSqlite3.IsAvailable) return false;
             if (scanAtStart == 0) return false;
 
-            Gallery g = Gallery.singleton;
-            if (g == null) return false;
-            List<Gallery.Category> catSnap = g.CloneCategoriesForIndex();
+            List<Gallery.Category> catSnap = categoriesProvider();
             if (catSnap == null || catSnap.Count == 0) return false;
             string catSig = BuildCategoriesSignature(catSnap);
             if (string.IsNullOrEmpty(catSig)) return false;
 
             var classifier = new CategoryClassifier(catSnap);
-            Dictionary<string, VarPackage> pkgSnap;
-            lock (FileManager.packagesLock)
-            {
-                if (FileManager.PackagesByUid == null) return false;
-                pkgSnap = new Dictionary<string, VarPackage>(FileManager.PackagesByUid, StringComparer.OrdinalIgnoreCase);
-            }
+            Dictionary<string, VarPackage> pkgSnap = packagesProvider();
+            if (pkgSnap == null) return false;
             string invSigForMeta = ComputePackageInventorySignature(pkgSnap);
 
             int nRemoved = (removedPackages != null ? removedPackages.Count : 0) + (removedUidsOnly != null ? removedUidsOnly.Count : 0);
@@ -4405,10 +4421,7 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    string metaCatSig;
-                    if (!TryValidateDatabaseMetaForIncremental(conn, out metaCatSig))
-                        return false;
-                    if (!string.Equals(metaCatSig, catSig, StringComparison.Ordinal))
+                    if (!TryValidateDatabaseMetaForIncremental(conn, catSig))
                         return false;
 
                     conn.ExecUtf8("BEGIN IMMEDIATE;");
@@ -4477,7 +4490,7 @@ namespace VPB
             }
 
             long scanNow = 0;
-            try { scanNow = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+            try { scanNow = refreshClockProvider().ToBinary(); } catch { }
             if (scanNow != scanAtStart)
             {
                 try
@@ -5400,8 +5413,42 @@ namespace VPB
             }
         }
 
+        private static List<Gallery.Category> ReadLiveCategories()
+        {
+            Gallery g = Gallery.singleton;
+            List<Gallery.Category> cats = g != null ? g.CloneCategoriesForIndex() : null;
+            return cats ?? new List<Gallery.Category>();
+        }
+
+        private static DateTime ReadLiveRefreshClock()
+        {
+            try { return FileManager.lastPackageRefreshTime; }
+            catch { return DateTime.MinValue; }
+        }
+
+        private static Dictionary<string, VarPackage> ReadLivePackageSnapshot()
+        {
+            lock (FileManager.packagesLock)
+            {
+                if (FileManager.PackagesByUid == null) return null;
+                return new Dictionary<string, VarPackage>(FileManager.PackagesByUid, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
         private static void RebuildCore()
         {
+            RebuildCoreWith(ReadLiveCategories, ReadLiveRefreshClock, ReadLivePackageSnapshot);
+        }
+
+        internal static void RebuildCoreWith(
+            Func<List<Gallery.Category>> categoriesProvider,
+            Func<DateTime> refreshClockProvider,
+            Func<Dictionary<string, VarPackage>> packagesProvider)
+        {
+            if (categoriesProvider == null) categoriesProvider = ReadLiveCategories;
+            if (refreshClockProvider == null) refreshClockProvider = ReadLiveRefreshClock;
+            if (packagesProvider == null) packagesProvider = ReadLivePackageSnapshot;
+
             if (!VpbSqlite3.IsAvailable)
             {
                 if (!s_LoggedSqliteUnavailable)
@@ -5419,8 +5466,7 @@ namespace VPB
                 return;
             }
 
-            Gallery g = Gallery.singleton;
-            List<Gallery.Category> catSnap = g != null ? g.CloneCategoriesForIndex() : new List<Gallery.Category>();
+            List<Gallery.Category> catSnap = categoriesProvider();
             if (catSnap == null) catSnap = new List<Gallery.Category>();
 
             if (catSnap.Count == 0)
@@ -5455,7 +5501,7 @@ namespace VPB
             // Never rebuild against an unstamped clock: DateTime.MinValue.ToBinary() is 0 and would publish
             // s_ReadyScanBinary=0 while real scans use a non-zero stamp — SQL fast path stays disabled forever.
             DateTime refreshClock = DateTime.MinValue;
-            try { refreshClock = FileManager.lastPackageRefreshTime; } catch { }
+            try { refreshClock = refreshClockProvider(); } catch { }
             if (refreshClock == DateTime.MinValue)
                 return;
 
@@ -5467,12 +5513,8 @@ namespace VPB
             string catSig = BuildCategoriesSignature(catSnap);
             var classifier = new CategoryClassifier(catSnap);
 
-            Dictionary<string, VarPackage> pkgSnap;
-            lock (FileManager.packagesLock)
-            {
-                if (FileManager.PackagesByUid == null) return;
-                pkgSnap = new Dictionary<string, VarPackage>(FileManager.PackagesByUid, StringComparer.OrdinalIgnoreCase);
-            }
+            Dictionary<string, VarPackage> pkgSnap = packagesProvider();
+            if (pkgSnap == null) return;
 
             int pkgTotal = pkgSnap != null ? pkgSnap.Count : 0;
             int pkgWithCache = CountPackagesWithFileEntryCache(pkgSnap);
@@ -5767,13 +5809,13 @@ namespace VPB
             }
 
             long scanNow = 0;
-            try { scanNow = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+            try { scanNow = refreshClockProvider().ToBinary(); } catch { }
             if (scanNow != scanAtStart || scanAtStart == 0)
             {
                 rebuildAbortReason = "scan_changed";
             }
 
-            string catSigNow = BuildCategoriesSignature(g.CloneCategoriesForIndex());
+            string catSigNow = BuildCategoriesSignature(categoriesProvider());
             if (catSigNow != catSig)
             {
                 if (rebuildAbortReason == null) rebuildAbortReason = "categories_changed";

@@ -12,6 +12,8 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
+[assembly: InternalsVisibleTo("VPB.Tests.Runtime")]
+
 // COM visibility
 [assembly: ComVisible(false)]
 

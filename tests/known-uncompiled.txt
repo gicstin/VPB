@@ -1,0 +1,21 @@
+# Source files that live under src/ but are deliberately NOT in VPB.csproj.
+# One repo-relative path per line, forward slashes. Every entry needs a reason.
+#
+# Checked by VPB.Tests.Static -> CompileListTests.
+# If a test failure sent you here: only add a path if the exclusion is intentional.
+# Anything else listed here is code that never reaches the shipped DLL, with no
+# build error and no log line to tell you.
+
+# Built by VPBPatcher.csproj, not by VPB.csproj.
+src/patcher/VPBPatcher.cs
+
+# Hub live-sync feature (b0eab085, issues #98/#100), abandoned mid-implementation.
+# Adding VpbHubLiveSync.cs to VPB.csproj does not compile - it calls two members that were
+# never written:
+#     VpbLocalDatabase.TryTouchHubLiveSyncStamp(...)
+#     VPBConfig.DataPackHubLiveSyncEnabled
+# VpbLocalDatabase.DataPackLive.cs does compile, but every one of its members exists only to
+# serve VpbHubLiveSync, so on its own it is ~300 lines of unreachable code in the shipped DLL.
+# The two belong together: finish the feature and add both, or delete both. Verified 2026-09-06.
+src/datapack/VpbHubLiveSync.cs
+src/gallery/index/VpbLocalDatabase.DataPackLive.cs

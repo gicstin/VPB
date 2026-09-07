@@ -1,0 +1,71 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!--
+    Reads the JUnit report the in-game plugin wrote into VaM and reports it as MSBuild warnings, so
+    an in-game failure lands in the IDE error list instead of only in a terminal nobody opened.
+
+    Imported by both VPB.csproj and VPB.Tests.Runtime.csproj. It has to run from VPB.csproj as well
+    as from the child: the parent runs the child through Exec with IgnoreStandardErrorWarningFormat
+    so a broken suite cannot fail the plugin build, and that same flag stops the child's warnings
+    from ever becoming warnings here.
+
+    Warnings, never errors. An in-game result is information about the last VaM launch, not a reason
+    to block a build.
+  -->
+
+  <Target Name="VpbRuntimeReportLastRun" Condition="'$(VaMPath)' != ''">
+    <PropertyGroup>
+      <_VpbRtMarker>$(VaMPath)\BepInEx\plugins\VPB.Tests.Runtime\run-tests.marker</_VpbRtMarker>
+      <_VpbRtReport>$(VaMPath)\Saves\PluginData\VPB\vpb-runtime-tests.xml</_VpbRtReport>
+    </PropertyGroup>
+
+    <!--
+      A marker still sitting there means the last build armed a run that never happened. Silence
+      here would read exactly like "the tests passed".
+    -->
+    <Warning Condition="Exists('$(_VpbRtMarker)')"
+             Text="VPB in-game tests: the previous build armed a run that never happened (run-tests.marker is still there). Anything below is from an older launch." />
+
+    <Message Importance="high" Condition="!Exists('$(_VpbRtReport)')"
+             Text="VPB in-game tests: no report yet. Launch VaM once; results appear here on the next build." />
+
+    <XmlPeek Condition="Exists('$(_VpbRtReport)')" XmlInputPath="$(_VpbRtReport)"
+             Query="/testsuite/@tests" ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="Result" PropertyName="_VpbRtTotal" />
+    </XmlPeek>
+    <XmlPeek Condition="Exists('$(_VpbRtReport)')" XmlInputPath="$(_VpbRtReport)"
+             Query="/testsuite/@failures" ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="Result" PropertyName="_VpbRtFailures" />
+    </XmlPeek>
+    <XmlPeek Condition="Exists('$(_VpbRtReport)')" XmlInputPath="$(_VpbRtReport)"
+             Query="/testsuite/@skipped" ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="Result" PropertyName="_VpbRtSkipped" />
+    </XmlPeek>
+
+    <!--
+      XmlPeek runs XPath 1.0 and cannot evaluate concat(), so this peeks whole <testcase> elements
+      and reshapes each one in the Warning below.
+    -->
+    <XmlPeek Condition="Exists('$(_VpbRtReport)')" XmlInputPath="$(_VpbRtReport)"
+             Query="//testcase[failure]" ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="Result" ItemName="_VpbRtFailedCases" />
+    </XmlPeek>
+
+    <Warning Condition="Exists('$(_VpbRtReport)') And '$(_VpbRtTotal)' == ''"
+             Text="VPB in-game tests: $(_VpbRtReport) exists but could not be read as a JUnit report. Treat this as a failed run, not an absent one." />
+
+    <Warning Condition="'$(_VpbRtTotal)' != '' And '$(_VpbRtTotal)' == '0'"
+             Text="VPB in-game tests: the report contains no tests at all. Discovery found nothing, which is a harness failure, not a pass." />
+
+    <Warning Condition="'$(_VpbRtTotal)' != '' And '$(_VpbRtTotal)' != '0' And '$(_VpbRtTotal)' == '$(_VpbRtSkipped)'"
+             Text="VPB in-game tests: every one of $(_VpbRtTotal) test(s) was skipped. Nothing was actually verified in the game." />
+
+    <Warning Condition="'@(_VpbRtFailedCases)' != ''"
+             Text="VPB in-game test failed: $([System.Text.RegularExpressions.Regex]::Replace('%(_VpbRtFailedCases.Identity)', '(?s)^.*?classname=.([^&quot;]*). name=.([^&quot;]*).*?message=.([^&quot;]*).*$', '$1.$2 :: $3'))" />
+
+    <Message Importance="high"
+             Condition="'$(_VpbRtTotal)' != '' And '$(_VpbRtTotal)' != '0' And '$(_VpbRtFailures)' == '0' And '$(_VpbRtTotal)' != '$(_VpbRtSkipped)'"
+             Text="VPB in-game tests: $(_VpbRtTotal) test(s), 0 failures, $(_VpbRtSkipped) skipped (last VaM launch)." />
+  </Target>
+
+</Project>

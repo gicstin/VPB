@@ -10,6 +10,8 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>VPB</RootNamespace>
     <AssemblyName>VPB</AssemblyName>
+    <!-- Stops Test Explorer probing VPB.dll for tests ("No test is available in ... VPB.dll"). -->
+    <IsTestProject>false</IsTestProject>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -758,6 +760,106 @@
     </PropertyGroup>
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
   </Target>
+  <!--
+    Installs tests/hooks into .git/hooks on build, so a fresh clone gets pre-commit/pre-push
+    without anyone having to know a setup command. SkipUnchangedFiles keeps it a no-op after
+    the first build; editing a hook in tests/hooks re-installs it. Skipped when .git/hooks is
+    absent (git worktrees, exported source). Set SkipVPBGitHooks=true to opt out.
+  -->
+  <ItemGroup>
+    <VPBGitHook Include="tests\hooks\*" />
+  </ItemGroup>
+  <Target Name="InstallVPBGitHooks" BeforeTargets="BeforeBuild"
+          Inputs="@(VPBGitHook)"
+          Outputs="@(VPBGitHook->'$(MSBuildProjectDirectory)\.git\hooks\%(Filename)%(Extension)')"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBGitHooks)' != 'true' And Exists('$(MSBuildProjectDirectory)\.git\hooks')">
+    <Copy SourceFiles="@(VPBGitHook)" DestinationFolder="$(MSBuildProjectDirectory)\.git\hooks"
+          ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="CopiedFiles" ItemName="_VPBGitHookInstalled" />
+    </Copy>
+    <Message Importance="high" Condition="'@(_VPBGitHookInstalled)' != ''"
+             Text="VPB: installed git hooks (@(_VPBGitHookInstalled->'%(Filename)', ', ')). Bypass a run with --no-verify; disable with -p:SkipVPBGitHooks=true." />
+  </Target>
+
+  <!--
+    Debug only: rebuild and deploy the in-game test plugin whenever VPB.dll deploys, so a developer
+    never has to remember a second command. Runs after PostBuildDeploy, so it compiles against the
+    VPB.dll that was just written.
+
+    It can never fail this build. A broken or uncompilable test suite is a test problem, not a
+    reason to block shipping the plugin, so every step is WarnAndContinue.
+
+    It also arms the run: the deploy drops a 'run-tests.marker' beside the DLL, so the next VaM
+    launch runs the in-game suite once and consumes it. The build before that reads the report the
+    previous launch wrote and raises one warning per failed in-game test, which is how those reach
+    the IDE error list. That reporting has to happen here rather than in the child project: the Exec
+    below uses IgnoreStandardErrorWarningFormat, which is what keeps a broken suite from failing
+    this build and equally what would reduce the child's warnings to plain text.
+
+    Set SkipVPBRuntimeTests=true to opt out of the whole thing, SkipVPBRuntimeTestArm=true to deploy
+    without arming. Release builds skip it outright.
+  -->
+  <Import Project="tests\VpbRuntimeTestReport.targets" Condition="Exists('tests\VpbRuntimeTestReport.targets')" />
+
+  <Target Name="BuildVPBRuntimeTests" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Debug'
+                     And '$(DesignTimeBuild)' != 'true'
+                     And '$(SkipVPBRuntimeTests)' != 'true'
+                     And Exists('$(MSBuildProjectDirectory)\tests\VPB.Tests.Runtime\VPB.Tests.Runtime.csproj')
+                     And Exists('$(VaMPath)\VaM_Data\Managed\Assembly-CSharp.dll')">
+    <PropertyGroup>
+      <_VPBRuntimeTestsProject>$(MSBuildProjectDirectory)\tests\VPB.Tests.Runtime\VPB.Tests.Runtime.csproj</_VPBRuntimeTestsProject>
+    </PropertyGroup>
+
+    <!--
+      Exec, not the MSBuild task. ContinueOnError on <MSBuild> lets this target continue, but the
+      child project's "error CSxxxx" lines are still logged into the same build, so Visual Studio
+      reports the solution build as failed. IgnoreStandardErrorWarningFormat stops MSBuild parsing
+      the child output into the parent's error list, which is what actually keeps a broken test
+      suite from failing the plugin build.
+    -->
+    <!--
+      Report the last in-game run BEFORE the Exec below re-arms, so the marker check is about the
+      run that was armed last time rather than the one being armed now. It runs here, in the parent,
+      because IgnoreStandardErrorWarningFormat on the Exec would otherwise reduce the child's
+      warnings to plain text that never reaches the IDE error list.
+    -->
+    <CallTarget Targets="VpbRuntimeReportLastRun" ContinueOnError="WarnAndContinue" />
+
+    <Exec Command="dotnet build &quot;$(_VPBRuntimeTestsProject)&quot; -c $(Configuration) -p:VaMPath=&quot;$(VaMPath)&quot; -p:DeployToVaM=true -p:SkipVPBRuntimeTestReport=true --nologo -v:m"
+          WorkingDirectory="$(MSBuildProjectDirectory)"
+          ContinueOnError="true"
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true">
+      <Output TaskParameter="ExitCode" PropertyName="_VPBRuntimeTestsExit" />
+    </Exec>
+
+    <Warning Condition="'$(_VPBRuntimeTestsExit)' != '0'"
+             Text="VPB: the in-game test plugin did not build (exit $(_VPBRuntimeTestsExit)). VPB.dll is unaffected and has already deployed - see the output above for the test-side error. Disable with -p:SkipVPBRuntimeTests=true." />
+  </Target>
+
+  <!--
+    Warns about any src/**/*.cs that is missing from the Compile list above, i.e. code that is
+    committed but never compiled and never reaches VPB.dll - no build error, no log line.
+    Deliberate exclusions go in tests/known-uncompiled.txt (same file the test suite reads).
+    Set SkipVPBSourceAudit=true to skip.
+  -->
+  <Target Name="AuditVPBSourceList" BeforeTargets="CoreCompile"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBSourceAudit)' != 'true'">
+    <ReadLinesFromFile File="tests\known-uncompiled.txt" Condition="Exists('tests\known-uncompiled.txt')">
+      <Output TaskParameter="Lines" ItemName="_VPBAuditAllowRaw" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_VPBAuditAllow Include="$([System.String]::Copy('%(_VPBAuditAllowRaw.Identity)').Replace('/','\'))"
+                      Condition="'%(_VPBAuditAllowRaw.Identity)' != '' And !$([System.String]::Copy('%(_VPBAuditAllowRaw.Identity)').StartsWith('#'))" />
+      <_VPBAuditOnDisk Include="src\**\*.cs" />
+      <_VPBAuditUncompiled Include="@(_VPBAuditOnDisk)" Exclude="@(Compile);@(_VPBAuditAllow)" />
+    </ItemGroup>
+    <Warning Condition="'@(_VPBAuditUncompiled)' != ''"
+             File="%(_VPBAuditUncompiled.Identity)"
+             Text="VPB: this file is not in VPB.csproj, so it is never compiled and never reaches VPB.dll. Add a &lt;Compile Include&gt; entry, or list it in tests/known-uncompiled.txt with a reason." />
+  </Target>
+
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <!-- Deploy logic lives in scripts/PostBuildDeploy.ps1 so cmd-batch quoting and silent copy /Y failures stop eating locked-DLL replacements. Script never fails the build, emits MSBuild-formatted warnings (yellow in Errors panel) on copy/lock issues. -->

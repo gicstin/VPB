@@ -1,0 +1,93 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <AssemblyName>VPB.Tests.Vam</AssemblyName>
+    <RootNamespace>VPB.Tests</RootNamespace>
+    <NoWarn>CS0618;CS1591;CS0067;CS0169;CS0414;CS0649;CS0162;CS0219;CS0108;MSB3277;NU1702</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="$(VpbTestSdkVersion)" />
+    <PackageReference Include="xunit" Version="$(VpbXunitVersion)" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="$(VpbXunitRunnerVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(VpbHasVaM)' == 'true'">
+    <Compile Include="Harness\*.cs" />
+    <Compile Include="Suites\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(VpbHasVaM)' != 'true'">
+    <Compile Include="NoVaM\*.cs" />
+  </ItemGroup>
+
+  <Target Name="VpbReportVaM" BeforeTargets="BeforeBuild">
+    <Message Importance="high" Condition="'$(VpbHasVaM)' == 'true'" Text="VPB.Tests.Vam: using VaM install at $(VaMPath)" />
+    <Message Importance="high" Condition="'$(VpbHasVaM)' != 'true'" Text="VPB.Tests.Vam: no VaM install found - building the placeholder suite only. Set &lt;VaMPath&gt; in VPB.local.props." />
+  </Target>
+
+  <!--
+    ZstdNet and TurboJPEG resolve their native DLL relative to the *assembly* directory, so the
+    plugin's native payload has to sit next to the test DLL. sqlite3 is found separately, through
+    VpbSqlite3.SetGameInstallRootForNativeDll. Missing files are not an error: the suites that need
+    them say so in their own failure message.
+  -->
+  <ItemGroup Condition="'$(VpbHasVaM)' == 'true'">
+    <None Include="$(VaMPath)\BepInEx\plugins\VPB\native\*.*">
+      <Link>native\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="$(VaMPath)\BepInEx\plugins\VPB\native\libzstd.dll;$(VaMPath)\BepInEx\plugins\VPB\native\turbojpeg.dll;$(VaMPath)\BepInEx\plugins\VPB\native\zstd.exe">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="VpbWriteEnvironmentConstants" BeforeTargets="CoreCompile" Condition="'$(VpbHasVaM)' == 'true'">
+    <PropertyGroup>
+      <_VpbEnvFile>$(IntermediateOutputPath)VpbTestEnvironment.g.cs</_VpbEnvFile>
+      <_VpbEnvBody>namespace VPB.Tests { internal static class TestEnvironment { public const string VaMPath = @"$(VaMPath)"%3B public const string RepoRoot = @"$(VpbRoot)"%3B } }</_VpbEnvBody>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_VpbEnvFile)" Lines="$(_VpbEnvBody)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(_VpbEnvFile)" />
+      <FileWrites Include="$(_VpbEnvFile)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="VpbImportSources" BeforeTargets="CoreCompile" Condition="'$(VpbHasVaM)' == 'true'">
+    <XmlPeek XmlInputPath="$(VpbRoot)VPB.csproj"
+             Query="//msb:Compile/@Include"
+             Namespaces="&lt;Namespace Prefix='msb' Uri='http://schemas.microsoft.com/developer/msbuild/2003' /&gt;">
+      <Output TaskParameter="Result" ItemName="_VpbCompileRaw" />
+    </XmlPeek>
+    <ItemGroup>
+      <Compile Include="@(_VpbCompileRaw->'$(VpbRoot)%(Identity)')"
+               Condition="!$([System.String]::Copy('%(Identity)').StartsWith('$'))" />
+    </ItemGroup>
+    <Message Importance="normal" Text="VPB.Tests.Vam: imported @(_VpbCompileRaw->Count()) source entries from VPB.csproj" />
+  </Target>
+
+  <Target Name="VpbAddVaMReferences" BeforeTargets="ResolveAssemblyReferences" Condition="'$(VpbHasVaM)' == 'true'">
+    <ItemGroup>
+      <_VpbVaMDll Include="$(VaMPath)\VaM_Data\Managed\*.dll"
+                  Exclude="$(VaMPath)\VaM_Data\Managed\Mono.*.dll;$(VaMPath)\VaM_Data\Managed\mscorlib.dll;$(VaMPath)\VaM_Data\Managed\System.dll;$(VaMPath)\VaM_Data\Managed\System.*.dll;$(VaMPath)\VaM_Data\Managed\Accessibility.dll;$(VaMPath)\VaM_Data\Managed\Boo.Lang.dll" />
+      <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\0Harmony20.dll" />
+      <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\BepInEx.dll" />
+      <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\BepInEx.Harmony.dll" />
+      <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\HarmonyXInterop.dll" />
+      <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\MonoMod.Utils.dll" />
+      <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\MonoMod.RuntimeDetour.dll" />
+      <Reference Include="@(_VpbVaMDll->'%(Filename)')">
+        <HintPath>%(_VpbVaMDll.FullPath)</HintPath>
+        <Private>true</Private>
+      </Reference>
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -1,0 +1,38 @@
+#!/bin/sh
+# VPB pre-push hook: static invariants plus the VaM-linked suite (~8s).
+# Installed automatically by a Debug build of VPB.csproj; tests/run.ps1 -InstallHooks also works.
+# Bypass once with:  git push --no-verify
+
+repo_root=$(git rev-parse --show-toplevel)
+
+# run.ps1 is the entry point on purpose: it treats a zero-discovery run as a failure.
+# Calling `dotnet test` directly here would let the xUnit "Skipping: could not find dependent
+# assembly" case exit 0 and push a suite that ran nothing.
+for candidate in pwsh powershell; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        shell="$candidate"
+        break
+    fi
+done
+
+if [ -z "$shell" ]; then
+    echo "pre-push: neither pwsh nor powershell is on PATH."
+    echo "pre-push: REFUSING the push rather than passing silently. Use --no-verify to override."
+    exit 1
+fi
+
+if ! command -v dotnet >/dev/null 2>&1; then
+    echo "pre-push: dotnet is not on PATH."
+    echo "pre-push: REFUSING the push rather than passing silently. Use --no-verify to override."
+    exit 1
+fi
+
+"$shell" -NoProfile -ExecutionPolicy Bypass -File "$repo_root/tests/run.ps1"
+status=$?
+
+if [ $status -ne 0 ]; then
+    echo ""
+    echo "pre-push: tests failed. Push with --no-verify to bypass."
+fi
+
+exit $status

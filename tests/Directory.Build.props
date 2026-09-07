@@ -1,0 +1,28 @@
+<Project>
+
+  <PropertyGroup>
+    <VpbRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</VpbRoot>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <NuGetAudit>false</NuGetAudit>
+    <VpbXunitVersion>2.9.2</VpbXunitVersion>
+    <VpbXunitRunnerVersion>2.8.2</VpbXunitRunnerVersion>
+    <VpbTestSdkVersion>17.11.1</VpbTestSdkVersion>
+  </PropertyGroup>
+
+  <Import Project="$(VpbRoot)VPB.local.props" Condition="Exists('$(VpbRoot)VPB.local.props')" />
+
+  <PropertyGroup Condition="'$(VaMPath)' == '' Or !Exists('$(VaMPath)\VaM_Data\Managed\Assembly-CSharp.dll')">
+    <VaMPath Condition="Exists('C:\vam\VaM_Data\Managed\Assembly-CSharp.dll')">C:\vam</VaMPath>
+    <VaMPath Condition="'$(VaMPath)' == '' And Exists('C:\VaM\VaM_Data\Managed\Assembly-CSharp.dll')">C:\VaM</VaMPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <VpbHasVaM>false</VpbHasVaM>
+    <VpbHasVaM Condition="'$(VaMPath)' != '' And Exists('$(VaMPath)\VaM_Data\Managed\Assembly-CSharp.dll')">true</VpbHasVaM>
+  </PropertyGroup>
+
+</Project>

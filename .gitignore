@@ -1,5 +1,8 @@
 /obj/
 /bin/
+tests/**/bin/
+tests/**/obj/
+tests/**/TestResults/
 /.old
 /.vs
 /.sample/sample

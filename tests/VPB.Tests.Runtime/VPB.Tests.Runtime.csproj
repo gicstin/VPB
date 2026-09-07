@@ -1,0 +1,126 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\VpbRuntimeTestReport.targets" />
+
+  <!--
+    In-game test plugin. Compiled against VaM's own BCL so Mono 2018 can load it, exactly like the
+    plugin itself.
+
+    TargetFramework and FrameworkPathOverride are both load-bearing and must stay together. With
+    net472 the resolver saw VaM's mscorlib (2.0.0.0) lose a version comparison to the 4.7.2
+    targeting pack, silently compiled the whole plugin against .NET 4.7.2, and emitted
+    [IteratorStateMachine] and Assembly.op_Equality - neither of which exists in Unity 2018's Mono.
+    The build was clean, the DLL deployed, BepInEx loaded it, and it died on the first iterator
+    step with a TypeLoadException in the Unity player log only. net35 plus pointing the framework
+    directory at VaM's own Managed folder means there is no second BCL to lose to. Do not add
+    MSB3277 to NoWarn: that is the warning for exactly this conflict.
+
+    A Debug build of VPB.csproj builds and deploys this after PostBuildDeploy (see the
+    BuildVPBRuntimeTests target there), always WarnAndContinue so a broken suite cannot block the
+    plugin. Release skips it. To build it on its own:
+        dotnet build tests\VPB.Tests.Runtime -p:DeployToVaM=true
+    which drops the DLL in BepInEx\plugins\VPB.Tests.Runtime\ - deliberately NOT under
+    BepInEx\plugins\VPB\, because the patcher prunes anything there that patch_manifest.json
+    does not list.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net35</TargetFramework>
+    <FrameworkPathOverride>$(VaMPath)\VaM_Data\Managed</FrameworkPathOverride>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>VPB.Tests.Runtime</AssemblyName>
+    <RootNamespace>VPB.Tests.Runtime</RootNamespace>
+    <OutputType>Library</OutputType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <NoStdLib>true</NoStdLib>
+    <NoConfig>true</NoConfig>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <DebugType>embedded</DebugType>
+    <IsTestProject>false</IsTestProject>
+    <NoWarn>CS0618;CS1591</NoWarn>
+    <MSBuildWarningsAsErrors>MSB3277</MSBuildWarningsAsErrors>
+    <VpbPluginDll>$(VpbRoot)bin\$(Configuration)\VPB.dll</VpbPluginDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Runtime\*.cs" />
+    <Compile Include="Suites\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(VpbHasVaM)' == 'true'">
+    <Reference Include="mscorlib"><HintPath>$(VaMPath)\VaM_Data\Managed\mscorlib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System"><HintPath>$(VaMPath)\VaM_Data\Managed\System.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Core"><HintPath>$(VaMPath)\VaM_Data\Managed\System.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Xml"><HintPath>$(VaMPath)\VaM_Data\Managed\System.Xml.dll</HintPath><Private>false</Private></Reference>
+
+    <Reference Include="Assembly-CSharp"><HintPath>$(VaMPath)\VaM_Data\Managed\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+
+    <Reference Include="BepInEx"><HintPath>$(VaMPath)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony20"><HintPath>$(VaMPath)\BepInEx\core\0Harmony20.dll</HintPath><Private>false</Private></Reference>
+
+    <Reference Include="VPB"><HintPath>$(VpbPluginDll)</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <Target Name="VpbRuntimeRequireInputs" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(VpbHasVaM)' != 'true'"
+           Text="VPB.Tests.Runtime needs a VaM install. Set &lt;VaMPath&gt; in VPB.local.props." />
+    <Error Condition="!Exists('$(VpbPluginDll)')"
+           Text="VPB.Tests.Runtime references $(VpbPluginDll), which does not exist. Build VPB.csproj first." />
+
+    <ItemGroup>
+      <_VpbStaleProbe Include="$(VpbPluginDll)" Condition="Exists('$(VpbPluginDll)')" />
+      <_VpbAssemblyInfoProbe Include="$(VpbRoot)src\Properties\AssemblyInfo.cs" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_VpbDllModified>@(_VpbStaleProbe->'%(ModifiedTime)')</_VpbDllModified>
+      <_VpbAssemblyInfoModified>@(_VpbAssemblyInfoProbe->'%(ModifiedTime)')</_VpbAssemblyInfoModified>
+      <_VpbPluginDllIsStale>false</_VpbPluginDllIsStale>
+      <_VpbPluginDllIsStale Condition="'$(_VpbDllModified)' != '' And $([System.String]::Compare('$(_VpbDllModified)', '$(_VpbAssemblyInfoModified)')) &lt; 0">true</_VpbPluginDllIsStale>
+    </PropertyGroup>
+    <Warning Condition="'$(_VpbPluginDllIsStale)' == 'true'"
+             Text="$(VpbPluginDll) is older than src/Properties/AssemblyInfo.cs. If this build fails with CS0122 'inaccessible due to its protection level', that is why: rebuild VPB.csproj so the [InternalsVisibleTo(&quot;VPB.Tests.Runtime&quot;)] attribute is present in VPB.dll." />
+  </Target>
+
+  <Target Name="VpbRuntimeDeploy" AfterTargets="Build" Condition="'$(DeployToVaM)' == 'true' And '$(VpbHasVaM)' == 'true'">
+    <PropertyGroup>
+      <_VpbRuntimeDest>$(VaMPath)\BepInEx\plugins\VPB.Tests.Runtime</_VpbRuntimeDest>
+      <_VpbRuntimeMarker>$(_VpbRuntimeDest)\run-tests.marker</_VpbRuntimeMarker>
+      <_VpbRuntimeReport>$(VaMPath)\Saves\PluginData\VPB\vpb-runtime-tests.xml</_VpbRuntimeReport>
+    </PropertyGroup>
+
+    <!--
+      Report the PREVIOUS run before arming the next one. Skipped when VPB.csproj drives this build:
+      it reports the same file itself, and it has to, because it runs this project through Exec with
+      IgnoreStandardErrorWarningFormat - which is what keeps a broken suite from failing the plugin
+      build, and also what would stop these warnings from ever reaching the IDE.
+    -->
+    <CallTarget Targets="VpbRuntimeReportLastRun" ContinueOnError="WarnAndContinue"
+                Condition="'$(SkipVPBRuntimeTestReport)' != 'true'" />
+
+    <MakeDir Directories="$(_VpbRuntimeDest)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(_VpbRuntimeDest)" ContinueOnError="WarnAndContinue" />
+
+    <!--
+      Arming is what makes this tier actually run. Left manual, the honest state of the in-game
+      suite was "deployed on every build, run when someone remembered a terminal command".
+    -->
+    <Touch Files="$(_VpbRuntimeMarker)" AlwaysCreate="true"
+           Condition="'$(SkipVPBRuntimeTestArm)' != 'true'"
+           ContinueOnError="WarnAndContinue" />
+
+    <Message Importance="high" Condition="'$(SkipVPBRuntimeTestArm)' != 'true'"
+             Text="VPB.Tests.Runtime deployed and ARMED. The next VaM launch runs the in-game suite once and reports back here on the build after that. Opt out with -p:SkipVPBRuntimeTestArm=true." />
+    <Message Importance="high" Condition="'$(SkipVPBRuntimeTestArm)' == 'true'"
+             Text="VPB.Tests.Runtime deployed to $(_VpbRuntimeDest), not armed. Arm it with .\tests\run.ps1 -Runtime." />
+  </Target>
+
+</Project>

@@ -1372,9 +1372,71 @@ namespace VPB
             return PassesFilters(entry, false, false);
         }
 
-        /// <summary>
-        /// Clothing path gate (classify + subfilters) for <see cref="VarFileEntry.Path"/> or loose file path form.
-        /// </summary>
+        internal static bool PassesClothingSubfilterFacts(
+            ClothingSubfilter f,
+            bool isPreset,
+            bool isDecal,
+            bool isCustomItem,
+            bool isCustomPresetLoose,
+            ClothingLoadingUtils.ResourceGender gender)
+        {
+            // Default view shows base items only: hide all .vap presets (VAR and custom).
+            if (f == 0) return !isPreset;
+
+            bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+            bool wantsDecalType = ((f & ClothingSubfilter.Decals) != 0);
+
+            bool typeExplicit = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
+            if (typeExplicit)
+            {
+                bool okType = (!isDecal && (f & ClothingSubfilter.RealClothing) != 0) ||
+                              (isDecal && (f & ClothingSubfilter.Decals) != 0);
+                if (!okType) return false;
+            }
+            else
+            {
+                if (wantsRealType && isDecal && !wantsDecalType) return false;
+            }
+
+            bool wantsPresets = (f & ClothingSubfilter.Presets) != 0;
+            bool wantsCustom = (f & ClothingSubfilter.Custom) != 0;
+            bool wantsCustomPreset = (f & ClothingSubfilter.CustomPreset) != 0;
+            if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
+            if (wantsCustom) { if (!isCustomItem) return false; }
+            if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
+            // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
+            if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
+            if ((f & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
+            // If gender unknown, keep visible under either toggle (VaM content often not in gendered folders).
+            if ((f & ClothingSubfilter.Male) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Male && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+            if ((f & ClothingSubfilter.Female) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Female && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+
+            return true;
+        }
+
+        internal static bool PassesHairSubfilterFacts(
+            HairSubfilter f,
+            bool isPreset,
+            bool isCustomItem,
+            bool isCustomPresetLoose,
+            ClothingLoadingUtils.ResourceGender gender)
+        {
+            if (f == 0) return !isPreset;
+
+            bool wantsPresets = (f & HairSubfilter.Presets) != 0;
+            bool wantsCustom = (f & HairSubfilter.Custom) != 0;
+            bool wantsCustomPreset = (f & HairSubfilter.CustomPreset) != 0;
+            if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
+            if (wantsCustom) { if (!isCustomItem) return false; }
+            if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
+            if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
+            if ((f & HairSubfilter.Items) != 0) { if (isPreset) return false; }
+            if ((f & HairSubfilter.Male) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Male && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+            if ((f & HairSubfilter.Female) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Female && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+
+            return true;
+        }
+
         internal static bool PassesClothingGalleryFiltersForPath(string path, ClothingSubfilter clothingSubfilter, bool isVarPackageEntry)
         {
             string p = path ?? "";
@@ -1391,45 +1453,10 @@ namespace VPB
             ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
             if (k != ClothingLoadingUtils.ResourceKind.Clothing) return false;
 
-            bool isDecal = ClothingLoadingUtils.IsDecalLikePath(p);
+            bool isDecal = ClothingLoadingUtils.IsDecalLikePath(ClothingLoadingUtils.NormalizeLooseGalleryPath(p));
 
-            // Default view shows base items only: hide all .vap presets (VAR and custom).
-            if (clothingSubfilter == 0)
-            {
-                if (isPreset) return false;
-            }
-            else
-            {
-                bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
-                bool wantsDecalType = ((clothingSubfilter & ClothingSubfilter.Decals) != 0);
-
-                bool typeExplicit = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
-                if (typeExplicit)
-                {
-                    bool okType = (!isDecal && (clothingSubfilter & ClothingSubfilter.RealClothing) != 0) ||
-                                  (isDecal && (clothingSubfilter & ClothingSubfilter.Decals) != 0);
-                    if (!okType) return false;
-                }
-                else
-                {
-                    if (wantsRealType && isDecal && !wantsDecalType) return false;
-                }
-
-                bool wantsPresets = (clothingSubfilter & ClothingSubfilter.Presets) != 0;
-                bool wantsCustom = (clothingSubfilter & ClothingSubfilter.Custom) != 0;
-                bool wantsCustomPreset = (clothingSubfilter & ClothingSubfilter.CustomPreset) != 0;
-                if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
-                if (wantsCustom) { if (!isCustomItem) return false; }
-                if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
-                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
-                if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
-                if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
-                // If gender unknown, keep visible under either toggle (VaM content often not in gendered folders).
-                if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
-                if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
-            }
-
-            return true;
+            return PassesClothingSubfilterFacts(
+                clothingSubfilter, isPreset, isDecal, isCustomItem, isCustomPresetLoose, g);
         }
 
         /// <summary>
@@ -1452,28 +1479,7 @@ namespace VPB
             ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
             if (k != ClothingLoadingUtils.ResourceKind.Hair) return false;
 
-            // Default view shows base items only: hide all .vap presets (VAR and custom).
-            if (hairSubfilter == 0)
-            {
-                if (isPreset) return false;
-            }
-            else
-            {
-                bool wantsPresets = (hairSubfilter & HairSubfilter.Presets) != 0;
-                bool wantsCustom = (hairSubfilter & HairSubfilter.Custom) != 0;
-                bool wantsCustomPreset = (hairSubfilter & HairSubfilter.CustomPreset) != 0;
-                if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
-                if (wantsCustom) { if (!isCustomItem) return false; }
-                if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
-                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
-                if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
-                if ((hairSubfilter & HairSubfilter.Items) != 0) { if (isPreset) return false; }
-                // If gender unknown, keep visible under either toggle.
-                if ((hairSubfilter & HairSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
-                if ((hairSubfilter & HairSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
-            }
-
-            return true;
+            return PassesHairSubfilterFacts(hairSubfilter, isPreset, isCustomItem, isCustomPresetLoose, g);
         }
 
         private bool PassesFilters(FileEntry entry, bool ignorePosePeopleFilter)

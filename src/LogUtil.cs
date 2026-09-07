@@ -148,10 +148,22 @@ namespace VPB
             ResetPluginSession();
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static float EngineRealtime()
+        {
+            return Time.realtimeSinceStartup;
+        }
+
+        static float SafeEngineRealtime()
+        {
+            try { return EngineRealtime(); }
+            catch { return 0f; }
+        }
+
         public static void ResetPluginSession()
         {
             pluginSessionStartTime = DateTime.Now;
-            pluginSessionEngineStartSeconds = Time.realtimeSinceStartup;
+            pluginSessionEngineStartSeconds = SafeEngineRealtime();
             uiReadyLogged = false;
             readyLogged = false;
             startupReadyLogged = false;

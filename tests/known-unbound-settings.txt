@@ -1,0 +1,7 @@
+# Settings.ConfigEntry fields that are deliberately NOT bound inside Settings.Load.
+# One field name per line. Every entry needs a reason.
+#
+# Checked by VPB.Tests.Static -> SettingsBindingTests.
+# An unbound ConfigEntry stays null and throws on first read, usually far from Settings.cs and
+# often only on the machine that turns the feature on. Listing one here without a reason is
+# indistinguishable from having forgotten it.
