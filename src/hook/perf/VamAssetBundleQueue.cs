@@ -12,6 +12,8 @@ namespace VPB
     {
         internal static bool Enabled = true;
         internal static int MaxConcurrent = 3;
+        internal const long BundleMemoryBudgetBytes = 512L * 1024L * 1024L;
+        static long s_ReservedBytes;
 
         internal static long Served;
         internal static long Deduped;
@@ -31,6 +33,7 @@ namespace VPB
         sealed class Entry
         {
             public string Path;
+            public long EstimatedBytes;
             public List<Delivery> Waiters;
             public Worker Worker;
         }
@@ -42,6 +45,7 @@ namespace VPB
             public int LastDriverTick;
             public float LastTickRealtime;
             public bool Disowned;
+            public long ReservedBytes;
         }
 
         sealed class LoadResult
@@ -168,6 +172,8 @@ namespace VPB
 
             AssetLoader loader = Singleton();
             if (loader == null) return true;
+            // VaM's read thread outlives its coroutine; keep workers on the persistent host.
+            if (Messager.singleton == null || !Messager.singleton.gameObject.activeInHierarchy) return true;
 
             string path = abffr.path;
             bool refAdded = false;
@@ -200,7 +206,7 @@ namespace VPB
                     return false;
                 }
 
-                e = new Entry { Path = path, Waiters = new List<Delivery>(2) { created } };
+                e = new Entry { Path = path, EstimatedBytes = EstimateBundleBytes(path), Waiters = new List<Delivery>(2) { created } };
                 s_InFlight[path] = e;
                 s_Pending.Add(path);
                 MarkProgress();
@@ -247,14 +253,20 @@ namespace VPB
 
         static void PumpOnce(AssetLoader loader)
         {
+            if (Messager.singleton == null || !Messager.singleton.gameObject.activeInHierarchy) return;
             while (s_Active.Count < MaxConcurrent && s_Pending.Count > 0)
             {
+                // A synchronous completion callback can replace the loader while this pump is running.
+                if (loader == null || !ReferenceEquals(Singleton(), loader)) return;
                 string next = null;
                 int nextIndex = -1;
                 for (int i = 0; i < s_Pending.Count; i++)
                 {
                     string candidate = s_Pending[i];
                     if (IsPackageBusy(candidate)) continue;
+                    Entry candidateOwner;
+                    if (s_InFlight.TryGetValue(candidate, out candidateOwner) && candidateOwner != null
+                        && !CanAdmitBundleBytes(candidateOwner.EstimatedBytes, s_ReservedBytes, s_Active.Count)) continue;
                     next = candidate;
                     nextIndex = i;
                     break;
@@ -270,16 +282,44 @@ namespace VPB
                 {
                     Path = next,
                     Owner = owner,
+                    ReservedBytes = owner.EstimatedBytes,
                     LastDriverTick = s_DriverTick,
                     LastTickRealtime = Time.realtimeSinceStartup
                 };
                 owner.Worker = worker;
                 s_Active.Add(worker);
+                s_ReservedBytes += worker.ReservedBytes;
                 MarkPackageBusy(next, 1);
                 Started++;
                 MarkProgress();
-                loader.StartCoroutine(RunGuarded(loader, worker));
+                try { Messager.singleton.StartCoroutine(RunGuarded(loader, worker)); }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB.Perf] bundle worker start failed for " + next + ": " + ex.Message);
+                    Finish(loader, worker, null);
+                }
             }
+        }
+
+        internal static bool CanAdmitBundleBytes(long bytes, long reservedBytes, int activeWorkers)
+        {
+            if (bytes <= 0 || reservedBytes < 0 || activeWorkers < 0) return false;
+            // An oversized bundle must make progress, but never overlap another reservation.
+            if (activeWorkers == 0) return reservedBytes == 0;
+            return bytes <= BundleMemoryBudgetBytes && reservedBytes <= BundleMemoryBudgetBytes - bytes;
+        }
+
+        static long EstimateBundleBytes(string path)
+        {
+            try
+            {
+                MVR.FileManagement.FileEntry entry = MVR.FileManagement.FileManager.GetFileEntry(path);
+                long bytes = entry != null ? entry.Size : 0;
+                // Allow source plus native load copy headroom; final asset memory is not bounded here.
+                if (bytes > 0) return bytes <= long.MaxValue / 2 ? bytes * 2 : long.MaxValue;
+            }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] bundle size unavailable for " + path + ": " + ex.Message); }
+            return BundleMemoryBudgetBytes;
         }
 
         static string PackageKeyOf(string path)
@@ -460,9 +500,16 @@ namespace VPB
 
         static void Finish(AssetLoader loader, Worker worker, AssetBundle bundle)
         {
+            int workerIndex = s_Active.IndexOf(worker);
+            if (workerIndex < 0) return;
             bool disowned = worker.Disowned;
             try
             {
+                if (!disowned && (loader == null || !ReferenceEquals(Singleton(), loader)))
+                {
+                    DisownWorker(workerIndex, "AssetLoader replaced before completion");
+                    disowned = true;
+                }
                 if (disowned)
                 {
                     PublishOrUnload(loader, worker.Path, bundle);
@@ -495,14 +542,22 @@ namespace VPB
             }
             finally
             {
-                if (!disowned)
+                if (s_Active.Remove(worker))
                 {
-                    s_Active.Remove(worker);
+                    s_ReservedBytes -= worker.ReservedBytes;
                     MarkPackageBusy(worker.Path, -1);
                     MarkProgress();
                 }
                 worker.Owner = null;
-                try { Pump(loader); }
+                try
+                {
+                    AssetLoader currentLoader = Singleton();
+                    if (currentLoader != null)
+                    {
+                        EnsureDriver(currentLoader);
+                        Pump(currentLoader);
+                    }
+                }
                 catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] bundle pump failed: " + ex.Message); }
                 try { Drain(); }
                 catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] bundle drain failed: " + ex.Message); }
@@ -578,7 +633,15 @@ namespace VPB
             {
                 for (int i = s_Active.Count - 1; i >= 0; i--)
                     DisownWorker(i, "AssetLoader replaced");
-                s_PackageBusy.Clear();
+                // Admission occurs after EnsureDriver, so pending entries all belong to the old loader.
+                for (int i = 0; i < s_Pending.Count; i++)
+                {
+                    Entry entry;
+                    if (!s_InFlight.TryGetValue(s_Pending[i], out entry)) continue;
+                    s_InFlight.Remove(s_Pending[i]);
+                    ResolveWaiters(entry, null);
+                }
+                s_Pending.Clear();
             }
             s_DriverLoader = loader;
         }
@@ -626,11 +689,10 @@ namespace VPB
         static void DisownWorker(int index, string reason)
         {
             Worker w = s_Active[index];
-            s_Active.RemoveAt(index);
-            if (w == null) return;
+            if (w == null || w.Disowned) return;
 
             w.Disowned = true;
-            MarkPackageBusy(w.Path, -1);
+            // Abandon callbacks, not the read/native operation or its admission reservation.
             Recovered++;
             Failures++;
             LogUtil.LogWarning("[VPB.Perf] bundle worker abandoned for " + w.Path + " (" + reason + ")");
@@ -651,6 +713,7 @@ namespace VPB
             {
                 Worker w = s_Active[i];
                 if (w == null) { s_Active.RemoveAt(i); continue; }
+                if (w.Disowned) continue;
                 if (s_DriverTick - w.LastDriverTick < WorkerStallTicks) continue;
                 if (now - w.LastTickRealtime < StallSeconds) continue;
                 DisownWorker(i, "no coroutine tick for " + StallSeconds + "s");
@@ -749,6 +812,8 @@ namespace VPB
                 + " | inflight=" + (s_Delivery.Count - s_DeliveryHead)
                 + " active=" + s_Active.Count
                 + " pending=" + s_Pending.Count
+                + " reservedBytes=" + s_ReservedBytes
+                + " budgetBytes=" + BundleMemoryBudgetBytes
                 + " maxConcurrent=" + MaxConcurrent;
         }
     }
