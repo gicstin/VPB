@@ -568,6 +568,8 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_cm_pkg ON cat_mem(pkg_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_src ON pkg_dep(src_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_dep ON pkg_dep(dep_uid);" +
+                // Default LIKE needs NOCASE to seek package families instead of scanning every dependency edge.
+                "CREATE INDEX IF NOT EXISTS idx_pd_dep_nocase ON pkg_dep(dep_uid COLLATE NOCASE);" +
                 "CREATE INDEX IF NOT EXISTS idx_sf_key ON sys_file(cache_key);" +
                 "CREATE TABLE IF NOT EXISTS cache_usage (cache_path TEXT PRIMARY KEY, hit_count INTEGER NOT NULL DEFAULT 0, last_accessed INTEGER NOT NULL);" +
                 "CREATE TABLE IF NOT EXISTS cache_usage_pkg (cache_path TEXT NOT NULL, pkg_uid TEXT NOT NULL, PRIMARY KEY(cache_path, pkg_uid));" +
@@ -8682,6 +8684,67 @@ namespace VPB
             catch
             {
                 count = 0;
+                return false;
+            }
+        }
+
+        internal static bool TryCountDependentUidsBatch(Dictionary<string, string> uidToShort, out Dictionary<string, int> counts)
+        {
+            counts = null;
+            if (uidToShort == null || uidToShort.Count == 0 || !VpbSqlite3.IsAvailable) return false;
+            long scanBin = FileManager.lastPackageRefreshTime.ToBinary();
+            string catSig;
+            lock (s_Sync)
+            {
+                catSig = s_ReadyCategoriesSig;
+                if (s_ReadyScanBinary != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+                    return false;
+            }
+
+            try
+            {
+                var result = new Dictionary<string, int>(uidToShort.Count, StringComparer.Ordinal);
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    long version = ScalarInt64(conn, "PRAGMA data_version");
+                    if (version < 0) return false;
+                    // Every count must see one snapshot, even if a rebuild commits between lookups.
+                    conn.ExecUtf8("BEGIN;");
+                    if (uidToShort.Count < DependentScanMinimumTargets || !TryCountDependentUidsByScan(conn, uidToShort, result))
+                    {
+                        using (var family = conn.Prepare(
+                            "SELECT COUNT(DISTINCT src_uid) FROM pkg_dep WHERE dep_uid = ? OR dep_uid LIKE ? ESCAPE '\\'"))
+                        using (var exact = conn.Prepare("SELECT COUNT(DISTINCT src_uid) FROM pkg_dep WHERE dep_uid = ?"))
+                        {
+                            foreach (var pair in uidToShort)
+                            {
+                                if (string.IsNullOrEmpty(pair.Key)) return false;
+                                bool hasFamily = !string.IsNullOrEmpty(pair.Value);
+                                var st = hasFamily ? family : exact;
+                                st.BindText(1, pair.Key);
+                                if (hasFamily) st.BindText(2, EscapeLike(pair.Value) + ".%");
+                                if (st.Step() != VpbSqlite3.SqliteRow) return false;
+                                result.Add(pair.Key, Math.Max(0, (int)st.ColumnInt64(0)));
+                                st.Reset();
+                            }
+                        }
+                    }
+                    conn.ExecUtf8("COMMIT;");
+                    // Also reject a rebuild that started and finished while the batch was reading.
+                    if (ScalarInt64(conn, "PRAGMA data_version") != version)
+                        return false;
+                }
+                lock (s_Sync)
+                {
+                    if (s_RebuildRunning || s_ReadyScanBinary != scanBin || s_ReadyCategoriesSig != catSig
+                        || FileManager.lastPackageRefreshTime.ToBinary() != scanBin)
+                        return false;
+                }
+                counts = result;
+                return true;
+            }
+            catch
+            {
                 return false;
             }
         }

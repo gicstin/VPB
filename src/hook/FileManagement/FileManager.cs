@@ -2419,19 +2419,46 @@ namespace VPB
 		{
 			try
 			{
-				VarPackage[] snapshot;
 				lock (packagesLock)
 				{
 					if (packagesByUid == null) return;
-					snapshot = packagesByUid.Values.ToArray();
-				}
-				for (int i = 0; i < snapshot.Length; i++)
-				{
-					if (snapshot[i] != null)
-						snapshot[i].DependentCount = -1;
+					foreach (VarPackage package in packagesByUid.Values)
+						if (package != null) package.DependentCount = -1;
 				}
 			}
 			catch { }
+		}
+
+		internal static void PrefillDependentCounts(List<VarPackage> packages)
+		{
+			if (packages == null || packages.Count == 0 || IsScanning) return;
+			DateTime scanTime = lastPackageRefreshTime;
+			var cold = new Dictionary<string, VarPackage>(StringComparer.Ordinal);
+			var uidToShort = new Dictionary<string, string>(StringComparer.Ordinal);
+			for (int i = 0; i < packages.Count; i++)
+			{
+				VarPackage package = packages[i];
+				if (package == null || package.DependentCount >= 0 || string.IsNullOrEmpty(package.Uid)) continue;
+				cold[package.Uid] = package;
+				uidToShort[package.Uid] = GetPackageGroupShortUid(package.Uid);
+			}
+			if (cold.Count == 0) return;
+			Dictionary<string, int> counts;
+			if (!VpbLocalDatabase.TryCountDependentUidsBatch(uidToShort, out counts)) return;
+			// Never hold registry lock during SQLite work; a completed scan invalidates this snapshot.
+			lock (packagesLock)
+			{
+				if (IsScanning || lastPackageRefreshTime != scanTime || packagesByUid == null) return;
+				foreach (var pair in cold)
+				{
+					VarPackage registered;
+					int count;
+					if (packagesByUid.TryGetValue(pair.Key, out registered)
+						&& ReferenceEquals(registered, pair.Value)
+						&& counts.TryGetValue(pair.Key, out count))
+						registered.DependentCount = count;
+				}
+			}
 		}
 
 		public static int ResolveDependentCount(VarPackage pkg)

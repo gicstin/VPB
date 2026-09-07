@@ -231,6 +231,8 @@ namespace VPB
                     SortByPrecomputedInt(files, GetDepsCount, state.Direction);
                     break;
                 case SortType.Dependents:
+                    try { PrefillDependentCounts(files); }
+                    catch (Exception ex) { LogUtil.LogError("[VPB] Dependent count prefill failed: " + ex); }
                     SortByPrecomputedInt(files, GetDependentsCount, state.Direction);
                     break;
                 case SortType.Missing:
@@ -1091,6 +1093,20 @@ namespace VPB
                 LogUtil.LogError($"[VPB] GetDepsCount error: {ex}");
             }
             return 0;
+        }
+
+        private static void PrefillDependentCounts(List<FileEntry> files)
+        {
+            if (files == null || files.Count < 2) return;
+            var packages = new List<VarPackage>();
+            for (int i = 0; i < files.Count; i++)
+            {
+                var vfe = files[i] as VarFileEntry;
+                var ple = files[i] as PackageListEntry;
+                VarPackage package = vfe != null ? vfe.Package : (ple != null ? ple.Package : null);
+                if (package != null && package.DependentCount < 0) packages.Add(package);
+            }
+            FileManager.PrefillDependentCounts(packages);
         }
 
         public static int GetDependentsCount(FileEntry file)
