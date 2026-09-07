@@ -1284,21 +1284,36 @@ namespace VPB
             {
                 EnsurePkgIdentTable(conn);
 
-                const string hitSelect =
+                string hitSelect =
                     "SELECT di.pack_id, pi.pkg_uid, di.entry_id, pi.klen " +
                     "FROM pkg_ident pi " +
-                    "CROSS JOIN datapack_ident di ON di.ident_key = pi.ident_key " +
+                    "CROSS JOIN datapack_ident di " + (scoped ? "INDEXED BY idx_dp_ident_key " : "") +
+                    "ON di.ident_key = pi.ident_key " +
                     "WHERE di.ident_key <> '' " +
                     "AND NOT EXISTS (SELECT 1 FROM temp.dp_ident_amb a " +
-                    "WHERE a.pack_id = di.pack_id AND a.ident_key = di.ident_key)";
+                    "WHERE a.pack_id = di.pack_id AND a.ident_key = di.ident_key)" +
+                    (scoped ? " AND di.pack_id=?" : "");
 
                 conn.ExecUtf8(
                     "DROP TABLE IF EXISTS temp.dp_ident_amb;" +
                     "CREATE TEMP TABLE dp_ident_amb(pack_id TEXT NOT NULL, ident_key TEXT NOT NULL," +
-                    "PRIMARY KEY(pack_id, ident_key));" +
+                    "PRIMARY KEY(pack_id, ident_key));");
+
+                string ambiguitySql =
                     "INSERT OR IGNORE INTO temp.dp_ident_amb(pack_id, ident_key) " +
                     "SELECT pack_id, ident_key FROM datapack_ident " +
-                    "GROUP BY pack_id, ident_key HAVING COUNT(*) > " + DataPackIdentAmbiguityCap + ";");
+                    (scoped ? "WHERE pack_id=? " : "") +
+                    "GROUP BY pack_id, ident_key HAVING COUNT(*) > " + DataPackIdentAmbiguityCap;
+                if (scoped)
+                {
+                    using (var st = conn.Prepare(ambiguitySql))
+                    {
+                        st.BindText(1, packId);
+                        st.Step();
+                    }
+                }
+                else
+                    conn.ExecUtf8(ambiguitySql + ";");
 
                 if (!DataPackPrefixJoinPlanIsSane(conn, hitSelect))
                 {
@@ -1311,8 +1326,19 @@ namespace VPB
                 conn.ExecUtf8(
                     "DROP TABLE IF EXISTS temp.dp_prefix_hit;" +
                     "CREATE TEMP TABLE dp_prefix_hit(pack_id TEXT NOT NULL, pkg_uid TEXT NOT NULL," +
-                    "entry_id INTEGER NOT NULL, klen INTEGER NOT NULL);" +
-                    "INSERT INTO temp.dp_prefix_hit(pack_id, pkg_uid, entry_id, klen) " + hitSelect + ";" +
+                    "entry_id INTEGER NOT NULL, klen INTEGER NOT NULL);");
+                string hitSql = "INSERT INTO temp.dp_prefix_hit(pack_id, pkg_uid, entry_id, klen) " + hitSelect;
+                if (scoped)
+                {
+                    using (var st = conn.Prepare(hitSql))
+                    {
+                        st.BindText(1, packId);
+                        st.Step();
+                    }
+                }
+                else
+                    conn.ExecUtf8(hitSql + ";");
+                conn.ExecUtf8(
                     "CREATE INDEX temp.idx_dp_prefix_hit ON dp_prefix_hit(pack_id, pkg_uid, klen);" +
 
                     "DROP TABLE IF EXISTS temp.dp_prefix_pick;" +
