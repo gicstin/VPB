@@ -79,6 +79,7 @@ namespace VPB
             { "select_all", new HelpIconSpec { Path = "select-all", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
             { "pin", new HelpIconSpec { Path = "pin", Backdrop = new Color(0.20f, 0.24f, 0.30f, 1f) } },
             { "hub", new HelpIconSpec { Path = "world-search", Backdrop = new Color(0.28f, 0.22f, 0.38f, 1f) } },
+            { "looks", new HelpIconSpec { Path = "list-search", Backdrop = new Color(0.70f, 0.46f, 0.24f, 1f) } },
         };
 
         private static string _helpDir;

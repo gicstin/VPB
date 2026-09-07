@@ -1,4 +1,5 @@
-﻿using System;
+using VPB.src.util;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -287,7 +288,7 @@ namespace VPB
                 List<string> added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(needed);
                 if (added != null && added.Count > 0)
                 {
-                    LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list: +" + string.Join(", ", added.ToArray()));
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list: +" + string.Join(", ", added.ToArray()));
                     try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
                 }
                 return added;
@@ -305,7 +306,7 @@ namespace VPB
             try
             {
                 ScanWhitelistManager.Instance.RemoveTemporaryUidOverrides(temporaryUids);
-                LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list removed: -" + string.Join(", ", temporaryUids.ToArray()));
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list removed: -" + string.Join(", ", temporaryUids.ToArray()));
                 try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
             }
             catch (Exception ex)
@@ -375,7 +376,7 @@ namespace VPB
 
         private static IEnumerator DisableSuppressionAfterSceneLoad(SceneLoadCleanupState cleanupState)
         {
-            LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Waiting for scene to finish loading...");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Waiting for scene to finish loading...");
             int startSerial = cleanupState != null ? cleanupState.SceneLoadTotalSerialAtStart : LogUtil.GetSceneLoadTotalSerial();
             float timeout = 60f; // Max 60 seconds
             float elapsed = 0f;
@@ -408,9 +409,9 @@ namespace VPB
 
         public static IEnumerator DisableSuppressionAfterDelay(float delay)
         {
-            LogUtil.Log($"[VPB] DisableSuppressionAfterDelay: Waiting {delay}s before disabling suppression...");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] DisableSuppressionAfterDelay: Waiting {delay}s before disabling suppression...");
             yield return new WaitForSeconds(delay);
-            LogUtil.Log("[VPB] DisableSuppressionAfterDelay: Delay complete, disabling suppression");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] DisableSuppressionAfterDelay: Delay complete, disabling suppression");
             Gallery.SuppressAutoRefresh(false);
         }
 
@@ -586,12 +587,12 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] Scene load will continue in DEGRADED mode: missing "
                     + outcome.EnsureResult.MissingCount + "/" + outcome.EnsureResult.ReferencedCount + " referenced package(s)");
             else if (!outcome.DepsChanged)
-                LogUtil.Log("[VPB] UI.EnsureInstalled: no package moves detected.");
+                { if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] UI.EnsureInstalled: no package moves detected."); }
 
             if (packageStateChanged)
             {
-                if (outcome.DepsChanged) LogUtil.Log("[VPB] Refreshing FileManagers...");
-                else LogUtil.Log("[VPB] Refreshing VaM FileManager for temporary scene-load allow-list...");
+                if (outcome.DepsChanged) { if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Refreshing FileManagers..."); }
+                else { if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Refreshing VaM FileManager for temporary scene-load allow-list..."); }
 
                 try { VpbProgressService.ReportSceneLoadPrepPhase("Refreshing package catalog"); } catch { }
                 yield return null;
@@ -675,7 +676,7 @@ namespace VPB
                 if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(entry, out string rewritten))
                 {
                     normalizedPath = UI.NormalizePath(rewritten);
-                    LogUtil.Log("[VPB] Using rewritten scene: " + normalizedPath);
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Using rewritten scene: " + normalizedPath);
                 }
             }
             catch (Exception ex)
@@ -683,7 +684,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] Scene rewrite skipped due to error: " + ex.Message);
             }
 
-            LogUtil.Log("[VPB] Normalized path: " + normalizedPath);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Normalized path: " + normalizedPath);
             outcome.NormalizedPath = normalizedPath;
             outcome.Success = true;
         }
@@ -923,7 +924,7 @@ namespace VPB
                 yield break;
             }
 
-            LogUtil.Log("[VPB] MergeSceneFile started: " + path
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] MergeSceneFile started: " + path
                 + " mode=" + mode + " atPlayer=" + atPlayer);
             try
             {
@@ -1222,7 +1223,7 @@ namespace VPB
         private static IEnumerator LoadSceneFileRoutine(FileEntry entry, GalleryPanel panel)
         {
             string path = entry.Uid;
-            LogUtil.Log("[VPB] UI.LoadSceneFile started for: " + path);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] UI.LoadSceneFile started for: " + path);
 
             try
             {
@@ -2856,6 +2857,17 @@ namespace VPB
             _iconSpriteCache.Clear();
             _iconSpriteTint.Clear();
             GalleryIconAtlas.Destroy();
+        }
+
+        public static Sprite LoadGenderIconSprite(VPB.src.util.LooseVapGenderProbe.Gender gender)
+        {
+            if (gender == VPB.src.util.LooseVapGenderProbe.Gender.Female)
+                return LoadIconSprite("gender-female", GalleryUiColorTokens.GenderFemaleGlyph);
+            if (gender == VPB.src.util.LooseVapGenderProbe.Gender.Futa)
+                return LoadIconSprite("gender-hermaphrodite", GalleryUiColorTokens.GenderFutaGlyph);
+            if (gender == VPB.src.util.LooseVapGenderProbe.Gender.Male)
+                return LoadIconSprite("gender-male", GalleryUiColorTokens.GenderMaleGlyph);
+            return null;
         }
 
         /// <summary>Loads a Tabler source id (e.g. <c>shirt-off</c>, <c>filled/star</c>).</summary>

@@ -14,7 +14,6 @@ namespace VPB
     /// </summary>
     public partial class GalleryPanel
     {
-        private StickyToolMode _deferredStickyEnter = StickyToolMode.None;
         private bool _confirmEscIsDismiss;
 
         private GameObject _gridCtxMenuGO;
@@ -43,66 +42,18 @@ namespace VPB
         }
 
         /// <summary>
-        /// Gate sticky enter while Try-On open. False = dialog pending (caller must return).
-        /// Esc dismisses dialog and stays in Try-On (no Keep/Revert).
+        /// Sticky enter never blocks on an open Try-On: the preview auto-commits (Undo
+        /// restores it) and the tool opens immediately. Always returns true.
         /// </summary>
         private bool GateStickyEnterWhileTryOn(StickyToolMode entering)
         {
             if (!_tryOnActive || entering == StickyToolMode.TryOn)
                 return true;
 
-            _deferredStickyEnter = entering;
-            _confirmEscIsDismiss = true;
             string keptName = _tryOnCurrentName;
-            DisplayConfirm(
-                VPBTranslation.T("gallery.tryon.sticky_title", "Try-On still open"),
-                string.Format(
-                    VPBTranslation.T(
-                        "gallery.tryon.sticky_msg",
-                        "Keep '{0}' before switching tools?\n\nKeep = commit · Revert = discard · Esc = stay in Try-On."),
-                    string.IsNullOrEmpty(keptName) ? "…" : keptName),
-                StickySwitchKeepThenEnter,
-                StickySwitchRevertThenEnter,
-                VPBTranslation.T("gallery.tryon.btn_keep", "Keep"),
-                VPBTranslation.T("gallery.tryon.btn_revert", "Revert"));
-            return false;
-        }
-
-        private void StickySwitchKeepThenEnter()
-        {
-            StickyToolMode mode = _deferredStickyEnter;
-            _deferredStickyEnter = StickyToolMode.None;
             try { TryOnKeep(); } catch { }
-            CompleteDeferredStickyEnter(mode);
-        }
-
-        private void StickySwitchRevertThenEnter()
-        {
-            StickyToolMode mode = _deferredStickyEnter;
-            _deferredStickyEnter = StickyToolMode.None;
-            try { TryOnRevert(); } catch { }
-            CompleteDeferredStickyEnter(mode);
-        }
-
-        private void CompleteDeferredStickyEnter(StickyToolMode mode)
-        {
-            switch (mode)
-            {
-                case StickyToolMode.Creator:
-                    EnterCreatorMode();
-                    break;
-                case StickyToolMode.Remove:
-                    RemoveModeEnter(_removeModeSiderailUseLeft);
-                    break;
-                case StickyToolMode.Cleanup:
-                    TboxOpenCleanupView();
-                    break;
-                case StickyToolMode.Import:
-                    try { SetImportSidebarActive(true); } catch { }
-                    break;
-                default:
-                    break;
-            }
+            TryOnNotifyAutoKept(keptName);
+            return true;
         }
 
         /// <summary>
@@ -373,6 +324,8 @@ namespace VPB
                     try { DetailStripToggleExpanded(); } catch { }
                 });
 
+            GridCtxAddStartupSceneActions();
+
             GridCtxAddSeparator();
             GridCtxAddAction(
                 VPBTranslation.T("gallery.tbox.copy_names", "Copy Names"),
@@ -421,7 +374,7 @@ namespace VPB
                         () =>
                         {
                             CloseGridContextMenu();
-                            try { TboxHideSelectedPackages(); } catch { }
+                            try { TboxHideSelectedPackages(false); } catch { }
                         });
                 }
                 if (unhideN > 0)
@@ -433,7 +386,39 @@ namespace VPB
                         () =>
                         {
                             CloseGridContextMenu();
-                            try { TboxUnhideSelectedPackages(); } catch { }
+                            try { TboxUnhideSelectedPackages(false); } catch { }
+                        });
+                }
+            }
+
+            int pkgHideN = 0, pkgUnhideN = 0;
+            try { GridCtxCountPackageHideUnhide(out pkgHideN, out pkgUnhideN); }
+            catch { pkgHideN = 0; pkgUnhideN = 0; }
+            if (pkgHideN > 0 || pkgUnhideN > 0)
+            {
+                if (hideN == 0 && unhideN == 0) GridCtxAddSeparator();
+                if (pkgHideN > 0)
+                {
+                    GridCtxAddAction(
+                        VPBTranslation.T("gallery.tbox.hide_package", "Hide Whole Package"),
+                        KeyCode.None, "",
+                        GridCtxIcon("eye-off"),
+                        () =>
+                        {
+                            CloseGridContextMenu();
+                            try { TboxHideSelectedPackages(true); } catch { }
+                        });
+                }
+                if (pkgUnhideN > 0)
+                {
+                    GridCtxAddAction(
+                        VPBTranslation.T("gallery.tbox.unhide_package", "Unhide Whole Package"),
+                        KeyCode.None, "",
+                        GridCtxIcon("eye"),
+                        () =>
+                        {
+                            CloseGridContextMenu();
+                            try { TboxUnhideSelectedPackages(true); } catch { }
                         });
                 }
             }

@@ -1,4 +1,5 @@
-﻿using System;
+using VPB.src.util;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -128,15 +129,19 @@ namespace VPB
              if (name.Contains("glove")) regions.Add("hands");
              
              if (name.Contains("hat") || name.Contains("cap") || name.Contains("mask") || name.Contains("glasses")) regions.Add("head");
+             if (name.Contains("earring") || name.Contains("piercing") || name.Contains("necklace")
+                 || name.Contains("choker") || name.Contains("bracelet") || name.Contains("anklet")
+                 || name.Contains("jewelry") || name.Contains("jewellery") || name.Contains("accessory"))
+             {
+                 regions.Add("accessory");
+                 regions.Add("jewelry");
+             }
              
              return regions;
         }
 
 
 
-        // The cast for a two-person pose is asked for, not guessed: see VpbDualPoseModal. The
-        // gender-and-nearest heuristic that used to live here picked a partner silently, and in
-        // a session it wrote to the body the other player was driving.
 
         private void DestroyGhost()
         {

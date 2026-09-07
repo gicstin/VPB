@@ -44,6 +44,7 @@ namespace VPB
             SyncQuickMenuPopupRoundedBg(m_QuickMenuSavePopupRoot, frac);
             RoundedRect tooltipRounded = m_QmTooltipBackdrop as RoundedRect;
             if (tooltipRounded != null) tooltipRounded.cornerRadiusFraction = frac;
+            SyncQuickMenuBrandPlateCornerRadius(frac);
             QuickMenuSyncRandomPreviewCornerRadius(frac);
             try { QuickMenuSyncWatchCornerRadius(frac); } catch { }
             if (m_QuickMenuGridButtons != null)
@@ -289,6 +290,7 @@ namespace VPB
                 m_QmTooltipRT.anchoredPosition = new Vector2(centerX, topEdge + 8f);
                 var sd = m_QmTooltipRT.sizeDelta;
                 m_QmTooltipRT.sizeDelta = new Vector2(QuickMenuGridCell * 4f - QuickMenuGridGap, sd.y);
+                QuickMenuLayoutBrandPlate();
                 QuickMenuPositionDeskPreview();
             }
         }
@@ -347,6 +349,7 @@ namespace VPB
 
                 var sd0 = m_QmTooltipRT.sizeDelta;
                 m_QmTooltipRT.sizeDelta = new Vector2(sd0.x, 0f);
+                QuickMenuSyncBrandPlate();
                 QuickMenuPositionDeskPreview();
                 return;
             }
@@ -374,6 +377,7 @@ namespace VPB
 
             var sd = m_QmTooltipRT.sizeDelta;
             m_QmTooltipRT.sizeDelta = new Vector2(sd.x, h);
+            QuickMenuSyncBrandPlate();
             QuickMenuPositionDeskPreview();
         }
 
@@ -1081,6 +1085,11 @@ namespace VPB
 
         private static void QuickMenuSetIcon(GameObject buttonGO, Sprite icon, float padding)
         {
+            QuickMenuSetIcon(buttonGO, icon, padding, Color.white);
+        }
+
+        private static void QuickMenuSetIcon(GameObject buttonGO, Sprite icon, float padding, Color tint)
+        {
             if (buttonGO == null) return;
 
             // Remove any label; icon-only buttons should not retain stale text across pages.
@@ -1115,6 +1124,7 @@ namespace VPB
                         if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.QmIconSwap++;
                         UI.SetIconSprite(existingImg, icon);
                     }
+                    if (existingImg.color != tint) existingImg.color = tint;
                     Vector2 desiredSize = new Vector2(-padding * 2f, -padding * 2f);
                     if (existingRT.sizeDelta != desiredSize) existingRT.sizeDelta = desiredSize;
                     return;
@@ -1129,6 +1139,7 @@ namespace VPB
             iconGO.transform.SetParent(buttonGO.transform, false);
             Image img = iconGO.AddComponent<Image>();
             UI.SetIconSprite(img, icon);
+            img.color = tint;
             img.preserveAspect = true;
             img.raycastTarget = false;
 
@@ -1137,6 +1148,11 @@ namespace VPB
             rt.anchorMax = Vector2.one;
             rt.sizeDelta = new Vector2(-padding * 2f, -padding * 2f);
             rt.anchoredPosition = Vector2.zero;
+        }
+
+        private static bool QuickMenuIsRandomAction(QuickMenuAssignableAction a)
+        {
+            return a == QuickMenuAssignableAction.Random;
         }
 
         private static void QuickMenuSetLabel(GameObject buttonGO, string text, bool clearIcon)
@@ -1195,6 +1211,45 @@ namespace VPB
             bg.color = normal;
             var hh = bg.GetComponent<QuickMenuSquareHover>();
             if (hh != null) { hh.normal = normal; hh.hover = hover; }
+        }
+
+        private bool QuickMenuRefreshFpsLabel(int idx, GameObject go)
+        {
+            if (go == null) return false;
+            QuickMenuEnsureSlotLabelCache();
+            // Throttle text refresh to max 2 Hz; slot visuals may update more frequently.
+            const float interval = 0.5f;
+            float now = 0f;
+            try { now = Time.unscaledTime; } catch { now = 0f; }
+
+            if (string.IsNullOrEmpty(m_QmFpsCachedLabel) || (now - m_QmFpsLastLabelUpdateTime) >= interval)
+            {
+                m_QmFpsLastLabelUpdateTime = now;
+
+                float fps = 0f;
+                try
+                {
+                    float dt = Time.unscaledDeltaTime;
+                    if (dt <= 0f) dt = Time.deltaTime;
+                    fps = 1f / Mathf.Max(0.00001f, dt);
+                }
+                catch { fps = 0f; }
+
+                // Display as an integer 0..999 (no decimals), per quick-menu compact constraint.
+                if (fps > 999f) fps = 999f;
+                if (fps < 0f) fps = 0f;
+                m_QmFpsCachedLabel = ((int)(fps + 0.5f)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            // Only touch UI text if it actually changed (avoids per-frame layout dirties).
+            string last = (m_QmLastAppliedSlotLabels != null) ? m_QmLastAppliedSlotLabels[idx] : null;
+            if (last != m_QmFpsCachedLabel)
+            {
+                if (m_QmLastAppliedSlotLabels != null) m_QmLastAppliedSlotLabels[idx] = m_QmFpsCachedLabel;
+                QuickMenuSetLabel(go, m_QmFpsCachedLabel, clearIcon: true);
+                return true;
+            }
+            return false;
         }
 
         private void QuickMenuRefreshSlotVisual(int idx)
@@ -1451,44 +1506,16 @@ namespace VPB
                     break;
             }
 
+            bool isRandom = QuickMenuIsRandomAction(action);
+
             if (action == QuickMenuAssignableAction.FpsCounter)
             {
-                // Throttle text refresh to max 2 Hz; slot visuals may update more frequently.
-                const float interval = 0.5f;
-                float now = 0f;
-                try { now = Time.unscaledTime; } catch { now = 0f; }
-
-                if (string.IsNullOrEmpty(m_QmFpsCachedLabel) || (now - m_QmFpsLastLabelUpdateTime) >= interval)
-                {
-                    m_QmFpsLastLabelUpdateTime = now;
-
-                    float fps = 0f;
-                    try
-                    {
-                        float dt = Time.unscaledDeltaTime;
-                        if (dt <= 0f) dt = Time.deltaTime;
-                        fps = 1f / Mathf.Max(0.00001f, dt);
-                    }
-                    catch { fps = 0f; }
-
-                    // Display as an integer 0..999 (no decimals), per quick-menu compact constraint.
-                    if (fps > 999f) fps = 999f;
-                    if (fps < 0f) fps = 0f;
-                    m_QmFpsCachedLabel = ((int)(fps + 0.5f)).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                }
-
-                // Only touch UI text if it actually changed (avoids per-frame layout dirties).
-                string last = (m_QmLastAppliedSlotLabels != null) ? m_QmLastAppliedSlotLabels[idx] : null;
-                if (last != m_QmFpsCachedLabel)
-                {
-                    if (m_QmLastAppliedSlotLabels != null) m_QmLastAppliedSlotLabels[idx] = m_QmFpsCachedLabel;
-                    QuickMenuSetLabel(go, m_QmFpsCachedLabel, clearIcon: true);
-                }
+                QuickMenuRefreshFpsLabel(idx, go);
             }
             else
             {
                 if (m_QmLastAppliedSlotLabels != null) m_QmLastAppliedSlotLabels[idx] = null;
-                QuickMenuSetIcon(go, icon, padding: 6f);
+                QuickMenuSetIcon(go, icon, 6f, isRandom ? GalleryUiColorTokens.RandomGlyph : Color.white);
             }
 
             bool isAssigned = action != QuickMenuAssignableAction.None;
@@ -1499,13 +1526,29 @@ namespace VPB
                 Color hover;
                 if (QuickMenuAssignablesForceOpaque())
                 {
-                    normal = isAssigned ? QmBackdropAssignedOpaque : QmBackdropEmptyOpaque;
-                    hover = isAssigned ? QmBackdropAssignedHoverOpaque : QmBackdropEmptyHoverOpaque;
+                    if (isRandom)
+                    {
+                        normal = GalleryUiColorTokens.RandomWell;
+                        hover = GalleryUiColorTokens.RandomWellHover;
+                    }
+                    else
+                    {
+                        normal = isAssigned ? QmBackdropAssignedOpaque : QmBackdropEmptyOpaque;
+                        hover = isAssigned ? QmBackdropAssignedHoverOpaque : QmBackdropEmptyHoverOpaque;
+                    }
                 }
                 else
                 {
-                    normal = isAssigned ? QmBackdropAssignedTransparent : QmBackdropEmptyTransparent;
-                    hover = isAssigned ? QmBackdropAssignedHoverTransparent : QmBackdropEmptyHoverTransparent;
+                    if (isRandom)
+                    {
+                        normal = GalleryUiColorTokens.RandomWellTransparent;
+                        hover = GalleryUiColorTokens.RandomWellTransparentHover;
+                    }
+                    else
+                    {
+                        normal = isAssigned ? QmBackdropAssignedTransparent : QmBackdropEmptyTransparent;
+                        hover = isAssigned ? QmBackdropAssignedHoverTransparent : QmBackdropEmptyHoverTransparent;
+                    }
                 }
                 QuickMenuApplyBackdropColors(bgImg, normal, hover);
             }
@@ -2070,21 +2113,10 @@ namespace VPB
                     try { QuickMenuRefreshSlotVisual(i); } catch { }
         }
 
-        private static bool QuickMenuTryGetPersonIsMale(Atom person, out bool isMale)
+        private static VPB.src.util.LooseVapGenderProbe.Gender QuickMenuGetPersonGender(Atom person)
         {
-            isMale = false;
-            if (person == null) return false;
-            try
-            {
-                // Prefer DAZCharacter name heuristic (used elsewhere in VPB).
-                if (person.type == "Person")
-                {
-                    isMale = VPB.src.util.AtomGenderUtils.IsMale(person);
-                    return true;
-                }
-                return false;
-            }
-            catch { return false; }
+            try { return VPB.src.util.AtomGenderUtils.ClassifyForBadge(person); }
+            catch { return VPB.src.util.LooseVapGenderProbe.Gender.Unknown; }
         }
 
         private static string QuickMenuFormatPersonLabel(Atom person)
@@ -2097,9 +2129,12 @@ namespace VPB
                 try { name = person.uid; } catch { name = ""; }
             }
 
-            bool isMale;
-            if (QuickMenuTryGetPersonIsMale(person, out isMale))
-                return (isMale ? "Male: " : "Female: ") + name;
+            switch (QuickMenuGetPersonGender(person))
+            {
+                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return "Male: " + name;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return "Female: " + name;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return "Futa: " + name;
+            }
             return "Person: " + name;
         }
 
@@ -2221,11 +2256,11 @@ namespace VPB
         private static Color QuickMenuTargetAtomColorForPerson(Atom personOrNull)
         {
             if (personOrNull == null) return new Color(1f, 0f, 0f, 0.9f); // red
-            bool isMale;
-            if (QuickMenuTryGetPersonIsMale(personOrNull, out isMale))
+            switch (QuickMenuGetPersonGender(personOrNull))
             {
-                if (isMale) return new Color(0.2f, 0.5f, 1f, 0.9f);  // blue
-                return new Color(1f, 0.3f, 0.7f, 0.9f);               // pink
+                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return new Color(0.2f, 0.5f, 1f, 0.9f);  // blue
+                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return new Color(1f, 0.3f, 0.7f, 0.9f);  // pink
+                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return new Color(0.7f, 0.45f, 1f, 0.9f); // violet
             }
             return new Color(1f, 0f, 0f, 0.9f); // red (unknown)
         }

@@ -1,0 +1,10 @@
+# AccessTools lookups whose receiving Type is computed at runtime, so the member behind them
+# cannot be verified from source. One "<variable>.<member>" per line. Every entry needs a reason.
+#
+# Checked by VPB.Tests.Vam -> ReflectionLookupTests.LookupsThroughATypeVariableAlsoResolve.
+# Prefer fixing the call site to use typeof(...) or AccessTools.TypeByName("...") over adding an
+# entry here: an untraceable receiver means that hook is not covered by the drift check at all.
+
+# src/hook/PostMagicUiCameraFix.cs - scriptType comes from create.GetParameters()[1].ParameterType,
+# a type only known once VaM's own method has been reflected at runtime.
+scriptType.CreateBehaviourInstance

@@ -1144,6 +1144,7 @@ namespace VPB.src.util
 
             LogAtom("split selected=" + idsToImport.Count + " cua=" + cuaIds.Count + " generic=" + genericOrder.Count);
 
+            var cuaLiveIds = new Dictionary<string, string>(StringComparer.Ordinal);
             if (cuaIds.Count > 0)
             {
                 if (targetPerson != null && !string.IsNullOrEmpty(sourcePersonAtomId))
@@ -1152,7 +1153,7 @@ namespace VPB.src.util
                         + string.Join(", ", new List<string>(cuaIds).ToArray()));
                     yield return CUAAtomImporter.ImportSelectedCUAsAsAtoms(
                         sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid,
-                        cuaIds, relativeToTargetPerson, replaceExisting: false);
+                        cuaIds, relativeToTargetPerson, replaceExisting: false, liveIdSink: cuaLiveIds);
                 }
                 else
                 {
@@ -1164,6 +1165,7 @@ namespace VPB.src.util
             if (genericOrder.Count == 0)
             {
                 LogAtom("no generic atoms to spawn.");
+                ApplyCuaParentAtoms(atoms, cuaLiveIds, cuaLiveIds);
                 yield break;
             }
 
@@ -1204,6 +1206,12 @@ namespace VPB.src.util
                         LogAtom("idMap '" + id + "' -> '" + liveId + "'");
                 }
             }
+
+            var parentLiveIds = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> kv in cuaLiveIds)
+                parentLiveIds[kv.Key] = kv.Value;
+            foreach (KeyValuePair<string, string> kv in idMap)
+                parentLiveIds[kv.Key] = kv.Value;
 
             JSONArray outAtoms = new JSONArray();
             int prepareFailed = 0;
@@ -1266,6 +1274,10 @@ namespace VPB.src.util
 
                 node["id"] = liveId;
 
+                string liveParentId = RemapParentAtomToLiveId(node, parentLiveIds);
+                if (!string.IsNullOrEmpty(liveParentId))
+                    LogAtom("prepare '" + id + "' — parentAtom -> '" + liveParentId + "'");
+
                 if (relativeToTargetPerson && srcPersonRoot != null && destPersonRoot != null)
                 {
                     if (TryRepositionRelativeToPerson(node, srcPersonRoot, destPersonRoot))
@@ -1290,6 +1302,62 @@ namespace VPB.src.util
 
             LogAtom("spawning " + outAtoms.Count + " generic atom(s) (prepareFailed=" + prepareFailed + ").");
             yield return SpawnAndRestoreAtoms(outAtoms);
+
+            ApplyCuaParentAtoms(atoms, cuaLiveIds, parentLiveIds);
+        }
+
+        private static void ApplyCuaParentAtoms(
+            JSONArray atoms, Dictionary<string, string> cuaLiveIds, Dictionary<string, string> parentLiveIds)
+        {
+            if (atoms == null || cuaLiveIds == null || cuaLiveIds.Count == 0) return;
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return;
+
+            foreach (KeyValuePair<string, string> kv in cuaLiveIds)
+            {
+                if (string.IsNullOrEmpty(kv.Key) || string.IsNullOrEmpty(kv.Value)) continue;
+
+                string parentId = ReadParentAtomId(FindAtom(atoms, kv.Key));
+                if (string.IsNullOrEmpty(parentId)) continue;
+
+                string mapped;
+                if (parentLiveIds != null
+                    && parentLiveIds.TryGetValue(parentId, out mapped)
+                    && !string.IsNullOrEmpty(mapped))
+                    parentId = mapped;
+
+                try
+                {
+                    Atom child = sc.GetAtomByUid(kv.Value);
+                    if (child == null) continue;
+                    Atom parent = sc.GetAtomByUid(parentId);
+                    if (parent == null)
+                    {
+                        LogAtomWarn("restore '" + kv.Value + "' parentAtom '" + parentId
+                            + "' not in scene — left unparented.");
+                        continue;
+                    }
+                    child.SetParentAtom(parent);
+                    LogAtom("restore '" + child.uid + "' parentAtom -> '" + parent.uid + "' (CUA)");
+                }
+                catch (Exception ex)
+                {
+                    LogAtomWarn("restore '" + kv.Value + "' parentAtom: " + ex.Message);
+                }
+            }
+        }
+
+        private static string RemapParentAtomToLiveId(JSONClass node, Dictionary<string, string> liveIds)
+        {
+            if (node == null || liveIds == null || liveIds.Count == 0) return null;
+            string parentId = ReadParentAtomId(node);
+            if (string.IsNullOrEmpty(parentId)) return null;
+            string liveParentId;
+            if (!liveIds.TryGetValue(parentId, out liveParentId) || string.IsNullOrEmpty(liveParentId))
+                return null;
+            if (string.Equals(liveParentId, parentId, StringComparison.Ordinal)) return null;
+            node["parentAtom"] = liveParentId;
+            return liveParentId;
         }
 
         private static IEnumerator SpawnAndRestoreAtoms(JSONArray outAtoms)
@@ -1373,6 +1441,22 @@ namespace VPB.src.util
                     LogAtom("restore '" + kv.Key.uid + "' RestoreTransform ok");
                 }
                 catch (Exception ex) { LogAtomWarn("restore '" + kv.Key.uid + "' RestoreTransform: " + ex.Message); }
+            }
+            foreach (var kv in created)
+            {
+                try
+                {
+                    string parentId = ReadParentAtomId(kv.Value);
+                    kv.Key.RestoreParentAtom(kv.Value);
+                    if (string.IsNullOrEmpty(parentId))
+                        continue;
+                    if (kv.Key.parentAtom != null)
+                        LogAtom("restore '" + kv.Key.uid + "' parentAtom -> '" + kv.Key.parentAtom.uid + "'");
+                    else
+                        LogAtomWarn("restore '" + kv.Key.uid + "' parentAtom '" + parentId
+                            + "' not in scene — left unparented.");
+                }
+                catch (Exception ex) { LogAtomWarn("restore '" + kv.Key.uid + "' RestoreParentAtom: " + ex.Message); }
             }
             foreach (var kv in created)
             {

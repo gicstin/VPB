@@ -1750,6 +1750,15 @@ namespace VPB
             {
                 UserTagSideTabEntry e = rows[ri];
                 if (string.IsNullOrEmpty(e.Name)) continue;
+                if (e.IsHubTag || e.IsLooksLike
+                    || e.IsHubCategory
+                    || e.Count == UserTagHubBucketHeaderSentinel
+                    || e.Count == UserTagLooksBucketHeaderSentinel
+                    || e.Count == UserTagHubCatBucketHeaderSentinel)
+                {
+                    if (normalOut != null) normalOut.Add(e);
+                    continue;
+                }
                 int idx;
                 if (pinIndex.TryGetValue(e.Name, out idx))
                 {
@@ -3105,6 +3114,11 @@ namespace VPB
             if (!_userTagAnyAssignmentExists) return false;
             if (ut.Count == UserTagCreateRowCountSentinel) return false;
             if (ut.Count == UserTagUnusedBucketHeaderSentinel) return false;
+            if (ut.IsHubTag || ut.IsLooksLike
+                || ut.IsHubCategory
+                || ut.Count == UserTagHubBucketHeaderSentinel
+                || ut.Count == UserTagLooksBucketHeaderSentinel
+                || ut.Count == UserTagHubCatBucketHeaderSentinel) return false;
             // Expanded Unused bucket shows zero-count rows explicitly.
             if (_userTagShowUnusedBucket) return false;
             if (_userTagSelectionRowCount > 0 && !string.IsNullOrEmpty(ut.Name))
@@ -4516,6 +4530,10 @@ namespace VPB
         private RectTransform _ghostRT;
         private Canvas _rootCanvas;
         private readonly List<RaycastResult> _raycastHits = new List<RaycastResult>(16);
+        private PointerEventData _hoverPointerData;
+        private EventSystem _hoverEventSystem;
+        private const float HoverSampleInterval = 1f / 30f;
+        private float _nextHoverSampleTime;
         public bool ConsumedByDrag { get; private set; }
         private bool _releaseProcessed;
         /// <summary>Desktop: small screen slack past press. VR laser+world canvas barely moves screen px — skip (same as UIDraggableItem).</summary>
@@ -4573,6 +4591,11 @@ namespace VPB
                 if (!XrUtils.IsVrActive())
                     _lastScreenPos = (Vector2)Input.mousePosition;
                 UpdateGhostPosition();
+                if (!_releaseProcessed && Input.GetMouseButtonUp(0))
+                {
+                    EndManualDrag(null);
+                    return;
+                }
                 if (!IsAppliedRowDrag)
                 {
                     bool reorderHint = false;
@@ -4595,8 +4618,6 @@ namespace VPB
                     else
                         RefreshUserTagApplyDragHoverStatus();
                 }
-                if (!_releaseProcessed && Input.GetMouseButtonUp(0))
-                    EndManualDrag(null);
                 return;
             }
 
@@ -4662,6 +4683,7 @@ namespace VPB
             // Applied-column quick-tagger: treat as remove-mode so strip/gallery apply zones ignore the drag.
             UserTagDragSession.PendingIsAppliedRowRemove = IsAppliedRowDrag || DetailStripAppliedReorder;
             _dragging = true;
+            _nextHoverSampleTime = 0f;
             ConsumedByDrag = true;
 
             if (_cg != null)
@@ -4821,6 +4843,13 @@ namespace VPB
             catch { }
         }
 
+        private bool HoverSampleDue(float now)
+        {
+            if (now < _nextHoverSampleTime) return false;
+            _nextHoverSampleTime = now + HoverSampleInterval;
+            return true;
+        }
+
         private void RefreshUserTagApplyDragHoverStatus()
         {
             if (Panel == null) return;
@@ -4828,12 +4857,22 @@ namespace VPB
             EventSystem es = EventSystem.current;
             if (tags == null || tags.Count == 0 || es == null)
             {
+                _nextHoverSampleTime = 0f;
                 Panel.dragHoverItem(null, tags);
                 return;
             }
-            var ped = new PointerEventData(es) { position = _lastScreenPos };
+            if (_hoverPointerData == null || _hoverEventSystem != es)
+            {
+                _hoverEventSystem = es;
+                _hoverPointerData = new PointerEventData(es);
+                _nextHoverSampleTime = 0f;
+            }
+            // Hints can lag one sample; actual drops always resolve a fresh full hit list.
+            if (!HoverSampleDue(Time.unscaledTime)) return;
+            _hoverPointerData.Reset();
+            _hoverPointerData.position = _lastScreenPos;
             _raycastHits.Clear();
-            es.RaycastAll(ped, _raycastHits);
+            es.RaycastAll(_hoverPointerData, _raycastHits);
             if (!GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry rowHit))
             {
                 Panel.dragHoverItem(null, tags);
@@ -4844,6 +4883,9 @@ namespace VPB
 
         private void CleanupDragVisuals()
         {
+            _hoverPointerData = null;
+            _hoverEventSystem = null;
+            _nextHoverSampleTime = 0f;
             bool wasDragging = _dragging;
             _pressed = false;
             _dragging = false;

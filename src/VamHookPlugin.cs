@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using HarmonyLib;
 using ICSharpCode.SharpZipLib.Zip;
 using Prime31.MessageKit;
@@ -266,6 +266,10 @@ namespace VPB
             singleton = this;
             IsFileManagerInited = false;
 
+            try { VpbShutdown.Arm(); } catch { }
+            try { VpbLocalDatabase.RegisterShutdownHooks(); } catch { }
+            try { VpbProgressService.RegisterShutdownHooks(); } catch { }
+
             try
             {
                 var current = Debug.unityLogger.logHandler;
@@ -358,6 +362,7 @@ namespace VPB
             }
 
             Settings.Init(this.Config);
+            VPBLogger.RefreshOptions();
             try
             {
                 if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null)
@@ -378,7 +383,7 @@ namespace VPB
             {
                 VPBConfig.ReloadFromDisk();
                 var cfg = VPBConfig.Instance;
-                LogUtil.Log("[VPBConfig] Awake loaded | path=" + cfg.ConfigPathForDebug + " | LastGalleryCategory=" + cfg.LastGalleryCategory + " | DragDropReplaceMode=" + cfg.DragDropReplaceMode);
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPBConfig] Awake loaded | path=" + cfg.ConfigPathForDebug + " | LastGalleryCategory=" + cfg.LastGalleryCategory + " | DragDropReplaceMode=" + cfg.DragDropReplaceMode);
             }
             catch { }
 
@@ -418,6 +423,7 @@ namespace VPB
             m_Harmony.PatchAll(typeof(HubResourcePackageHook));
             m_Harmony.PatchAll(typeof(SuperControllerHook));
             m_Harmony.PatchAll(typeof(MVRPluginManagerHook));
+            PostMagicUiCameraFix.Apply(m_Harmony);
             VamStartupProfilerPatches.ApplySafe(m_Harmony);
             VamStartupOptimizationPatches.Apply(m_Harmony);
             VamLoadPerfHooks.Apply(m_Harmony);
@@ -544,9 +550,8 @@ namespace VPB
             // Reap a broker orphaned by a previous crash. Reads a pid file; never launches anything.
             try { VpbNetBrokerLink.ReapOrphans(); } catch { }
 
-            // Migrate legacy VPB hide markers to native VaM-compatible format
             System.Threading.ThreadPool.QueueUserWorkItem((state) => {
-                try { PackageHidePrefs.MigrateAllLegacyHideMarkers(); } catch { }
+                try { PackageHidePrefs.TryCollapseLegacyFannedOutPackageHides(); } catch { }
             });
 
             AutoLoadALPackages();
@@ -600,6 +605,8 @@ namespace VPB
                     var alPackages = AutoLoadPackagesManager.Instance.GetAutoLoadPackages();
                     if (alPackages.Count == 0) return;
 
+                    var logClock = System.Diagnostics.Stopwatch.StartNew();
+                    int matched = 0, movedCount = 0, alreadyPresent = 0, itemErrors = 0;
                     List<string> fileList = new List<string>();
                     FileManager.SafeGetFiles("AllPackages", "*.var", fileList);
                     string[] files = fileList.ToArray();
@@ -610,6 +617,7 @@ namespace VPB
                         string name = Path.GetFileNameWithoutExtension(file);
                         if (alPackages.Contains(name))
                         {
+                            matched++;
                             string relativePath = file.Replace('\\', '/');
                             string targetPath = "AddonPackages" + relativePath.Substring("AllPackages".Length);
 
@@ -622,13 +630,16 @@ namespace VPB
                                 {
                                     File.Move(file, targetPath);
                                     moved = true;
-                                    LogUtil.Log("[VPB] Auto-Loaded package: " + name);
+                                    movedCount++;
+                                    if (VPBLogger.Verbose) LogUtil.Log("[VPB] Auto-Loaded package: " + name);
                                 }
                                 catch (Exception ex)
                                 {
+                                    itemErrors++;
                                     LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message);
                                 }
                             }
+                            else alreadyPresent++;
                         }
                     }
 
@@ -636,6 +647,9 @@ namespace VPB
                     {
                         m_PendingAutoLoadRefresh = true;
                     }
+                    VPBLogger.Files.LogMessage("[VPB] Auto-load scan complete requested=" + alPackages.Count
+                        + " matching_files=" + matched + " moved=" + movedCount + " already_present=" + alreadyPresent
+                        + " item_errors=" + itemErrors + " elapsed_ms=" + logClock.ElapsedMilliseconds, false);
                 }
                 catch (Exception ex)
                 {
@@ -660,6 +674,10 @@ namespace VPB
             try { UI.ClearIconSpriteCache(); } catch { }
             try { DAZClothingHook.ResetTransientState(); } catch { }
             try { GalleryLayoutPresetStore.ResetForTeardown(); } catch { }
+            try { VpbClothingFootprintCache.ResetSessionState(); } catch { }
+            try { VpbSkinRegionMap.ResetSessionState(); } catch { }
+            try { VpbHairFootprint.ResetSessionState(); } catch { }
+            try { VpbSkinAreaMap.ResetSessionState(); } catch { }
             try
             {
                 var sc = SuperController.singleton;
@@ -696,6 +714,8 @@ namespace VPB
 
         void OnApplicationQuit()
         {
+            LogUtil.LogPerfSummary("quit");
+            VPBLogger.Flush();
             // Runs before OnDestroy during player quit — kill Win32 pump, companion pipe, zstd writers early.
             try { VpbProgressService.ShutdownForQuit(); } catch { }
             try { VpbNetPresence.Stop("VaM quit"); } catch { }
@@ -863,6 +883,10 @@ namespace VPB
             }
         }
 
+        private static bool s_EditingTextFieldResolved;
+        private static PropertyInfo s_EditingTextFieldProperty;
+        private static FieldInfo s_EditingTextFieldField;
+
         private static bool IsTypingInTextInput()
         {
             try
@@ -877,16 +901,23 @@ namespace VPB
             // IMGUI TextField focus: not in all Unity reference assemblies; probe at runtime.
             try
             {
-                var t = typeof(GUIUtility);
-                const BindingFlags bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
-                var p = t.GetProperty("editingTextField", bf);
+                if (!s_EditingTextFieldResolved)
+                {
+                    var t = typeof(GUIUtility);
+                    const BindingFlags bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+                    s_EditingTextFieldProperty = t.GetProperty("editingTextField", bf);
+                    if (s_EditingTextFieldProperty == null)
+                        s_EditingTextFieldField = t.GetField("editingTextField", bf);
+                    s_EditingTextFieldResolved = true;
+                }
+                var p = s_EditingTextFieldProperty;
                 if (p != null)
                 {
                     if (p.GetValue(null, null) is bool pb && pb) return true;
                 }
                 else
                 {
-                    var f = t.GetField("editingTextField", bf);
+                    var f = s_EditingTextFieldField;
                     if (f != null && f.GetValue(null) is bool fb && fb) return true;
                 }
             }
@@ -912,14 +943,14 @@ namespace VPB
             var sc = SuperController.singleton;
             if (sc == null || sc.navigationRig == null) return;
 
-            // Don't hijack text entry (E/C are letters) or modifier combos (e.g. Ctrl+C copy).
-            if (IsTypingInTextInput() || IsGalleryPluginHotkeyCaptureActive()) return;
-            if (!VpbShortcutGate.WindowFocusAllowed()) return;
-
             int dir = 0;
             if (VpbShortcutMap.Held(VpbShortcut.NavUp)) dir += 1;
             if (VpbShortcutMap.Held(VpbShortcut.NavDown)) dir -= 1;
             if (dir == 0) return;
+
+            // Don't hijack text entry (E/C are letters) or modifier combos (e.g. Ctrl+C copy).
+            if (IsTypingInTextInput() || IsGalleryPluginHotkeyCaptureActive()) return;
+            if (!VpbShortcutGate.WindowFocusAllowed()) return;
 
             float scale = 1f;
             try { scale = sc.worldScale; } catch { }
@@ -933,6 +964,7 @@ namespace VPB
 
         void Update()
         {
+            VPBLogger.Poll();
             EnsureAtomAddedSubscription();
             VpbFrameRate.Tick();
             VpbPerfDiag.RefreshCache();
@@ -1056,10 +1088,10 @@ namespace VPB
 
                 // Layout presets. Pane Update skips when canvas is off, so this is the
                 // no-visible-pane path (quick menu / gallery hidden).
-                if (!IsTypingInTextInput()
+                if (VpbShortcutMap.DownIgnoringPaneGate(VpbShortcut.LayoutPresets)
+                    && !IsTypingInTextInput()
                     && VpbShortcutGate.GlobalHotkeyAllowed(true)
-                    && (Gallery.singleton == null || !Gallery.singleton.IsVisible)
-                    && VpbShortcutMap.DownIgnoringPaneGate(VpbShortcut.LayoutPresets))
+                    && (Gallery.singleton == null || !Gallery.singleton.IsVisible))
                 {
                     try { GalleryPanel.OpenLayoutPresetsFloatAnywhere(); } catch { }
                 }
@@ -1176,6 +1208,15 @@ namespace VPB
                 {
                     if (m_QuickMenuGridButtons != null)
                     {
+                        int visualState = Gallery.singleton.IsVisible ? 1 : 0;
+                        var config = VPBConfig.Instance;
+                        if (config != null)
+                        {
+                            if (config.DragDropReplaceMode) visualState |= 2;
+                            if (config.DesktopFixedAutoCollapse) visualState |= 4;
+                            if (config.GalleryShowHiddenPackages) visualState |= 8;
+                        }
+                        int changedVisualState = visualState ^ m_QuickMenuLastVisualState;
                         for (int i = 0; i < m_QuickMenuGridButtons.Length; i++)
                         {
                             var a = QuickMenuGetSlotAction(i);
@@ -1192,15 +1233,20 @@ namespace VPB
                                 }
                             }
 
-                            if (a == QuickMenuAssignableAction.ShowHide ||
-                                a == QuickMenuAssignableAction.ReplaceAddToggle ||
-                                a == QuickMenuAssignableAction.AutoHideGallery ||
-                                a == QuickMenuAssignableAction.ShowHiddenPackages ||
-                                a == QuickMenuAssignableAction.FpsCounter ||
-                                i == m_QuickMenuEditSlotIdx ||
-                                i == m_QuickMenuPageToggleSlotIdx)
+                            // Edit/page/assignment events already refresh their slots synchronously.
+                            if (i == m_QuickMenuEditSlotIdx || i == m_QuickMenuPageToggleSlotIdx) continue;
+                            if (a == QuickMenuAssignableAction.FpsCounter)
+                            {
+                                if (QuickMenuRefreshFpsLabel(i, m_QuickMenuGridButtons[i]) && i < QuickMenuWatchHudSlotCount)
+                                    QuickMenuSyncWatchSlot(i);
+                            }
+                            else if ((a == QuickMenuAssignableAction.ShowHide && (changedVisualState & 1) != 0) ||
+                                (a == QuickMenuAssignableAction.ReplaceAddToggle && (changedVisualState & 2) != 0) ||
+                                (a == QuickMenuAssignableAction.AutoHideGallery && (changedVisualState & 4) != 0) ||
+                                (a == QuickMenuAssignableAction.ShowHiddenPackages && (changedVisualState & 8) != 0))
                                 QuickMenuRefreshSlotVisual(i);
                         }
+                        m_QuickMenuLastVisualState = visualState;
                     }
                 }
                 catch { }
@@ -1217,7 +1263,8 @@ namespace VPB
             // Assignable-button tip hide grace (instant show; deferred clear only).
             try { QuickMenuAdvanceTooltipHide(); } catch { }
 
-            // Random hover preview: only does work when a cold category pool trip is owed.
+            try { QuickMenuSyncBrandPlate(); } catch { }
+
             try { QuickMenuAdvanceRandomPreview(); } catch { }
         }
 
@@ -1497,6 +1544,7 @@ namespace VPB
         GameObject m_ShowHideButtonGO;
         UIDynamicButton m_ShowHideButton;
         int m_ShowHideButtonLastCount = -1;
+        int m_QuickMenuLastVisualState = -1;
         GameObject m_CreateGalleryButtonGO;
         GameObject m_CloseAllButtonGO;
         GameObject m_BringFrontButtonGO;
@@ -1672,6 +1720,7 @@ namespace VPB
 
                 // Tooltip UI (positioned by QuickMenuApplyGridLayoutFromAnchor / live updates)
                 QuickMenuEnsureTooltipUI();
+                try { QuickMenuEnsureBrandPlate(); } catch { }
                 try { QuickMenuApplyGridLayoutFromAnchor(createCenter); } catch { }
 
                 // Core slot indices are loaded from persisted config in QuickMenuEnsureDefaultsAndLoadFromConfig().

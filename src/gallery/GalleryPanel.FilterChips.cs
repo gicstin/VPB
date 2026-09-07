@@ -98,6 +98,7 @@ namespace VPB
             if (clothingSubfilter != 0) return true;
             if (hairSubfilter != 0) return true;
             if (appearanceSubfilter != 0) return true;
+            if (SceneHubSubfilterActiveOnCurrentCategory()) return true;
             if (posePeopleFilter != PosePeopleFilter.All) return true;
             if (IsUserTagIncludeExcludeFilterArmed())
                 return true;
@@ -825,6 +826,7 @@ namespace VPB
             clothingSubfilter = 0;
             hairSubfilter = 0;
             appearanceSubfilter = 0;
+            SetSceneHubSubfilterExplicit(0);
             _clothingGenderUserOverride = false;
             _hairGenderUserOverride = false;
             tagsCached = false;
@@ -899,6 +901,9 @@ namespace VPB
                 return VPBTranslation.T("gallery.filter_chip.hair_sub", "Hair") + ": " + DescribeHairSubfilter(hairSubfilter);
             if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 && appearanceSubfilter != 0)
                 return VPBTranslation.T("gallery.filter_chip.appearance_sub", "Appearance") + ": " + DescribeAppearanceSubfilter(appearanceSubfilter);
+            if (SceneHubSubfilterActiveOnCurrentCategory())
+                return VPBTranslation.T("gallery.filter_chip.scene_hub", "Hub type") + ": "
+                    + DescribeSceneHubSubfilter(EffectiveSceneHubSubfilter());
             return null;
         }
 
@@ -937,6 +942,16 @@ namespace VPB
             if ((f & AppearanceSubfilter.Female) != 0) parts.Add("Female");
             if ((f & AppearanceSubfilter.Futa) != 0) parts.Add("Futa");
             if ((f & AppearanceSubfilter.Unknown) != 0) parts.Add("Unknown");
+            return parts.Count > 0 ? string.Join("+", parts.ToArray()) : "Active";
+        }
+
+        private static string DescribeSceneHubSubfilter(SceneHubSubfilter f)
+        {
+            var parts = new System.Collections.Generic.List<string>(4);
+            if ((f & SceneHubSubfilter.HubScenes) != 0) parts.Add("Scenes");
+            if ((f & SceneHubSubfilter.HubLooks) != 0) parts.Add("Looks");
+            if ((f & SceneHubSubfilter.Unclassified) != 0) parts.Add("Unclassified");
+            if ((f & SceneHubSubfilter.Other) != 0) parts.Add("Other");
             return parts.Count > 0 ? string.Join("+", parts.ToArray()) : "Active";
         }
 

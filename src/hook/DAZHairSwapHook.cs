@@ -172,7 +172,7 @@ namespace VPB
             {
                 if (method.Name != "SetActiveHairItem") continue;
                 var parameters = method.GetParameters();
-                if (parameters.Length == 3 &&
+                if (parameters.Length >= 3 &&
                     parameters[0].ParameterType == typeof(DAZHairGroup) &&
                     parameters[1].ParameterType == typeof(bool) &&
                     parameters[2].ParameterType == typeof(bool))
@@ -356,9 +356,10 @@ namespace VPB
         {
             if (hair == null || session == null || !session.swapActive) return false;
             if (ShouldKeepHairVisible(hair, session)) return false;
-            if (session.outgoingAtStart.Contains(hair)) return true;
+            if (session.incoming.Contains(hair)) return false;
             if (session.pendingHide.Contains(hair)) return true;
-            return (hair.active || hair.gameObject.activeSelf) && !session.incoming.Contains(hair);
+            if (session.outgoingAtStart.Contains(hair) && !ShouldHairBeEnabled(hair, session)) return true;
+            return false;
         }
 
         static void SnapshotOutgoingHair(DAZCharacterSelector selector, HairSwapSession session)
@@ -461,12 +462,32 @@ namespace VPB
 
         static bool ShouldHairBeEnabled(DAZHairGroup item, HairSwapSession session)
         {
-            if (item == null) return false;
+            if (item == null || session == null) return false;
             if (session.targetEnabled.Count == 0) return false;
 
-            if (session.targetEnabled.TryGetValue(item.uid, out bool byUid)) return byUid;
-            if (!string.IsNullOrEmpty(item.internalUid) && session.targetEnabled.TryGetValue(item.internalUid, out bool byInternal)) return byInternal;
-            if (!string.IsNullOrEmpty(item.backupId) && session.targetEnabled.TryGetValue(item.backupId, out bool byBackup)) return byBackup;
+            bool enabled;
+            if (TryTargetEnabled(session, item.uid, out enabled)) return enabled;
+            if (TryTargetEnabled(session, item.internalUid, out enabled)) return enabled;
+            if (TryTargetEnabled(session, item.backupId, out enabled)) return enabled;
+            return false;
+        }
+
+        static bool TryTargetEnabled(HairSwapSession session, string key, out bool enabled)
+        {
+            enabled = false;
+            if (session == null || string.IsNullOrEmpty(key)) return false;
+            if (session.targetEnabled.TryGetValue(key, out enabled)) return true;
+            try
+            {
+                string normalized = MVR.FileManagement.FileManager.NormalizeID(key);
+                if (!string.IsNullOrEmpty(normalized)
+                    && !string.Equals(normalized, key, StringComparison.OrdinalIgnoreCase)
+                    && session.targetEnabled.TryGetValue(normalized, out enabled))
+                {
+                    return true;
+                }
+            }
+            catch { }
             return false;
         }
 

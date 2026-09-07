@@ -110,22 +110,28 @@ namespace VPB
                     return;
                 }
 
-                // Fail closed by default: if config is missing/corrupt at startup, enable
-                // the whitelist with an empty list so AddonPackages are excluded from VaM's
-                // proactive scan. VPB on-demand registration still allows needed packages.
-                _enabled = true;
-                hasLoadedSuccessfully = true; // fresh start
-                createBlankConfig = !mainExists && !backupExists;
-                if (createBlankConfig)
-                    LogUtil.LogWarning("[VPB ScanWhitelist] No config found — creating blank enabled whitelist (fail-closed)");
+                hasLoadedSuccessfully = true;
+                if (!mainExists && !backupExists)
+                {
+                    // First run: fail-closed empty whitelist (on-demand still loads packages).
+                    _enabled = true;
+                    createBlankConfig = true;
+                    LogUtil.Log("[VPB ScanWhitelist] No config found — creating blank enabled whitelist (fail-closed)");
+                }
                 else
-                    LogUtil.LogWarning("[VPB ScanWhitelist] Config unreadable — defaulting to enabled empty whitelist (fail-closed)");
+                {
+                    // Rewrite unreadable whitelist data so an empty enabled whitelist does not persist.
+                    _enabled = false;
+                    createBlankConfig = true;
+                    LogUtil.Log("[VPB ScanWhitelist] Config unreadable — rewriting disabled whitelist");
+                }
             }
 
             if (createBlankConfig)
             {
                 try { Save(); } catch { }
-                LogUtil.Log("[VPB ScanWhitelist] Created blank scan_whitelist.json (enabled, no folders or UID overrides)");
+                LogUtil.Log("[VPB ScanWhitelist] Wrote scan_whitelist.json enabled=" + _enabled
+                    + " folders=0 uid_overrides=0");
             }
         }
 
@@ -137,7 +143,7 @@ namespace VPB
                 "[VPB ScanWhitelist] Loaded ({0}): enabled={1} | folders={2} [{3}] | uid_overrides={4}",
                 source, _enabled, _whitelistedFolders.Count, folderList, _includedPackageUids.Count));
             if (_enabled && _whitelistedFolders.Count == 0 && _includedPackageUids.Count == 0)
-                LogUtil.LogWarning("[VPB ScanWhitelist] WARNING: enabled but empty — all AddonPackages will be excluded from VaM startup scan!");
+                LogUtil.Log("[VPB ScanWhitelist] enabled but empty — AddonPackages excluded from VaM startup scan (settings shows the warning)");
         }
 
         private bool TryLoadFile(string path)
@@ -183,7 +189,7 @@ namespace VPB
             }
             catch (Exception ex)
             {
-                Debug.LogError("[VPB] ScanWhitelistManager: Error parsing " + Path.GetFileName(path) + ": " + ex.Message);
+                LogUtil.Log("[VPB] ScanWhitelistManager: skip unreadable " + Path.GetFileName(path) + ": " + ex.Message);
             }
             return false;
         }
@@ -241,7 +247,7 @@ namespace VPB
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError("[VPB] ScanWhitelistManager: Error saving scan_whitelist.json: " + ex.Message);
+                    VPB.src.util.VPBLogger.Files.LogError("[VPB] ScanWhitelistManager: Error saving scan_whitelist.json: " + ex.Message, false);
                 }
             }
         }

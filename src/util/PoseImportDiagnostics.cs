@@ -32,7 +32,7 @@ namespace VPB.src.util
                 LastSourcePose = poseNode;
                 LastTargetUid = targetUid;
                 LastCapturedTime = Time.realtimeSinceStartup;
-                LogUtil.Log($"[VPB][POSE] captured source pose for target '{targetUid}' "
+                if (VPBLogger.Verbose) LogUtil.Log($"[VPB][POSE] captured source pose for target '{targetUid}' "
                     + $"(storables={CountStorables(poseNode)}).");
             }
             catch (Exception ex) { LogUtil.LogWarning("[VPB][POSE] CaptureSource failed: " + ex.Message); }

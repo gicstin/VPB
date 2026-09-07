@@ -32,6 +32,9 @@ namespace VPB
 		/// <summary>Per-uid <c>pkg.first_scanned</c> from SQLite; avoids resolving <see cref="Package"/> for DateAdded/DateUpdated sort.</summary>
 		private long _galleryIndexedFirstScannedTicks = long.MinValue;
 
+		/// <summary>NTFS creation time from SQLite <c>pkg.pctime</c>; bounds package New/Updated dates.</summary>
+		private long _galleryIndexedFileCreationTicks = long.MinValue;
+
 		/// <summary>When set (History grid), exact <c>item_usage.item_key</c> for deletes (matches usage tracking keys).</summary>
 		private string _galleryItemUsageKey;
 
@@ -106,6 +109,12 @@ namespace VPB
 			_galleryIndexedFirstScannedTicks = firstScannedTicksOrMin;
 		}
 
+		public VarFileEntry(string packageUid, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, string indexedVarPathHint, long packageCreationTicksOrMin, long firstScannedTicksOrMin, long packageFileCreationTicksOrMin, string galleryItemUsageKey = null)
+			: this(packageUid, entryName, lastWriteTime, size, indexedGalleryPath, indexedVarPathHint, packageCreationTicksOrMin, firstScannedTicksOrMin, galleryItemUsageKey)
+		{
+			_galleryIndexedFileCreationTicks = packageFileCreationTicksOrMin;
+		}
+
 		/// <summary>Package UID for this row (deferred or resolved), for matching scoped path refresh.</summary>
 		internal string GetRowPackageUid()
 		{
@@ -139,6 +148,21 @@ namespace VPB
 			try
 			{
 				dt = DateTime.FromBinary(_galleryIndexedFirstScannedTicks);
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		internal bool TryGetGalleryIndexedFileCreationTime(out DateTime dt)
+		{
+			dt = DateTime.MinValue;
+			if (_galleryIndexedFileCreationTicks == long.MinValue || _galleryIndexedFileCreationTicks == 0L) return false;
+			try
+			{
+				dt = DateTime.FromBinary(_galleryIndexedFileCreationTicks);
 				return true;
 			}
 			catch
@@ -211,22 +235,60 @@ namespace VPB
 
 		public override bool HasFlagFile(string flagName)
 		{
-			return false;
+			if (string.IsNullOrEmpty(flagName)) return false;
+			if (string.Equals(flagName, "hide", StringComparison.OrdinalIgnoreCase))
+				return VpbHideIndex.IsItemHiddenByEntryUid(Uid);
+			string p = VpbHideIndex.BuildVarEntryFlagPath(GetRowPackageUid(), InternalPath, flagName);
+			if (string.IsNullOrEmpty(p)) return false;
+			try { return File.Exists(p); }
+			catch { return false; }
+		}
+
+		public override void SetFlagFile(string flagName, bool b)
+		{
+			if (string.IsNullOrEmpty(flagName)) return;
+			if (string.Equals(flagName, "hide", StringComparison.OrdinalIgnoreCase))
+			{
+				VpbHideIndex.SetItemHidden(GetRowPackageUid(), InternalPath, b);
+				return;
+			}
+			string p = VpbHideIndex.BuildVarEntryFlagPath(GetRowPackageUid(), InternalPath, flagName);
+			if (string.IsNullOrEmpty(p)) return;
+			try
+			{
+				if (b)
+				{
+					if (File.Exists(p)) return;
+					string dir = System.IO.Path.GetDirectoryName(p);
+					if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+					File.WriteAllText(p, string.Empty);
+				}
+				else if (File.Exists(p))
+				{
+					File.Delete(p);
+				}
+			}
+			catch { }
 		}
 
 		public bool IsFlagFileModifiable(string flagName)
 		{
-			return false;
+			return !string.IsNullOrEmpty(flagName) && !string.IsNullOrEmpty(InternalPath);
 		}
 
 		public override bool IsHidden()
 		{
-			return false;
+			return VpbHideIndex.IsItemHiddenByEntryUid(Uid);
+		}
+
+		public override void SetHidden(bool b)
+		{
+			VpbHideIndex.SetItemHidden(GetRowPackageUid(), InternalPath, b);
 		}
 
 		public bool IsHiddenModifiable()
 		{
-			return false;
+			return !string.IsNullOrEmpty(InternalPath);
 		}
 
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -47,6 +48,8 @@ namespace VPB
 
                 if (movedUids.Count > 0)
                     RefreshAfterTboxPackageFileMoves(movedUids);
+                VPBLogger.Files.LogMessage("Package selection load selected=" + pkgs.Count
+                    + " moved=" + moved + " not_moved=" + (pkgs.Count - moved), false);
                 ShowTemporaryStatus(moved > 0
                     ? $"Load: moved {moved} package(s) to AddonPackages."
                     : "Load: nothing to move (already installed or blocked).", 2.5f);
@@ -98,6 +101,8 @@ namespace VPB
 
                 if (movedUids.Count > 0)
                     RefreshAfterTboxPackageFileMoves(movedUids);
+                VPBLogger.Files.LogMessage("Package selection unload selected=" + pkgs.Count
+                    + " moved=" + moved + " not_moved=" + (pkgs.Count - moved), false);
                 ShowTemporaryStatus(moved > 0
                     ? $"Unload: moved {moved} package(s) to AllPackages."
                     : "Unload: nothing to move (not in AddonPackages or blocked).", 2.5f);
@@ -129,6 +134,8 @@ namespace VPB
 
                 int moved = 0;
                 var movedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var counts = new VarPackage.InstallLogCounts();
+                var clock = System.Diagnostics.Stopwatch.StartNew();
                 var buf = new List<string>(32);
                 for (int i = 0; i < pkgs.Count; i++)
                 {
@@ -137,7 +144,7 @@ namespace VPB
                     try
                     {
                         buf.Clear();
-                        if (!p.InstallRecursive(buf)) continue;
+                        if (!p.InstallRecursive(buf, counts)) continue;
                         moved++;
                         for (int j = 0; j < buf.Count; j++)
                         {
@@ -153,6 +160,7 @@ namespace VPB
 
                 if (movedUids.Count > 0)
                     RefreshAfterTboxPackageFileMoves(movedUids);
+                counts.LogSummary("selected=" + pkgs.Count, true, clock.ElapsedMilliseconds, logUnchanged: true);
                 ShowTemporaryStatus(moved > 0
                     ? $"Load deps: installed {moved} tree(s) (self + dependencies per settings)."
                     : "Load deps: nothing to install.", 2.5f);

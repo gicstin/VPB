@@ -1566,7 +1566,7 @@ namespace VPB
             SetCleanupFilterMode(4, true);
         }
 
-        private bool TryMoveCleanupCandidateFile(CleanupCandidate c, out bool moved, out string failReason, out string dstPath)
+        private bool TryMoveCleanupCandidateFile(CleanupCandidate c, VpbLocalDatabase.CacheUsageDeleteSession cacheUsage, out bool moved, out string failReason, out string dstPath)
         {
             moved = false;
             failReason = null;
@@ -1586,13 +1586,13 @@ namespace VPB
                         File.Delete(c.SourcePath);
                         string meta = c.SourcePath + "meta";
                         if (File.Exists(meta)) File.Delete(meta);
-                        VpbLocalDatabase.TryDeleteCacheUsage(c.SourcePath);
+                        cacheUsage.TryDelete(c.SourcePath);
                         moved = true;
                         return true;
                     }
                     else
                     {
-                        VpbLocalDatabase.TryDeleteCacheUsage(c.SourcePath);
+                        cacheUsage.TryDelete(c.SourcePath);
                         moved = true; // Already gone
                         return true;
                     }
@@ -1702,32 +1702,35 @@ namespace VPB
                 int failed = 0;
                 var movedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var undoPairs = new List<FileMoveUndoPair>();
-                for (int i = 0; i < selected.Count; i++)
+                using (var cacheUsage = new VpbLocalDatabase.CacheUsageDeleteSession())
                 {
-                    string dstPath;
-                    if (TryMoveCleanupCandidateFile(selected[i], out bool ok, out string failReason, out dstPath) && ok)
+                    for (int i = 0; i < selected.Count; i++)
                     {
-                        moved++;
-                        try
+                        string dstPath;
+                        if (TryMoveCleanupCandidateFile(selected[i], cacheUsage, out bool ok, out string failReason, out dstPath) && ok)
                         {
-                            string p = NormalizePathSafe(selected[i].SourcePath);
-                            if (!string.IsNullOrEmpty(p)) movedPaths.Add(p);
+                            moved++;
+                            try
+                            {
+                                string p = NormalizePathSafe(selected[i].SourcePath);
+                                if (!string.IsNullOrEmpty(p)) movedPaths.Add(p);
+                            }
+                            catch { }
+                            if (!string.IsNullOrEmpty(dstPath) && !string.IsNullOrEmpty(selected[i].SourcePath)
+                                && selected[i].SourceKind != CleanupCandidateSourceKind.StaleCache)
+                            {
+                                FileMoveUndoPair pair;
+                                pair.FromDeletedPath = dstPath;
+                                pair.ToOriginalPath = selected[i].SourcePath;
+                                undoPairs.Add(pair);
+                            }
                         }
-                        catch { }
-                        if (!string.IsNullOrEmpty(dstPath) && !string.IsNullOrEmpty(selected[i].SourcePath)
-                            && selected[i].SourceKind != CleanupCandidateSourceKind.StaleCache)
+                        else
                         {
-                            FileMoveUndoPair pair;
-                            pair.FromDeletedPath = dstPath;
-                            pair.ToOriginalPath = selected[i].SourcePath;
-                            undoPairs.Add(pair);
+                            failed++;
+                            if (!string.IsNullOrEmpty(failReason))
+                                LogUtil.LogWarning("[VPB] Cleanup move failed for " + selected[i].SourcePath + ": " + failReason);
                         }
-                    }
-                    else
-                    {
-                        failed++;
-                        if (!string.IsNullOrEmpty(failReason))
-                            LogUtil.LogWarning("[VPB] Cleanup move failed for " + selected[i].SourcePath + ": " + failReason);
                     }
                 }
 

@@ -1,4 +1,4 @@
-﻿namespace VPB
+namespace VPB
 {
     /// <summary>Design-reference pixel sizes at gallery UI scale 1.0 (before host/DPI factors).</summary>
     public static class GalleryUiDesignTokens
@@ -116,6 +116,8 @@
         public const float FloatSearchRowHeightRef = SearchFieldHeightRef + FloatSearchRowPadRef * 2f;
         /// <summary>Window-type glyph in float title bars (settings gear, tags, filter, import).</summary>
         public const float FloatTitleWindowIconSizeRef = 22f;
+        ////// <summary>Venus / Mars well beside a person atom name , same edge as regular chrome buttons.</summary>
+        public const float PersonGenderBadgeRef = ButtonSizeRef;
         /// <summary>Space after window icon before title label (design px at scale 1).</summary>
         public const float FloatTitleWindowIconGapRef = TightGapRef;
         /// <summary>Float title bar L/R pad — keep icon near left (grip + this).</summary>

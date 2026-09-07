@@ -15,6 +15,68 @@ namespace VPB
         public void OnEndDrag(PointerEventData eventData) { try { OnRelease?.Invoke(); } catch { } }
     }
 
+    internal sealed class SettingsValueEllipsis : MonoBehaviour
+    {
+        public string FullText = "";
+        Text _text;
+        RectTransform _rt;
+        float _lastWidth = -1f;
+        string _lastFull;
+
+        void Awake()
+        {
+            _text = GetComponent<Text>();
+            _rt = GetComponent<RectTransform>();
+        }
+
+        void OnEnable() { _lastWidth = -1f; Apply(); }
+
+        void OnRectTransformDimensionsChange() { Apply(); }
+
+        internal void SetFullText(string s)
+        {
+            FullText = s ?? "";
+            _lastFull = null;
+            Apply();
+        }
+
+        void Apply()
+        {
+            if (_text == null || _rt == null) return;
+            float w = _rt.rect.width;
+            if (w <= 1f) return;
+            if (Mathf.Abs(w - _lastWidth) < 0.5f && string.Equals(_lastFull, FullText, StringComparison.Ordinal))
+                return;
+            _lastWidth = w;
+            _lastFull = FullText;
+
+            string full = FullText ?? "";
+            if (full.Length == 0) { _text.text = ""; return; }
+
+            var gen = _text.cachedTextGeneratorForLayout;
+            TextGenerationSettings gs = _text.GetGenerationSettings(new Vector2(0f, 0f));
+            float needed;
+            try { needed = gen.GetPreferredWidth(full, gs) / Mathf.Max(0.0001f, _text.pixelsPerUnit); }
+            catch { needed = 0f; }
+            if (needed <= 0f || needed <= w) { _text.text = full; return; }
+
+            int guess = Mathf.Clamp(Mathf.FloorToInt(full.Length * (w / needed)), 1, full.Length);
+            for (int i = guess; i >= 1; i--)
+            {
+                string cand = full.Substring(0, i) + "…";
+                float cw;
+                try { cw = gen.GetPreferredWidth(cand, gs) / Mathf.Max(0.0001f, _text.pixelsPerUnit); }
+                catch { cw = 0f; }
+                if (cw <= w || i == 1)
+                {
+                    _text.text = cand;
+                    return;
+                }
+            }
+            _text.text = "…";
+        }
+    }
+
     /// <summary>Pointer-down, not Button.onClick — VR laser + ScrollRect drag often cancels click.
     /// Do not add IDragHandler: steals list drag and drops idle-rim restore on pointer-exit.</summary>
     internal sealed class SettingsPointerDownAction : MonoBehaviour, IPointerDownHandler
@@ -38,6 +100,7 @@ namespace VPB
             Button,
             ColorRgb,
             Hotkey,
+            ReadOnlyText,
         }
 
         private sealed class InternalSettingDefinition
@@ -173,7 +236,7 @@ namespace VPB
             new[] { "grid_highlights", "grid", "scan_wl_border" },
             new[] { "layout",          "follow", "desktop" },
             new[] { "vr",              "vr" },
-            new[] { "browsing",        "lists", "cat_general", "tags", "search" },
+            new[] { "browsing",        "lists", "cat_general", "tags", "search", "plugin_datapacks" },
             new[] { "cat_visibility",  "cat_visibility" },
             new[] { "interaction",     "interaction", "plugin_quickmenu" },
             new[] { "shortcuts",       "keys_rules", "plugin_hotkeys", "keys_chrome", "keys_browse", "keys_selection", "keys_tools", "keys_world" },
@@ -287,6 +350,8 @@ namespace VPB
                 return VPBTranslation.T("gallery.side.category", "Categories");
             if (string.Equals(value, "Creator", StringComparison.OrdinalIgnoreCase))
                 return VPBTranslation.T("gallery.side.creator", "Creators");
+            if (string.Equals(value, "Lookapedia", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("gallery.side.tags", "User Tags");
             if (string.Equals(value, "Path", StringComparison.OrdinalIgnoreCase))
                 return VPBTranslation.T("gallery.side.path", "Path");
             if (string.Equals(value, "History", StringComparison.OrdinalIgnoreCase))
@@ -570,7 +635,11 @@ namespace VPB
             public bool EnableDragDrop;
             public bool GalleryAutoGenderFilter;
             public bool GalleryCollapseOnSceneLaunch;
+            public bool ClothingReplaceUseGeometry;
+            public int ClothingReplaceStrictness;
             public bool VerticalMoveKeysEnabled;
+            public bool DataPackLookapediaEnabled;
+            public bool DataPackHubTagsEnabled;
             public bool RequireDragHoldBeforeMove;
             public float DragHoldThreshold;
             public float HoldToLaunchHoldSeconds;
@@ -995,6 +1064,40 @@ namespace VPB
                     VPBConfig.Instance.NormalizeDragDropHoldSettings();
                 }
             });
+            var replaceGeometryDef = new InternalSettingDefinition {
+                Key = "interaction.replaceByFit", GroupKey = "interaction",
+                Label = VPBTranslation.T("settings.replace_by_fit", "Replace by where it fits"),
+                Tooltip = VPBTranslation.T("settings.tip.replace_by_fit", "On (default): Replace mode compares where items actually sit on the body, read from each garment's own mesh binding, so applying shoes cannot take off a shirt. Off: falls back to the older tag and filename matching."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.ClothingReplaceUseGeometry,
+                SetBool = v => { VPBConfig.Instance.ClothingReplaceUseGeometry = v; VPBConfig.Instance.TriggerChange(); }
+            };
+            replaceGeometryDef.SetDefault(true);
+            defs.Add(replaceGeometryDef);
+
+            var replaceStrictnessDef = new InternalSettingDefinition {
+                Key = "interaction.replaceStrictness", GroupKey = "interaction",
+                Label = VPBTranslation.T("settings.replace_strictness", "Replace takes off"),
+                Tooltip = VPBTranslation.T("settings.tip.replace_strictness", "Anything in the way (default): every worn item that shares the new item's place, so a bra clears the dress over it and a dress clears the bra under it. What it hides: only items the new one would cover, which leaves small items layered on top of big ones. Exact swap: only a mutual match, shoes for shoes. None of these can touch an item somewhere else on the body."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Anything in the way", "What it hides", "Exact swap" },
+                GetString = () =>
+                {
+                    int v = VPBConfig.Instance.ClothingReplaceStrictness;
+                    return v <= 0 ? "Exact swap" : (v >= 2 ? "Anything in the way" : "What it hides");
+                },
+                SetString = v =>
+                {
+                    int n = string.Equals(v, "Exact swap", StringComparison.OrdinalIgnoreCase) ? 0
+                          : string.Equals(v, "What it hides", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
+                    VPBConfig.Instance.ClothingReplaceStrictness = n;
+                    VPBConfig.Instance.TriggerChange();
+                },
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.ClothingReplaceUseGeometry
+            };
+            replaceStrictnessDef.SetDefault("Anything in the way");
+            defs.Add(replaceStrictnessDef);
+
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.autoGenderFilter", GroupKey = "categories", SubGroupKey = "options", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_auto_gender_filter", "When ON, Hair/Clothing categories auto-filter Male/Female items to match selected target atom gender."),
@@ -1018,6 +1121,75 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.vertical_move_keys", "When ON, press E to move up and C to move down in the world, complementing WASD. Ignored while typing in a text field."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.VerticalMoveKeysEnabled,
                 SetBool = v => { VPBConfig.Instance.VerticalMoveKeysEnabled = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "datapacks.lookapedia", GroupKey = "plugin_datapacks",
+                Label = VPBTranslation.T("settings.datapack_lookapedia", "Look-A-Pedia lookalike data"),
+                Tooltip = VPBTranslation.T("settings.tip.datapack_lookapedia",
+                    "Imports the shipped Look-A-Pedia community database and matches it against packages in your library. Adds a Looks like section at the top of the Tags list — click a name, no syntax. Type a character name in gallery search to find misnamed looks. Select an item to see Looks like in the detail strip. Shares Hub resource ids with the Hub data pack, so a Look-A-Pedia row with no filename still attaches when Hub knows the var. looks: / hubtag: / lap: still work for experts. Turning this off deletes the imported rows."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DataPackLookapediaEnabled,
+                SetBool = v => {
+                    VPBConfig.Instance.DataPackLookapediaEnabled = v;
+                    RequestDataPackSync();
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "datapacks.lookapediaStatus", GroupKey = "plugin_datapacks",
+                Label = VPBTranslation.T("settings.datapack_lookapedia_status", "Look-A-Pedia pack status"),
+                Tooltip = VPBTranslation.T("settings.tip.datapack_lookapedia_status", "Version of the shipped pack, how many entries it holds, and how many of them matched a package you actually have."),
+                ControlType = InternalSettingControlType.ReadOnlyText,
+                GetString = () => VpbDataPackService.StatusLineFor(VpbDataPackService.PackIndexLookapedia),
+                RowVisible = () => VPBConfig.Instance.DataPackLookapediaEnabled
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "datapacks.hubtags", GroupKey = "plugin_datapacks",
+                Label = VPBTranslation.T("settings.datapack_hubtags", "VaM Hub tags & resource data"),
+                Tooltip = VPBTranslation.T("settings.tip.datapack_hubtags",
+                    "Imports the shipped index of every VaM Hub resource — tags, resource type, pay category, licence, release dates, download counts and ratings — and matches it against packages in your library. Gives packages their Hub tags even for content that was never browsed on the Hub, and feeds Hub type at the top of Categories plus Hub tags in the Tags list and hubcat: / hubtag: / lap: search. Click Hub type in Categories to browse Looks vs Scenes the way creators listed them (package grid). Same Hub resource id is shared with Look-A-Pedia, so tags and looks-like attach to one listing. Turning this off deletes the imported rows."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DataPackHubTagsEnabled,
+                SetBool = v => {
+                    VPBConfig.Instance.DataPackHubTagsEnabled = v;
+                    RequestDataPackSync();
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "datapacks.hubtagsStatus", GroupKey = "plugin_datapacks",
+                Label = VPBTranslation.T("settings.datapack_hubtags_status", "Hub data pack status"),
+                Tooltip = VPBTranslation.T("settings.tip.datapack_hubtags_status", "Version of the shipped pack, how many Hub resources it holds, and how many of them matched a package you actually have."),
+                ControlType = InternalSettingControlType.ReadOnlyText,
+                GetString = () => VpbDataPackService.StatusLineFor(VpbDataPackService.PackIndexHubTags),
+                RowVisible = () => VPBConfig.Instance.DataPackHubTagsEnabled
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "datapacks.hiddenTags", GroupKey = "plugin_datapacks",
+                Label = VPBTranslation.T("settings.datapack_hidden_tags", "Hidden Hub tags"),
+                Tooltip = VPBTranslation.T("settings.tip.datapack_hidden_tags",
+                    "Hub tags you told VPB to stop showing. Select an item, open its tag list, then click a Hub tag to hide it on that package or right-click to hide it everywhere. Hides are stored locally against the tag text, so they survive a data pack update."),
+                ControlType = InternalSettingControlType.ReadOnlyText,
+                GetString = () => FormatDataPackHiddenTagSummary(),
+                RowVisible = () => VpbLocalDatabase.DataPackPacksConfigured()
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "datapacks.clearHiddenTags", GroupKey = "plugin_datapacks",
+                Label = VPBTranslation.T("settings.datapack_clear_hidden_tags", "Show all hidden Hub tags again"),
+                Tooltip = VPBTranslation.T("settings.tip.datapack_clear_hidden_tags",
+                    "Drops every Hub tag hide rule — both the library-wide ones and the per-package ones."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () =>
+                {
+                    if (!VpbLocalDatabase.ClearDataPackTagPrefs(false))
+                    {
+                        ShowTemporaryStatus(VPBTranslation.T(
+                            "settings.datapack_clear_hidden_tags.failed", "Could not clear hidden Hub tags."), 3f);
+                        return;
+                    }
+                    ShowTemporaryStatus(VPBTranslation.T(
+                        "settings.datapack_clear_hidden_tags.done", "All Hub tags are visible again."), 3f);
+                    RefreshInternalSettingsListRows(true);
+                },
+                RowVisible = () => DataPackHiddenTagRuleCount() > 0
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.dragHoldSec", GroupKey = "interaction", Label = VPBTranslation.T("settings.drag_hold_threshold", "VR hold duration (s)"),
@@ -1298,7 +1470,7 @@ namespace VPB
             defs.Add(new InternalSettingDefinition {
                 Key = "helpers.returnToSceneViewOnStartup", GroupKey = "helpers",
                 Label = VPBTranslation.T("settings.helpers_return_to_scene_on_startup", "Return to scene view on startup"),
-                Tooltip = VPBTranslation.T("settings.tip.helpers_return_to_scene_on_startup", "On startup, skip VaM main menu (World UI) and go straight to scene view — same as Return To Scene View."),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_return_to_scene_on_startup", "On startup, skip VaM main menu (World UI) and go straight to scene view — same as Return To Scene View. Ignored when a startup scene is set; that scene loads instead."),
                 ControlType = InternalSettingControlType.Toggle,
                 GetBool = () => {
                     try {
@@ -1314,6 +1486,50 @@ namespace VPB
                         Settings.SaveConfig();
                     } catch { }
                 }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.startupScenePath", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_startup_scene", "Startup scene"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_startup_scene", "Scene VaM loads once after World UI is ready, skipping the main menu. Empty / None = stay on the menu (or return-to-scene-view if that is on). Set from the gallery: right-click one scene → Set as startup scene. Hover the value for the stored path."),
+                ControlType = InternalSettingControlType.ReadOnlyText,
+                GetString = () => {
+                    string p = VpbStartupScene.GetPath();
+                    if (string.IsNullOrEmpty(p))
+                        return VPBTranslation.T("settings.helpers_startup_scene_none", "None");
+                    return p;
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.clearStartupScene", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_clear_startup_scene", "Clear startup scene"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_clear_startup_scene", "Stop auto-loading a scene at VaM start. Same as gallery right-click → Clear startup scene."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () => {
+                    string previous = VpbStartupScene.GetPath();
+                    if (string.IsNullOrEmpty(previous))
+                    {
+                        ShowTemporaryStatus(
+                            VPBTranslation.T("gallery.startup.none", "No startup scene is set."),
+                            2f);
+                        return;
+                    }
+                    VpbStartupScene.SetPath("");
+                    NotifyStartupSceneSettingChanged();
+                    ShowTemporaryStatus(
+                        VPBTranslation.T("gallery.startup.cleared", "Startup scene cleared."),
+                        2.5f);
+                    PushUndo(() =>
+                    {
+                        VpbStartupScene.SetPath(previous);
+                        NotifyStartupSceneSettingChanged();
+                        ShowTemporaryStatus(
+                            string.Format(
+                                VPBTranslation.T("gallery.startup.set", "Startup scene: {0}"),
+                                VpbStartupScene.DisplayNameFromPath(previous)),
+                            2.5f);
+                    }, VPBTranslation.T("gallery.undo.clear_startup_scene", "Clear startup scene"));
+                },
+                RowVisible = () => VpbStartupScene.HasPath()
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "helpers.blockInGameMessages", GroupKey = "helpers",
@@ -2200,7 +2416,11 @@ namespace VPB
                 EnableDragDrop = VPBConfig.Instance.EnableDragDrop,
                 GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 GalleryCollapseOnSceneLaunch = VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
+                ClothingReplaceUseGeometry = VPBConfig.Instance.ClothingReplaceUseGeometry,
+                ClothingReplaceStrictness = VPBConfig.Instance.ClothingReplaceStrictness,
                 VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
+                DataPackLookapediaEnabled = VPBConfig.Instance.DataPackLookapediaEnabled,
+                DataPackHubTagsEnabled = VPBConfig.Instance.DataPackHubTagsEnabled,
                 ShortcutsRequireWindowFocus = VPBConfig.Instance.ShortcutsRequireWindowFocus,
                 ShortcutsNeedVisiblePane = VPBConfig.Instance.ShortcutsNeedVisiblePane,
                 CategoryNumberKeysEnabled = VPBConfig.Instance.CategoryNumberKeysEnabled,
@@ -2337,6 +2557,81 @@ namespace VPB
                 OpenSettingsSideTab();
             else
                 RefreshInternalSettingsListRows(true);
+        }
+
+        private static int DataPackHiddenTagRuleCount()
+        {
+            int global, perPackage;
+            VpbLocalDatabase.DataPackHiddenTagCounts(out global, out perPackage);
+            return global + perPackage;
+        }
+
+        private static string FormatDataPackHiddenTagSummary()
+        {
+            int global, perPackage;
+            VpbLocalDatabase.DataPackHiddenTagCounts(out global, out perPackage);
+            if (global == 0 && perPackage == 0)
+                return VPBTranslation.T("settings.datapack_hidden_tags.none", "None hidden");
+            return string.Format(
+                VPBTranslation.T("settings.datapack_hidden_tags.fmt", "{0} hidden everywhere · {1} hidden on single packages"),
+                global, perPackage);
+        }
+
+        private static void RequestDataPackSync()
+        {
+            var cfg = VPBConfig.Instance;
+            if (cfg == null) return;
+            VpbDataPackService.RequestSync(cfg.DataPackLookapediaEnabled, cfg.DataPackHubTagsEnabled);
+        }
+
+        private int _dataPackStatusRevisionSeen = -1;
+        private bool _dataPackIndexReadySeen;
+
+        private void DataPackStatusRowTick()
+        {
+            int rev = VpbDataPackService.StatusRevision;
+            if (rev == _dataPackStatusRevisionSeen) return;
+            _dataPackStatusRevisionSeen = rev;
+
+            _searchPackUidsCache = null;
+            _searchPackUidsCacheFor = null;
+            VpbLocalDatabase.InvalidateDataPackLookOverlayCache();
+
+            bool ready = VpbLocalDatabase.DataPackIndexReady;
+            if (ready != _dataPackIndexReadySeen)
+            {
+                _dataPackIndexReadySeen = ready;
+                try
+                {
+                    if (selectedFiles != null && selectedFiles.Count > 0)
+                    {
+                        _detailStripCacheKey = "";
+                        DetailStripRefresh();
+                    }
+                }
+                catch { }
+                if (HasActiveNameFilter())
+                {
+                    try { RefreshFiles(true, false, false, "datapack_ready"); } catch { }
+                }
+            }
+
+            try { ShowLookFacetRailButtonsIfPackOn(); } catch { }
+            _userTagVirtViewSig = null;
+            if (leftActiveContent == ContentType.UserTags)
+                try { RefreshUserTagsAvailPaneInPlace(true); } catch { }
+            if (rightActiveContent == ContentType.UserTags)
+                try { RefreshUserTagsAvailPaneInPlace(false); } catch { }
+            if (leftActiveContent == ContentType.Lookapedia || rightActiveContent == ContentType.Lookapedia)
+            {
+                _lookFacetVirtViewSig = null;
+                _lookFacetSubjectCollectSig = null;
+                _lookFacetHubCollectSig = null;
+                try { UpdateTabs(); } catch { }
+            }
+
+            if (!IsSettingsPanelOpen()) return;
+            RefreshInternalSettingsListRows(true);
         }
 
         private bool IsSettingsPanelOpen()
@@ -2534,6 +2829,7 @@ namespace VPB
                     }
                     break;
                 case InternalSettingControlType.TextArea:
+                case InternalSettingControlType.ReadOnlyText:
                     break;
                 case InternalSettingControlType.Button:
                     if (def.ActionEnabled == null || def.ActionEnabled()) def.OnAction?.Invoke();
@@ -2555,6 +2851,7 @@ namespace VPB
             InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);
             if (def == null) return false;
             if (def.ControlType == InternalSettingControlType.TextArea) return false;
+            if (def.ControlType == InternalSettingControlType.ReadOnlyText) return false;
             if (def.ControlType == InternalSettingControlType.ColorRgb) return false;
             if (def.ControlType == InternalSettingControlType.Hotkey) return false;
             ApplyInternalSettingDefinition(def, secondary);
@@ -2746,6 +3043,40 @@ namespace VPB
                     def.SetBool(true);
                     RefreshInternalSettingsListRows(true);
                 });
+                SettleSettingsRowLayout(detailsTr, listRowTr, settleLayout);
+                return;
+            }
+
+            if (def.ControlType == InternalSettingControlType.ReadOnlyText && def.GetString != null)
+            {
+                GameObject valueGO = new GameObject("SettingsReadOnlyValue");
+                valueGO.transform.SetParent(controls.transform, false);
+                Text valueText = valueGO.AddComponent<Text>();
+                string valueStr = def.GetString() ?? "";
+                valueText.text = valueStr;
+                valueText.alignment = TextAnchor.MiddleRight;
+                valueText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                valueText.verticalOverflow = VerticalWrapMode.Truncate;
+                valueText.color = GalleryUiColorTokens.TextMuted;
+                valueText.raycastTarget = true;
+                Font rowFont = null;
+                try
+                {
+                    Transform nTr = listRowTr.Find("Name");
+                    Text nTxt = nTr != null ? nTr.GetComponent<Text>() : null;
+                    if (nTxt != null) rowFont = nTxt.font;
+                }
+                catch { }
+                if (rowFont == null)
+                {
+                    try { rowFont = Resources.GetBuiltinResource<Font>("Arial.ttf"); } catch { }
+                }
+                valueText.font = rowFont;
+                GalleryUiMetrics.ApplyFont(valueText, GalleryUiDesignTokens.FontBodyRef, uiS, GalleryUiDesignTokens.FontMinRef);
+                UI.AddLE(valueGO, minHeight: chipH, flexibleWidth: 1f);
+                var ell = valueGO.AddComponent<SettingsValueEllipsis>();
+                ell.SetFullText(valueStr);
+                AddDynamicTooltip(valueGO, () => def.GetString() ?? "");
                 SettleSettingsRowLayout(detailsTr, listRowTr, settleLayout);
                 return;
             }
@@ -3077,7 +3408,8 @@ namespace VPB
                         btnLabel = VPBTranslation.T("settings.row.manage", "MANAGE");
                     else if (string.Equals(def.Key, "plugin.qm_positions", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.adjust", "ADJUST");
-                    else if (isSceneAtomCache)
+                    else if (isSceneAtomCache
+                        || string.Equals(def.Key, "helpers.clearStartupScene", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.clear", "CLEAR");
                     if (def.ActionLabel != null)
                     {
@@ -3204,7 +3536,16 @@ namespace VPB
             VPBConfig.Instance.EnableDragDrop = b.EnableDragDrop;
             VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.GalleryCollapseOnSceneLaunch = b.GalleryCollapseOnSceneLaunch;
+            VPBConfig.Instance.ClothingReplaceUseGeometry = b.ClothingReplaceUseGeometry;
+            VPBConfig.Instance.ClothingReplaceStrictness = b.ClothingReplaceStrictness;
             VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;
+            if (VPBConfig.Instance.DataPackLookapediaEnabled != b.DataPackLookapediaEnabled
+                || VPBConfig.Instance.DataPackHubTagsEnabled != b.DataPackHubTagsEnabled)
+            {
+                VPBConfig.Instance.DataPackLookapediaEnabled = b.DataPackLookapediaEnabled;
+                VPBConfig.Instance.DataPackHubTagsEnabled = b.DataPackHubTagsEnabled;
+                RequestDataPackSync();
+            }
             VPBConfig.Instance.ShortcutsRequireWindowFocus = b.ShortcutsRequireWindowFocus;
             VPBConfig.Instance.ShortcutsNeedVisiblePane = b.ShortcutsNeedVisiblePane;
             VPBConfig.Instance.CategoryNumberKeysEnabled = b.CategoryNumberKeysEnabled;

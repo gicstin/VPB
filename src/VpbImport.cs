@@ -210,7 +210,7 @@ namespace VPB
                     bool ensured = UI.EnsureInstalled(sourceEntry, movedUids);
                     if (ensured)
                     {
-                        LogUtil.Log("[VpbImport] Dependencies ensured installed.");
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VpbImport] Dependencies ensured installed.");
                     }
                     if (probe) AppearanceApplyProbe.Phase("ensure_installed_done", "ensured=" + (ensured ? 1 : 0));
                 }
@@ -224,7 +224,7 @@ namespace VPB
                 {
                     if (probe) AppearanceApplyProbe.Phase("prewarm_start");
                     int prewarmed = SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(sourceEntry, sourceEntry.Uid);
-                    LogUtil.Log($"[VpbImport] Prewarm complete: {prewarmed} packages.");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VpbImport] Prewarm complete: {prewarmed} packages.");
                     if (probe) AppearanceApplyProbe.Phase("prewarm_done", "packages=" + prewarmed);
                 }
                 catch (Exception ex)
@@ -243,7 +243,7 @@ namespace VPB
                     if (probe) AppearanceApplyProbe.Phase("flush_refresh_start",
                         VamOnDemandLoader.DescribePendingCatalogRefreshForProbe());
                     bool ran = VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("vpb_import_prewarm_flush");
-                    LogUtil.Log("[VpbImport] Coalesced refresh flushed.");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VpbImport] Coalesced refresh flushed.");
                     if (probe) AppearanceApplyProbe.Phase("flush_refresh_done", "ran=" + (ran ? 1 : 0));
                 }
                 catch (Exception ex)
@@ -304,7 +304,7 @@ namespace VPB
                         if (doSuppressScale)
                         {
                             bool patched = AppearancePresetSuppress.PatchScaleToTargetCurrent(preset, targetAtom);
-                            LogUtil.Log($"[VPB Scale] core suppress=ON patched={patched}");
+                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB Scale] core suppress=ON patched={patched}");
                             if (probe) AppearanceApplyProbe.Phase("scale_patch", "patched=" + (patched ? 1 : 0));
                         }
 
@@ -317,7 +317,7 @@ namespace VPB
                         {
                             livePoseSnap = AppearancePresetSuppress.CaptureLivePoseStorables(targetAtom);
                             int stripped = AppearancePresetSuppress.StripPoseStorables(preset);
-                            LogUtil.Log("[VPB] Appearance: pose snap="
+                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Appearance: pose snap="
                                 + (livePoseSnap != null ? livePoseSnap.Count : 0)
                                 + " stripped=" + stripped);
                             AppearancePresetSuppress.BeginPosePreserve(targetAtom, livePoseSnap, seconds: 8f);
@@ -538,7 +538,7 @@ namespace VPB
                             try
                             {
                                 int n = AppearancePresetSuppress.RestoreLivePoseStorables(targetAtom, livePoseSnap);
-                                LogUtil.Log("[VPB] Appearance: restored live pose controllers=" + n + " (immediate)");
+                                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Appearance: restored live pose controllers=" + n + " (immediate)");
                                 if (probe) AppearanceApplyProbe.Phase("pose_restore", "controllers=" + n);
                             }
                             catch (Exception ex) { LogUtil.LogWarning("VpbImport: live pose restore failed: " + ex.Message); }
@@ -681,7 +681,7 @@ namespace VPB
                             if (extracted != null)
                             {
                                 preset = extracted;
-                                LogUtil.Log("[VpbImport] Pose dispatch: extracted Person atom from scene dump.");
+                                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VpbImport] Pose dispatch: extracted Person atom from scene dump.");
                             }
                         }
 
@@ -689,7 +689,7 @@ namespace VPB
                         if (suppressRoot)
                         {
                             CleanPresetsHelper(preset);
-                            LogUtil.Log("[VpbImport] Pose dispatch: suppressRoot stripping applied.");
+                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VpbImport] Pose dispatch: suppressRoot stripping applied.");
                         }
 
                         // Pin the primary body controls On when the pose omits their state (see helper). Without this,
@@ -1597,6 +1597,7 @@ namespace VPB
 
         private static void DumpOutfitOnlyDiag(JSONClass preset, JSONClass keepCosmetics, JSONClass slice)
         {
+            if (!VPBLogger.Verbose && Settings.Instance?.LogVerboseUi?.Value != true) return;
             LogUtil.Log("[VPB OutfitDiag] ===== Outfit Only apply diagnostic =====");
             DumpOutfitOnlySource("PRESET(garments source)", preset);
             DumpOutfitOnlySource("KEEP(target cosmetics)", keepCosmetics);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -133,8 +133,10 @@ namespace VPB
         // Dual-buffer Category/Creator main side-tab lists (avoids destroying hundreds of buttons on each toggle).
         private GameObject leftCategoryTabHolder;
         private GameObject leftCreatorTabHolder;
+        private GameObject leftLookFacetTabHolder;
         private GameObject rightCategoryTabHolder;
         private GameObject rightCreatorTabHolder;
+        private GameObject rightLookFacetTabHolder;
         private List<GameObject> leftCategoryTabButtons = new List<GameObject>();
         private List<GameObject> leftCreatorTabButtons = new List<GameObject>();
         private List<GameObject> rightCategoryTabButtons = new List<GameObject>();
@@ -436,6 +438,21 @@ namespace VPB
         private GameObject leftCreatorSideBtnGO;
         /// <summary>Root GO for right creator rail button (null when hide setting — never created).</summary>
         private GameObject rightCreatorSideBtnGO;
+        /// <summary>Retired: pack facets live in Tags. Kept so overflow/layout null-checks still compile.</summary>
+        private GameObject leftLookFacetSideBtnGO = null;
+        private GameObject rightLookFacetSideBtnGO = null;
+        private Text leftLookFacetBtnText = null;
+        private Image leftLookFacetBtnImage = null;
+        private Image leftLookFacetBtnIconImage = null;
+        private Text rightLookFacetBtnText = null;
+        private Image rightLookFacetBtnImage = null;
+        private Image rightLookFacetBtnIconImage = null;
+        private GameObject _leftLookFacetModeRowGO;
+        private GameObject _leftLookFacetModeLooksBtn;
+        private GameObject _leftLookFacetModeHubBtn;
+        private GameObject _rightLookFacetModeRowGO;
+        private GameObject _rightLookFacetModeLooksBtn;
+        private GameObject _rightLookFacetModeHubBtn;
         /// <summary>One-shot purge of creator rail orphans after create/destroy.</summary>
         private bool _creatorSideRailOrphansPurged;
         private Text leftPathBtnText;
@@ -627,6 +644,10 @@ namespace VPB
         private string currentSizeFilter = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
+        /// <summary>Side-list typeahead for Look-A-Pedia facet (does not arm the grid).</summary>
+        private string lookapediaFilter = "";
+        /// <summary>False = Looks like subjects; true = Hub tags. Ambient mode chip in the pane.</summary>
+        private bool _lookFacetHubMode;
         private string pathFilter = "";
         private string removeClothingFilter = "";
         private string removeHairFilter = "";
@@ -645,6 +666,22 @@ namespace VPB
         private bool _rightCreatorVirtHooked;
         private int _leftCreatorVirtLastFirstIdx = -1;
         private int _rightCreatorVirtLastFirstIdx = -1;
+
+        private readonly List<CreatorCacheEntry> _lookFacetSubjectRows = new List<CreatorCacheEntry>(512);
+        private readonly List<CreatorCacheEntry> _lookFacetHubRows = new List<CreatorCacheEntry>(512);
+        private string _lookFacetSubjectCollectSig;
+        private string _lookFacetHubCollectSig;
+        private readonly List<CreatorCacheEntry> _lookFacetVirtView = new List<CreatorCacheEntry>(512);
+        private string _lookFacetVirtViewSig;
+        private readonly List<GameObject> _leftLookFacetVirtButtons = new List<GameObject>(64);
+        private readonly List<GameObject> _rightLookFacetVirtButtons = new List<GameObject>(64);
+        private ScrollRect _leftLookFacetVirtScroll;
+        private ScrollRect _rightLookFacetVirtScroll;
+        private bool _leftLookFacetVirtHooked;
+        private bool _rightLookFacetVirtHooked;
+        private int _leftLookFacetVirtLastFirstIdx = -1;
+        private int _rightLookFacetVirtLastFirstIdx = -1;
+        private bool _lookFacetVirtBuilding;
         private string tagFilter = ""; // NEW
         private string userTagFilter = "";
         /// <summary>Lower split pane when <see cref="ContentType.UserTags"/> — filters tags applied to current selection.</summary>
@@ -757,6 +794,8 @@ namespace VPB
         private bool _searchUserTagVocabEmpty;
         private Dictionary<string, HashSet<string>> _searchTagKeysCache;
         private string _searchTagKeysCacheFor;
+        private Dictionary<string, HashSet<string>> _searchPackUidsCache;
+        private string _searchPackUidsCacheFor;
 
         // Tagging
         private List<string> currentPaths = new List<string>();
@@ -778,6 +817,23 @@ namespace VPB
         private UserTagAvailMode _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
         /// <summary>Filter-mode Available list: expand collapsed Unused bucket (zero-count tags).</summary>
         private bool _userTagShowUnusedBucket;
+        /// <summary>User Tags Available list: expand collapsed Hub tags bucket (data-pack, read-only).</summary>
+        private bool _userTagShowHubBucket;
+        /// <summary>User Tags Available list: expand collapsed Looks like bucket (Look-A-Pedia, read-only).</summary>
+        private bool _userTagShowLooksBucket;
+        private bool _userTagShowHubCatBucket;
+        private readonly List<CreatorCacheEntry> _hubCatFacetRows = new List<CreatorCacheEntry>(24);
+        private string _hubCatFacetCollectSig;
+        private bool _categoryShowHubTypeBucket;
+        private string _hubTypeBrowseToken = "";
+        private string _pendingHubTypeBrowseToken;
+        private List<string> _hubItemScopeCategories;
+        private List<string> _pendingHubItemScopeCategories;
+        private string _hubBrowseReturnTitle;
+        private string _hubBrowseReturnExtension;
+        private string _hubBrowseReturnPath;
+        private readonly List<CreatorCacheEntry> _hubCatItemFacetRows = new List<CreatorCacheEntry>(24);
+        private string _hubCatItemFacetSig;
         /// <summary>Guard against recursive title↔filter user-tag chip bridging.</summary>
         private bool _bridgingUserTagFilterTitleSearch;
         /// <summary>Not Tagged filter: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
@@ -910,6 +966,17 @@ namespace VPB
             Unknown = 1 << 5,
         }
 
+        [Flags]
+        internal enum SceneHubSubfilter
+        {
+            HubScenes = 1 << 0,
+            HubLooks = 1 << 1,
+            Unclassified = 1 << 2,
+            Other = 1 << 3,
+            DefaultOn = All,
+            All = HubScenes | HubLooks | Unclassified | Other,
+        }
+
         private enum PosePeopleFilter
         {
             All,
@@ -927,6 +994,9 @@ namespace VPB
         private bool _hairGenderUserOverride;
 
         private AppearanceSubfilter appearanceSubfilter = 0;
+        private SceneHubSubfilter sceneHubSubfilter = SceneHubSubfilter.DefaultOn;
+        private bool _sceneHubSubfilterExplicit;
+        private bool _sceneHubDefaultStatusShown;
 
         private int clothingSubfilterCountAll = 0;
         private int clothingSubfilterCountReal = 0;
@@ -1022,6 +1092,7 @@ namespace VPB
         private RectTransform tboxTargetMenuPanelRT;
         private GameObject tboxTargetDropdownRowGO;
         private Text tboxTargetDropdownBtnText;
+        private UnityEngine.UI.Image tboxTargetDropdownGenderBadge;
         private bool tboxTargetMenuOpen;
 
         private AppearanceGender GetAppearanceGender(FileEntry entry)
@@ -1427,6 +1498,7 @@ namespace VPB
         private Sprite galleryAddSprite;
         private Sprite galleryReplaceSprite;
         private Sprite galleryRemoveSprite;
+        private Sprite galleryRemoveModeSprite;
         private Sprite galleryRemoveClothingSprite;
         private Sprite galleryRemoveHairSprite;
 
@@ -1496,6 +1568,8 @@ namespace VPB
         // Content-type accent colors — <see cref="GalleryUiColorTokens"/> facets.
         public static readonly Color ColorCategory = GalleryUiColorTokens.FacetCategory;
         public static readonly Color ColorCreator = GalleryUiColorTokens.FacetCreator;
+        public static readonly Color ColorLooksLike = GalleryUiColorTokens.FacetLooksLike;
+        public static readonly Color ColorHubType = GalleryUiColorTokens.FacetHubType;
         public static readonly Color ColorTagFilter = GalleryUiColorTokens.FacetTag;
         public static readonly Color ColorRatingFilter = GalleryUiColorTokens.FacetRating;
         /// <summary>★ Not-rated filter armed (slate; distinct from rated purple accent).</summary>
@@ -1657,3 +1731,4 @@ namespace VPB
         private bool _sceneSaveRehideApplied;
     }
 }
+

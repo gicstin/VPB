@@ -90,7 +90,7 @@ namespace VPB
                 return;
             }
 
-            try { LogUtil.Log("[VPB.PluginsFloat] open"); } catch { }
+            try { if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.PluginsFloat] open"); } catch { }
             EnsurePluginsFloatBuilt();
             ShowPluginsFloat();
             // Own catalog — never RefreshFiles / Show("Plugins").

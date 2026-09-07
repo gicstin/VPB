@@ -89,7 +89,7 @@ namespace VPB
 			if (string.IsNullOrEmpty(p)) return null;
 
 			int colon = p.IndexOf(':');
-			if (colon > 0)
+			if (colon > 1)
 				return p.Substring(0, colon);
 
 			// Author.Pkg.N.var — accept either slash style without allocating Replace.

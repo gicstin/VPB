@@ -89,9 +89,11 @@ namespace VPB.src.util
                 if (!confirmedPaths.Contains(reference.InternalPath)) continue;
                 string ownerUid = uniqueOwnerByPath[reference.InternalPath];
                 reference.UidNode.Value = ownerUid + ":/" + reference.InternalPath;
-                LogUtil.Log("[VPB Morph] Qualified ownerless morph " + reference.InternalPath
+                if (VPBLogger.Verbose) LogUtil.Log("[VPB Morph] Qualified ownerless morph " + reference.InternalPath
                     + " owner=" + ownerUid);
             }
+            VPBLogger.Files.LogMessage("[VPB Morph] Ownerless resolution paths_resolved=" + confirmedPaths.Count
+                + " paths_requested=" + checkedPaths.Count + " owner_packages=" + ownerUids.Count, false);
             return new List<string>(ownerUids);
         }
 

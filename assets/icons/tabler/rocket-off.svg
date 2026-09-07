@@ -1,0 +1,22 @@
+<!--
+tags: [space, nasa, launch, ship, startup, disabled]
+category: Map
+version: "1.66"
+unicode: "f14c"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M9.11 9.11a7.002 7.002 0 0 0 -3.11 4.89a6 6 0 0 0 3 5a6 6 0 0 0 5 -3a7.003 7.003 0 0 0 2.564 -3.78m1.436 -5.222a3 3 0 0 0 -3 -3a9 9 0 0 0 -6.222 3.436" />
+  <path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" />
+  <path d="M15 9a1 1 0 0 0 1 -1m-1 -1a1 1 0 0 0 -1 1" />
+  <path d="M3 3l18 18" />
+</svg>

@@ -561,12 +561,23 @@ namespace VPB
             }
         }
 
+        internal static bool IsHubSortType(SortType type)
+        {
+            return type == SortType.HubDownloads || type == SortType.HubRating
+                || type == SortType.HubReleased || type == SortType.HubUpdated;
+        }
+
         private SortState GetSortState(string context)
         {
             if (!contentSortStates.TryGetValue(context, out SortState state) || state == null)
             {
                 state = GallerySortManager.Instance.GetDefaultSortState(context);
                 contentSortStates[context] = state;
+            }
+            if (IsHubSortType(state.Type) && !VpbLocalDatabase.DataPackPacksConfigured())
+            {
+                state.Type = SortType.Name;
+                state.Direction = SortDirection.Ascending;
             }
             return state;
         }
@@ -707,6 +718,8 @@ namespace VPB
             SortType.DateAdded, SortType.DateUpdated,
             SortType.Size, SortType.Rating,
             SortType.UsageCount,
+            SortType.HubDownloads, SortType.HubRating,
+            SortType.HubReleased, SortType.HubUpdated,
             SortType.Random,
             SortType.Deps, SortType.Dependents, SortType.Missing
         };
@@ -723,6 +736,10 @@ namespace VPB
                 case SortType.Size: return VPBTranslation.T("gallery.sort.full.size", "File size");
                 case SortType.Rating: return VPBTranslation.T("gallery.sort.full.rating", "Rating");
                 case SortType.UsageCount: return VPBTranslation.T("gallery.sort.full.usage_count", "Usage count");
+                case SortType.HubDownloads: return VPBTranslation.T("gallery.sort.full.hub_downloads", "Hub downloads");
+                case SortType.HubRating: return VPBTranslation.T("gallery.sort.full.hub_rating", "Hub rating");
+                case SortType.HubReleased: return VPBTranslation.T("gallery.sort.full.hub_released", "Hub release date");
+                case SortType.HubUpdated: return VPBTranslation.T("gallery.sort.full.hub_updated", "Hub update date");
                 case SortType.Random: return VPBTranslation.T("gallery.sort.full.random", "Random");
                 case SortType.UnusedOnly: return VPBTranslation.T("gallery.sort.full.unused_only", "Unused (only)");
                 case SortType.Deps: return VPBTranslation.T("gallery.sort.full.deps", "Dependencies");
@@ -1048,6 +1065,7 @@ namespace VPB
                     || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.UsageCount
                     || type == SortType.Random
+                    || (IsHubSortType(type) && VpbLocalDatabase.DataPackPacksConfigured())
                     // Prefer-sort still used by Always-loaded / Unused Filter cycles (not shown in sort menu).
                     || type == SortType.AutoInstall;
             }
@@ -1055,7 +1073,7 @@ namespace VPB
             {
                 return type == SortType.Name || type == SortType.Count || type == SortType.Rating;
             }
-            else if (context == "Category" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource" || context == "DetailStripTagMenu")
+            else if (context == "Category" || context == "Lookapedia" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource" || context == "DetailStripTagMenu")
             {
                 return type == SortType.Name || type == SortType.Count;
             }
@@ -1064,7 +1082,7 @@ namespace VPB
 
         private static bool SupportsSidePaneFourModeSort(string context)
         {
-            return context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags";
+            return context == "Category" || context == "Creator" || context == "Lookapedia" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags";
         }
 
         /// <summary>Upper side pane: name A→Z, name Z→A, count low→high, count high→low (same icons as scene file sort).</summary>
@@ -1214,6 +1232,10 @@ namespace VPB
                 case SortType.Score: symbol = "Sc"; break;
                 case SortType.Rating: symbol = "Rt"; break;
                 case SortType.UsageCount: symbol = "Us"; break;
+                case SortType.HubDownloads: symbol = "Hd"; break;
+                case SortType.HubRating: symbol = "Hr"; break;
+                case SortType.HubReleased: symbol = "Hn"; break;
+                case SortType.HubUpdated: symbol = "Hu"; break;
                 case SortType.Random: symbol = "Rnd"; break;
                 case SortType.UnusedOnly: symbol = "U0"; break;
                 case SortType.Deps: symbol = "Dp"; break;
@@ -1248,6 +1270,10 @@ namespace VPB
                     case SortType.Score: symbol = "Sc"; break;
                     case SortType.Rating: symbol = "Rt"; break;
                     case SortType.UsageCount: symbol = "Us"; break;
+                    case SortType.HubDownloads: symbol = "Hd"; break;
+                    case SortType.HubRating: symbol = "Hr"; break;
+                    case SortType.HubReleased: symbol = "Hn"; break;
+                    case SortType.HubUpdated: symbol = "Hu"; break;
                     case SortType.Random: symbol = "Rnd"; break;
                     case SortType.UnusedOnly: symbol = "U0"; break;
                     case SortType.Deps: symbol = "Dp"; break;

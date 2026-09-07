@@ -1,0 +1,24 @@
+<!--
+tags: [gender, futa, futanari, hermaphrodite, intersex, sex, symbol, person]
+category: Symbols
+version: "1.0"
+unicode: "f0f7"
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+  <path d="M11 16v5" />
+  <path d="M9 19h4" />
+  <path d="M13.8 9.2l5.2 -5.2" />
+  <path d="M19 4h-4" />
+  <path d="M19 4v4" />
+</svg>

@@ -451,7 +451,7 @@ namespace VPB
             if (hasHistorySide)
                 try { ApplyHistoryBrowseTitle(); } catch { }
             else if (titleText != null)
-                titleText.text = currentCategoryTitle;
+                ApplyGalleryTitleText();
         }
 
         private ContentType? NormalizePersistableSideTabContent(ContentType? type)
@@ -461,6 +461,8 @@ namespace VPB
                 && VPBConfig.Instance != null
                 && VPBConfig.Instance.GalleryHideCreatorSideButtons)
                 return null;
+            if (type == ContentType.Lookapedia)
+                return ContentType.UserTags;
             return type;
         }
 
@@ -471,6 +473,7 @@ namespace VPB
             {
                 case ContentType.Category:
                 case ContentType.Creator:
+                case ContentType.Lookapedia:
                 case ContentType.UserTags:
                 case ContentType.Path:
                 case ContentType.History:
@@ -511,6 +514,11 @@ namespace VPB
             entry.HairSubfilter = state.HairSubfilter;
             entry.AppearanceSubfilter = state.AppearanceSubfilter;
             entry.PosePeopleFilter = state.PosePeopleFilter;
+            if (state.HasSceneHubSubfilter)
+            {
+                entry.HasSceneHubSubfilter = true;
+                entry.SceneHubSubfilter = state.SceneHubSubfilter;
+            }
             entry.SortState = state.FileSortState != null ? state.FileSortState.Clone() : null;
             entry.BrowseHiddenMode = state.BrowseHiddenMode;
             entry.BrowseAlwaysLoadedMode = state.BrowseAlwaysLoadedMode;
@@ -541,6 +549,16 @@ namespace VPB
             state.HairSubfilter = entry.HairSubfilter;
             state.AppearanceSubfilter = entry.AppearanceSubfilter;
             state.PosePeopleFilter = entry.PosePeopleFilter;
+            if (entry.HasSceneHubSubfilter)
+            {
+                state.HasSceneHubSubfilter = true;
+                state.SceneHubSubfilter = entry.SceneHubSubfilter;
+            }
+            else
+            {
+                state.HasSceneHubSubfilter = false;
+                state.SceneHubSubfilter = 0;
+            }
             if (entry.SortState != null) state.FileSortState = entry.SortState.Clone();
             state.BrowseHiddenMode = entry.BrowseHiddenMode;
             state.BrowseAlwaysLoadedMode = entry.BrowseAlwaysLoadedMode;

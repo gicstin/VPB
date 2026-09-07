@@ -235,6 +235,11 @@ namespace VPB
             try { target = GetBestTargetAtom(); } catch { target = null; }
             if (target == null) return;
 
+            if (VpbClothingReplace.GeometryEnabled)
+            {
+                return;
+            }
+
             if (family == 1)
             {
                 try { ClothingLoadingUtils.RemoveRealGarmentClothing(target); } catch { }
@@ -308,9 +313,7 @@ namespace VPB
                     yield return WaitForFilterRefresh(gen);
                     if (gen != _filterRandomizeGen) yield break;
 
-                    var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
-                        ? currentFilteredFiles
-                        : lastFilteredFiles;
+                    var pool = GetRandomCandidatePool();
 
                     if (pool == null || pool.Count == 0)
                     {

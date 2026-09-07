@@ -21,7 +21,7 @@ namespace VPB
 
         public static readonly string[] TopLeftBadgeNames =
         {
-            "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge"
+            "StartupSceneBadge", "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge"
         };
 
         public RectTransform rectTransform;
@@ -94,6 +94,7 @@ namespace VPB
         public Transform hidePackageBadgeTr;
         public Transform scanExcludedBadgeTr;
         public Transform userTagsBadgeTr;
+        public Transform startupSceneBadgeTr;
         public Transform depsBadgeTr;
         public Transform depsDownloadBtnTr;
 
@@ -202,6 +203,7 @@ namespace VPB
             hidePackageBadgeTr = FindBadge(root, "HidePackageBadge");
             scanExcludedBadgeTr = FindBadge(root, "ScanExcludedBadge");
             userTagsBadgeTr = FindBadge(root, "UserTagsBadge");
+            startupSceneBadgeTr = FindBadge(root, "StartupSceneBadge");
             depsBadgeTr = FindBadge(root, "DepsBadge");
             depsDownloadBtnTr = FindBadge(root, "DepsDownloadBtn");
         }
@@ -270,6 +272,7 @@ namespace VPB
             if (badgeName == "HidePackageBadge") return hidePackageBadgeTr;
             if (badgeName == "ScanExcludedBadge") return scanExcludedBadgeTr;
             if (badgeName == "UserTagsBadge") return userTagsBadgeTr;
+            if (badgeName == "StartupSceneBadge") return startupSceneBadgeTr;
             if (badgeName == "DepsBadge") return depsBadgeTr;
             if (badgeName == "DepsDownloadBtn") return depsDownloadBtnTr;
             return FindBadge(transform, badgeName);

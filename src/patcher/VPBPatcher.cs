@@ -184,7 +184,8 @@ namespace VPB.Patcher
                 if (!File.Exists(Path.Combine(vpbDir, "VPB.dll")))
                     return;
 
-                int removed = VpbLegacyLayout.SweepPluginsRoot(pluginsDir, null, LogPruneWarning);
+                int removed = VpbLegacyLayout.SweepPluginsRoot(pluginsDir, LogPruneInfo, LogPruneWarning);
+                removed += VpbLegacyLayout.SweepMpOnlyUnderVpbDir(vpbDir, LogPruneInfo);
 
                 removed += PruneUnshippedFiles(vpbDir);
 
@@ -210,7 +211,7 @@ namespace VPB.Patcher
 
             if (files.Count < MinManifestRowsToPrune || !files.Contains("vpb.dll"))
             {
-                Log.LogWarning("Shipped manifest looks incomplete (" + files.Count + " owned files); skipping prune");
+                Log.LogInfo("Shipped manifest looks incomplete (" + files.Count + " owned files); skipping prune");
                 return 0;
             }
 
@@ -289,7 +290,7 @@ namespace VPB.Patcher
                 var json = File.ReadAllText(path);
                 if (json == null || !json.TrimEnd().EndsWith("]", StringComparison.Ordinal))
                 {
-                    Log.LogWarning("Shipped manifest is truncated; skipping prune");
+                    Log.LogInfo("Shipped manifest is truncated; skipping prune");
                     return false;
                 }
 
@@ -317,6 +318,11 @@ namespace VPB.Patcher
                 Log.LogWarning("Could not read shipped manifest: " + ex.Message);
                 return false;
             }
+        }
+
+        private static void LogPruneInfo(string message)
+        {
+            Log.LogInfo(message);
         }
 
         private static void LogPruneWarning(string message)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -631,7 +631,7 @@ namespace VPB
         {
             // Usage recorded in LoadCUAIntoAtom when the asset is actually applied (avoid double-count).
             string normalizedPath = UI.NormalizePath(path);
-            LogUtil.Log($"[DragDropDebug] Loading CUA: {normalizedPath}");
+            LogUtil.LogVerbose($"[DragDropDebug] Loading CUA: {normalizedPath}");
             if (Panel != null) Panel.StartCoroutine(LoadCUACoroutine(normalizedPath));
             else StartCoroutine(LoadCUACoroutine(normalizedPath));
         }
@@ -686,7 +686,7 @@ namespace VPB
 
             if (urlParam != null)
             {
-                LogUtil.Log("[DragDropDebug] Setting assetUrl to " + normalizedPath);
+                LogUtil.LogVerbose("[DragDropDebug] Setting assetUrl to " + normalizedPath);
                 urlParam.val = normalizedPath;
                 
                 // Automatically set assetName if possible
@@ -701,7 +701,7 @@ namespace VPB
                 
                 if (assetNames != null && assetNames.Count > 0)
                 {
-                     LogUtil.Log($"[DragDropDebug] Found {assetNames.Count} assets in bundle.");
+                     LogUtil.LogVerbose($"[DragDropDebug] Found {assetNames.Count} assets in bundle.");
                      JSONStorableString nameParam = targetAtom.GetStringJSONParam("assetName");
                      if (nameParam == null)
                      {
@@ -717,7 +717,7 @@ namespace VPB
                           // Default to the first asset (Position 1)
                           string match = assetNames[0];
                           
-                          LogUtil.Log($"[DragDropDebug] Auto-setting assetName to: {match}");
+                          LogUtil.LogVerbose($"[DragDropDebug] Auto-setting assetName to: {match}");
                           nameParam.val = match;
                      }
                 }
@@ -725,9 +725,10 @@ namespace VPB
             else
             {
                 LogUtil.LogError("[DragDropDebug] assetUrl param not found on " + targetAtom.name);
+                if (!VPBLogger.Verbose && Settings.Instance?.LogVerboseUi?.Value != true) yield break;
                 foreach (string sid in targetAtom.GetStorableIDs())
                 {
-                    LogUtil.Log("[DragDropDebug] Storable: " + sid);
+                    LogUtil.LogVerbose("[DragDropDebug] Storable: " + sid);
                     JSONStorable storable = targetAtom.GetStorableByID(sid);
                     if (storable != null)
                     {
@@ -927,14 +928,14 @@ namespace VPB
             try
             {
                 Atom ca = sessionMgr.containingAtom;
-                LogUtil.Log("[VPB] LoadPluginsAsSession: " + FileEntry.Name
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] LoadPluginsAsSession: " + FileEntry.Name
                     + " host name=" + (ca != null ? ca.name : "?")
                     + " uid=" + (ca != null ? ca.uid : "?")
                     + " type=" + (ca != null ? ca.type : "?"));
             }
             catch
             {
-                LogUtil.Log("[VPB] LoadPluginsAsSession: " + FileEntry.Name);
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] LoadPluginsAsSession: " + FileEntry.Name);
             }
             ApplyPluginScriptToManager(sessionMgr, FileEntry, undoAtomUid: null);
             try
@@ -966,7 +967,7 @@ namespace VPB
                 try
                 {
                     Atom ca = tabMgr.containingAtom;
-                    LogUtil.Log("[VPB] GetSessionPluginManager: TabSessionPlugins"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] GetSessionPluginManager: TabSessionPlugins"
                         + " name=" + (ca != null ? ca.name : "?")
                         + " uid=" + (ca != null ? ca.uid : "?")
                         + " type=" + (ca != null ? ca.type : "?"));
@@ -1002,7 +1003,7 @@ namespace VPB
                 try
                 {
                     Atom ca = coreMgr.containingAtom;
-                    LogUtil.Log("[VPB] GetSessionPluginManager: CoreControl.PluginManager"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] GetSessionPluginManager: CoreControl.PluginManager"
                         + " name=" + (ca != null ? ca.name : "?")
                         + " uid=" + (ca != null ? ca.uid : "?")
                         + " type=" + (ca != null ? ca.type : "?")
@@ -1151,7 +1152,7 @@ namespace VPB
             try
             {
                 host.type = "SessionPluginManager";
-                LogUtil.Log("[VPB] Session host type CoreControl → SessionPluginManager (UIAssist/BA gate)");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Session host type CoreControl → SessionPluginManager (UIAssist/BA gate)");
             }
             catch (Exception ex)
             {
@@ -1442,7 +1443,7 @@ namespace VPB
             }
             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "appearance"); } catch { }
             string cfgAppearanceClothing = VPBConfig.Instance != null ? VPBConfig.Instance.AppearanceClothingApplyMode : "replace";
-            LogUtil.Log($"[VPB] LoadAppearance: Applying {FileEntry.Name} to {target.uid} (explicitMode: {mode ?? "<resolve>"}, AppearanceClothingCfg={cfgAppearanceClothing})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] LoadAppearance: Applying {FileEntry.Name} to {target.uid} (explicitMode: {mode ?? "<resolve>"}, AppearanceClothingCfg={cfgAppearanceClothing})");
             ApplyClothingToAtom(target, FileEntry.Uid, mode);
         }
 
@@ -1599,7 +1600,7 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveAllClothing: target={target.uid} ({target.type})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllClothing: target={target.uid} ({target.type})");
 
             PushUndoSnapshotForClothingHair(target);
 
@@ -1632,7 +1633,7 @@ namespace VPB
             }
 
             string slotLower = slot.Trim().ToLowerInvariant();
-            LogUtil.Log($"[VPB] RemoveClothingBySlot: target={target.uid} ({target.type}) slot={slotLower}");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingBySlot: target={target.uid} ({target.type}) slot={slotLower}");
 
             PushUndoSnapshotForClothingHair(target);
 
@@ -1967,7 +1968,7 @@ namespace VPB
                         bestJsb.val = false;
                         geometryBoolFound = true;
                         geometryBoolWasTrue = true;
-                        LogUtil.Log($"[VPB] RemoveClothingItemByUid: normalized match removed clothing:{bestKey} true -> false (matches={matches})");
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingItemByUid: normalized match removed clothing:{bestKey} true -> false (matches={matches})");
                     }
                     else
                     {
@@ -2044,7 +2045,7 @@ namespace VPB
                                 bool before = jsb.val;
                                 jsb.val = false;
                                 hits++;
-                                LogUtil.Log($"[VPB] RemoveClothingItemByUid: filename-match removed clothing:{uid} {before} -> {jsb.val}");
+                                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingItemByUid: filename-match removed clothing:{uid} {before} -> {jsb.val}");
                             }
                         }
 
@@ -2067,13 +2068,13 @@ namespace VPB
                 {
                     if (miSetActiveItem != null)
                     {
-                        LogUtil.Log("[VPB] RemoveClothingItemByUid: item already inactive; attempting force refresh via SetActiveClothingItem(true->false)");
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] RemoveClothingItemByUid: item already inactive; attempting force refresh via SetActiveClothingItem(true->false)");
                         InvokeSetActiveItem(miSetActiveItem, dcs, matched, true);
                         InvokeSetActiveItem(miSetActiveItem, dcs, matched, false);
                     }
                     else if (miSetActiveItemByUid != null)
                     {
-                        LogUtil.Log("[VPB] RemoveClothingItemByUid: item already inactive; attempting force refresh via SetActiveClothingItem(uid, true->false)");
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] RemoveClothingItemByUid: item already inactive; attempting force refresh via SetActiveClothingItem(uid, true->false)");
                         InvokeSetActiveItem(miSetActiveItemByUid, dcs, matched.uid, true);
                         InvokeSetActiveItem(miSetActiveItemByUid, dcs, matched.uid, false);
                     }
@@ -2105,13 +2106,13 @@ namespace VPB
 
                                 if (ps.Length == 1 && ps[0].ParameterType == typeof(string))
                                 {
-                                    LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking Clothing.{m.Name}(string)");
+                                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking Clothing.{m.Name}(string)");
                                     m.Invoke(clothing, new object[] { matched.uid });
                                     invoked = true;
                                 }
                                 else if (ps.Length == 1 && ps[0].ParameterType == typeof(DAZClothingItem))
                                 {
-                                    LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking Clothing.{m.Name}(DAZClothingItem)");
+                                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking Clothing.{m.Name}(DAZClothingItem)");
                                     m.Invoke(clothing, new object[] { matched });
                                     invoked = true;
                                 }
@@ -2133,13 +2134,13 @@ namespace VPB
 
                             if (ps.Length == 1 && ps[0].ParameterType == typeof(string))
                             {
-                                LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking DAZCharacterSelector.{m.Name}(string)");
+                                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking DAZCharacterSelector.{m.Name}(string)");
                                 m.Invoke(dcs, new object[] { matched.uid });
                                 invoked = true;
                             }
                             else if (ps.Length == 1 && ps[0].ParameterType == typeof(DAZClothingItem))
                             {
-                                LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking DAZCharacterSelector.{m.Name}(DAZClothingItem)");
+                                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking DAZCharacterSelector.{m.Name}(DAZClothingItem)");
                                 m.Invoke(dcs, new object[] { matched });
                                 invoked = true;
                             }
@@ -2169,7 +2170,7 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveAllHair: target={target.uid} ({target.type})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllHair: target={target.uid} ({target.type})");
 
             PushUndoSnapshotForClothingHair(target);
 

@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System.Collections;
 using System.Collections.Generic;
 using SimpleJSON;
@@ -244,7 +245,7 @@ namespace VPB.src.util
                 {
                     try
                     {
-                        LogUtil.Log("[VPB] Appearance: restored live pose controllers=" + n
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Appearance: restored live pose controllers=" + n
                             + " frame=" + f + "/" + (max - 1));
                     }
                     catch { }

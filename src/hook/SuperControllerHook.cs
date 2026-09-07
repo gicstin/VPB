@@ -11,6 +11,7 @@ using HarmonyLib;
 using Prime31.MessageKit;
 using GPUTools.Hair.Scripts.Settings;
 using SimpleJSON;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -18,10 +19,6 @@ namespace VPB
     {
         private static readonly Regex s_HubResourcePathRegex =
             new Regex(@"^/resources/(?<id>\d+)(/|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly object pluginCreateLock = new object();
-        private static readonly Dictionary<int, Stopwatch> pluginCreateSwByThread = new Dictionary<int, Stopwatch>();
-        private static readonly Dictionary<int, string> pluginCreateNameByThread = new Dictionary<int, string>();
 
         // Registry of confirmed simulation texture paths extracted from preset files
         private static HashSet<string> simTextureRegistry = new HashSet<string>();
@@ -111,7 +108,7 @@ namespace VPB
                     {
                         string textureUrl = value.Value;
                         RegisterSimTexture(textureUrl, presetPath);
-                        LogUtil.Log($"[VPB SIM] Registered sim texture from key '{key}': {textureUrl}");
+                        if (VPBLogger.Verbose) LogUtil.Log($"[VPB SIM] Registered sim texture from key '{key}': {textureUrl}");
                     }
 
                     // Check if this entry has simEnabled="true"
@@ -129,7 +126,7 @@ namespace VPB
                             if (!string.IsNullOrEmpty(textureUrl))
                             {
                                 RegisterSimTexture(textureUrl, presetPath);
-                                LogUtil.Log($"[VPB SIM] Registered sim texture from preset: {textureUrl}");
+                                if (VPBLogger.Verbose) LogUtil.Log($"[VPB SIM] Registered sim texture from preset: {textureUrl}");
                             }
                         }
                     }
@@ -366,10 +363,13 @@ namespace VPB
         }
 
         /// <summary>GPU blit → readable RGBA32 copy. Caller owns destroy of returned texture when different from <paramref name="src"/>.</summary>
-        internal static Texture2D EnsureCpuReadableTexture(Texture2D src, bool linear, string logTag)
+        internal static Texture2D EnsureCpuReadableTexture(Texture2D src, bool linear, bool createMipMaps, string logTag)
         {
             if (src == null) return null;
             if (IsTextureReadableCompat(src)) return src;
+
+            bool mipChain = (createMipMaps || src.mipmapCount > 1)
+                && TextureUtil.CanGenerateMipsFromBaseLevel(src.width, src.height, TextureFormat.RGBA32);
 
             RenderTexture rt = null;
             RenderTexture prev = RenderTexture.active;
@@ -378,9 +378,9 @@ namespace VPB
                 rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
                 Graphics.Blit(src, rt);
                 RenderTexture.active = rt;
-                Texture2D readableTex = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, linear);
+                Texture2D readableTex = new Texture2D(src.width, src.height, TextureFormat.RGBA32, mipChain, linear);
                 readableTex.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0);
-                readableTex.Apply(false, false);
+                readableTex.Apply(mipChain, false);
                 if (!string.IsNullOrEmpty(logTag))
                     LogUtil.Log("[VPB] " + logTag + ": made texture CPU-readable " + src.width + "x" + src.height);
                 return readableTex;
@@ -671,11 +671,31 @@ namespace VPB
                 return null;
             }
 
+            if (IsMissingLocalSavesDirectory(__0))
+                return __exception;
+
             __result = s_EmptyStringArray;
             // Rate-limit: BodyLanguage can hammer missing morph dirs; avoid log spam alloc.
             if (ShouldLogGetFilesEmpty(__0))
                 LogUtil.LogWarning("[VPB] FileManager.GetFiles non-existent path suppressed (returned empty): " + __0);
             return null;
+        }
+
+        static bool IsMissingLocalSavesDirectory(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            try
+            {
+                if (path.IndexOf(":/", StringComparison.Ordinal) > 0) return false;
+                if (path.IndexOf(":\\", StringComparison.Ordinal) > 0) return false;
+
+                string p = path.IndexOf('\\') >= 0 ? path.Replace('\\', '/') : path;
+                if (p.Length > 0 && p[0] == '/') p = p.Substring(1);
+                if (!p.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase)) return false;
+
+                return !Directory.Exists(p);
+            }
+            catch { return false; }
         }
 
         static readonly string[] s_EmptyStringArray = new string[0];
@@ -1143,6 +1163,13 @@ namespace VPB
                         return;
                     }
 
+                    MVR.FileManagement.VarFileEntry aliasEntry = null;
+                    if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref aliasEntry))
+                    {
+                        result = true;
+                        return;
+                    }
+
                     // VaM may check FileExists against a *.latest:/... plugin path even
                     // after the package registered under its concrete UID.
                     string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
@@ -1186,12 +1213,22 @@ namespace VPB
         public static void PreOpenStream(ref string path)
         {
             long t0 = VamSceneLoadPhaseProfiler.Active ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
-            string rewritten = RewriteVdsPathIfNeeded(path);
-            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            try
             {
-                path = rewritten;
+                string rewritten = RewriteVdsPathIfNeeded(path);
+                if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+                {
+                    path = rewritten;
+                }
+                TryRewriteBareCustomPath(ref path);
+                string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
+                if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+                    path = best;
             }
-            TryRewriteBareCustomPath(ref path);
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] PreOpenStream swallowed exception for path='" + path + "': " + ex.GetType().Name + ": " + ex.Message);
+            }
             if (t0 != 0L)
                 VamSceneLoadPhaseProfiler.AddHookCost(VamSceneLoadPhaseProfiler.HookBucket.OpenStream,
                     System.Diagnostics.Stopwatch.GetTimestamp() - t0);
@@ -1208,12 +1245,22 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStreamReader", new Type[] { typeof(string), typeof(bool) })]
         public static void PreOpenStreamReader(ref string path)
         {
-            string rewritten = RewriteVdsPathIfNeeded(path);
-            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            try
             {
-                path = rewritten;
+                string rewritten = RewriteVdsPathIfNeeded(path);
+                if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+                {
+                    path = rewritten;
+                }
+                TryRewriteBareCustomPath(ref path);
+                string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
+                if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+                    path = best;
             }
-            TryRewriteBareCustomPath(ref path);
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] PreOpenStreamReader swallowed exception for path='" + path + "': " + ex.GetType().Name + ": " + ex.Message);
+            }
         }
 
         [HarmonyPostfix]
@@ -1308,10 +1355,21 @@ namespace VPB
             catch (Exception ex) { LogUtil.LogWarning("[VPB] ReturnToSceneViewOnStartup failed: " + ex.Message); }
         }
 
+        static void TryScheduleStartupSceneLoad(SuperController sc)
+        {
+            try
+            {
+                if (VpbStartupScene.TryScheduleLoad(sc))
+                    s_ReturnToSceneViewOnStartupApplied = true;
+            }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB] Startup scene schedule failed: " + ex.Message); }
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "ActivateWorldUI")]
         public static void PostActivateWorldUI(SuperController __instance)
         {
+            TryScheduleStartupSceneLoad(__instance);
             TryReturnToSceneViewOnStartup(__instance);
             LogUtil.LogStartupReadyOnce("World UI activated");
             LogUtil.MarkScenePhaseWorldUiActivated();
@@ -1387,8 +1445,9 @@ namespace VPB
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVRPluginManager), "CreateScriptController")]
-        public static void PreCreateScriptController(object mvrp, object type)
+        public static void PreCreateScriptController(object mvrp, object type, out KeyValuePair<long, string> __state)
         {
+            __state = default(KeyValuePair<long, string>);
             try
             {
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.ScriptCtrlCreate++;
@@ -1442,42 +1501,30 @@ namespace VPB
 
                 string scriptType = type != null ? type.ToString() : "unknown";
                 int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
-                var sw = Stopwatch.StartNew();
-                lock (pluginCreateLock)
-                {
-                    pluginCreateSwByThread[tid] = sw;
-                    pluginCreateNameByThread[tid] = pluginName + "|" + scriptType;
-                }
-                LogUtil.Log("[VPB.Startup] plugin_create START tid=" + tid + " plugin=" + pluginName + " type=" + scriptType);
+                __state = new KeyValuePair<long, string>(Stopwatch.GetTimestamp(), pluginName + "|" + scriptType);
+                if (VPBLogger.Verbose) LogUtil.Log("[VPB.Startup] plugin_create START tid=" + tid + " plugin=" + pluginName + " type=" + scriptType);
             }
             catch { }
         }
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(MVRPluginManager), "CreateScriptController")]
-        public static Exception FinalizeCreateScriptController(Exception __exception)
+        public static Exception FinalizeCreateScriptController(Exception __exception, KeyValuePair<long, string> __state)
         {
             try
             {
                 int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
-                Stopwatch sw = null;
-                string name = "unknown";
-                lock (pluginCreateLock)
-                {
-                    if (pluginCreateSwByThread.TryGetValue(tid, out sw))
-                        pluginCreateSwByThread.Remove(tid);
-                    if (pluginCreateNameByThread.TryGetValue(tid, out name))
-                        pluginCreateNameByThread.Remove(tid);
-                }
-                long ms = 0;
-                try { if (sw != null) { sw.Stop(); ms = sw.ElapsedMilliseconds; } } catch { }
+                string name = __state.Value ?? "unknown";
+                double ms = __state.Key == 0 ? 0 : (Stopwatch.GetTimestamp() - __state.Key) * 1000.0 / Stopwatch.Frequency;
+                if (__state.Key != 0) LogUtil.PerfAdd("plugin_create", ms, 0, __exception != null);
+                string duration = __state.Key == 0 ? "unavailable" : ms.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
                 if (__exception == null)
                 {
-                    LogUtil.Log("[VPB.Startup] plugin_create DONE tid=" + tid + " target=" + name + " ms=" + ms);
+                    if (VPBLogger.Verbose) LogUtil.Log("[VPB.Startup] plugin_create DONE tid=" + tid + " target=" + name + " ms=" + duration);
                 }
                 else
                 {
-                    LogUtil.LogWarning("[VPB.Startup] plugin_create FAIL tid=" + tid + " target=" + name + " ms=" + ms + " ex=" + __exception.GetType().Name + ": " + __exception.Message);
+                    LogUtil.LogWarning("[VPB.Startup] plugin_create FAIL tid=" + tid + " target=" + name + " ms=" + duration + " ex=" + __exception.GetType().Name + ": " + __exception.Message);
                 }
             }
             catch { }
@@ -1512,7 +1559,7 @@ namespace VPB
                 try { VpbNetSceneLaunchGuard.NotifyLaunchPassed(); } catch { }
             }
 
-            LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
+            if (VPBLogger.Verbose) LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             LogUtil.BeginSceneLoad(saveName);
             LogUtil.MarkScenePhasePreLoadInternal();
             try { ThirdPartyFixHook.TryClearInGameLogsOnSceneLaunch(__instance, loadMerge); } catch { }
@@ -1685,9 +1732,9 @@ namespace VPB
                     && ___immediateTextureCache.TryGetValue(qi.cacheSignature, out owned)
                     && object.ReferenceEquals(owned, qi.tex)
                     && ImageLoadingMgr.singleton != null
-                    && ImageLoadingMgr.singleton.TryGetTextureCachePath(qi.tex, out vpbCachePath))
+                    && ImageLoadingMgr.singleton.TryGetTextureOwnershipPath(qi.tex, out vpbCachePath))
                 {
-                    ImageLoadingMgr.singleton.ReleaseTextureCacheReference(vpbCachePath);
+                    ImageLoadingMgr.singleton.ReleaseTextureCacheReference(vpbCachePath, qi.tex);
                 }
             }
             catch { }
@@ -1707,7 +1754,7 @@ namespace VPB
 
             ImageLoadingMgr mgr = ImageLoadingMgr.singleton;
             string vpbCachePath;
-            if (mgr == null || !mgr.TryGetTextureCachePath(tex, out vpbCachePath)) return;
+            if (mgr == null || !mgr.TryGetTextureOwnershipPath(tex, out vpbCachePath)) return;
 
             try
             {
@@ -1725,7 +1772,7 @@ namespace VPB
                 }
 
                 ___textureTrackedCache.Add(tex, true);
-                mgr.ReleaseTextureCacheReference(vpbCachePath);
+                mgr.ReleaseTextureCacheReference(vpbCachePath, tex);
             }
             catch (Exception ex)
             {
@@ -2010,6 +2057,7 @@ namespace VPB
                 // Skip cache on requeue: if cache invalidation failed (file locked / permissions),
                 // VaM's loader would re-read the same corrupt cache, fail again, and bounce back here.
                 try { qi.skipCache = true; } catch { }
+                if (qi.cancel) return;
                 var loader = ImageLoaderThreaded.singleton;
                 if (loader == null)
                 {
@@ -2069,14 +2117,14 @@ namespace VPB
                             if (tex != null && !IsTextureReadableCompat(tex))
                             {
                                 string tag = IsCharacterTextureQueuedImage(__instance) ? "CHAR" : "SIM";
-                                LogUtil.Log("[VPB " + tag + "] PostFinish: Fixing up non-readable texture: " + __instance.imgPath);
+                                if (VPBLogger.Verbose) LogUtil.Log("[VPB " + tag + "] PostFinish: Fixing up non-readable texture: " + __instance.imgPath);
 
-                                Texture2D readableTex = EnsureCpuReadableTexture(tex, __instance.linear, null);
+                                Texture2D readableTex = EnsureCpuReadableTexture(tex, __instance.linear, __instance.createMipMaps, null);
                                 if (readableTex != null && readableTex != tex)
                                 {
                                     UnityEngine.Object.Destroy(tex);
                                     __instance.tex = readableTex;
-                                    LogUtil.Log("[VPB " + tag + "] PostFinish: Fixed texture to be readable: " + __instance.imgPath);
+                                    if (VPBLogger.Verbose) LogUtil.Log("[VPB " + tag + "] PostFinish: Fixed texture to be readable: " + __instance.imgPath);
                                 }
                             }
                         }
@@ -2218,6 +2266,10 @@ namespace VPB
             {
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHook++;
                 if (__result != null) return;
+
+                if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref __result))
+                    return;
+
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 bool entered;
@@ -2240,6 +2292,9 @@ namespace VPB
 
                     __result = MVR.FileManagement.FileManager.GetVarFileEntry(path);
                     if (__result != null) return;
+
+                    if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref __result))
+                        return;
 
                     // Some VaM call sites pass *.latest:/... and do not resolve aliases
                     // after registration. Retry with a concrete UID path when possible.
@@ -2276,10 +2331,60 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Issue #12: plugins calling native <c>FileManager.GetPackage</c> must see scan-excluded
-        /// packages once requested. Register on demand and retry (no full catalog Refresh here).
-        /// Preserves native semantics: exact UID miss stays null (no silent version swap).
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "IsFileInPackage", new Type[] { typeof(string) })]
+        public static void PostIsFileInPackageOnDemand(string path, ref bool __result)
+        {
+            long t0 = VamSceneLoadPhaseProfiler.Active ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            try
+            {
+                if (__result) return;
+                if (string.IsNullOrEmpty(path)) return;
+                if (path.IndexOf(":/", StringComparison.Ordinal) <= 0
+                    && path.IndexOf(":\\", StringComparison.Ordinal) <= 0) return;
+
+                MVR.FileManagement.VarFileEntry alias = null;
+                if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref alias) && alias != null)
+                {
+                    __result = true;
+                    LogIsFileInPackageRecovered(path);
+                    return;
+                }
+
+                if (VamOnDemandLoader.s_InOnDemand) return;
+
+                if (MVR.FileManagement.FileManager.GetVarFileEntry(path) != null)
+                {
+                    __result = true;
+                    LogIsFileInPackageRecovered(path);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostIsFileInPackageOnDemand error: " + ex.Message);
+            }
+            finally
+            {
+                if (t0 != 0L)
+                    VamSceneLoadPhaseProfiler.AddHookCost(VamSceneLoadPhaseProfiler.HookBucket.GetFileEntry,
+                        System.Diagnostics.Stopwatch.GetTimestamp() - t0);
+            }
+        }
+
+        static readonly HashSet<string> s_IsFileInPackageRecoveredLogged =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static void LogIsFileInPackageRecovered(string path)
+        {
+            try
+            {
+                if (s_IsFileInPackageRecoveredLogged.Count > 512) return;
+                if (!s_IsFileInPackageRecoveredLogged.Add(path)) return;
+                LogUtil.Log("[VPB OnDemand] IsFileInPackage recovered: " + path);
+            }
+            catch { }
+        }
+
         /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetPackage", new Type[] { typeof(string) })]
@@ -2288,9 +2393,14 @@ namespace VPB
             try
             {
                 if (__result != null) return;
-                if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (string.IsNullOrEmpty(packageUidOrPath)) return;
+                if (VamStartupOptimizations.TryShortCircuitAbsentVamXGetPackage(packageUidOrPath)) return;
                 if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
+
+                if (VamOnDemandLoader.TryNativeGetPackageWithRegisteredUid(packageUidOrPath, ref __result))
+                    return;
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 // Native Refresh / pre-first-Refresh: leave miss as null. Do NOT enqueue —
                 // VaM walks every package and GetPackage/IsPackage miss thousands of times;
@@ -2307,6 +2417,9 @@ namespace VPB
                     VamOnDemandLoader.TryRegisterPackageOnDemand(packageUidOrPath);
                     __result = MVR.FileManagement.FileManager.GetPackage(packageUidOrPath);
                     if (__result != null) return;
+
+                    if (VamOnDemandLoader.TryNativeGetPackageWithRegisteredUid(packageUidOrPath, ref __result))
+                        return;
 
                     // Native .latest resolves via package group — ensure a concrete version is registered.
                     if (packageUidOrPath.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
@@ -2333,10 +2446,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Issue #12: <c>IsPackage</c> probes must match GetPackage on-demand registration.
-        /// Never returns true for a different UID than requested.
-        /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "IsPackage", new Type[] { typeof(string) })]
         public static void PostIsPackageOnDemand(string packageUidOrPath, ref bool __result)
@@ -2344,9 +2453,14 @@ namespace VPB
             try
             {
                 if (__result) return;
-                if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (string.IsNullOrEmpty(packageUidOrPath)) return;
+                if (VamStartupOptimizations.TryShortCircuitAbsentVamXGetPackage(packageUidOrPath)) return;
                 if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
+
+                if (VamOnDemandLoader.TryNativeIsPackageWithRegisteredUid(packageUidOrPath, ref __result))
+                    return;
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 // Same as GetPackage: no enqueue during Refresh (probe noise → register storm).
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
@@ -2361,6 +2475,9 @@ namespace VPB
                     VamOnDemandLoader.TryRegisterPackageOnDemand(packageUidOrPath);
                     __result = MVR.FileManagement.FileManager.IsPackage(packageUidOrPath);
                     if (__result) return;
+
+                    if (VamOnDemandLoader.TryNativeIsPackageWithRegisteredUid(packageUidOrPath, ref __result))
+                        return;
 
                     if (packageUidOrPath.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                     {
@@ -2395,9 +2512,13 @@ namespace VPB
             try
             {
                 if (__result != null) return;
-                if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (string.IsNullOrEmpty(packageGroupUid)) return;
                 if (packageGroupUid.IndexOf('.') < 0) return;
+
+                if (VamOnDemandLoader.TryNativeGetPackageGroupWithRegisteredUid(packageGroupUid, ref __result))
+                    return;
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
                 // Same as GetPackage: no enqueue during Refresh.
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
@@ -2415,6 +2536,9 @@ namespace VPB
                         latestReq = packageGroupUid + ".latest";
                     VamOnDemandLoader.TryRegisterPackageOnDemand(latestReq);
                     __result = MVR.FileManagement.FileManager.GetPackageGroup(packageGroupUid);
+                    if (__result != null) return;
+
+                    VamOnDemandLoader.TryNativeGetPackageGroupWithRegisteredUid(packageGroupUid, ref __result);
                 }
                 finally
                 {

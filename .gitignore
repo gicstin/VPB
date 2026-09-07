@@ -1,5 +1,8 @@
 /obj/
 /bin/
+tests/**/bin/
+tests/**/obj/
+tests/**/TestResults/
 /.old
 /.vs
 /.sample/sample
@@ -48,3 +51,4 @@ scripts/_tabler_probe_cache.npz
 
 # Runtime scratch written next to the broker when Steam starts without one
 steam_appid.txt
+/TESTING_PLAN.md

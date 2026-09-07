@@ -1,0 +1,11 @@
+# Type names used in AccessTools.Method/Field/Property lookups that the test harness
+# cannot resolve by reflection (ambiguous simple names, or types that only exist at
+# runtime inside VaM). One name per line. Every entry needs a reason.
+#
+# Checked by VPB.Tests.Vam -> ReflectionLookupTests.
+# Prefer fixing the call site to use a fully qualified name over adding an entry here:
+# an unresolvable type means the member behind it is NOT being verified.
+
+# Third-party plugin type (MacGruber Life). Present only when the user has that plugin
+# installed, so it can never resolve against a bare VaM install.
+MacGruber.ParentHoldLink

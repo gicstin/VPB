@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -3560,6 +3560,8 @@ namespace VPB
 
         private void ToggleSideFromRailButton(ContentType type, bool fromLeftRailButton, bool rightClick)
         {
+            if (type == ContentType.Lookapedia)
+                type = ContentType.UserTags;
             if (PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick))
                 ToggleLeft(type);
             else
@@ -3585,6 +3587,8 @@ namespace VPB
             }
             bool hadSettingsPanel = IsSettingsPanelOpen();
             bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
+            if (type == ContentType.Lookapedia)
+                type = ContentType.UserTags;
             // Legacy middle-pane settings only — float Settings stays open with side panes (modeless).
             if (settingsListViewActive)
                 ExitInternalSettingsMode(true);
@@ -3636,7 +3640,7 @@ namespace VPB
             SyncActiveContentTypeFromSidePanels();
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             if (!hasHistorySide && hadHistorySide && titleText != null)
-                titleText.text = currentCategoryTitle;
+                ApplyGalleryTitleText();
 
             bool hasSettingsPanel = IsSettingsPanelOpen();
             if (!hadSettingsPanel && hasSettingsPanel)
@@ -3826,7 +3830,7 @@ namespace VPB
             }
             ApplyMode oldMode = ItemApplyMode;
             ApplyMode newMode = (oldMode == ApplyMode.SingleClick) ? ApplyMode.DoubleClick : ApplyMode.SingleClick;
-            LogUtil.Log("[GalleryPanel] ToggleApplyMode: " + oldMode + " -> " + newMode);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[GalleryPanel] ToggleApplyMode: " + oldMode + " -> " + newMode);
             ItemApplyMode = newMode;
             UpdateApplyModeButtonState();
             try { RefreshModeAmbientChrome(); } catch { }

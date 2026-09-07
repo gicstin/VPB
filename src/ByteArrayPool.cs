@@ -37,13 +37,21 @@ namespace VPB
             return v;
         }
 
-        public static byte[] Rent(int minSize)
+        internal static int GetRentalSize(int minSize)
         {
             if (minSize < 0) minSize = 0;
-            if (minSize == 0) return new byte[0];
+            if (minSize == 0) return 0;
 
-            int size = NextPowerOfTwo(minSize);
+            // Oversized buffers cannot be retained; rounding only adds RAM and can overflow.
+            int size = minSize > MaxPooledBytes ? minSize : NextPowerOfTwo(minSize);
             if (size < 4096) size = 4096;
+            return size;
+        }
+
+        public static byte[] Rent(int minSize)
+        {
+            int size = GetRentalSize(minSize);
+            if (size == 0) return new byte[0];
 
             lock (lockObj)
             {
@@ -65,11 +73,11 @@ namespace VPB
 
         public static void Return(byte[] buffer)
         {
-            if (buffer == null || buffer.Length == 0) return;
+            if (buffer == null || buffer.Length == 0 || buffer.Length > MaxPooledBytes) return;
 
             int size = buffer.Length;
             
-            // Only pool Power of Two arrays, as Rent only returns POT
+            // Only retain power-of-two buffers eligible for reuse.
             if ((size & (size - 1)) != 0) return;
 
             lock (lockObj)

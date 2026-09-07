@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>VPB.Tests.Static</AssemblyName>
+    <RootNamespace>VPB.Tests.Static</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Infra\*.cs" />
+    <Compile Include="Suites\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="$(VpbTestSdkVersion)" />
+    <PackageReference Include="xunit" Version="$(VpbXunitVersion)" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="$(VpbXunitRunnerVersion)" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+  </ItemGroup>
+
+</Project>

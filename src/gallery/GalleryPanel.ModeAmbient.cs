@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -114,8 +114,8 @@ namespace VPB
             }
             if (keep != StickyToolMode.TryOn && _tryOnActive)
             {
-                // Fallback only (Esc / force). Sticky enter uses GateStickyEnterWhileTryOn first.
-                try { TryOnRevert(); } catch { }
+                // Implicit commit , only Esc / the Revert button discard a preview.
+                try { TryOnKeep(); } catch { }
             }
             if (keep != StickyToolMode.Cleanup && cleanupModeActive)
             {
@@ -131,7 +131,7 @@ namespace VPB
             }
 
             // Sticky enter owns input — drop armed apply so banner/chrome do not stack modes.
-            if (keep != StickyToolMode.None)
+            if (keep != StickyToolMode.None && keep != StickyToolMode.TryOn)
             {
                 try { ForceClearArmedApplySemantics(toast: false); } catch { }
             }

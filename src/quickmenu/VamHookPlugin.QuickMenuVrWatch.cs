@@ -2537,6 +2537,7 @@ namespace VPB
             if (bg == null) return;
 
             bool assigned = act != QuickMenuAssignableAction.None;
+            bool isRandom = QuickMenuIsRandomAction(act);
             bool pressing = m_WatchPressIdx == hudIdx && m_WatchPressKind == 0;
             Color normal;
             Color hover;
@@ -2550,6 +2551,11 @@ namespace VPB
                 normal = QuickMenuWatchChromeDanger;
                 hover = QuickMenuWatchChromeDangerHover;
             }
+            else if (isRandom)
+            {
+                normal = GalleryUiColorTokens.RandomWell;
+                hover = GalleryUiColorTokens.RandomWellHover;
+            }
             else
             {
                 normal = assigned ? QmBackdropAssignedOpaque : QmBackdropEmptyOpaque;
@@ -2559,7 +2565,9 @@ namespace VPB
 
             if (slotIcon != null)
             {
-                Color want = m_QuickMenuEditMode ? QuickMenuWatchEmptyIconTint : Color.white;
+                Color want = m_QuickMenuEditMode
+                    ? QuickMenuWatchEmptyIconTint
+                    : (isRandom ? GalleryUiColorTokens.RandomGlyph : Color.white);
                 if (slotIcon.color != want) slotIcon.color = want;
             }
         }

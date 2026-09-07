@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -144,6 +144,7 @@ namespace VPB
             try { PluginSettingsHotkeyCaptureUpdate(); } catch { }
             try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
             try { FooterPluginInfoPollHoverTooltip(); } catch { }
+            try { DataPackStatusRowTick(); } catch { }
             try { RemoveModeUpdate(); } catch { }
 
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;

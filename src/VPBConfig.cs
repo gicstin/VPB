@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
@@ -178,6 +178,9 @@ namespace VPB
         public bool GalleryManualRefreshOnly = true;
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
+        public bool ClothingReplaceUseGeometry = true;
+        public int ClothingReplaceStrictness = 2;
+        public bool ClothingReplaceStrictnessUpgraded = false;
         /// <summary>How gallery applies an appearance .vap: replace (full), keep (keep body garments), clothingOnly (garment outfit from preset only), mergeoutfit (keep body; pick clothing items to merge on top).</summary>
         private string _appearanceClothingApplyMode = "replace";
         public string AppearanceClothingApplyMode
@@ -1101,6 +1104,8 @@ namespace VPB
         public bool TryOnModeEnabled = false;
         /// <summary>When ON, the E/C keys move the navigation rig up/down in world (complements WASD). On by default.</summary>
         public bool VerticalMoveKeysEnabled = true;
+        public bool DataPackLookapediaEnabled = true;
+        public bool DataPackHubTagsEnabled = true;
         public JSONClass ShortcutBindings = new JSONClass();
         public bool ShortcutsRequireWindowFocus = true;
         public bool ShortcutsNeedVisiblePane = true;
@@ -1670,7 +1675,7 @@ namespace VPB
             _loadedFromExistingConfig = false;
             Stopwatch loadSw = Stopwatch.StartNew();
             _lightweightGalleryTabRefreshSlotsRemaining = 0;
-            VPBLogger.Config.LogInfo("Starting Load() from: " + cfgPath);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) VPBLogger.Config.LogInfo("Starting Load() from: " + cfgPath);
             // Reset to defaults before loading
             EnableButtonGaps = true;
             EnableGalleryElementRounding = true;
@@ -1694,6 +1699,9 @@ namespace VPB
             GalleryManualRefreshOnly = true;
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
+            ClothingReplaceUseGeometry = true;
+            ClothingReplaceStrictness = 2;
+            ClothingReplaceStrictnessUpgraded = true;
             AppearanceClothingApplyMode = "replace";
             SuppressAppearanceScaleChange = false;
             ImportSidebarPrefs = new JSONClass();
@@ -1836,6 +1844,8 @@ namespace VPB
             HoldToLaunchEnabled = false;
             TryOnModeEnabled = false;
             VerticalMoveKeysEnabled = true;
+            DataPackLookapediaEnabled = true;
+            DataPackHubTagsEnabled = true;
             ShortcutBindings = new JSONClass();
             ShortcutsRequireWindowFocus = true;
             ShortcutsNeedVisiblePane = true;
@@ -1934,6 +1944,15 @@ namespace VPB
                         if (node["GalleryManualRefreshOnly"] != null) GalleryManualRefreshOnly = node["GalleryManualRefreshOnly"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
+                        if (node["ClothingReplaceUseGeometry"] != null) ClothingReplaceUseGeometry = node["ClothingReplaceUseGeometry"].AsBool;
+                        if (node["ClothingReplaceStrictness"] != null) ClothingReplaceStrictness = node["ClothingReplaceStrictness"].AsInt;
+                        if (node["ClothingReplaceStrictnessUpgraded"] != null)
+                            ClothingReplaceStrictnessUpgraded = node["ClothingReplaceStrictnessUpgraded"].AsBool;
+                        if (!ClothingReplaceStrictnessUpgraded)
+                        {
+                            if (ClothingReplaceStrictness == 1) ClothingReplaceStrictness = 2;
+                            ClothingReplaceStrictnessUpgraded = true;
+                        }
                         if (node["AppearanceClothingApplyMode"] != null)
                             AppearanceClothingApplyMode = node["AppearanceClothingApplyMode"].Value;
                         else if (node["KeepClothingWhenApplyingAppearance"] != null)
@@ -2304,6 +2323,8 @@ namespace VPB
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["TryOnModeEnabled"] != null) TryOnModeEnabled = node["TryOnModeEnabled"].AsBool;
                         if (node["VerticalMoveKeysEnabled"] != null) VerticalMoveKeysEnabled = node["VerticalMoveKeysEnabled"].AsBool;
+                        if (node["DataPackLookapediaEnabled"] != null) DataPackLookapediaEnabled = node["DataPackLookapediaEnabled"].AsBool;
+                        if (node["DataPackHubTagsEnabled"] != null) DataPackHubTagsEnabled = node["DataPackHubTagsEnabled"].AsBool;
                         if (node["ShortcutBindings"] != null) ShortcutBindings = node["ShortcutBindings"].AsObject;
                         if (node["ShortcutsRequireWindowFocus"] != null) ShortcutsRequireWindowFocus = node["ShortcutsRequireWindowFocus"].AsBool;
                         if (node["ShortcutsNeedVisiblePane"] != null) ShortcutsNeedVisiblePane = node["ShortcutsNeedVisiblePane"].AsBool;
@@ -2434,7 +2455,7 @@ namespace VPB
                             !string.IsNullOrEmpty(LastGalleryCategory))
                         {
                             s_LastLoggedLoadedGalleryCategory = LastGalleryCategory;
-                            VPBLogger.Config.LogInfo("Loaded LastGalleryCategory='" + LastGalleryCategory + "' from " + ConfigPath);
+                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) VPBLogger.Config.LogInfo("Loaded LastGalleryCategory='" + LastGalleryCategory + "' from " + ConfigPath);
                         }
                     }
                     catch { }
@@ -2512,6 +2533,9 @@ namespace VPB
                 node["GalleryManualRefreshOnly"].AsBool = GalleryManualRefreshOnly;
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
+                node["ClothingReplaceUseGeometry"].AsBool = ClothingReplaceUseGeometry;
+                node["ClothingReplaceStrictness"].AsInt = ClothingReplaceStrictness;
+                node["ClothingReplaceStrictnessUpgraded"].AsBool = ClothingReplaceStrictnessUpgraded;
                 node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;
                 node["SuppressAppearanceScaleChange"].AsBool = SuppressAppearanceScaleChange;
                 if (ImportSidebarPrefs != null) node["ImportSidebarPrefs"] = ImportSidebarPrefs;
@@ -2755,6 +2779,8 @@ namespace VPB
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["TryOnModeEnabled"].AsBool = TryOnModeEnabled;
                 node["VerticalMoveKeysEnabled"].AsBool = VerticalMoveKeysEnabled;
+                node["DataPackLookapediaEnabled"].AsBool = DataPackLookapediaEnabled;
+                node["DataPackHubTagsEnabled"].AsBool = DataPackHubTagsEnabled;
                 try { VpbShortcutMap.SaveToConfig(); } catch { }
                 if (ShortcutBindings != null) node["ShortcutBindings"] = ShortcutBindings;
                 node["ShortcutsRequireWindowFocus"].AsBool = ShortcutsRequireWindowFocus;

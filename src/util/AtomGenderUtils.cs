@@ -42,11 +42,8 @@ namespace VPB.src.util
             }
         }
 
-        public static bool IsFuta(Atom atom)
+        static bool IsFutaCharacter(DAZCharacter ch)
         {
-            if (!AtomActive(atom)) return false;
-
-            DAZCharacter ch = GetSelectedCharacter(atom);
             if (ch == null) return false;
 
             string dn = "";
@@ -54,8 +51,14 @@ namespace VPB.src.util
             try { dn = ch.displayName ?? ""; } catch { dn = ""; }
             try { nm = ch.name ?? ""; } catch { nm = ""; }
 
-            return dn.StartsWith("futa", StringComparison.OrdinalIgnoreCase)
-                || nm.StartsWith("futa", StringComparison.OrdinalIgnoreCase);
+            return LooseVapGenderProbe.IsFutaCharacterName(dn)
+                || LooseVapGenderProbe.IsFutaCharacterName(nm);
+        }
+
+        public static bool IsFuta(Atom atom)
+        {
+            if (!AtomActive(atom)) return false;
+            return IsFutaCharacter(GetSelectedCharacter(atom));
         }
 
         public static bool IsMale(Atom atom)
@@ -72,6 +75,40 @@ namespace VPB.src.util
         {
             if (!AtomActive(atom)) return false;
             return !IsMale(atom);
+        }
+
+        public static LooseVapGenderProbe.Gender ClassifyForBadge(Atom atom)
+        {
+            if (atom == null) return LooseVapGenderProbe.Gender.Unknown;
+            try { if (atom.type != "Person") return LooseVapGenderProbe.Gender.Unknown; }
+            catch { return LooseVapGenderProbe.Gender.Unknown; }
+
+            DAZCharacterSelector selector = null;
+            try { selector = atom.GetStorableByID("geometry") as DAZCharacterSelector; }
+            catch { selector = null; }
+            DAZCharacter ch = null;
+            try { if (selector != null) ch = selector.selectedCharacter; }
+            catch { ch = null; }
+            if (ch == null) return LooseVapGenderProbe.Gender.Unknown;
+            if (IsFutaCharacter(ch)) return LooseVapGenderProbe.Gender.Futa;
+
+            bool useFemaleMorphsOnMale = false;
+            try
+            {
+                JSONStorableBool flag = selector.GetBoolJSONParam("useFemaleMorphsOnMale");
+                if (flag != null) useFemaleMorphsOnMale = flag.val;
+            }
+            catch { }
+
+            try
+            {
+                if (ch.isMale)
+                    return useFemaleMorphsOnMale
+                        ? LooseVapGenderProbe.Gender.Futa
+                        : LooseVapGenderProbe.Gender.Male;
+                return LooseVapGenderProbe.Gender.Female;
+            }
+            catch { return LooseVapGenderProbe.Gender.Unknown; }
         }
     }
 }

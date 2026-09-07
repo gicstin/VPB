@@ -188,6 +188,8 @@ namespace VPB
             dest.HairSubfilter = src.HairSubfilter;
             dest.AppearanceSubfilter = src.AppearanceSubfilter;
             dest.PosePeopleFilter = src.PosePeopleFilter;
+            dest.SceneHubSubfilter = src.SceneHubSubfilter;
+            dest.HasSceneHubSubfilter = src.HasSceneHubSubfilter;
             dest.SortState = src.SortState;
             dest.BrowseHiddenMode = src.BrowseHiddenMode;
             dest.BrowseAlwaysLoadedMode = src.BrowseAlwaysLoadedMode;
@@ -257,6 +259,8 @@ namespace VPB
             s_ContentSigSb.Append('|').Append(e.HairSubfilter);
             s_ContentSigSb.Append('|').Append(e.AppearanceSubfilter);
             s_ContentSigSb.Append('|').Append(e.PosePeopleFilter);
+            s_ContentSigSb.Append('|').Append(e.HasSceneHubSubfilter ? 1 : 0);
+            s_ContentSigSb.Append('|').Append(e.SceneHubSubfilter);
             s_ContentSigSb.Append('|').Append(e.BrowseHiddenMode);
             s_ContentSigSb.Append('|').Append(e.BrowseAlwaysLoadedMode);
             s_ContentSigSb.Append('|').Append(e.BrowseOldVersionsMode);

@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.IO;
 using UnityEngine;
@@ -101,7 +102,7 @@ namespace VPB
 		}
 		public override bool SetAutoInstall(bool b)
         {
-			LogUtil.Log("SetAutoInstall " + b+" "+Path);
+			if (VPBLogger.Verbose) LogUtil.Log("SetAutoInstall " + b+" "+Path);
 			if (isVar)
             {
 				string key = System.IO.Path.GetFileNameWithoutExtension(Path);
@@ -143,7 +144,7 @@ namespace VPB
 					_hiddenCached = false;
 					return false;
 				}
-				hidden = File.Exists(full + ".hide");
+				hidden = VpbHideIndex.IsLooseHidden(full);
 			}
 			catch { hidden = false; }
 			_hiddenCached = hidden;
@@ -168,29 +169,7 @@ namespace VPB
 					&& !string.Equals(full.TrimEnd('\\', '/'), root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
 					return;
 
-				string hidePath = full + ".hide";
-				if (b)
-				{
-					if (File.Exists(hidePath))
-					{
-						_hiddenCached = true;
-						return;
-					}
-					string dir = System.IO.Path.GetDirectoryName(hidePath);
-					if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-					File.WriteAllText(hidePath, string.Empty);
-					_hiddenCached = File.Exists(hidePath);
-				}
-				else
-				{
-					if (!File.Exists(hidePath))
-					{
-						_hiddenCached = false;
-						return;
-					}
-					File.Delete(hidePath);
-					_hiddenCached = false;
-				}
+				_hiddenCached = VpbHideIndex.SetLooseHidden(full, b) ? b : (bool?)null;
 			}
 			catch { _hiddenCached = null; }
 		}
@@ -199,6 +178,8 @@ namespace VPB
 		public void InvalidateHiddenCache()
 		{
 			_hiddenCached = null;
+			try { VpbHideIndex.InvalidateLoose(FileManager.GetFullPath(Path)); }
+			catch { }
 		}
 
         public bool Install()

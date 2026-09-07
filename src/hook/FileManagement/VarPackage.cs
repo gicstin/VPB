@@ -12,6 +12,7 @@ using System.Runtime.InteropServices;
 using Valve.Newtonsoft.Json;
 using System.Threading;
 using System.Diagnostics;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -2424,40 +2425,78 @@ namespace VPB
 			// Also scan all strings for dependencies (catches local/custom references and embedded deps)
 			DependencyExtractor.ScanAllStringsForDependencies(jc, depends);
 		}
-		public bool InstallRecursive()
-        {
-			if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null && !Settings.Instance.LoadDependenciesWithPackage.Value)
+		internal sealed class InstallLogCounts
+		{
+			internal int Visited, Moved, Unchanged, Failed, Missing;
+
+			internal void LogSummary(string context, bool completed, long elapsedMs, bool logUnchanged = false)
 			{
-				return InstallSelf();
+				// GetPackage probes installed rows; only explicit batch commands need no-change summaries.
+				if (logUnchanged || VPBLogger.Verbose || !completed || Moved != 0 || Failed != 0 || Missing != 0)
+					VPBLogger.Files.LogMessage("Dependency install " + context
+						+ " result=" + (!completed ? "aborted" : Failed + Missing > 0 ? "partial" : "complete")
+						+ " package_visits=" + Visited + " moved=" + Moved + " unchanged=" + Unchanged
+						+ " install_failed=" + Failed + " missing_dependency_references=" + Missing
+						+ " elapsed_ms=" + elapsedMs, false);
 			}
-            return InstallRecursive(new HashSet<string>(), null);
-        }
+		}
+
+		public bool InstallRecursive()
+		{
+			return InstallRecursive((List<string>)null);
+		}
 
 		public bool InstallRecursive(List<string> outMovedPackageUids)
 		{
-			if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null && !Settings.Instance.LoadDependenciesWithPackage.Value)
+			var counts = new InstallLogCounts();
+			var clock = Stopwatch.StartNew();
+			bool completed = false;
+			try
 			{
-				bool moved = InstallSelf();
-				if (moved && outMovedPackageUids != null && !string.IsNullOrEmpty(Uid))
-					outMovedPackageUids.Add(Uid);
+				bool moved = InstallRecursive(outMovedPackageUids, counts);
+				completed = true;
 				return moved;
 			}
-			return InstallRecursive(new HashSet<string>(), outMovedPackageUids);
+			finally
+			{
+				counts.LogSummary("root=" + Uid, completed, clock.ElapsedMilliseconds);
+			}
 		}
 
-		private bool InstallRecursive(HashSet<string> visited, List<string> outMovedPackageUids)
+		internal bool InstallRecursive(List<string> outMovedPackageUids, InstallLogCounts counts)
+		{
+			try
+			{
+				if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null && !Settings.Instance.LoadDependenciesWithPackage.Value)
+					return InstallSelfForOperation(outMovedPackageUids, counts);
+				return InstallRecursive(new HashSet<string>(), outMovedPackageUids, counts);
+			}
+			catch (Exception ex)
+			{
+				counts.Failed++;
+				VPBLogger.Files.LogError("Dependency install aborted root=" + Uid + ": " + ex, false);
+				throw;
+			}
+		}
+
+		private bool InstallSelfForOperation(List<string> outMovedPackageUids, InstallLogCounts counts)
+		{
+			counts.Visited++;
+			bool failed;
+			bool moved = InstallSelf(out failed);
+			if (failed) counts.Failed++;
+			else if (moved) counts.Moved++;
+			else counts.Unchanged++;
+			if (moved && outMovedPackageUids != null && !string.IsNullOrEmpty(Uid)) outMovedPackageUids.Add(Uid);
+			return moved;
+		}
+
+		private bool InstallRecursive(HashSet<string> visited, List<string> outMovedPackageUids, InstallLogCounts counts)
 		{
             if (visited.Contains(this.Uid)) return false;
             visited.Add(this.Uid);
 
-			bool flag = false;
-			bool dirty= InstallSelf();
-			if (dirty)
-			{
-				flag = true;
-				if (outMovedPackageUids != null && !string.IsNullOrEmpty(Uid))
-					outMovedPackageUids.Add(Uid);
-			}
+			bool flag = InstallSelfForOperation(outMovedPackageUids, counts);
 			
 			//string linkvar = "AddonPackages/" + this.Uid + ".var";
             if (this.RecursivePackageDependencies != null)
@@ -2470,8 +2509,13 @@ namespace VPB
 						VarPackage package = FileManager.GetPackageForDependency(key, false);
 						if (package != null)
 						{
-							bool dirty2= package.InstallRecursive(visited, outMovedPackageUids);
+							bool dirty2= package.InstallRecursive(visited, outMovedPackageUids, counts);
 							if (dirty2) flag = true;
+						}
+						else
+						{
+							counts.Missing++;
+							VPBLogger.Files.LogWarning("Missing dependency requester=" + Uid + " dependency=" + key, false);
 						}
 					}
 				}
@@ -2486,6 +2530,13 @@ namespace VPB
 		}
 		public bool InstallSelf()
 		{
+			bool failed;
+			return InstallSelf(out failed);
+		}
+
+		private bool InstallSelf(out bool failed)
+		{
+			failed = false;
 			if (this.Path.StartsWith("AddonPackages/")) return false;
 
 			string linkvar = null;
@@ -2502,10 +2553,11 @@ namespace VPB
 			if (Directory.Exists(linkvar))// A directory with the same name may exist
             {
 				LogUtil.LogError("InstallSelf " + this.Path+" exist directory with same name");
+				failed = true;
 				return false;
             }
 
-			LogUtil.Log($"Installing package: {Uid} from {this.Path} to {linkvar}");
+			if (VPBLogger.Verbose) LogUtil.Log($"Installing package: {Uid} from {this.Path} to {linkvar}");
 
 			// Final rename stays on destination volume so VaM never observes partially copied archive.
 			string dir = System.IO.Path.GetDirectoryName(linkvar);
@@ -2517,6 +2569,7 @@ namespace VPB
 			catch (Exception ex)
 			{
 				LogUtil.LogError($"InstallSelf: Failed to create directory {dir}: {ex.Message}");
+				failed = true;
 				return false;
 			}
 
@@ -2532,6 +2585,7 @@ namespace VPB
 			catch (Exception ex)
 			{
 				LogUtil.LogError($"InstallSelf: Failed to install {Uid} from {sourcePath} to {linkvar}: {ex.Message}");
+				failed = true;
 				try { if (File.Exists(tempTarget)) File.Delete(tempTarget); } catch { }
 				return false;
 			}

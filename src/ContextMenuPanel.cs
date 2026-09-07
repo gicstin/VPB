@@ -542,6 +542,7 @@ namespace VPB
         {
             ClearHotkeys();
             pageStack.Clear();
+            ReleasePooledButtons();
             _waitMouseUpBeforeOutside = false;
             if (canvasGO != null) canvasGO.SetActive(false);
             enabled = false;
@@ -696,12 +697,20 @@ namespace VPB
             Canvas.ForceUpdateCanvases();
         }
 
+        private void ReleasePooledButtons()
+        {
+            // Pool visuals, not actions that retain the previous drag target and gallery.
+            for (int i = 0; i < buttonPool.Count; i++)
+            {
+                buttonPool[i].GetComponent<Button>().onClick.RemoveAllListeners();
+                buttonPool[i].SetActive(false);
+            }
+        }
+
         private void RenderOptions(List<Option> options)
         {
             ClearHotkeys();
-
-            for (int i = 0; i < buttonPool.Count; i++)
-                buttonPool[i].SetActive(false);
+            ReleasePooledButtons();
 
             if (cancelGapGO != null) cancelGapGO.SetActive(false);
             if (cancelGO != null) cancelGO.SetActive(false);

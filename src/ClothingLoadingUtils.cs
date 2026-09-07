@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -575,7 +576,7 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveClothingByWearClass({classToRemove}): target={target.uid} ({target.type})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveClothingByWearClass({classToRemove}): target={target.uid} ({target.type})");
 
             try
             {
@@ -927,6 +928,24 @@ namespace VPB
             return n > 0 ? new string(buf, 0, n) : "";
         }
 
+        private static bool StorableBelongsToItemKind(JSONStorable storable, bool wantClothing)
+        {
+            if (storable == null) return false;
+            try
+            {
+                var clothing = storable.GetComponentsInParent<DAZClothingItem>(true);
+                bool isClothingItem = clothing != null && clothing.Length > 0;
+
+                var hair = storable.GetComponentsInParent<DAZHairGroup>(true);
+                bool isHairItem = hair != null && hair.Length > 0;
+
+                if (!isClothingItem && !isHairItem) return true;
+
+                return wantClothing ? isClothingItem : isHairItem;
+            }
+            catch { return true; }
+        }
+
         private static JSONStorable FindItemPresetStorableFuzzy(Atom atom, string itemUid, string itemName, string creator, string inferredBaseId, bool isClothing, out string storableId)
         {
             storableId = null;
@@ -944,6 +963,8 @@ namespace VPB
             add(GetItemKeyForMatching(itemUid));
             add(ExtractKeyFromInferredBaseId(inferredBaseId));
             add(inferredBaseId);
+
+            int firstCreatorNeedle = needles.Count;
             add(creator);
 
             if (needles.Count == 0) return null;
@@ -970,20 +991,18 @@ namespace VPB
                 if (string.IsNullOrEmpty(sidNorm)) continue;
 
                 int tokenHits = 0;
+                int itemTokenHits = 0;
                 for (int k = 0; k < needles.Count; k++)
                 {
-                    if (sidNorm.Contains(needles[k])) tokenHits++;
+                    if (!sidNorm.Contains(needles[k])) continue;
+                    tokenHits++;
+                    if (k < firstCreatorNeedle) itemTokenHits++;
                 }
 
                 // Hard requirement: must match at least one semantic token from item/path.
-                if (tokenHits == 0) continue;
+                if (itemTokenHits == 0) continue;
 
-                // Basic type sanity to avoid applying clothing presets into unrelated hair storables (and vice versa).
-                string sidLower = sid.ToLowerInvariant();
-                if (isClothing && sidLower.Contains("hair") && !sidLower.Contains("cloth"))
-                    continue;
-                if (!isClothing && sidLower.Contains("cloth") && !sidLower.Contains("hair"))
-                    continue;
+                if (!StorableBelongsToItemKind(s, isClothing)) continue;
 
                 int score = tokenHits * 3;
                 if (sid.EndsWith("Preset", StringComparison.OrdinalIgnoreCase)) score += 2;
@@ -1153,7 +1172,7 @@ namespace VPB
                 string inferredBaseId = InferClothingHairBaseIdFromPresetJson(presetJSON);
 
                 string lookupName = !string.IsNullOrEmpty(inferredBaseId) ? inferredBaseId : itemName;
-                LogUtil.Log($"[DragDropDebug] Waiting for item preset storable. isClothing={isClothing}, itemName={itemName}, inferredBaseId={inferredBaseId}, itemUid={itemUid}, creator={creator}, presetPath={normalizedPath}");
+                LogUtil.LogVerbose($"[DragDropDebug] Waiting for item preset storable. isClothing={isClothing}, itemName={itemName}, inferredBaseId={inferredBaseId}, itemUid={itemUid}, creator={creator}, presetPath={normalizedPath}");
 
                 // Give the clothing item a few frames to initialize after being activated
                 yield return new WaitForEndOfFrame();
@@ -1205,7 +1224,7 @@ namespace VPB
                             yield break;
                         }
 
-                        LogUtil.Log($"[DragDropDebug] Found item preset storable: {storableId}. Applying preset now.");
+                        LogUtil.LogVerbose($"[DragDropDebug] Found item preset storable: {storableId}. Applying preset now.");
 
                         JSONStorableString presetNameJSS = presetStorable.GetStringJSONParam("presetName");
                         if (presetNameJSS != null)
@@ -1222,7 +1241,7 @@ namespace VPB
                             }
                         }
 
-                        LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
+                        LogUtil.LogVerbose($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
 
                         VpbImport.LoadPreset(entry, atom, VpbResourceType.General,
                             ClothingApplyMode.Replace, presetJC: presetJSON, storableNameOverride: storableId,
@@ -1244,6 +1263,54 @@ namespace VPB
             }
         }
 
+        private static string TryResolvePresetTargetItemUid(Atom atom, string path, bool isClothing)
+        {
+            if (atom == null || string.IsNullOrEmpty(path)) return "";
+
+            JSONStorable geometry = atom.GetStorableByID("geometry");
+            if (geometry == null) return "";
+
+            string prefix = isClothing ? "clothing:" : "hair:";
+            List<string> names = geometry.GetBoolParamNames();
+            if (names == null) return "";
+
+            string inferredKey = "";
+            try
+            {
+                JSONClass presetJSON = LoadPresetJsonWithPathFixups(UI.NormalizePath(path));
+                inferredKey = ExtractKeyFromInferredBaseId(InferClothingHairBaseIdFromPresetJson(presetJSON));
+            }
+            catch { }
+
+            if (!string.IsNullOrEmpty(inferredKey))
+            {
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string n = names[i];
+                    if (string.IsNullOrEmpty(n) || !n.StartsWith(prefix)) continue;
+                    string actualItemName = n.Substring(prefix.Length);
+                    if (GetItemKeyForMatching(actualItemName).Equals(inferredKey, StringComparison.OrdinalIgnoreCase))
+                        return actualItemName;
+                }
+            }
+
+            string slashed = path.Replace('\\', '/');
+            string[] parts = slashed.Split('/');
+            string itemName = parts.Length >= 2 ? parts[parts.Length - 2] : "";
+            if (string.IsNullOrEmpty(itemName)) return "";
+
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (string.IsNullOrEmpty(n) || !n.StartsWith(prefix)) continue;
+                string actualItemName = n.Substring(prefix.Length);
+                if (GetItemKeyForMatching(actualItemName).Equals(itemName, StringComparison.OrdinalIgnoreCase))
+                    return actualItemName;
+            }
+
+            return "";
+        }
+
         public static void ActivateClothingHairItemPreset(Atom atom, FileEntry entry, bool isClothing)
         {
             if (atom == null || entry == null) return;
@@ -1252,7 +1319,18 @@ namespace VPB
 
             if (isClothing && GalleryPanel.EffectiveDragDropReplaceMode)
             {
-                RemoveRealGarmentClothing(atom);
+                bool handled = false;
+                string targetUid = null;
+                try
+                {
+                    targetUid = TryResolvePresetTargetItemUid(atom, path, true);
+                    if (!string.IsNullOrEmpty(targetUid))
+                        handled = VpbClothingReplace.TryApply(atom, targetUid, null);
+                }
+                catch (Exception ex) { LogUtil.LogWarning("[VPB.Replace] preset geometric pass failed: " + ex.Message); }
+
+                if (!handled && string.IsNullOrEmpty(targetUid))
+                    RemoveRealGarmentClothing(atom);
             }
 
             string normalizedPath = UI.NormalizePath(path);
@@ -1274,7 +1352,7 @@ namespace VPB
 
             if (string.IsNullOrEmpty(itemName)) return;
 
-            LogUtil.Log($"[DragDropDebug] Target Item Name from path: {itemName} (Package: {packageName})");
+            LogUtil.LogVerbose($"[DragDropDebug] Target Item Name from path: {itemName} (Package: {packageName})");
 
             JSONStorable geometry = atom.GetStorableByID("geometry");
             if (geometry == null) return;
@@ -1301,7 +1379,7 @@ namespace VPB
                     if (actualKey.Equals(inferredKey, StringComparison.OrdinalIgnoreCase))
                     {
                         itemUid = actualItemName;
-                        LogUtil.Log($"[DragDropDebug] Matched item via inferredKey: {inferredKey} -> {itemUid}");
+                        LogUtil.LogVerbose($"[DragDropDebug] Matched item via inferredKey: {inferredKey} -> {itemUid}");
                         break;
                     }
                 }
@@ -1309,7 +1387,7 @@ namespace VPB
 
             if (!string.IsNullOrEmpty(itemUid))
             {
-                LogUtil.Log($"[DragDropDebug] Identified Item UID (inferred): {itemUid}");
+                LogUtil.LogVerbose($"[DragDropDebug] Identified Item UID (inferred): {itemUid}");
                 JSONStorableBool inferredActive = geometry.GetBoolJSONParam(prefix + itemUid);
                 if (inferredActive != null && !inferredActive.val) inferredActive.val = true;
                 StartActivateClothingHairItemPresetCoroutine(atom, entry, isClothing, itemUid, itemName, applySerial);
@@ -1383,7 +1461,7 @@ namespace VPB
                 string vamPath = FileManagerSecure.GetDirectoryName(path) + "/" + itemName + ".vam";
                 if (FileManagerSecure.FileExists(vamPath))
                 {
-                    LogUtil.Log($"[DragDropDebug] Clothing item not found on atom. Attempting to load parent .vam via JSON: {vamPath}");
+                    LogUtil.LogVerbose($"[DragDropDebug] Clothing item not found on atom. Attempting to load parent .vam via JSON: {vamPath}");
 
                     string presetsStorableId = isClothing ? "ClothingPresets" : "HairPresets";
                     JSONStorable presetsStorable = atom.GetStorableByID(presetsStorableId);
@@ -1448,7 +1526,7 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[DragDropDebug] Identified Item UID: {itemUid}");
+            LogUtil.LogVerbose($"[DragDropDebug] Identified Item UID: {itemUid}");
 
             JSONStorableBool activeJSB = geometry.GetBoolJSONParam(prefix + itemUid);
             if (activeJSB != null && !activeJSB.val)
@@ -1483,17 +1561,17 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveAllClothing: target={target.uid} ({target.type})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllClothing: target={target.uid} ({target.type})");
 
             bool cleared = false;
             try
             {
                 JSONStorable clothing = target.GetStorableByID("Clothing");
-                LogUtil.Log($"[VPB] RemoveAllClothing: Clothing storable {(clothing != null ? "found" : "NOT found")}");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllClothing: Clothing storable {(clothing != null ? "found" : "NOT found")}");
                 if (clothing != null)
                 {
                     EnsureClothingClearCached(clothing);
-                    LogUtil.Log($"[VPB] RemoveAllClothing: Clear() method {(s_ClothingClearMethod != null ? "found" : "NOT found")} on {clothing.GetType().FullName}");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllClothing: Clear() method {(s_ClothingClearMethod != null ? "found" : "NOT found")} on {clothing.GetType().FullName}");
                     if (s_ClothingClearMethod != null)
                     {
                         s_ClothingClearMethod.Invoke(clothing, null);
@@ -1557,17 +1635,17 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveAllHair: target={target.uid} ({target.type})");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllHair: target={target.uid} ({target.type})");
 
             bool cleared = false;
             try
             {
                 JSONStorable hair = target.GetStorableByID("Hair");
-                LogUtil.Log($"[VPB] RemoveAllHair: Hair storable {(hair != null ? "found" : "NOT found")}");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllHair: Hair storable {(hair != null ? "found" : "NOT found")}");
                 if (hair != null)
                 {
                     EnsureHairClearCached(hair);
-                    LogUtil.Log($"[VPB] RemoveAllHair: Clear() method {(s_HairClearMethod != null ? "found" : "NOT found")} on {hair.GetType().FullName}");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] RemoveAllHair: Clear() method {(s_HairClearMethod != null ? "found" : "NOT found")} on {hair.GetType().FullName}");
                     if (s_HairClearMethod != null)
                     {
                         s_HairClearMethod.Invoke(hair, null);

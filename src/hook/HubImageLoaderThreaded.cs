@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -656,7 +657,7 @@ namespace VPB
                         }
                         bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
                         tex.Apply(false, !isSimTexture);
-                        if (isSimTexture) LogUtil.Log($"[VPB SIM] HubLoader: Applied READABLE sim texture: {imgPath}");
+                        if (isSimTexture) { if (VPBLogger.Verbose) LogUtil.Log($"[VPB SIM] HubLoader: Applied READABLE sim texture: {imgPath}"); }
                         if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
                         {
                             try { tex.Compress(true); } catch { canCompress = false; }
@@ -670,7 +671,7 @@ namespace VPB
                             bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
                             // Keep readable until after we write cache (if enabled).
                             tex.Apply(false, false);
-                            if (isSimTexture) LogUtil.Log($"[VPB SIM] HubLoader (Standard): Applied READABLE sim texture: {imgPath}");
+                            if (isSimTexture) { if (VPBLogger.Verbose) LogUtil.Log($"[VPB SIM] HubLoader (Standard): Applied READABLE sim texture: {imgPath}"); }
                             if (canCompress) tex.Compress(true); 
                         }
                         catch (Exception ex) { LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed for {imgPath}: {ex.Message}"); }
@@ -862,6 +863,8 @@ namespace VPB
         {
             if (!_threadsRunning)
             {
+                if (VpbShutdown.IsQuitting) return;
+                try { VpbShutdown.Register("hub-image-loader", StopThreads); } catch { }
                 _threadsRunning = true;
                 imageLoaderTask = new ImageLoaderTaskInfo();
                 imageLoaderTask.name = "HubImageLoaderTask";

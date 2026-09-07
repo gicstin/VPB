@@ -14,6 +14,78 @@ namespace VPB
         /// <summary>Pause starting new images when zstd queue is deep.</summary>
         private const int OnDemandZstdBackpressureQueued = 24;
 
+        private static long EstimateManagedPass(int width, int height, bool bump, bool zstd)
+        {
+            checked
+            {
+                if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException("width");
+                long pixels = (long)width * height;
+                long mipBytes = 0;
+                int w = width, h = height;
+                while (true)
+                {
+                    mipBytes += (long)w * h * 4;
+                    if (w == 1 && h == 1) break;
+                    w = Math.Max(1, w / 2); h = Math.Max(1, h / 2);
+                }
+                // Includes decoder intermediates, fallback pooled copy and both Finish snapshots.
+                long raw = pixels * (bump ? 8 : 4);
+                if (raw > int.MaxValue || mipBytes > int.MaxValue) throw new OverflowException();
+                long bytes = pixels * (bump ? 18 : 6) + height * 32L + 4096;
+                bytes += ByteArrayPool.GetRentalSize((int)raw) + 2 * mipBytes;
+                if (zstd)
+                {
+                    ulong bound = ZstdNet.Compressor.GetCompressBoundLong((ulong)mipBytes);
+                    if (bound > int.MaxValue) throw new OverflowException();
+                    bytes += ByteArrayPool.GetRentalSize((int)bound) + (long)bound;
+                }
+                return bytes;
+            }
+        }
+
+        private static long EstimateManagedRoute(string path, string cachePath, TextureFlags flags,
+            int width, int height, int secondWidth, int secondHeight, bool zstd, out bool exclusive)
+        {
+            exclusive = true;
+            try
+            {
+                long sourceBytes = TryGetOnDemandFileEntrySize(path);
+                int sw, sh;
+                if (sourceBytes <= 0 || !TryReadImageDimensionsPartial(path, out sw, out sh)) return 512L * 1024 * 1024;
+                if (width <= 0 || height <= 0)
+                {
+                    width = flags.compress ? Math.Max(4, sw / 4 * 4) : sw;
+                    height = flags.compress ? Math.Max(4, sh / 4 * 4) : sh;
+                }
+                checked
+                {
+                    // Sum both passes: original payload remains fallback until downscaled decode succeeds.
+                    long bytes = sourceBytes + EstimateManagedPass(width, height, flags.createNormalFromBump, zstd);
+                    if (secondWidth > 0 && secondHeight > 0)
+                        bytes += sourceBytes + EstimateManagedPass(secondWidth, secondHeight, flags.createNormalFromBump, zstd);
+                    if (!string.IsNullOrEmpty(cachePath) && System.IO.File.Exists(cachePath))
+                    {
+                        long cacheBytes = new System.IO.FileInfo(cachePath).Length;
+                        if (cacheBytes <= 0 || cacheBytes > int.MaxValue) return 512L * 1024 * 1024;
+                        bytes += 3L * ByteArrayPool.GetRentalSize((int)cacheBytes);
+                        if (zstd)
+                        {
+                            ulong bound = ZstdNet.Compressor.GetCompressBoundLong((ulong)cacheBytes);
+                            if (bound > int.MaxValue) return 512L * 1024 * 1024;
+                            bytes += ByteArrayPool.GetRentalSize((int)bound) + (long)bound;
+                        }
+                    }
+                    exclusive = false;
+                    return bytes;
+                }
+            }
+            catch (Exception)
+            {
+                // Preserve formats with unknown headers and oversized routes, but run them alone.
+                return 512L * 1024 * 1024;
+            }
+        }
+
         private static float GetOnDemandFrameBudgetSec()
         {
             return s_UiVisible && !s_UiShowSummary ? OnDemandBulkFrameBudgetSec : OnDemandFrameBudgetSec;
@@ -180,8 +252,11 @@ namespace VPB
 
             var active = new List<NestedPump>(parallel);
 
+            int session = OnDemandZstdWriteQueue.CurrentSession;
+            try
+            {
             // Sliding window: refill as soon as a slot frees — no batch barrier stall.
-            while ((pending.Count > 0 || active.Count > 0) && !s_CancelRequested)
+            while ((pending.Count > 0 || active.Count > 0) && !s_CancelRequested && OnDemandZstdWriteQueue.IsSessionCurrent(session))
             {
                 bool zstdBackpressured = OnDemandZstdWriteQueue.PendingCount >= OnDemandZstdBackpressureQueued;
                 while (!zstdBackpressured && active.Count < parallel && pending.Count > 0)
@@ -251,7 +326,8 @@ namespace VPB
                 yield return null;
             }
 
-            if (s_CancelRequested)
+            }
+            finally
             {
                 for (int i = 0; i < active.Count; i++)
                 {

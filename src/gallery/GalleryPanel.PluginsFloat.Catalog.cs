@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -40,7 +41,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.PluginsFloat] catalog load START force=" + (force ? "1" : "0")
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.PluginsFloat] catalog load START force=" + (force ? "1" : "0")
                     + " ready=" + (_pluginsFloatCatalogReady ? "1" : "0")
                     + " prev=" + _pluginsFloatCatalog.Count);
             }
@@ -111,7 +112,7 @@ namespace VPB
             _pluginsFloatCatalogCo = null;
             try
             {
-                LogUtil.Log("[VPB.PluginsFloat] catalog apply START count=" + _pluginsFloatCatalog.Count);
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.PluginsFloat] catalog apply START count=" + _pluginsFloatCatalog.Count);
             }
             catch { }
 
@@ -139,7 +140,7 @@ namespace VPB
                     }
                     try
                     {
-                        LogUtil.Log("[VPB.PluginsFloat] cslist refs warm count=" + refs.Count
+                        if (VPBLogger.Verbose) LogUtil.Log("[VPB.PluginsFloat] cslist refs warm count=" + refs.Count
                             + " warmGen=" + warmGen);
                     }
                     catch { }
@@ -171,7 +172,7 @@ namespace VPB
             if (!IsPluginsFloatOpen() || !_pluginsFloatCatalogReady) return;
             try
             {
-                LogUtil.Log("[VPB.PluginsFloat] tree refresh after refs warm");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.PluginsFloat] tree refresh after refs warm");
             }
             catch { }
             RefreshPluginsFloatTree(false);

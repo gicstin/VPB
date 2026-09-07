@@ -1,0 +1,21 @@
+# VPBConfig fields whose value is deliberately re-derived, re-stamped or migrated on load,
+# so a changed value is not expected to come back unchanged. One field name per line.
+#
+# Checked by VPB.Tests.Vam -> ConfigRoundTripTests.EveryScalarSettingSurvivesSaveAndReload.
+# Every entry needs a reason. A field listed here without one is indistinguishable from a
+# setting that silently fails to persist.
+
+# One-time migration flags. Load() forces them back to true once the migration has run,
+# so writing false and reloading legitimately yields true again.
+ClothingReplaceStrictnessUpgraded
+GalleryScanWlBadgePrimaryV1
+
+# Re-stamped from VpbPerfController.PerfStepScaleVersion on every Save().
+PerfStepScaleVersion
+
+# Legacy mirrors of the unified gallery UI scale. The InnerPaneScaleVR / InnerPaneScaleDesktop
+# setters assign these, so Load() overwrites whatever was persisted. Change InnerPaneScale*
+# instead - those are the live settings.
+SideButtonScale
+SideButtonScaleVR
+SideButtonScaleDesktop

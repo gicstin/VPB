@@ -1,5 +1,8 @@
 ﻿using BepInEx.Configuration;
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 namespace VPB
 {
@@ -66,6 +69,7 @@ namespace VPB
         public ConfigEntry<int> TextureLogLevel;
 
         public ConfigEntry<bool> LogStartupDetails;
+        public ConfigEntry<bool> VerboseLogging;
         public ConfigEntry<string> IndexDiagUidSubstring;
         public ConfigEntry<bool> LogStartupTiming;
         public ConfigEntry<bool> StartupDeferGallerySqlRebuild;
@@ -170,6 +174,7 @@ namespace VPB
         public ConfigEntry<bool> PreferLightClothingHairCatalogBeforeNativeRefresh;
         public ConfigEntry<bool> HairSwapKeepVisibleUntilLoaded;
         public ConfigEntry<bool> ReturnToSceneViewOnStartup;
+        public ConfigEntry<string> StartupScenePath;
         public ConfigEntry<bool> ForceLatestDependencies;
         public ConfigEntry<string> ForceLatestDependencyPackageGroups;
         public ConfigEntry<string> ForceLatestDependencyIgnorePackageGroups;
@@ -227,7 +232,8 @@ namespace VPB
             SkipPackageMorphRefreshOnClothingHairCatalog = config.Bind<bool>("Settings", "SkipPackageMorphRefreshOnClothingHairCatalog", true, "During on-demand clothing/hair catalog FileManager.Refresh, skip DAZ RefreshPackageMorphs. Avoids ~18s/person morph re-ingest (e.g. Naturalis/TittyMagic) when only clothing/hair packages were registered. Morph packages still trigger full morph refresh. Disable if new morphs from a clothing .var are missing after dress.");
             PreferLightClothingHairCatalogBeforeNativeRefresh = config.Bind<bool>("Settings", "PreferLightClothingHairCatalogBeforeNativeRefresh", true, "Before forced native FileManager.Refresh on clothing/hair apply, try DAZ RefreshClothingItems/RefreshHairItems on the target Person. If the clothing/hair param already exists, cancel the pending native refresh (avoids multi-second Person refresh × all atoms).");
             HairSwapKeepVisibleUntilLoaded = config.Bind<bool>("Helpers", "HairSwapKeepVisibleUntilLoaded", true, "During hair preset replace, keep previous hair visible until new hair finishes loading. Outgoing hair collisions are disabled first; outgoing mesh is hidden only after incoming hair is ready.");
-            ReturnToSceneViewOnStartup = config.Bind<bool>("Helpers", "ReturnToSceneViewOnStartup", false, "On startup, skip VaM main menu (World UI) and return to scene view (same as Return To Scene View).");
+            ReturnToSceneViewOnStartup = config.Bind<bool>("Helpers", "ReturnToSceneViewOnStartup", false, "On startup, skip VaM main menu (World UI) and return to scene view (same as Return To Scene View). Ignored when StartupScenePath is set — that scene loads instead.");
+            StartupScenePath = config.Bind<string>("Helpers", "StartupScenePath", "", "Scene JSON path or package uid (Author.Pkg.N:/Saves/scene/....json) loaded once after World UI is ready. Empty = VaM main menu. Set from gallery: right-click one scene → Set as startup scene.");
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
             ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Comma/space separated list of package groups (Author.Package) to ignore (do not force) even when ForceLatestDependencies is enabled.");
@@ -236,6 +242,7 @@ namespace VPB
             PluginConsolidateCslist = config.Bind<bool>("Settings", "PluginConsolidateCslist", true, "In the Plugins gallery category, hide .cs files that are referenced by a .cslist so each multi-file plugin shows as a single row (its .cslist). Standalone .cs files (not in any .cslist) always show. Turn off to see every individual .cs file.");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 0, "0=off, 1=summary only, 2=verbose per-texture trace.");
+            VerboseLogging = config.Bind<bool>("Logging", "VerboseLogging", false, "Include per-package logging detail and bypass exact-repeat suppression. Does not enable expensive diagnostics or change their switches.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");
             LogVerboseUi = config.Bind<bool>("Logging", "LogVerboseUi", false, "Log verbose UI lifecycle messages (can be noisy).");
             LogConfigPerf = config.Bind<bool>("Logging", "LogConfigPerf", false, "Log VPB.cfg Save timing and each ConfigChanged subscriber. Set false after troubleshooting.");
@@ -332,6 +339,39 @@ namespace VPB
 
 
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "", "Last opened Gallery page.");
+
+            DropOrphanedMpConfig(config);
+        }
+
+        private static void DropOrphanedMpConfig(ConfigFile config)
+        {
+            if (config == null) return;
+            try
+            {
+                FieldInfo field = typeof(ConfigFile).GetField("OrphanedEntries", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (field == null) return;
+                IDictionary orphans = field.GetValue(config) as IDictionary;
+                if (orphans == null || orphans.Count == 0) return;
+
+                List<object> drop = new List<object>();
+                foreach (DictionaryEntry kv in orphans)
+                {
+                    ConfigDefinition def = kv.Key as ConfigDefinition;
+                    if (def == null) continue;
+                    if (string.Equals(def.Section, "Net", StringComparison.OrdinalIgnoreCase))
+                        drop.Add(kv.Key);
+                    else if (string.Equals(def.Section, "Pose", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(def.Key, "DualAnchorAtMe", StringComparison.OrdinalIgnoreCase))
+                        drop.Add(kv.Key);
+                }
+                if (drop.Count == 0) return;
+                for (int i = 0; i < drop.Count; i++)
+                    orphans.Remove(drop[i]);
+                config.Save();
+            }
+            catch
+            {
+            }
         }
     }
 }

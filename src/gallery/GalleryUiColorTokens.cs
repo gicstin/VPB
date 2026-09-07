@@ -107,6 +107,12 @@ namespace VPB
         public static readonly Color RuleBlockedText = new Color(0.94f, 0.80f, 0.80f, 1f);
         public static readonly Color RuleAskText = new Color(0.95f, 0.87f, 0.66f, 1f);
         public static readonly Color RuleAllowedText = new Color(0.78f, 0.94f, 0.84f, 1f);
+        // ── Random / dice affordance (idle gold lift, not hover-only) ────────
+        public static readonly Color RandomWell = new Color(0.34f, 0.26f, 0.08f, 1f);
+        public static readonly Color RandomWellHover = new Color(0.48f, 0.37f, 0.11f, 1f);
+        public static readonly Color RandomWellTransparent = new Color(0.50f, 0.38f, 0.10f, 0.42f);
+        public static readonly Color RandomWellTransparentHover = new Color(0.62f, 0.48f, 0.14f, 0.62f);
+        public static readonly Color RandomGlyph = new Color(1f, 0.87f, 0.56f, 1f);
 
         // ── Sticky mode ambient (stronger than idle chrome — change blindness) ─
         public static readonly Color ModeToolBanner = new Color(0.20f, 0.28f, 0.34f, 0.97f);
@@ -118,6 +124,10 @@ namespace VPB
         // Slightly higher luminance than legacy so peers separate under squint test.
         public static readonly Color FacetCategory = new Color(0.62f, 0.28f, 0.28f, 1f);
         public static readonly Color FacetCreator = new Color(0.64f, 0.50f, 0.22f, 1f);
+        /// <summary>Look-A-Pedia identity facet (warmer than Creator so rails separate under squint).</summary>
+        public static readonly Color FacetLooksLike = new Color(0.70f, 0.46f, 0.24f, 1f);
+        ////// <summary>Hub listing type (Looks / Scenes / Clothing) , cooler than Hub tags green.</summary>
+        public static readonly Color FacetHubType = new Color(0.26f, 0.38f, 0.52f, 1f);
         public static readonly Color FacetTag = new Color(0.52f, 0.30f, 0.54f, 1f);
         public static readonly Color FacetRating = new Color(0.68f, 0.58f, 0.26f, 1f);
         public static readonly Color FacetUnrated = new Color(0.34f, 0.40f, 0.46f, 1f);
@@ -139,6 +149,15 @@ namespace VPB
         public static readonly Color FacetLicense = new Color(0.46f, 0.46f, 0.28f, 1f);
         public static readonly Color FacetUserTagsSide = new Color(0.24f, 0.40f, 0.42f, 1f);
 
+        // ── Pack-supplied (read-only) tags ──────────────────────────────────
+        public static readonly Color PackTagRow = new Color(0.15f, 0.25f, 0.20f, 1f);
+        public static readonly Color PackTagText = new Color(0.62f, 0.86f, 0.73f, 1f);
+        public static readonly Color PackTagRowHidden = new Color(0.16f, 0.16f, 0.16f, 1f);
+        /// <summary>Idle Looks-like row in Tags Available (header uses <see cref="FacetLooksLike"/>).</summary>
+        public static readonly Color LooksLikeRow = new Color(0.32f, 0.22f, 0.12f, 1f);
+        /// <summary>Idle Hub-type row in Tags Available.</summary>
+        public static readonly Color HubTypeRow = new Color(0.14f, 0.20f, 0.28f, 1f);
+
         // ── User-tag editor state ───────────────────────────────────────────
         public static readonly Color UserTagOn = new Color(0.24f, 0.40f, 0.42f, 1f);
         public static readonly Color UserTagMixed = new Color(0.38f, 0.38f, 0.28f, 1f);
@@ -146,6 +165,11 @@ namespace VPB
         public static readonly Color UserTagFilterOn = FacetTitleSearchActive;
         public static readonly Color UserTagFilterExclude = new Color(0.62f, 0.28f, 0.28f, 1f);
         public static readonly Color UserTagDropGlow = new Color(0.40f, 0.72f, 0.50f, 1f);
+
+        // ── Person gender badge (atom pickers) ──────────────────────────────
+        public static readonly Color GenderMaleGlyph = new Color(0.46f, 0.68f, 0.96f, 1f);
+        public static readonly Color GenderFemaleGlyph = new Color(0.94f, 0.58f, 0.78f, 1f);
+        public static readonly Color GenderFutaGlyph = new Color(0.78f, 0.62f, 0.98f, 1f);
 
         // ── Title-search popup cue ──────────────────────────────────────────
         public static readonly Color TitleSearchPopupIdle = SurfacePanel;
