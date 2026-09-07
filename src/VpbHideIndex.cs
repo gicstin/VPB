@@ -158,6 +158,11 @@ namespace VPB
 
 		public static bool SetItemHidden(string uid, string internalPath, bool hide)
 		{
+			return SetItemHidden(uid, internalPath, hide, null);
+		}
+
+		internal static bool SetItemHidden(string uid, string internalPath, bool hide, VpbLocalDatabase.HideMarkerWriteSession session)
+		{
 			if (string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(internalPath)) return false;
 			string markerPath = BuildVarEntryFlagPath(uid, internalPath, "hide");
 			if (string.IsNullOrEmpty(markerPath)) return false;
@@ -170,7 +175,7 @@ namespace VPB
 				if (s_built && s_hiddenItemKeys != null)
 					s_hiddenItemKeys = CopyWith(s_hiddenItemKeys, key, hide);
 			}
-			MirrorOne(VpbLocalDatabase.HideScopeItem, uid, internalPath.Replace('\\', '/'), hide);
+			MirrorOne(VpbLocalDatabase.HideScopeItem, uid, internalPath.Replace('\\', '/'), hide, session);
 			return true;
 		}
 
@@ -186,6 +191,11 @@ namespace VPB
 
 		public static bool SetPackageHidden(string uid, string varRelPath, bool hide)
 		{
+			return SetPackageHidden(uid, varRelPath, hide, null);
+		}
+
+		internal static bool SetPackageHidden(string uid, string varRelPath, bool hide, VpbLocalDatabase.HideMarkerWriteSession session)
+		{
 			if (string.IsNullOrEmpty(uid)) return false;
 			string markerPath = BuildPackageHidePath(uid, varRelPath);
 			if (string.IsNullOrEmpty(markerPath)) return false;
@@ -197,7 +207,7 @@ namespace VPB
 				if (s_built && s_hiddenPkgUids != null)
 					s_hiddenPkgUids = CopyWith(s_hiddenPkgUids, uid, hide);
 			}
-			MirrorOne(VpbLocalDatabase.HideScopePkg, uid, "", hide);
+			MirrorOne(VpbLocalDatabase.HideScopePkg, uid, "", hide, session);
 			return true;
 		}
 
@@ -322,11 +332,12 @@ namespace VPB
 			       || inner.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase);
 		}
 
-		private static void MirrorOne(string scope, string uid, string internalPath, bool present)
+		private static void MirrorOne(string scope, string uid, string internalPath, bool present, VpbLocalDatabase.HideMarkerWriteSession session)
 		{
 			try
 			{
-				if (!VpbLocalDatabase.TrySetHideMarker(scope, uid, internalPath, present))
+				if (!(session != null ? session.TrySet(scope, uid, internalPath, present)
+					: VpbLocalDatabase.TrySetHideMarker(scope, uid, internalPath, present)))
 					s_sqlMirrorFresh = false;
 			}
 			catch { s_sqlMirrorFresh = false; }

@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.IO;
 using UnityEngine;
@@ -101,7 +102,7 @@ namespace VPB
 		}
 		public override bool SetAutoInstall(bool b)
         {
-			LogUtil.Log("SetAutoInstall " + b+" "+Path);
+			if (VPBLogger.Verbose) LogUtil.Log("SetAutoInstall " + b+" "+Path);
 			if (isVar)
             {
 				string key = System.IO.Path.GetFileNameWithoutExtension(Path);

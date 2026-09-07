@@ -24,95 +24,109 @@ namespace VPB
                 bool scanWlDirty = false;
                 bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
 
-                for (int i = 0; i < selectedFiles.Count; i++)
+                try
                 {
-                    var f = selectedFiles[i];
-                    if (f == null) continue;
-                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl, out bool uidWl))
-                        continue;
-                    if (!seen.Add(uid)) continue;
-                    resolvedUids++;
-                    bool localScene = LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string absLocalJson, out _, false);
-                    bool pendingScanWlChange = scanWlEnabled && !localScene && !uidWl;
-                    if (fiAi && uidAl && !pendingScanWlChange) continue;
-
-                    if (localScene)
+                    for (int i = 0; i < selectedFiles.Count; i++)
                     {
-                        if (!fiAi)
+                        var f = selectedFiles[i];
+                        if (f == null) continue;
+                        if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl, out bool uidWl))
+                            continue;
+                        if (!seen.Add(uid)) continue;
+                        resolvedUids++;
+                        bool localScene = LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string absLocalJson, out _, false);
+                        bool pendingScanWlChange = scanWlEnabled && !localScene && !uidWl;
+                        if (fiAi && uidAl && !pendingScanWlChange) continue;
+
+                        if (localScene)
+                        {
+                            if (!fiAi)
+                            {
+                                try
+                                {
+                                    f.SetAutoInstall(true);
+                                    installOk++;
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages local scene " + uid + ": " + ex.Message);
+                                }
+                                try
+                                {
+                                    if (LocalSceneGallerySupport.InstallDependenciesForSceneJsonFile(absLocalJson))
+                                    {
+                                        try { FileManagerBridge.Refresh("tbox_autoinstall_local_scene", RefreshScope.Both); } catch { }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages local scene deps " + uid + ": " + ex.Message);
+                                }
+                            }
+                            continue;
+                        }
+
+                        if (scanWlEnabled && !uidWl)
                         {
                             try
                             {
-                                f.SetAutoInstall(true);
-                                installOk++;
-                            }
-                            catch (Exception ex)
-                            {
-                                LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages local scene " + uid + ": " + ex.Message);
-                            }
-                            try
-                            {
-                                if (LocalSceneGallerySupport.InstallDependenciesForSceneJsonFile(absLocalJson))
+                                if (ScanWhitelistManager.Instance.AddUidOverride(uid))
                                 {
-                                    try { FileManagerBridge.Refresh("tbox_autoinstall_local_scene", RefreshScope.Both); } catch { }
+                                    scanWlOk++;
+                                    scanWlDirty = true;
                                 }
                             }
                             catch (Exception ex)
                             {
-                                LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages local scene deps " + uid + ": " + ex.Message);
+                                LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages SetScanWhitelist " + uid + ": " + ex.Message);
                             }
                         }
-                        continue;
-                    }
 
-                    if (scanWlEnabled && !uidWl)
-                    {
+                        string path = ResolveVarPathForUid(uid);
+                        if (string.IsNullOrEmpty(path)) continue;
+
                         try
                         {
-                            if (ScanWhitelistManager.Instance.AddUidOverride(uid))
+                            var fe = FileManager.GetFileEntry(path, true);
+                            if (fe is VarFileEntry vfe && !fiAi)
                             {
-                                scanWlOk++;
-                                scanWlDirty = true;
+                                vfe.SetAutoInstall(true);
+                                installOk++;
+                            }
+                            else if (fe is SystemFileEntry sfe && sfe.isVar && !fiAi)
+                            {
+                                sfe.SetAutoInstall(true);
+                                installOk++;
                             }
                         }
                         catch (Exception ex)
                         {
-                            LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages SetScanWhitelist " + uid + ": " + ex.Message);
+                            LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages SetAutoInstall " + uid + ": " + ex.Message);
                         }
-                    }
 
-                    string path = ResolveVarPathForUid(uid);
-                    if (string.IsNullOrEmpty(path)) continue;
-
-                    try
-                    {
-                        var fe = FileManager.GetFileEntry(path, true);
-                        if (fe is VarFileEntry vfe && !fiAi)
+                        try
                         {
-                            vfe.SetAutoInstall(true);
-                            installOk++;
+                            if (!uidAl && AutoLoadPackagesManager.Instance != null)
+                            {
+                                AutoLoadPackagesManager.Instance.SetAutoLoad(uid, true, save: false);
+                                loadOk++;
+                            }
                         }
-                        else if (fe is SystemFileEntry sfe && sfe.isVar && !fiAi)
+                        catch (Exception ex)
                         {
-                            sfe.SetAutoInstall(true);
-                            installOk++;
+                            LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages SetAutoLoad " + uid + ": " + ex.Message);
                         }
                     }
-                    catch (Exception ex)
+                }
+                finally
+                {
+                    if (loadOk > 0)
                     {
-                        LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages SetAutoInstall " + uid + ": " + ex.Message);
-                    }
-
-                    try
-                    {
-                        if (!uidAl && AutoLoadPackagesManager.Instance != null)
+                        try { AutoLoadPackagesManager.Instance.Save(); }
+                        catch (Exception ex)
                         {
-                            AutoLoadPackagesManager.Instance.SetAutoLoad(uid, true);
-                            loadOk++;
+                            LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages SaveAutoLoad: " + ex.Message);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages SetAutoLoad " + uid + ": " + ex.Message);
                     }
                 }
 
@@ -166,42 +180,45 @@ namespace VPB
                 int ok = 0;
                 int failed = 0;
 
-                for (int i = 0; i < selectedFiles.Count; i++)
+                using (var hideMarkers = new VpbLocalDatabase.HideMarkerWriteSession())
                 {
-                    var f = selectedFiles[i];
-                    if (f == null) continue;
-                    if (!TryGetTboxHideTarget(f, escalateToPackage, out TboxHideTargetKind kind, out string key, out bool hidden))
-                        continue;
-                    if (!seenTargets.Add(key)) continue;
-                    resolvableTargets++;
-                    if (hidden) continue;
+                    for (int i = 0; i < selectedFiles.Count; i++)
+                    {
+                        var f = selectedFiles[i];
+                        if (f == null) continue;
+                        if (!TryGetTboxHideTarget(f, escalateToPackage, out TboxHideTargetKind kind, out string key, out bool hidden))
+                            continue;
+                        if (!seenTargets.Add(key)) continue;
+                        resolvableTargets++;
+                        if (hidden) continue;
 
-                    try
-                    {
-                        bool hid;
-                        switch (kind)
+                        try
                         {
-                            case TboxHideTargetKind.LocalSceneJson:
-                                hid = PackageHidePrefs.TryEnsureLocalSceneJsonHidden(f);
-                                break;
-                            case TboxHideTargetKind.LocalPreset:
-                                f.SetHidden(true);
-                                hid = f.IsHidden();
-                                break;
-                            case TboxHideTargetKind.VarItem:
-                                hid = PackageHidePrefs.TryEnsureVarItemHidden(f);
-                                break;
-                            default:
-                                hid = PackageHidePrefs.TryEnsureVpbPackageHidden(f);
-                                break;
+                            bool hid;
+                            switch (kind)
+                            {
+                                case TboxHideTargetKind.LocalSceneJson:
+                                    hid = PackageHidePrefs.TryEnsureLocalSceneJsonHidden(f);
+                                    break;
+                                case TboxHideTargetKind.LocalPreset:
+                                    f.SetHidden(true);
+                                    hid = f.IsHidden();
+                                    break;
+                                case TboxHideTargetKind.VarItem:
+                                    hid = PackageHidePrefs.SetVarItemHidden(f, true, hideMarkers);
+                                    break;
+                                default:
+                                    hid = PackageHidePrefs.SetPackageHiddenForEntry(f, true, hideMarkers);
+                                    break;
+                            }
+                            if (hid) ok++;
+                            else failed++;
                         }
-                        if (hid) ok++;
-                        else failed++;
-                    }
-                    catch (Exception ex)
-                    {
-                        failed++;
-                        LogUtil.LogError("[VPB] TboxHideSelectedPackages " + key + ": " + ex.Message);
+                        catch (Exception ex)
+                        {
+                            failed++;
+                            LogUtil.LogError("[VPB] TboxHideSelectedPackages " + key + ": " + ex.Message);
+                        }
                     }
                 }
 
@@ -326,46 +343,49 @@ namespace VPB
                 int ok = 0;
                 int failed = 0;
 
-                for (int i = 0; i < selectedFiles.Count; i++)
+                using (var hideMarkers = new VpbLocalDatabase.HideMarkerWriteSession())
                 {
-                    var f = selectedFiles[i];
-                    if (f == null) continue;
-                    if (!TryGetTboxHideTarget(f, escalateToPackage, out TboxHideTargetKind kind, out string key, out bool hidden))
-                        continue;
-                    if (!seenTargets.Add(key)) continue;
-                    resolvableTargets++;
-                    if (!hidden) continue;
+                    for (int i = 0; i < selectedFiles.Count; i++)
+                    {
+                        var f = selectedFiles[i];
+                        if (f == null) continue;
+                        if (!TryGetTboxHideTarget(f, escalateToPackage, out TboxHideTargetKind kind, out string key, out bool hidden))
+                            continue;
+                        if (!seenTargets.Add(key)) continue;
+                        resolvableTargets++;
+                        if (!hidden) continue;
 
-                    try
-                    {
-                        bool unhid;
-                        switch (kind)
+                        try
                         {
-                            case TboxHideTargetKind.LocalSceneJson:
-                                unhid = PackageHidePrefs.TryRemoveLocalSceneJsonHide(f);
-                                break;
-                            case TboxHideTargetKind.LocalPreset:
-                                f.SetHidden(false);
-                                unhid = !f.IsHidden();
-                                break;
-                            case TboxHideTargetKind.VarItem:
-                                unhid = false;
-                                if (PackageHidePrefs.IsVarItemHidden(f))
-                                    unhid |= PackageHidePrefs.TryRemoveVarItemHide(f);
-                                if (PackageHidePrefs.IsPackageVarHidden(f))
-                                    unhid |= PackageHidePrefs.TryRemovePackageVarHide(f);
-                                break;
-                            default:
-                                unhid = PackageHidePrefs.TryRemovePackageVarHide(f);
-                                break;
+                            bool unhid;
+                            switch (kind)
+                            {
+                                case TboxHideTargetKind.LocalSceneJson:
+                                    unhid = PackageHidePrefs.TryRemoveLocalSceneJsonHide(f);
+                                    break;
+                                case TboxHideTargetKind.LocalPreset:
+                                    f.SetHidden(false);
+                                    unhid = !f.IsHidden();
+                                    break;
+                                case TboxHideTargetKind.VarItem:
+                                    unhid = false;
+                                    if (PackageHidePrefs.IsVarItemHidden(f))
+                                        unhid |= PackageHidePrefs.SetVarItemHidden(f, false, hideMarkers);
+                                    if (PackageHidePrefs.IsPackageVarHidden(f))
+                                        unhid |= PackageHidePrefs.SetPackageHiddenForEntry(f, false, hideMarkers);
+                                    break;
+                                default:
+                                    unhid = PackageHidePrefs.SetPackageHiddenForEntry(f, false, hideMarkers);
+                                    break;
+                            }
+                            if (unhid) ok++;
+                            else failed++;
                         }
-                        if (unhid) ok++;
-                        else failed++;
-                    }
-                    catch (Exception ex)
-                    {
-                        failed++;
-                        LogUtil.LogError("[VPB] TboxUnhideSelectedPackages " + key + ": " + ex.Message);
+                        catch (Exception ex)
+                        {
+                            failed++;
+                            LogUtil.LogError("[VPB] TboxUnhideSelectedPackages " + key + ": " + ex.Message);
+                        }
                     }
                 }
 
@@ -412,90 +432,104 @@ namespace VPB
                 bool scanWlDirty = false;
                 bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
 
-                for (int i = 0; i < selectedFiles.Count; i++)
+                try
                 {
-                    var f = selectedFiles[i];
-                    if (f == null) continue;
-                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl, out bool uidWl))
-                        continue;
-                    if (!seenUid.Add(uid)) continue;
-                    resolvableUids++;
-                    bool localScene = LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false);
-                    bool pendingScanWlChange = scanWlEnabled && !localScene && uidWl;
-                    if (!fiAi && !uidAl && !pendingScanWlChange) continue;
-
-                    if (localScene)
+                    for (int i = 0; i < selectedFiles.Count; i++)
                     {
-                        if (fiAi)
+                        var f = selectedFiles[i];
+                        if (f == null) continue;
+                        if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl, out bool uidWl))
+                            continue;
+                        if (!seenUid.Add(uid)) continue;
+                        resolvableUids++;
+                        bool localScene = LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false);
+                        bool pendingScanWlChange = scanWlEnabled && !localScene && uidWl;
+                        if (!fiAi && !uidAl && !pendingScanWlChange) continue;
+
+                        if (localScene)
+                        {
+                            if (fiAi)
+                            {
+                                try
+                                {
+                                    f.SetAutoInstall(false);
+                                    installOk++;
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages local scene " + uid + ": " + ex.Message);
+                                }
+                            }
+                            continue;
+                        }
+
+                        if (scanWlEnabled && uidWl)
                         {
                             try
                             {
-                                f.SetAutoInstall(false);
-                                installOk++;
+                                if (ScanWhitelistManager.Instance.RemoveUidOverride(uid))
+                                {
+                                    scanWlOk++;
+                                    scanWlDirty = true;
+                                }
                             }
                             catch (Exception ex)
                             {
-                                LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages local scene " + uid + ": " + ex.Message);
+                                LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages ClearScanWhitelist " + uid + ": " + ex.Message);
                             }
                         }
-                        continue;
-                    }
 
-                    if (scanWlEnabled && uidWl)
-                    {
+                        string path = ResolveVarPathForUid(uid);
+                        if (string.IsNullOrEmpty(path)) continue;
+
                         try
                         {
-                            if (ScanWhitelistManager.Instance.RemoveUidOverride(uid))
+                            var fe = FileManager.GetFileEntry(path, true);
+                            if (fe is VarFileEntry vfe)
                             {
-                                scanWlOk++;
-                                scanWlDirty = true;
+                                if (vfe.IsAutoInstall())
+                                {
+                                    vfe.SetAutoInstall(false);
+                                    installOk++;
+                                }
+                            }
+                            else if (fe is SystemFileEntry sfe && sfe.isVar)
+                            {
+                                if (sfe.IsAutoInstall())
+                                {
+                                    sfe.SetAutoInstall(false);
+                                    installOk++;
+                                }
                             }
                         }
                         catch (Exception ex)
                         {
-                            LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages ClearScanWhitelist " + uid + ": " + ex.Message);
+                            LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages SetAutoInstall " + uid + ": " + ex.Message);
                         }
-                    }
 
-                    string path = ResolveVarPathForUid(uid);
-                    if (string.IsNullOrEmpty(path)) continue;
-
-                    try
-                    {
-                        var fe = FileManager.GetFileEntry(path, true);
-                        if (fe is VarFileEntry vfe)
+                        try
                         {
-                            if (vfe.IsAutoInstall())
+                            if (AutoLoadPackagesManager.Instance != null && AutoLoadPackagesManager.Instance.IsAutoLoad(uid))
                             {
-                                vfe.SetAutoInstall(false);
-                                installOk++;
+                                AutoLoadPackagesManager.Instance.SetAutoLoad(uid, false, save: false);
+                                loadOk++;
                             }
                         }
-                        else if (fe is SystemFileEntry sfe && sfe.isVar)
+                        catch (Exception ex)
                         {
-                            if (sfe.IsAutoInstall())
-                            {
-                                sfe.SetAutoInstall(false);
-                                installOk++;
-                            }
+                            LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages SetAutoLoad " + uid + ": " + ex.Message);
                         }
                     }
-                    catch (Exception ex)
+                }
+                finally
+                {
+                    if (loadOk > 0)
                     {
-                        LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages SetAutoInstall " + uid + ": " + ex.Message);
-                    }
-
-                    try
-                    {
-                        if (AutoLoadPackagesManager.Instance != null && AutoLoadPackagesManager.Instance.IsAutoLoad(uid))
+                        try { AutoLoadPackagesManager.Instance.Save(); }
+                        catch (Exception ex)
                         {
-                            AutoLoadPackagesManager.Instance.SetAutoLoad(uid, false);
-                            loadOk++;
+                            LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages SaveAutoLoad: " + ex.Message);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages SetAutoLoad " + uid + ": " + ex.Message);
                     }
                 }
 

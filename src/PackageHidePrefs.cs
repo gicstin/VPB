@@ -301,7 +301,7 @@ namespace VPB
 			s_fanoutCollapseSettled = true;
 		}
 
-		private static bool SetVarItemHidden(FileEntry entry, bool hide)
+		internal static bool SetVarItemHidden(FileEntry entry, bool hide, VpbLocalDatabase.HideMarkerWriteSession session = null)
 		{
 			string entryPath = entry != null ? entry.Path : "(null)";
 			if (hide) AbandonFanoutCollapseAfterUserItemHide();
@@ -314,7 +314,7 @@ namespace VPB
 					LogUtil.LogWarning("[VPB] HidePrefs: could not resolve VAR sub-item for " + entryPath);
 					return false;
 				}
-				bool ok = VpbHideIndex.SetItemHidden(uid, internalPath, hide);
+				bool ok = VpbHideIndex.SetItemHidden(uid, internalPath, hide, session);
 				if (!ok)
 					LogUtil.LogWarning("[VPB] HidePrefs: item hide marker did not settle for " + uid + ":/" + internalPath);
 				return ok;
@@ -336,7 +336,7 @@ namespace VPB
 			return SetPackageHiddenForEntry(entry, false);
 		}
 
-		private static bool SetPackageHiddenForEntry(FileEntry entry, bool hide)
+		internal static bool SetPackageHiddenForEntry(FileEntry entry, bool hide, VpbLocalDatabase.HideMarkerWriteSession session = null)
 		{
 			string entryPath = entry != null ? entry.Path : "(null)";
 			try
@@ -347,7 +347,7 @@ namespace VPB
 					LogUtil.LogWarning("[VPB] HidePrefs: could not resolve package uid from " + entryPath);
 					return false;
 				}
-				return SetPackageHiddenByUid(uid, ResolveVarRelPathForUid(uid), hide);
+				return SetPackageHiddenByUid(uid, ResolveVarRelPathForUid(uid), hide, session);
 			}
 			catch (Exception ex)
 			{
@@ -376,11 +376,11 @@ namespace VPB
 			return SetPackageHiddenByUid(pkg.Uid, pkg.Path, false);
 		}
 
-		private static bool SetPackageHiddenByUid(string uid, string varRelPath, bool hide)
+		private static bool SetPackageHiddenByUid(string uid, string varRelPath, bool hide, VpbLocalDatabase.HideMarkerWriteSession session = null)
 		{
 			try
 			{
-				bool ok = VpbHideIndex.SetPackageHidden(uid, varRelPath, hide);
+				bool ok = VpbHideIndex.SetPackageHidden(uid, varRelPath, hide, session);
 				if (!ok)
 					LogUtil.LogWarning("[VPB] HidePrefs: package hide marker did not settle for " + uid);
 				return ok;

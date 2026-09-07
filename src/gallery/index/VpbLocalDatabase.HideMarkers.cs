@@ -79,17 +79,38 @@ namespace VPB
 
 		internal static bool TrySetHideMarker(string scope, string pkgUid, string internalPath, bool present)
 		{
-			if (!VpbSqlite3.IsAvailable) return false;
-			if (string.IsNullOrEmpty(scope) || string.IsNullOrEmpty(pkgUid)) return false;
-			try
+			using (var session = new HideMarkerWriteSession())
+				return session.TrySet(scope, pkgUid, internalPath, present);
+		}
+
+		internal sealed class HideMarkerWriteSession : IDisposable
+		{
+			private VpbSqlite3.Connection connection;
+
+			internal bool TrySet(string scope, string pkgUid, string internalPath, bool present)
 			{
-				using (var conn = new VpbSqlite3.Connection(DbPath))
+				if (!VpbSqlite3.IsAvailable) return false;
+				if (string.IsNullOrEmpty(scope) || string.IsNullOrEmpty(pkgUid)) return false;
+				try
 				{
-					EnsureHideMarkerSchema(conn);
+					if (connection == null)
+					{
+						var opened = new VpbSqlite3.Connection(DbPath);
+						try
+						{
+							EnsureHideMarkerSchema(opened);
+							connection = opened;
+						}
+						catch
+						{
+							opened.Dispose();
+							throw;
+						}
+					}
 					string sql = present
 						? "INSERT OR REPLACE INTO hide_marker(scope, pkg_uid, internal_path) VALUES(?,?,?)"
 						: "DELETE FROM hide_marker WHERE scope=? AND pkg_uid=? AND internal_path=?";
-					using (var st = conn.Prepare(sql))
+					using (var st = connection.Prepare(sql))
 					{
 						st.BindText(1, scope);
 						st.BindText(2, pkgUid);
@@ -98,11 +119,19 @@ namespace VPB
 					}
 					return true;
 				}
+				catch (Exception ex)
+				{
+					try { LogUtil.LogWarning("[VPB.DB] hide_marker update failed: " + ex.Message); } catch { }
+					return false;
+				}
 			}
-			catch (Exception ex)
+
+			public void Dispose()
 			{
-				try { LogUtil.LogWarning("[VPB.DB] hide_marker update failed: " + ex.Message); } catch { }
-				return false;
+				var opened = connection;
+				connection = null;
+				try { if (opened != null) opened.Dispose(); }
+				catch { }
 			}
 		}
 
