@@ -69,6 +69,7 @@ namespace VPB
         public ConfigEntry<int> TextureLogLevel;
 
         public ConfigEntry<bool> LogStartupDetails;
+        public ConfigEntry<bool> VerboseLogging;
         public ConfigEntry<string> IndexDiagUidSubstring;
         public ConfigEntry<bool> LogStartupTiming;
         public ConfigEntry<bool> StartupDeferGallerySqlRebuild;
@@ -193,6 +194,7 @@ namespace VPB
             PluginConsolidateCslist = config.Bind<bool>("Settings", "PluginConsolidateCslist", true, "In the Plugins gallery category, hide .cs files that are referenced by a .cslist so each multi-file plugin shows as a single row (its .cslist). Standalone .cs files (not in any .cslist) always show. Turn off to see every individual .cs file.");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 0, "0=off, 1=summary only, 2=verbose per-texture trace.");
+            VerboseLogging = config.Bind<bool>("Logging", "VerboseLogging", false, "Include per-package logging detail and bypass exact-repeat suppression. Does not enable expensive diagnostics or change their switches.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");
             LogVerboseUi = config.Bind<bool>("Logging", "LogVerboseUi", false, "Log verbose UI lifecycle messages (can be noisy).");
             LogConfigPerf = config.Bind<bool>("Logging", "LogConfigPerf", false, "Log VPB.cfg Save timing and each ConfigChanged subscriber. Set false after troubleshooting.");

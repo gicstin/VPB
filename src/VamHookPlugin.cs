@@ -362,6 +362,7 @@ namespace VPB
             }
 
             Settings.Init(this.Config);
+            VPBLogger.RefreshOptions();
             try
             {
                 if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null)
@@ -691,6 +692,8 @@ namespace VPB
 
         void OnApplicationQuit()
         {
+            LogUtil.LogPerfSummary("quit");
+            VPBLogger.Flush();
             // Runs before OnDestroy during player quit — kill Win32 pump, companion pipe, zstd writers early.
             try { VpbProgressService.ShutdownForQuit(); } catch { }
             try { VpbRandomHistory.Flush(); } catch { }
@@ -926,6 +929,7 @@ namespace VPB
 
         void Update()
         {
+            VPBLogger.Poll();
             EnsureAtomAddedSubscription();
             VpbFrameRate.Tick();
             VpbPerfDiag.RefreshCache();

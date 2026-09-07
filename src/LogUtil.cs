@@ -105,8 +105,11 @@ namespace VPB
         struct PerfMetric
         {
             public double totalMs;
+            public double minMs;
+            public double maxMs;
             public long totalBytes;
             public int count;
+            public int failures;
         }
 
         struct SlowDiskSample
@@ -1259,7 +1262,6 @@ namespace VPB
                 LogError("SCENELOAD STATS exception: " + ex);
             }
 
-            perf.Clear();
             slowDisk.Clear();
             sceneLoadAutoEndFailedLogged = false;
             sceneLoadNotBusyStableFrames = 0;
@@ -1645,59 +1647,64 @@ namespace VPB
             sb.Append(suffix);
         }
 
-        public static void PerfAdd(string key, double ms, long bytes)
+        public static void PerfAdd(string key, double ms, long bytes, bool failed = false)
         {
             if (string.IsNullOrEmpty(key))
             {
                 return;
             }
 
-            PerfMetric m;
-            if (!perf.TryGetValue(key, out m))
+            lock (perf)
             {
-                m = new PerfMetric();
-            }
+                PerfMetric m;
+                perf.TryGetValue(key, out m);
+                if (m.count == 0 || ms < m.minMs) m.minMs = ms;
+                if (m.count == 0 || ms > m.maxMs) m.maxMs = ms;
 
-            m.totalMs += ms;
-            m.totalBytes += bytes;
-            m.count += 1;
-            perf[key] = m;
+                m.totalMs += ms;
+                m.totalBytes += bytes;
+                m.count += 1;
+                if (failed) m.failures++;
+                perf[key] = m;
+            }
         }
 
-        static void LogPerfSummary()
+        internal static void LogPerfSummary(string reason = "scene_end")
         {
-            if (perf.Count == 0)
+            KeyValuePair<string, PerfMetric>[] metrics;
+            lock (perf)
             {
-                return;
+                if (perf.Count == 0) return;
+                // Drain under the add lock so samples arriving during output belong to the next interval.
+                metrics = perf.OrderBy(x => x.Key, StringComparer.Ordinal).ToArray();
+                perf.Clear();
             }
 
-            var keys = perf.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
             var sb = StringBuilderPool.Get();
             try
             {
-                sb.Append(GetTimeString());
-                sb.Append(" (vb_warn) ");
-                sb.Append("[VB] PERF ");
+                sb.Append("[VB] PERF interval=").Append(reason).Append(" ");
                 bool first = true;
-                foreach (var k in keys)
+                foreach (var metric in metrics)
                 {
-                    var m = perf[k];
+                    var m = metric.Value;
                     if (!first) sb.Append(" | ");
                     first = false;
-                    sb.Append(k);
-                    sb.Append("=");
-                    sb.Append(m.totalMs.ToString("0.00"));
-                    sb.Append("ms (");
-                    sb.Append(m.count);
+                    sb.Append(metric.Key);
+                    sb.Append(" samples=").Append(m.count);
+                    sb.Append(" failures=").Append(m.failures);
+                    sb.Append(" total_ms=").Append(m.totalMs.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(" avg_ms=").Append((m.totalMs / m.count).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(" min_ms=").Append(m.minMs.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append(" max_ms=").Append(m.maxMs.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
                     if (m.totalBytes != 0)
                     {
-                        sb.Append(", ");
+                        sb.Append(" bytes=");
                         FormatBytes(sb, m.totalBytes);
                     }
-                    sb.Append(")");
                 }
 
-                LogWarning(sb.ToString());
+                VPBLogger.Perf.LogMessage(sb.ToString(), false);
             }
             finally
             {
