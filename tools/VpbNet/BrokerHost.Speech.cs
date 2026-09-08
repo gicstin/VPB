@@ -28,6 +28,7 @@ namespace VpbNet
         VoiceWizardOsc _speechOsc;
         ProcessAudioCapture _speechCapture;
         bool _speechEnabled, _speechTransmit, _speechCaptions, _speechDiscardCaptions;
+        bool _speechAudioObserved, _speechCaptionObserved;
         int _speechPeerId, _speechPid, _speechOscPort, _speechWizardPort;
         uint _speechClaim, _speechSequence, _speechEpoch;
         Action<string> _speechCaptionHandler;
@@ -101,6 +102,7 @@ namespace VpbNet
                     if (reset) _speechResult = string.Empty;
                 }
                 if (captions != _speechCaptions) _speechDiscardCaptions = true;
+                if (reset || captions != _speechCaptions) _speechCaptionObserved = false;
                 if (reset)
                 {
                     if (_speechOsc != null) { _speechOsc.Dispose(); _speechOsc = null; }
@@ -186,11 +188,11 @@ namespace VpbNet
                 if (_speechCapture.Error != null)
                 {
                     _speechStatus = _speechCapture.Error;
-                    Log(1, "[Speech] " + _speechStatus);
                     _speechNextProbe = now + 5000;
                 }
                 _speechCapture.Dispose();
                 _speechCapture = null;
+                _speechAudioObserved = false;
             }
             SpeechPeer peer;
             bool connected = _speechEnabled && _speechPeers.TryGetValue(_speechPeerId, out peer);
@@ -212,7 +214,11 @@ namespace VpbNet
                         _speechNextProbe = now + 2000;
                         try
                         {
-                            if (_speechOsc == null) _speechOsc = new VoiceWizardOsc(_speechOscPort, _speechWizardPort);
+                            if (_speechOsc == null)
+                            {
+                                _speechOsc = new VoiceWizardOsc(_speechOscPort, _speechWizardPort);
+                                _speechCaptionObserved = false;
+                            }
                             if (_speechTransmit && _speechCapture == null)
                             {
                                 int pid = FindVoiceWizard();
@@ -239,7 +245,6 @@ namespace VpbNet
                     }
                     if (_speechTransmit && _speechOsc != null && _speechCapture != null && _speechCapture.Started)
                     {
-                        _speechStatus = "Peer connected; Voice Wizard audio capture active";
                         for (int i = 0; i < 6 && _speechCapture.TryRead(_speechPacket, 9); i++)
                         {
                             uint sequence = ++_speechSequence;
@@ -247,15 +252,21 @@ namespace VpbNet
                             for (int j = 9; j < 9 + VpbNetSpeech.FrameBytes; j++)
                                 if (_speechPacket[j] != 0) { audible = true; break; }
                             if (!audible) continue;
+                            _speechAudioObserved = true;
                             _speechPacket[0] = VpbNetSpeech.Audio;
                             VpbIpc.WriteU32(_speechPacket, 1, _speechClaim);
                             VpbIpc.WriteU32(_speechPacket, 5, sequence);
                             peer.Cipher.Send(_speechPacket, 9 + VpbNetSpeech.FrameBytes, peer.SendWire);
                         }
+                        _speechStatus = _speechAudioObserved
+                            ? "Encrypted peer connected; Voice Wizard audio detected"
+                            : "Encrypted peer connected; Voice Wizard capture ready, waiting for audio";
+                        if (_speechCaptions && _speechCaptionObserved) _speechStatus += "; captions confirmed";
                     }
                     else if (!_speechTransmit && (!_speechCaptions || _speechOsc != null)) _speechStatus = _speechCaptions
-                        ? "Peer connected; listening for Voice Wizard captions"
-                        : "Peer connected; receiving speech";
+                        ? (_speechCaptionObserved ? "Encrypted peer connected; Voice Wizard captions confirmed"
+                            : "Encrypted peer connected; OSC listener open, waiting for Voice Wizard captions")
+                        : "Encrypted peer connected; ready to receive speech";
                 }
             }
             if (now >= _speechNextStatus)
@@ -270,7 +281,12 @@ namespace VpbNet
             }
         }
 
-        void OnSpeechCaption(string text) { if (_speechCaptions && !_speechDiscardCaptions) SendSpeechCaption(text); }
+        void OnSpeechCaption(string text)
+        {
+            if (!_speechCaptions || _speechDiscardCaptions) return;
+            _speechCaptionObserved = true;
+            SendSpeechCaption(text);
+        }
 
         void SetSpeechResult(string text)
         {
@@ -340,11 +356,11 @@ namespace VpbNet
             _speechStatus = portBusy
                 ? "Speech port is unavailable. Close VRChat or another OSC listener; VPB retries automatically."
                 : operation + " failed (" + error.GetType().Name + ")";
-            Log(1, "[Speech] " + _speechStatus);
         }
 
         void StopSpeechCapture()
         {
+            _speechAudioObserved = false;
             if (_speechCapture != null) _speechCapture.Dispose();
         }
 

@@ -370,6 +370,7 @@
     <Compile Include="src\net\VpbNetFidelityRig.cs" />
     <Compile Include="src\net\VpbNetRuntime.cs" />
     <Compile Include="src\net\VpbNetSpeechController.cs" />
+    <Compile Include="src\net\VpbNetVoiceWizardProbe.cs" />
     <Compile Include="src\net\VpbNetSpeechPlayback.cs" />
     <Compile Include="src\net\VpbNetTriggerRelay.cs" />
     <Compile Include="src\net\VpbNetPropSync.cs" />

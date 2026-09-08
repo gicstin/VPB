@@ -191,11 +191,22 @@ namespace VpbNet
                 Speech.SpeechSelfTest.Require(ReferenceEquals(connection, host._speechOsc) && host._speechTransmit && host._speechCaptions,
                     "enabling captions preserves voice connection");
                 Speech.SpeechSelfTest.Require(host._speechDiscardCaptions, "discard captions queued before enabling");
+                host.OnSpeechCaption("queued");
+                Speech.SpeechSelfTest.Require(!host._speechCaptionObserved, "queued captions do not confirm reception");
+                host._speechDiscardCaptions = false;
+                host.OnSpeechCaption("current");
+                host.OnSpeechCaption("next");
+                host.HandleSpeechCommand(22);
+                Speech.SpeechSelfTest.Require(host._speechCaptionObserved, "caption evidence survives traffic and configuration heartbeat");
                 host._rx[at + 3] = 0;
                 VpbIpc.WriteU32(host._rx, at + 18, 3);
                 host.HandleSpeechCommand(22);
                 Speech.SpeechSelfTest.Require(ReferenceEquals(connection, host._speechOsc) && host._speechTransmit && !host._speechCaptions,
                     "disabling captions preserves voice connection");
+                Speech.SpeechSelfTest.Require(!host._speechCaptionObserved, "disabling captions resets reception evidence");
+                host._speechAudioObserved = true;
+                host.StopSpeechCapture();
+                Speech.SpeechSelfTest.Require(!host._speechAudioObserved, "capture stop resets audio evidence");
                 host._rx[at + 2] = 0;
                 VpbIpc.WriteU32(host._rx, at + 18, 4);
                 host.HandleSpeechCommand(22);

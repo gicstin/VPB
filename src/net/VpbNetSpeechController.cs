@@ -10,7 +10,11 @@ namespace VPB
         static readonly byte[] Packet = new byte[VpbIpc.MaxDataPayload];
         static readonly VpbNetSpeechPlayback Playback = new VpbNetSpeechPlayback();
         static VpbNetUiKit.Chip _enableButton, _shareButton, _captionButton;
+        static VpbNetUiKit.Chip _speakButton;
         static Text _statusLabel, _captionLabel, _resultLabel;
+        static Text _wizardLabel;
+        static string _wizardStatus;
+        static float _nextWizardProbe;
         static InputField _text;
         static GameObject _details, _setup;
         static bool _showSetup;
@@ -20,6 +24,7 @@ namespace VPB
         static float _nextConfigure, _captionUntil;
         static string _status = "Speech off";
         static string _loggedStatus;
+        static bool _loggedPeerAudio;
         static string _caption = string.Empty;
         static string _requestResult = string.Empty;
         static uint _requestId;
@@ -40,12 +45,13 @@ namespace VPB
             _captionButton = VpbNetUiKit.Btn(controls, "STT captions", 0f, scale, ToggleCaptions);
             _statusLabel = VpbNetUiKit.Line(card, _status, VpbNetUiKit.FontCaption, UI.TextDim, VpbNetUiKit.LineRef, scale, true);
             _details = VpbNetUiKit.Pane(card, "Speech details", scale);
+            _wizardLabel = VpbNetUiKit.Line(_details, string.Empty, VpbNetUiKit.FontCaption, UI.TextDim, VpbNetUiKit.LineRef * 2, scale, true);
             _captionLabel = VpbNetUiKit.Line(_details, string.Empty, VpbNetUiKit.FontBody, UI.TextPrimary, VpbNetUiKit.LineRef * 2, scale, true);
             _captionLabel.supportRichText = false;
             GameObject entry = VpbNetUiKit.Row(_details, VpbNetUiKit.ButtonRef, scale);
             _text = VpbNetUiKit.Field(entry, "Type to speak (200 characters)", VpbNetUiKit.ButtonRef, scale);
             _text.characterLimit = 200;
-            VpbNetUiKit.PrimaryBtn(entry, "Speak", 88f, scale, Speak);
+            _speakButton = VpbNetUiKit.PrimaryBtn(entry, "Speak", 88f, scale, Speak);
             _resultLabel = VpbNetUiKit.Line(_details, string.Empty, VpbNetUiKit.FontCaption, UI.TextDim, VpbNetUiKit.LineRef * 2, scale, true);
             _resultLabel.supportRichText = false;
             VpbNetUiKit.Btn(_details, "Advanced connection settings", 0f, scale, delegate { _showSetup = !_showSetup; RefreshUi(); });
@@ -98,7 +104,7 @@ namespace VPB
         {
             Settings.Instance.NetSpeechEnabled.Value = !Enabled;
             Reset();
-            VPB.src.util.VPBLogger.Main.LogInfo("[VPB.Net][Speech] " + (Enabled ? "Enabled" : "Disabled"));
+            LogSpeechInfo(Enabled ? "Enabled" : "Disabled");
             RefreshUi();
         }
 
@@ -106,7 +112,7 @@ namespace VPB
         {
             if (!Enabled || !_connected) return;
             _share = !_share;
-            VPB.src.util.VPBLogger.Main.LogInfo("[VPB.Net][Speech] Voice sharing " + (_share ? "on" : "off"));
+            LogSpeechInfo(_share ? "Voice sharing on" : "Voice sharing off");
             ConfigureChanged();
             RefreshUi();
         }
@@ -115,14 +121,20 @@ namespace VPB
         {
             if (!Enabled || !_connected) return;
             _captions = !_captions;
-            VPB.src.util.VPBLogger.Main.LogInfo("[VPB.Net][Speech] STT captions " + (_captions ? "on" : "off"));
+            LogSpeechInfo(_captions ? "STT captions on" : "STT captions off");
             ConfigureChanged();
             RefreshUi();
         }
 
         static void Speak()
         {
-            if (!Enabled || !_connected || _text == null) return;
+            if (_text == null) return;
+            if (!Enabled || !_connected)
+            {
+                _requestResult = !Enabled ? "Enable speech before speaking." : "Connect a partner, load matching scenes and claim both avatars before speaking.";
+                RefreshUi();
+                return;
+            }
             if (++_requestId == 0) _requestId = 1;
             _requestDeadline = 0;
             int count = VpbNetSpeech.WriteText(Packet, VpbNetSpeech.Speak, _text.text);
@@ -137,6 +149,16 @@ namespace VPB
 
         public static void Tick()
         {
+            if (Enabled && Time.realtimeSinceStartup >= _nextWizardProbe)
+            {
+                _nextWizardProbe = Time.realtimeSinceStartup + 2f;
+                string status = VpbNetVoiceWizardProbe.Check(Settings.Instance.NetSpeechProcessId.Value, Settings.Instance.NetSpeechWizardPort.Value);
+                if (_wizardStatus != status)
+                {
+                    _wizardStatus = status;
+                    LogSpeechInfo(status);
+                }
+            }
             bool connected = VpbNetPresence.PeerUp && VpbNetPresence.PeerId > 0 && VpbNetPresence.ScenesMatch
                 && !string.IsNullOrEmpty(VpbNetPresence.MyAvatar) && !string.IsNullOrEmpty(VpbNetPresence.PeerAvatar);
             int peer = VpbNetPresence.PeerId;
@@ -224,11 +246,21 @@ namespace VPB
             }
             else if (Enabled && _connected && !stale && kind == VpbNetSpeech.Audio && count == 9 + VpbNetSpeech.FrameBytes
                 && VpbIpc.ReadU32(bytes, offset + 1) == _claim && VpbNetPresence.ScenesMatch)
+            {
+                if (!_loggedPeerAudio)
+                {
+                    _loggedPeerAudio = true;
+                    LogSpeechInfo("Peer audio received");
+                }
                 Playback.Push(VpbNetPresence.PeerAvatar, VpbIpc.ReadU32(bytes, offset + 5), bytes, offset + 9);
+            }
         }
 
         public static void Reset()
         {
+            _loggedPeerAudio = false;
+            _nextWizardProbe = 0f;
+            if (!Enabled) _wizardStatus = null;
             _share = _captions = false;
             _caption = string.Empty;
             _requestResult = string.Empty;
@@ -242,8 +274,10 @@ namespace VPB
 
         public static void DestroyUi()
         {
+            _wizardLabel = null;
             _details = _setup = null;
             _enableButton = _shareButton = _captionButton = null;
+            _speakButton = null;
             _statusLabel = _captionLabel = _resultLabel = null;
             _text = null;
         }
@@ -255,14 +289,23 @@ namespace VPB
             SendConfiguration(Enabled && _connected);
         }
 
+        static void LogSpeechInfo(string text)
+        {
+            string message = "[VPB.Net][Speech] " + text;
+            VPB.src.util.VPBLogger.Main.LogInfo(message, false);
+            if (SuperController.singleton != null)
+                SuperController.singleton.Message(message, logToFile: false, splash: false);
+        }
+
         static void RefreshUi()
         {
             if (_loggedStatus != _status)
             {
                 _loggedStatus = _status;
-                VPB.src.util.VPBLogger.Main.LogInfo("[VPB.Net][Speech] " + _status);
+                LogSpeechInfo(_status);
             }
             VpbNetUiKit.Show(_details, Enabled);
+            if (_speakButton != null) _speakButton.SetEnabled(Enabled && _connected && _share);
             VpbNetUiKit.Show(_setup, Enabled && _showSetup);
             if (_captionLabel != null) VpbNetUiKit.Show(_captionLabel.gameObject, _caption.Length > 0);
             if (_resultLabel != null)
@@ -288,6 +331,7 @@ namespace VPB
                 _captionButton.SetRole(_captions ? UI.AccentGreen : UI.ChromePanel, UI.TextPrimary);
             }
             if (_statusLabel != null && _statusLabel.text != _status) _statusLabel.text = _status;
+            if (_wizardLabel != null && _wizardLabel.text != _wizardStatus) _wizardLabel.text = _wizardStatus ?? string.Empty;
             if (_captionLabel != null && _captionLabel.text != _caption) _captionLabel.text = _caption;
         }
     }
