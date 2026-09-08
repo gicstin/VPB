@@ -112,6 +112,18 @@ namespace VPB.Tests.Static
             string manifestPath = Repo.Path_("vam_patch", "patch_manifest.json");
             using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
 
+            var listed = new HashSet<string>(doc.RootElement.EnumerateArray()
+                .Select(e => e.GetProperty("RelativePath").GetString()), StringComparer.OrdinalIgnoreCase);
+            foreach (string required in new[] {
+                "BepInEx/patchers/VPB.Patcher.dll",
+                "BepInEx/plugins/VPB/VPB.dll",
+                "BepInEx/plugins/VPB/patch_manifest.json",
+                "BepInEx/plugins/VPB/assets/icons.pack",
+                "BepInEx/plugins/VPB/net/VpbNet.exe",
+                "BepInEx/plugins/VPB/net/steam_api64.dll"
+            })
+                Assert.True(listed.Contains(required), "Install manifest omits required payload: " + required);
+
             var missing = new List<string>();
             int entries = 0;
             foreach (JsonElement e in doc.RootElement.EnumerateArray())

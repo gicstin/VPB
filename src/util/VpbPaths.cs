@@ -64,7 +64,6 @@ namespace VPB
                 int removed = 0;
                 if (!string.IsNullOrEmpty(s_LegacyRoot))
                     removed += VpbLegacyLayout.SweepPluginsRoot(s_LegacyRoot, LogSweepInfo, LogSweepWarning);
-                removed += VpbLegacyLayout.SweepMpOnlyUnderVpbDir(s_Root, LogSweepInfo);
                 if (removed > 0)
                 {
                     LogUtil.Log("[VPB] Retired " + removed + " leftover layout item(s); the shipped tree is "

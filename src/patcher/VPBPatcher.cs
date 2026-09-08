@@ -185,7 +185,6 @@ namespace VPB.Patcher
                     return;
 
                 int removed = VpbLegacyLayout.SweepPluginsRoot(pluginsDir, LogPruneInfo, LogPruneWarning);
-                removed += VpbLegacyLayout.SweepMpOnlyUnderVpbDir(vpbDir, LogPruneInfo);
 
                 removed += PruneUnshippedFiles(vpbDir);
 

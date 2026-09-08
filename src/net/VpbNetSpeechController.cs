@@ -19,6 +19,7 @@ namespace VPB
         static uint _claim, _epoch = 1;
         static float _nextConfigure, _captionUntil;
         static string _status = "Speech off";
+        static string _loggedStatus;
         static string _caption = string.Empty;
         static string _requestResult = string.Empty;
         static uint _requestId;
@@ -97,21 +98,24 @@ namespace VPB
         {
             Settings.Instance.NetSpeechEnabled.Value = !Enabled;
             Reset();
+            VPB.src.util.VPBLogger.Main.LogInfo("[VPB.Net][Speech] " + (Enabled ? "Enabled" : "Disabled"));
             RefreshUi();
         }
 
         static void ToggleShare()
         {
-            if (!Enabled) return;
+            if (!Enabled || !_connected) return;
             _share = !_share;
+            VPB.src.util.VPBLogger.Main.LogInfo("[VPB.Net][Speech] Voice sharing " + (_share ? "on" : "off"));
             ConfigureChanged();
             RefreshUi();
         }
 
         static void ToggleCaptions()
         {
-            if (!Enabled) return;
+            if (!Enabled || !_connected) return;
             _captions = !_captions;
+            VPB.src.util.VPBLogger.Main.LogInfo("[VPB.Net][Speech] STT captions " + (_captions ? "on" : "off"));
             ConfigureChanged();
             RefreshUi();
         }
@@ -150,7 +154,10 @@ namespace VPB
                 if (_configured) SendConfiguration(false);
                 Playback.Stop();
                 _share = _captions = false;
-                _status = Enabled ? "Speech waits for matching scenes and both claimed avatars" : "Speech off";
+                _status = !Enabled ? "Enable speech to use voice and captions"
+                    : !VpbNetPresence.PeerUp || VpbNetPresence.PeerId <= 0 ? "Waiting for partner to join"
+                    : !VpbNetPresence.ScenesMatch ? "Both players must load the same scene"
+                    : "Both players must claim an avatar";
             }
             else if (Time.realtimeSinceStartup >= _nextConfigure)
             {
@@ -250,6 +257,11 @@ namespace VPB
 
         static void RefreshUi()
         {
+            if (_loggedStatus != _status)
+            {
+                _loggedStatus = _status;
+                VPB.src.util.VPBLogger.Main.LogInfo("[VPB.Net][Speech] " + _status);
+            }
             VpbNetUiKit.Show(_details, Enabled);
             VpbNetUiKit.Show(_setup, Enabled && _showSetup);
             if (_captionLabel != null) VpbNetUiKit.Show(_captionLabel.gameObject, _caption.Length > 0);
@@ -258,9 +270,23 @@ namespace VPB
                 VpbNetUiKit.Show(_resultLabel.gameObject, _requestResult.Length > 0);
                 if (_resultLabel.text != _requestResult) _resultLabel.text = _requestResult;
             }
-            if (_enableButton != null) _enableButton.SetText(Enabled ? "Speech on" : "Enable speech");
-            if (_shareButton != null) _shareButton.SetText(_share ? "Stop sharing" : "Share voice");
-            if (_captionButton != null) _captionButton.SetText(_captions ? "STT captions on" : "STT captions off");
+            if (_enableButton != null)
+            {
+                _enableButton.SetText(Enabled ? "Speech: ON" : "Speech: OFF");
+                _enableButton.SetRole(Enabled ? UI.AccentGreen : UI.ChromePanel, UI.TextPrimary);
+            }
+            if (_shareButton != null)
+            {
+                _shareButton.SetText(_share ? "Share voice: ON" : "Share voice: OFF");
+                _shareButton.SetEnabled(Enabled && _connected);
+                _shareButton.SetRole(_share ? UI.AccentGreen : UI.ChromePanel, UI.TextPrimary);
+            }
+            if (_captionButton != null)
+            {
+                _captionButton.SetText(_captions ? "STT captions: ON" : "STT captions: OFF");
+                _captionButton.SetEnabled(Enabled && _connected);
+                _captionButton.SetRole(_captions ? UI.AccentGreen : UI.ChromePanel, UI.TextPrimary);
+            }
             if (_statusLabel != null && _statusLabel.text != _status) _statusLabel.text = _status;
             if (_captionLabel != null && _captionLabel.text != _caption) _captionLabel.text = _caption;
         }
