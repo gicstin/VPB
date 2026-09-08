@@ -21,6 +21,7 @@ namespace VpbNet
         PeerEvent = 13,
         Data = 14,
         PeerStats = 15,
+        Speech = 16,
     }
 
     public enum VpbIpcReject : byte

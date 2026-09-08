@@ -61,6 +61,9 @@ This repo builds a `VPB.dll` plugin, deployed to `BepInEx/plugins/VPB/` along wi
 **Automation**
 - VDS mode: command-line driven scene loading with cache control and runtime config overrides (see below)
 
+**Multiplayer speech**
+- Optional TTS Voice Wizard companion for TTS, STT captions and STTS, with encrypted speech transport and avatar playback. [Setup and limits](Documentation/MultiplayerSpeech.md).
+
 ## Installation
 
 ### Option A: VPM (recommended for first install)

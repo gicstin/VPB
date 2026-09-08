@@ -93,6 +93,7 @@ namespace VPB
             VpbNetUiKit.TickShells();
             VpbNetBrokerLink.Tick();
             VpbNetPresence.Tick();
+            VpbNetSpeechController.Tick();
         }
 
         static void HookScale(bool on)
@@ -110,6 +111,7 @@ namespace VPB
 
         public static void TearDown()
         {
+            VpbNetSpeechController.Reset();
             _enabled = false;
             HookScale(false);
             try { VpbNetPresence.Stop("multiplayer switched off"); }

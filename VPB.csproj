@@ -298,6 +298,8 @@
     <Compile Include="src\util\VpbPerfDiag.cs" />
     <Compile Include="src\util\VpbFrameRate.cs" />
     <Compile Include="protocol\VpbNetIpc.cs" />
+    <Compile Include="protocol\VpbNetSpeech.cs" />
+    <Compile Include="protocol\VpbSpeechBuffer.cs" />
     <Compile Include="protocol\VpbNetProtocol.cs" />
     <Compile Include="protocol\VpbNetClock.cs" />
     <Compile Include="protocol\VpbNetSnapshotBuffer.cs" />
@@ -367,6 +369,8 @@
     <Compile Include="src\net\VpbNetControllerSet.cs" />
     <Compile Include="src\net\VpbNetFidelityRig.cs" />
     <Compile Include="src\net\VpbNetRuntime.cs" />
+    <Compile Include="src\net\VpbNetSpeechController.cs" />
+    <Compile Include="src\net\VpbNetSpeechPlayback.cs" />
     <Compile Include="src\net\VpbNetTriggerRelay.cs" />
     <Compile Include="src\net\VpbNetPropSync.cs" />
     <Compile Include="src\net\VpbNetAtomParamSync.cs" />

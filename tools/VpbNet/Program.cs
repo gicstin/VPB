@@ -21,6 +21,7 @@ namespace VpbNet
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--self-test-pose") return VpbPose.RunSelfTestConsole();
+                if (args[i] == "--self-test-speech") return Speech.SpeechSelfTest.RunConsole();
                 if (args[i] == "--self-test-clock") return VpbNetClockSelfTest.RunConsole();
                 if (args[i] == "--self-test-snapshot") return VpbNetSnapshotSelfTest.RunConsole();
                 if (args[i] == "--self-test-event") return VpbNetEventSelfTest.RunConsole();

@@ -350,6 +350,7 @@ namespace VPB
 
         static void ResetSession()
         {
+            VpbNetSpeechController.Reset();
             SessionState = VpbIpcSession.Idle;
             SessionText = string.Empty;
             InviteBlob = string.Empty;
@@ -403,6 +404,14 @@ namespace VPB
             }
             DataSent++;
             return true;
+        }
+
+        public static bool SendSpeech(byte[] payload, int length)
+        {
+            if (_state != VpbNetLinkState.Ready || payload == null || length < 1 || length > VpbIpc.MaxDataPayload || length > payload.Length) return false;
+            int count = VpbIpc.WriteHeader(TxScratch, VpbIpcMsg.Speech, NextSeq(), Token, length);
+            Buffer.BlockCopy(payload, 0, TxScratch, VpbIpc.HeaderSize, length);
+            return Enqueue(TxScratch, count);
         }
 
         static void Cleanup()
@@ -560,11 +569,12 @@ namespace VPB
 
         static void DrainInbound()
         {
+            int budget = 128;
             if (_inbound == null) return;
 
             int len;
             long arrivalTicks;
-            while ((len = _inbound.TryDequeue(DrainScratch, out arrivalTicks)) > 0)
+            while (budget-- > 0 && (len = _inbound.TryDequeue(DrainScratch, out arrivalTicks)) > 0)
             {
                 _arrivalTicks = arrivalTicks;
                 double lag = TicksToMs(Stopwatch.GetTimestamp() - arrivalTicks);
@@ -701,6 +711,7 @@ namespace VPB
                     else if (ev == VpbIpcPeerEvent.Down) PeerUp[peerId] = false;
 
                     LogUtil.LogWarning("[VPB.Net] peer " + peerId + " " + ev + (string.IsNullOrEmpty(text) ? "" : " - " + text));
+                    if (ev == VpbIpcPeerEvent.Down || ev == VpbIpcPeerEvent.Stalled) VpbNetSpeechController.Reset();
                     VpbNetPresence.OnPeerEvent(peerId, ev, text);
                     break;
                 }
@@ -720,6 +731,10 @@ namespace VPB
                     VpbNetPresence.OnData(peerId, channel, DrainScratch, dataOffset, dataLen, _arrivalTicks);
                     break;
                 }
+                case VpbIpcMsg.Speech:
+                    VpbNetSpeechController.Receive(DrainScratch, VpbIpc.HeaderSize, payloadLen,
+                        TicksToMs(Stopwatch.GetTimestamp() - _arrivalTicks) > 250.0);
+                    break;
                 case VpbIpcMsg.PeerStats:
                 {
                     int peerId;

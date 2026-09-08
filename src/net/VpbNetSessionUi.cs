@@ -507,6 +507,7 @@ namespace VPB
         static void BuildLive(GameObject body, float s)
         {
             _livePane = VpbNetUiKit.Pane(body, "Live", s);
+            VpbNetSpeechController.BuildPanel(_livePane, s);
 
             _gatesPane = VpbNetUiKit.Pane(_livePane, "Gates", s);
             VpbNetUiKit.SectionHeader(_gatesPane,
@@ -2016,6 +2017,7 @@ namespace VPB
 
         public static void Destroy()
         {
+            VpbNetSpeechController.DestroyUi();
             VpbNetRulesUi.Detach();
             if (_shell != null)
             {

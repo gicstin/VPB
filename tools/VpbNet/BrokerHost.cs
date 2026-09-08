@@ -11,7 +11,7 @@ using VpbNet.Transport.Steam;
 
 namespace VpbNet
 {
-    public sealed class BrokerHost : IDisposable
+    public sealed partial class BrokerHost : IDisposable
     {
         public const ushort BrokerBuild = 3;
 
@@ -113,9 +113,10 @@ namespace VpbNet
             if (_transport != null)
             {
                 _transport.Poll(now);
+                PumpPeerEvents();
+                TickSpeech(now);
                 worked |= DrainOutbound();
                 worked |= PumpTransport();
-                PumpPeerEvents();
                 PumpStats(now);
                 PumpStatusHint();
                 CheckTransportFailure();
@@ -224,6 +225,11 @@ namespace VpbNet
                     HandleData(payloadLen);
                     break;
 
+                case VpbIpcMsg.Speech:
+                    if (!Authenticated()) return;
+                    HandleSpeechCommand(payloadLen);
+                    break;
+
                 case VpbIpcMsg.Bye:
                     if (!Authenticated()) return;
                     Exit("plugin said goodbye");
@@ -329,6 +335,7 @@ namespace VpbNet
             options.ConnectBlob = connectBlob;
             SessionAuth.RoomKeys keys = SessionAuth.Derive(roomCode);
             options.SessionKey = keys.SessionKey;
+            _speechRoomKey = (byte[])keys.SessionKey.Clone();
             options.LobbyToken = keys.LobbyToken;
             _hostRoomCode = VpbNetRoomCode.Normalize(roomCode);
             _hostRoomDisplay = _hostRoomCode != null
@@ -398,6 +405,7 @@ namespace VpbNet
             int dataLen;
             if (!VpbIpc.ReadDataHeader(_rx, payloadLen, out peerId, out channel, out flags, out dataOffset, out dataLen)) return;
             if (_transport == null || dataLen <= 0) return;
+            if (channel == VpbNetSpeech.Channel) return;
 
             bool reliable = (flags & VpbIpc.DataFlagReliable) != 0;
 
@@ -524,6 +532,11 @@ namespace VpbNet
                 any = true;
                 if (!_bound) continue;
 
+                if (channel == VpbNetSpeech.Channel && !_echoMode)
+                {
+                    ReceiveSpeech(peerId, _transportBuf, len);
+                    continue;
+                }
                 if (_echoMode) SendRaw(VpbIpc.WriteEcho(_tx, NextSeq(), _token, _transportBuf, len, true));
                 else SendRaw(VpbIpc.WriteData(_tx, NextSeq(), _token, peerId, channel, 0, _transportBuf, 0, len));
             }
@@ -544,6 +557,7 @@ namespace VpbNet
 
                 if (_echoMode) continue;
 
+                SpeechPeerEvent(peerId, kind);
                 SendRaw(VpbIpc.WritePeerEvent(_tx, NextSeq(), _token, (byte)kind, peerId, reason));
 
                 if (kind == PeerEventKind.Up) SendSessionState(VpbIpcSession.Connected, CurrentInvite(), reason);
@@ -657,6 +671,7 @@ namespace VpbNet
 
         void CloseTransport()
         {
+            CloseSpeech();
             if (_transport == null) return;
 
             try

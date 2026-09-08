@@ -99,6 +99,10 @@ namespace VPB
         public ConfigEntry<bool> LogStateMachineApply;
         public ConfigEntry<bool> NetEnabled;
         public ConfigEntry<string> NetBrokerPath;
+        public ConfigEntry<bool> NetSpeechEnabled;
+        public ConfigEntry<int> NetSpeechOscPort;
+        public ConfigEntry<int> NetSpeechWizardPort;
+        public ConfigEntry<int> NetSpeechProcessId;
         public ConfigEntry<int> NetSamplerHz;
         public ConfigEntry<bool> NetOverlay;
         public ConfigEntry<float> NetOverlayX;
@@ -276,6 +280,10 @@ namespace VPB
             LogSavePerf = config.Bind<bool>("Logging", "LogSavePerf", false, "Log scene-save timing split: bridge prep vs native SaveScene invocation. Enable when diagnosing save-time regressions vs native VaM baseline.");
             NetEnabled = config.Bind<bool>("Net", "Enabled", false, "MASTER KILL SWITCH for VPB multiplayer. While this is false the broker process (VpbNet.exe) can never be launched by anything, and multiplayer is entirely absent. Nothing is launched on plugin load even when true; the broker starts only on explicit session use.");
             NetBrokerPath = config.Bind<string>("Net", "BrokerPath", "", "Full path to VpbNet.exe. Empty uses VpbNet\\VpbNet.exe next to VPB.dll.");
+            NetSpeechEnabled = config.Bind<bool>("Net", "SpeechEnabled", false, "Enable encrypted multiplayer speech reception. Sharing voice and STT captions must be enabled again for each session.");
+            NetSpeechOscPort = config.Bind<int>("Net", "SpeechOscPort", VpbNet.VpbNetSpeech.DefaultReceivePort, "Uses Voice Wizard's standard VRChat output port. Leave unchanged for the standard setup. Close VRChat before sharing speech in VPB.");
+            NetSpeechWizardPort = config.Bind<int>("Net", "SpeechWizardPort", VpbNet.VpbNetSpeech.DefaultWizardPort, "Uses Voice Wizard's existing OSC listener on 127.0.0.1. Change only to match an already customized Voice Wizard listener.");
+            NetSpeechProcessId = config.Bind<int>("Net", "SpeechProcessId", 0, "Voice Wizard process ID. Zero selects the only running TTSVoiceWizard process. Other process names are rejected.");
             NetSamplerHz = config.Bind<int>("Net", "SamplerHz", 45, "Protocol sample rate in frames per second (1-200). 45 is the planned pose rate. Setting this above the physics rate cannot be met and will be reported as rate slips.");
             NetOverlay = config.Bind<bool>("Net", "Overlay", false, "Show the multiplayer diagnostics overlay on the HUD: session state, transport, RTT, jitter, loss, jitter-buffer delay and depth, frame age, sampler/applier microseconds, and stall/rejoin counts. Costs nothing while off, and only redraws when a value actually changes.");
             NetOverlayX = config.Bind<float>("Net", "OverlayX", 24f, "Diagnostics overlay window X position, remembered when you drag it.");
