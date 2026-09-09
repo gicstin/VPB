@@ -51,14 +51,14 @@ namespace VPB
             __state = default(BlendReadableTemps);
             try
             {
-                Texture2D torso = SuperControllerHook.EnsureCpuReadableTexture(inTorsoTex, linear, "BlendGenital");
+                Texture2D torso = SuperControllerHook.EnsureCpuReadableTexture(inTorsoTex, linear, false, "BlendGenital");
                 if (torso != null && torso != inTorsoTex)
                 {
                     __state.TorsoTemp = torso;
                     inTorsoTex = torso;
                 }
 
-                Texture2D gen = SuperControllerHook.EnsureCpuReadableTexture(inGenTex, linear, "BlendGenital");
+                Texture2D gen = SuperControllerHook.EnsureCpuReadableTexture(inGenTex, linear, false, "BlendGenital");
                 if (gen != null && gen != inGenTex)
                 {
                     __state.GenTemp = gen;

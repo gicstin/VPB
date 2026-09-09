@@ -99,6 +99,9 @@ namespace VPB
             public int onDemandZstdQueued;
             public int onDemandZstdActive;
             public long onDemandZstdPayloadBytes;
+            public long onDemandZstdReservedBytes;
+            public int onDemandZstdReservations;
+            public bool onDemandZstdExclusive;
             public int gen0;
             public int gen1;
             public int gen2;
@@ -258,7 +261,10 @@ namespace VPB
                 OnDemandZstdWriteQueue.GetTelemetryCounts(
                     out s.onDemandZstdQueued,
                     out s.onDemandZstdActive,
-                    out s.onDemandZstdPayloadBytes);
+                    out s.onDemandZstdPayloadBytes,
+                    out s.onDemandZstdReservedBytes,
+                    out s.onDemandZstdReservations,
+                    out s.onDemandZstdExclusive);
             }
             catch { }
 
@@ -364,7 +370,8 @@ namespace VPB
                 " ilmWritePaths={60} ilmWriteQ={61} ilmWriteActive={62}" +
                 " | bytePool={63} odZstdQ={64} odZstdActive={65} odZstdMemPayload={66}" +
                 " | vamTex={67} ({68}) vamImm={69} ({70}) vamThumb={71} ({72})" +
-                " vamTracked={73} ({74}) vamUsed={75} ({76})",
+                " vamTracked={73} ({74}) vamUsed={75} ({76})" +
+                " | odZstdReserved={77} odZstdReservations={78} odZstdExclusive={79}",
                 Time.realtimeSinceStartup,
                 s.textureCache, Delta(s.textureCache, p.textureCache),
                 s.immediateTextureCache, Delta(s.immediateTextureCache, p.immediateTextureCache),
@@ -407,7 +414,8 @@ namespace VPB
                 FormatCount(s.nativeImmediateTextureCache), DeltaCount(s.nativeImmediateTextureCache, p.nativeImmediateTextureCache, p.valid),
                 FormatCount(s.nativeThumbnailCache), DeltaCount(s.nativeThumbnailCache, p.nativeThumbnailCache, p.valid),
                 FormatCount(s.nativeTextureTrackedCache), DeltaCount(s.nativeTextureTrackedCache, p.nativeTextureTrackedCache, p.valid),
-                FormatCount(s.nativeTextureUseCount), DeltaCount(s.nativeTextureUseCount, p.nativeTextureUseCount, p.valid));
+                FormatCount(s.nativeTextureUseCount), DeltaCount(s.nativeTextureUseCount, p.nativeTextureUseCount, p.valid),
+                FormatBytes(s.onDemandZstdReservedBytes), s.onDemandZstdReservations, s.onDemandZstdExclusive ? 1 : 0);
 
             LogUtil.LogWarning(msg);
         }

@@ -1,0 +1,30 @@
+#!/bin/sh
+# VPB pre-commit hook: repository invariants only (~4s, no VaM install needed).
+# Installed automatically by a Debug build of VPB.csproj; tests/run.ps1 -InstallHooks also works.
+# Bypass once with:  git commit --no-verify
+
+repo_root=$(git rev-parse --show-toplevel)
+
+for candidate in pwsh powershell; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        shell="$candidate"
+        break
+    fi
+done
+
+if [ -z "$shell" ] || ! command -v dotnet >/dev/null 2>&1; then
+    echo "pre-commit: dotnet or powershell missing from PATH."
+    echo "pre-commit: REFUSING the commit rather than passing silently. Use --no-verify to override."
+    exit 1
+fi
+
+# Via run.ps1 so a zero-discovery run counts as a failure instead of exiting 0.
+"$shell" -NoProfile -ExecutionPolicy Bypass -File "$repo_root/tests/run.ps1" -Static
+status=$?
+
+if [ $status -ne 0 ]; then
+    echo ""
+    echo "pre-commit: static tests failed. Commit with --no-verify to bypass."
+fi
+
+exit $status

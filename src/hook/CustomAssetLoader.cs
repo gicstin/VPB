@@ -47,22 +47,19 @@ namespace VPB
 			if (!pathToAssetBundle.TryGetValue(path, out ab))
 			{
 				AssetBundleCreateRequest abcr2 = null;
-				if (MVR.FileManagement.FileManager.IsFileInPackage(path))
+				var vfe = VamOnDemandLoader.TryResolveNativeVarFileEntryForImmediateRead(path);
+				if (vfe != null && vfe.Simulated && vfe.Package != null)
 				{
-					var vfe = MVR.FileManagement.FileManager.GetVarFileEntry(path);
-					if (vfe.Simulated)
-					{
-						string path2 = vfe.Package.Path + "\\" + vfe.InternalPath;
-						abcr2 = AssetBundle.LoadFromFileAsync(path2);
-					}
-					else
-					{
-						byte[] assetbundleBytes = new byte[vfe.Size];
-						yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, assetbundleBytes);
-						abcr2 = AssetBundle.LoadFromMemoryAsync(assetbundleBytes);
-					}
+					string path2 = vfe.Package.Path + "\\" + vfe.InternalPath;
+					abcr2 = AssetBundle.LoadFromFileAsync(path2);
 				}
-				else
+				else if (vfe != null)
+				{
+					byte[] assetbundleBytes = new byte[vfe.Size];
+					yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, assetbundleBytes);
+					abcr2 = AssetBundle.LoadFromMemoryAsync(assetbundleBytes);
+				}
+				else if (!VamOnDemandLoader.LooksLikePackageEntryPath(path))
 				{
 					abcr2 = AssetBundle.LoadFromFileAsync(path);
 				}
@@ -295,26 +292,23 @@ namespace VPB
             // 3. Genuinely not loaded anywhere: load our own throwaway copy.
             if (ab == null)
             {
-                if (MVR.FileManagement.FileManager.IsFileInPackage(path))
+                var vfe = VamOnDemandLoader.TryResolveNativeVarFileEntryForImmediateRead(path);
+                if (vfe != null && vfe.Simulated && vfe.Package != null)
                 {
-                    var vfe = MVR.FileManagement.FileManager.GetVarFileEntry(path);
-                    if (vfe.Simulated)
-                    {
-                        string path2 = vfe.Package.Path + "\\" + vfe.InternalPath;
-                        AssetBundleCreateRequest req = AssetBundle.LoadFromFileAsync(path2);
-                        yield return req;
-                        ab = req.assetBundle;
-                    }
-                    else
-                    {
-                        byte[] assetbundleBytes = new byte[vfe.Size];
-                        yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, assetbundleBytes);
-                        AssetBundleCreateRequest req = AssetBundle.LoadFromMemoryAsync(assetbundleBytes);
-                        yield return req;
-                        ab = req.assetBundle;
-                    }
+                    string path2 = vfe.Package.Path + "\\" + vfe.InternalPath;
+                    AssetBundleCreateRequest req = AssetBundle.LoadFromFileAsync(path2);
+                    yield return req;
+                    ab = req.assetBundle;
                 }
-                else
+                else if (vfe != null)
+                {
+                    byte[] assetbundleBytes = new byte[vfe.Size];
+                    yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, assetbundleBytes);
+                    AssetBundleCreateRequest req = AssetBundle.LoadFromMemoryAsync(assetbundleBytes);
+                    yield return req;
+                    ab = req.assetBundle;
+                }
+                else if (!VamOnDemandLoader.LooksLikePackageEntryPath(path))
                 {
                     AssetBundleCreateRequest req = AssetBundle.LoadFromFileAsync(path);
                     yield return req;

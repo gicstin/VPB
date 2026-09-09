@@ -36,12 +36,16 @@ namespace VPB
         UsageCount = 16,
         /// <summary>Show only items with zero local usage.</summary>
         UnusedOnly = 17,
-        /// <summary>Family first added: MIN(first_scanned) across all .var versions sharing creator.packageName.</summary>
+        /// <summary>Family first added: earliest first_scanned or NTFS creation time across all .var versions.</summary>
         DateAdded = 18,
-        /// <summary>Family last updated: first_scanned of the highest-N .var version in creator.packageName.</summary>
+        /// <summary>Family last updated: earliest first_scanned or NTFS creation time for highest-N .var version.</summary>
         DateUpdated = 19,
         /// <summary>Random order (Fisher–Yates shuffle each time sort is applied).</summary>
-        Random = 20
+        Random = 20,
+        HubDownloads = 21,
+        HubRating = 22,
+        HubReleased = 23,
+        HubUpdated = 24
     }
 
     public enum SortDirection
@@ -87,6 +91,9 @@ namespace VPB
         // Bounded: clear-on-overflow (same pattern as GalleryFileListSnapshotCache).
         private static Dictionary<string, HashSet<string>> _sceneDependencyCache = new Dictionary<string, HashSet<string>>();
         private const int SceneDependencyCacheMaxEntries = 512;
+        private static readonly object FamilyFirstScannedCacheLock = new object();
+        private static Dictionary<string, long> _familyFirstScannedByUid;
+        private static long _familyFirstScannedScanBinary = long.MinValue;
 
         /// <summary>Drop in-memory scene-deps L1 cache (package refresh / soak-test bound).</summary>
         public static void ClearSceneDependencyCache()
@@ -115,53 +122,67 @@ namespace VPB
         /// </summary>
         public static void StartBackgroundWarmLooseDepsCache()
         {
+            if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
             if (Interlocked.CompareExchange(ref _looseDepsWarmRunning, 1, 0) != 0) return;
-            ThreadPool.QueueUserWorkItem(_ =>
+            bool queued = false;
+            try
             {
-                try { WarmLooseDepsCacheCore(); }
-                catch (Exception ex) { LogUtil.LogError("[VPB] Loose-deps warm failed: " + ex); }
-                finally { Interlocked.Exchange(ref _looseDepsWarmRunning, 0); }
-            });
+                queued = ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { WarmLooseDepsCacheCore(); }
+                    catch (Exception ex) { LogUtil.LogError("[VPB] Loose-deps warm failed: " + ex); }
+                    finally { Interlocked.Exchange(ref _looseDepsWarmRunning, 0); }
+                });
+            }
+            finally
+            {
+                if (!queued) Interlocked.Exchange(ref _looseDepsWarmRunning, 0);
+            }
         }
 
         private static void WarmLooseDepsCacheCore()
         {
+            if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             int seen = 0, hit = 0, written = 0;
-            var probe = new HashSet<string>();
             for (int r = 0; r < LooseDepsWarmRoots.Length; r++)
             {
+                if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
                 string root = LooseDepsWarmRoots[r];
                 if (!Directory.Exists(root)) continue;
                 var files = new List<string>();
                 try { FileManager.SafeGetFiles(root, "*.json", files); } catch { continue; }
-                for (int i = 0; i < files.Count; i++)
+                using (var reads = new VpbLocalDatabase.LooseSceneDepsReadSession())
                 {
-                    string path = files[i];
-                    if (string.IsNullOrEmpty(path)) continue;
-                    seen++;
-                    try
+                    for (int i = 0; i < files.Count; i++)
                     {
-                        var fi = new FileInfo(path);
-                        if (!fi.Exists) continue;
-                        long wt = fi.LastWriteTimeUtc.ToBinary();
-                        long sz = fi.Length;
-
-                        probe.Clear();
-                        if (VpbLocalDatabase.TryReadLooseSceneDeps(path, wt, sz, probe))
+                        if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
+                        string path = files[i];
+                        if (string.IsNullOrEmpty(path)) { reads.Dispose(); continue; }
+                        seen++;
+                        try
                         {
-                            hit++;
-                            continue;
+                            var fi = new FileInfo(path);
+                            if (!fi.Exists) { reads.Dispose(); continue; }
+                            long wt = fi.LastWriteTimeUtc.ToBinary();
+                            long sz = fi.Length;
+
+                            if (reads.HasFresh(path, wt, sz))
+                            {
+                                hit++;
+                                continue;
+                            }
+
+                            var deps = DependencyExtractor.ExtractDependenciesFromFile(path, 150, 1500);
+                            if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
+                            VpbLocalDatabase.WriteLooseSceneDeps(path, wt, sz, deps ?? new HashSet<string>());
+                            written++;
+
+                            // Throttle so a Timeline-laden library doesn't burn a CPU core for minutes straight.
+                            if ((written & 7) == 0) Thread.Sleep(10);
                         }
-
-                        var deps = DependencyExtractor.ExtractDependenciesFromFile(path, 150, 1500);
-                        VpbLocalDatabase.WriteLooseSceneDeps(path, wt, sz, deps ?? new HashSet<string>());
-                        written++;
-
-                        // Throttle so a Timeline-laden library doesn't burn a CPU core for minutes straight.
-                        if ((written & 7) == 0) Thread.Sleep(10);
+                        catch { reads.Dispose(); }
                     }
-                    catch { }
                 }
             }
             LogUtil.Log("[VPB] Loose-deps warm DONE | seen=" + seen + " | hit=" + hit + " | written=" + written + " | ms=" + sw.ElapsedMilliseconds);
@@ -224,6 +245,8 @@ namespace VPB
                     SortByPrecomputedInt(files, GetDepsCount, state.Direction);
                     break;
                 case SortType.Dependents:
+                    try { PrefillDependentCounts(files); }
+                    catch (Exception ex) { LogUtil.LogError("[VPB] Dependent count prefill failed: " + ex); }
                     SortByPrecomputedInt(files, GetDependentsCount, state.Direction);
                     break;
                 case SortType.Missing:
@@ -265,6 +288,12 @@ namespace VPB
                     LogSortedHeadSample("DateUpdated", state.Direction, files, f => GetFamilyHighestVersionScanned(f, fam));
                     break;
                 }
+                case SortType.HubDownloads:
+                case SortType.HubRating:
+                case SortType.HubReleased:
+                case SortType.HubUpdated:
+                    SortByHubMetric(files, state.Type, state.Direction);
+                    break;
                 case SortType.Random:
                     ShuffleFiles(files);
                     break;
@@ -364,6 +393,74 @@ namespace VPB
             public FileEntry File;
             public DateTime Key;
             public string Name;
+        }
+
+        private static void SortByHubMetric(List<FileEntry> files, SortType type, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+
+            Dictionary<string, VpbLocalDatabase.DataPackPackageMetrics> metrics = null;
+            try { metrics = VpbLocalDatabase.GetDataPackPackageMetrics(); }
+            catch { metrics = null; }
+            if (metrics == null || metrics.Count == 0) return;
+
+            SortByPrecomputedIntStable(files, f =>
+            {
+                string uid = GetHubMetricPackageUid(f);
+                if (string.IsNullOrEmpty(uid)) return 0;
+                VpbLocalDatabase.DataPackPackageMetrics m;
+                if (!metrics.TryGetValue(uid, out m)) return 0;
+                switch (type)
+                {
+                    case SortType.HubDownloads: return m.Downloads;
+                    case SortType.HubRating: return m.RatingX100;
+                    case SortType.HubReleased: return m.ReleasedYmd;
+                    default: return m.UpdatedYmd;
+                }
+            }, dir);
+        }
+
+        private static string GetHubMetricPackageUid(FileEntry file)
+        {
+            if (file == null) return "";
+            try
+            {
+                VarFileEntry vfe = file as VarFileEntry;
+                if (vfe != null) return vfe.GetRowPackageUid() ?? "";
+                PackageListEntry ple = file as PackageListEntry;
+                if (ple != null) return ple.GetPackageUidForGalleryUserTags() ?? "";
+            }
+            catch { }
+            return "";
+        }
+
+        private static void SortByPrecomputedIntStable(List<FileEntry> files, Func<FileEntry, int> getKey, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+            if (getKey == null) return;
+
+            int n = files.Count;
+            var keys = new int[n];
+            var order = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                int k = 0;
+                try { k = getKey(files[i]); } catch { k = 0; }
+                keys[i] = k;
+                order[i] = i;
+            }
+
+            bool asc = dir == SortDirection.Ascending;
+            Array.Sort(order, (ia, ib) =>
+            {
+                int res = asc ? keys[ia].CompareTo(keys[ib]) : keys[ib].CompareTo(keys[ia]);
+                if (res != 0) return res;
+                return ia.CompareTo(ib);
+            });
+
+            var tmp = new FileEntry[n];
+            for (int i = 0; i < n; i++) tmp[i] = files[order[i]];
+            for (int i = 0; i < n; i++) files[i] = tmp[i];
         }
 
         private static void SortByPrecomputedInt(List<FileEntry> files, Func<FileEntry, int> getKey, SortDirection dir)
@@ -580,6 +677,11 @@ namespace VPB
                 string p = sfe.Path ?? "";
                 return p.Length == 0 ? null : "sys:" + p;
             }
+            return ComputeFamilyKeyFromUid(uid);
+        }
+
+        private static string ComputeFamilyKeyFromUid(string uid)
+        {
             if (string.IsNullOrEmpty(uid)) return null;
             int lastDot = uid.LastIndexOf('.');
             if (lastDot <= 0) return uid;
@@ -641,6 +743,22 @@ namespace VPB
             return DateTime.MinValue;
         }
 
+        private static DateTime GetPackageFileCreationTime(FileEntry file)
+        {
+            DateTime dt;
+            if (file is VarFileEntry vfe)
+            {
+                if (vfe.TryGetGalleryIndexedFileCreationTime(out dt)) return NormalizeToUtcForCompare(dt);
+                try { if (vfe.Package != null) return NormalizeToUtcForCompare(vfe.Package.CreationTime); } catch { }
+            }
+            else if (file is PackageListEntry ple)
+            {
+                if (ple.TryGetGalleryIndexedFileCreationTime(out dt)) return NormalizeToUtcForCompare(dt);
+                try { if (ple.Package != null) return NormalizeToUtcForCompare(ple.Package.CreationTime); } catch { }
+            }
+            return DateTime.MinValue;
+        }
+
         /// <summary>Highest VAR version (N from "Creator.Package.N") for this row's uid; 0 when unknown.</summary>
         private static int GetUidVersionNumber(FileEntry file)
         {
@@ -652,6 +770,11 @@ namespace VPB
                 uid = ple.GetPackageUidForGalleryUserTags();
                 if (string.IsNullOrEmpty(uid) && ple.Package != null) uid = ple.Package.Uid;
             }
+            return GetUidVersionNumberFromUid(uid);
+        }
+
+        private static int GetUidVersionNumberFromUid(string uid)
+        {
             if (string.IsNullOrEmpty(uid)) return 0;
             int lastDot = uid.LastIndexOf('.');
             if (lastDot < 0 || lastDot >= uid.Length - 1) return 0;
@@ -659,11 +782,97 @@ namespace VPB
             return int.TryParse(uid.Substring(lastDot + 1), out v) ? v : 0;
         }
 
-        /// <summary>Build per-family (creator.package) scan-time lookup over the current file list. One pass, no I/O.</summary>
+        private static void AccumulatePackageVersion(
+            Dictionary<string, FamilyScanTimes> map,
+            string familyKey,
+            int version,
+            DateTime versionDate)
+        {
+            if (map == null || string.IsNullOrEmpty(familyKey)) return;
+            FamilyScanTimes dates;
+            map.TryGetValue(familyKey, out dates);
+            VpbGalleryFamilyDate.AccumulateVersion(
+                versionDate,
+                version,
+                ref dates.MinScanned,
+                ref dates.HighestVersion,
+                ref dates.HighestVersionScanned);
+            map[familyKey] = dates;
+        }
+
+        private static Dictionary<string, long> GetFamilyFirstScannedByUid()
+        {
+            long scanBinary;
+            try { scanBinary = FileManager.lastPackageRefreshTime.ToBinary(); }
+            catch { scanBinary = long.MinValue; }
+
+            lock (FamilyFirstScannedCacheLock)
+            {
+                if (_familyFirstScannedByUid != null && _familyFirstScannedScanBinary == scanBinary)
+                    return _familyFirstScannedByUid;
+            }
+
+            Dictionary<string, long> fresh = VpbLocalDatabase.ReadFirstScannedBinariesFromPkg();
+            if (fresh.Count == 0 && FileManager.GetPackageCount() > 0)
+                return fresh;
+
+            long currentScanBinary;
+            try { currentScanBinary = FileManager.lastPackageRefreshTime.ToBinary(); }
+            catch { currentScanBinary = long.MinValue; }
+            if (currentScanBinary != scanBinary) return fresh;
+
+            lock (FamilyFirstScannedCacheLock)
+            {
+                _familyFirstScannedByUid = fresh;
+                _familyFirstScannedScanBinary = scanBinary;
+                return _familyFirstScannedByUid;
+            }
+        }
+
         private static Dictionary<string, FamilyScanTimes> BuildFamilyScanTimes(List<FileEntry> files)
         {
             var map = new Dictionary<string, FamilyScanTimes>(StringComparer.OrdinalIgnoreCase);
             if (files == null) return map;
+            Dictionary<string, long> firstScannedByUid = GetFamilyFirstScannedByUid();
+
+            VarPackage[] packages = null;
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    if (FileManager.PackagesByUid != null && FileManager.PackagesByUid.Count > 0)
+                        packages = FileManager.PackagesByUid.Values.ToArray();
+                }
+            }
+            catch { packages = null; }
+
+            if (packages != null)
+            {
+                for (int i = 0; i < packages.Length; i++)
+                {
+                    VarPackage pkg = packages[i];
+                    if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) continue;
+                    DateTime firstScanned = DateTime.MinValue;
+                    try
+                    {
+                        long firstScannedBinary;
+                        if (firstScannedByUid == null
+                            || !firstScannedByUid.TryGetValue(pkg.Uid, out firstScannedBinary))
+                            firstScannedBinary = pkg.FirstScannedBinary;
+                        if (firstScannedBinary != 0L && firstScannedBinary != long.MinValue)
+                            firstScanned = NormalizeToUtcForCompare(DateTime.FromBinary(firstScannedBinary));
+                    }
+                    catch { }
+                    DateTime created = DateTime.MinValue;
+                    try { created = NormalizeToUtcForCompare(pkg.CreationTime); } catch { }
+                    AccumulatePackageVersion(
+                        map,
+                        ComputeFamilyKeyFromUid(pkg.Uid),
+                        GetUidVersionNumberFromUid(pkg.Uid),
+                        VpbGalleryFamilyDate.EarliestKnown(firstScanned, created));
+                }
+            }
+
             for (int i = 0; i < files.Count; i++)
             {
                 var f = files[i];
@@ -686,25 +895,11 @@ namespace VPB
                     continue;
                 }
 
-                DateTime scanned = GetIndexedFirstScannedForFile(f);
+                DateTime scanned = VpbGalleryFamilyDate.EarliestKnown(
+                    GetIndexedFirstScannedForFile(f),
+                    GetPackageFileCreationTime(f));
                 int version = GetUidVersionNumber(f);
-
-                FamilyScanTimes fst;
-                if (!map.TryGetValue(famKey, out fst))
-                {
-                    fst = new FamilyScanTimes { MinScanned = scanned, HighestVersion = version, HighestVersionScanned = scanned };
-                    map[famKey] = fst;
-                }
-                else
-                {
-                    if (scanned < fst.MinScanned || fst.MinScanned == DateTime.MinValue) fst.MinScanned = scanned;
-                    if (version > fst.HighestVersion)
-                    {
-                        fst.HighestVersion = version;
-                        fst.HighestVersionScanned = scanned;
-                    }
-                    map[famKey] = fst;
-                }
+                AccumulatePackageVersion(map, famKey, version, scanned);
             }
             return map;
         }
@@ -912,6 +1107,20 @@ namespace VPB
                 LogUtil.LogError($"[VPB] GetDepsCount error: {ex}");
             }
             return 0;
+        }
+
+        private static void PrefillDependentCounts(List<FileEntry> files)
+        {
+            if (files == null || files.Count < 2) return;
+            var packages = new List<VarPackage>();
+            for (int i = 0; i < files.Count; i++)
+            {
+                var vfe = files[i] as VarFileEntry;
+                var ple = files[i] as PackageListEntry;
+                VarPackage package = vfe != null ? vfe.Package : (ple != null ? ple.Package : null);
+                if (package != null && package.DependentCount < 0) packages.Add(package);
+            }
+            FileManager.PrefillDependentCounts(packages);
         }
 
         public static int GetDependentsCount(FileEntry file)
@@ -1204,6 +1413,12 @@ namespace VPB
                     var tmp = new CreatorCacheEntry[n];
                     for (int i = 0; i < n; i++) tmp[i] = creators[order[i]];
                     for (int i = 0; i < n; i++) creators[i] = tmp[i];
+                    break;
+                default:
+                    if (state.Direction == SortDirection.Descending)
+                        creators.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+                    else
+                        creators.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
                     break;
             }
         }

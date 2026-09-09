@@ -114,6 +114,8 @@ namespace VPB
                     try { RefreshFiles(true); } catch { }
                 }
                 try { UpdateLayout(); } catch { }
+                // The canvas stayed enabled as a float host, so visibility did not schedule this.
+                ScheduleDeferredSideTabsFreshAfterReopen();
             }
 
             try { UpdateFooterFloatsOnlyState(); } catch { }

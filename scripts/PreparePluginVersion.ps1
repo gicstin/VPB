@@ -24,9 +24,26 @@ function Write-TwoLineVersionFile([string] $path, [string] $line1, [int] $line2)
     [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
 }
 
-function Write-PluginVersionCs([string] $path, [string] $baseSemVer, [int] $n, [string] $fullVersion) {
+function Get-BuildBranch([string] $projectDir) {
+    # Detached HEAD reports "HEAD"; fall back to the short sha so the plate never shows a useless word.
+    try {
+        $name = & git -C $projectDir rev-parse --abbrev-ref HEAD 2>$null
+        if ($LASTEXITCODE -ne 0) { return '' }
+        $name = ([string]$name).Trim()
+        if ($name -eq 'HEAD') {
+            $sha = & git -C $projectDir rev-parse --short HEAD 2>$null
+            if ($LASTEXITCODE -eq 0) { return ([string]$sha).Trim() }
+            return ''
+        }
+        return $name
+    }
+    catch { return '' }
+}
+
+function Write-PluginVersionCs([string] $path, [string] $baseSemVer, [int] $n, [string] $fullVersion, [string] $branch) {
     $eb = Escape-CSharpString $baseSemVer
     $ef = Escape-CSharpString $fullVersion
+    $ebr = Escape-CSharpString $branch
     $ns = [string]$n
     # UTC date only (no time) so the tooltip can show build age without leaking timezone/work hours.
     $buildDate = [System.DateTime]::UtcNow.ToString('yyyy-MM-dd')
@@ -38,6 +55,7 @@ function Write-PluginVersionCs([string] $path, [string] $baseSemVer, [int] $n, [
         "        public const string BuildVersion = `"b$ns`";",
         "        public const string Version = `"$ef`";",
         "        public const string BuildDate = `"$buildDate`";",
+        "        public const string BuildBranch = `"$ebr`";",
         '    }',
         '}'
     )
@@ -100,8 +118,9 @@ if ($lastNorm -and ($lastNorm -ne $baseSemVer)) {
 }
 
 $fullVersion = "$baseSemVer.$n"
+$branch = Get-BuildBranch $ProjectDir
 $outCs = Join-Path $IntermediateDir 'PluginVersion.g.cs'
-Write-PluginVersionCs $outCs $baseSemVer $n $fullVersion
+Write-PluginVersionCs $outCs $baseSemVer $n $fullVersion $branch
 
 $nNext = $n + 1
 Write-TwoLineVersionFile $VersionFile $baseLine $nNext

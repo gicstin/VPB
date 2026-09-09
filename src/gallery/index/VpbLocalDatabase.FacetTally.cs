@@ -337,18 +337,34 @@ namespace VPB
                     if (sourceMode != 1) // skip VAR when source=Local
                     {
                         var rows = new List<ClothCountGroupRow>();
-                        string groupSql = "SELECT CAST(ifnull(m.cloth_attr,'0') AS INTEGER) AS attr, m.pkg_uid, COUNT(*)"
-                            + " FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE m.category = ?"
-                            + ctx.CreatorAndFragment + afterClothFragments
-                            + " GROUP BY attr, m.pkg_uid";
-                        using (var st = conn.Prepare(groupSql))
+
+                        bool showHidden = false;
+                        try { showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
+                        bool hideInSql = false;
+                        if (!showHidden)
+                        {
+                            try
+                            {
+                                VpbHideIndex.EnsureBuilt();
+                                hideInSql = VpbHideIndex.SqlMirrorFresh;
+                            }
+                            catch { hideInSql = false; }
+                        }
+
+                        var groupSb = new StringBuilder(320);
+                        groupSb.Append("SELECT CAST(ifnull(m.cloth_attr,'0') AS INTEGER) AS attr, m.pkg_uid, COUNT(*)")
+                               .Append(" FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE m.category = ?")
+                               .Append(ctx.CreatorAndFragment).Append(afterClothFragments);
+                        if (hideInSql) AppendGalleryHideExclusionSql(groupSb, "m");
+                        groupSb.Append(" GROUP BY attr, m.pkg_uid");
+
+                        using (var st = conn.Prepare(groupSb.ToString()))
                         {
                             BindGalleryCategoryWhere(st, ctx, 1);
                             while (st.Step() == VpbSqlite3.SqliteRow)
                             {
                                 string uid = st.ColumnText(1) ?? "";
-                                // Strip hidden packages to match the grid (no-op when GalleryShowHiddenPackages is on).
-                                if (PackageHidePrefs.IsVarPackageHiddenByUid(uid)) continue;
+                                if (!hideInSql && PackageHidePrefs.IsVarPackageHiddenByUid(uid)) continue;
                                 ClothCountGroupRow r;
                                 r.Attr = (int)st.ColumnInt64(0);
                                 r.Cnt = (int)st.ColumnInt64(2);

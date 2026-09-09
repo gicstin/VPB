@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.IO;
 using System.Collections;
@@ -647,7 +648,7 @@ namespace VPB
             // pass SystemFileEntry.isVar with the same uid:/ scene path).
             if (!string.IsNullOrEmpty(hostUid))
             {
-                LogUtil.Log("[VPB] Scene rewrite skipped for package scene (keep load context): " + hostUid);
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Scene rewrite skipped for package scene (keep load context): " + hostUid);
                 return false;
             }
 
@@ -767,7 +768,7 @@ namespace VPB
                                         if (depCount > 0)
                                         {
                                             string sample = string.Join(", ", deps.Take(5).ToArray());
-                                            LogUtil.Log($"[VPB] EnsureInstalled: Parsed {depCount} package refs from {entry.Name}. Sample: {sample}");
+                                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] EnsureInstalled: Parsed {depCount} package refs from {entry.Name}. Sample: {sample}");
                                         }
 
                                         int missing = 0;
@@ -918,7 +919,7 @@ namespace VPB
                 if (depCount > 0)
                 {
                     string sample = string.Join(", ", deps.Take(5).ToArray());
-                    LogUtil.Log($"[VPB] EnsureInstalled: Parsed {depCount} package refs from {entry.Name}. Sample: {sample}");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] EnsureInstalled: Parsed {depCount} package refs from {entry.Name}. Sample: {sample}");
                 }
 
                 int missing = 0;
@@ -1252,7 +1253,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log($"[VPB OnDemand] Queueing coalesced FileManager.Refresh for clothing catalog update ({newlyRegistered} new package(s))");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB OnDemand] Queueing coalesced FileManager.Refresh for clothing catalog update ({newlyRegistered} new package(s))");
                     VamOnDemandLoader.RequestCoalescedVamRefresh("scene_prewarm_clothing_catalog");
                 }
                 catch { }
@@ -1515,7 +1516,7 @@ namespace VPB
                     added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(needed);
                     if (added != null && added.Count > 0)
                     {
-                        LogUtil.Log("[VPB ScanWhitelist] Temporary native scene-load allow-list: +"
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB ScanWhitelist] Temporary native scene-load allow-list: +"
                             + string.Join(", ", added.ToArray()));
                     }
                 }
@@ -1650,7 +1651,7 @@ namespace VPB
             try
             {
                 ScanWhitelistManager.Instance.RemoveTemporaryUidOverrides(toRemove);
-                LogUtil.Log("[VPB ScanWhitelist] Temporary native scene-load allow-list removed: -"
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB ScanWhitelist] Temporary native scene-load allow-list removed: -"
                     + string.Join(", ", toRemove.ToArray()));
             }
             catch (Exception ex)

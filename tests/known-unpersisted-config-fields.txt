@@ -1,0 +1,6 @@
+# Public instance fields on VPBConfig that are deliberately NOT persisted to VPB.cfg.
+# One field name per line. Every entry needs a reason.
+#
+# Checked by VPB.Tests.Static -> ConfigSerializationTests.
+# Empty by design: if a field belongs here, say why. A field listed without a reason
+# is indistinguishable from a setting someone forgot to serialize.

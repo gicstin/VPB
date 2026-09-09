@@ -103,16 +103,16 @@ namespace VPB
                                 if (count >= 2)
                                 {
                                     _isDualPose = true;
-                                    LogUtil.Log($"[DragDropDebug] Detected Dual Pose: PeopleCount={count} in {FileEntry.Name}");
+                                    LogUtil.LogVerbose($"[DragDropDebug] Detected Dual Pose: PeopleCount={count} in {FileEntry.Name}");
                                 }
                                 else
                                 {
-                                    LogUtil.Log($"[DragDropDebug] Not Dual Pose: PeopleCount={count} in {FileEntry.Name}");
+                                    LogUtil.LogVerbose($"[DragDropDebug] Not Dual Pose: PeopleCount={count} in {FileEntry.Name}");
                                 }
                             }
                             else
                             {
-                                 // LogUtil.Log($"[DragDropDebug] Not Dual Pose: No PeopleCount in {FileEntry.Name}");
+                                 // LogUtil.LogVerbose($"[DragDropDebug] Not Dual Pose: No PeopleCount in {FileEntry.Name}");
                             }
                         }
                     }

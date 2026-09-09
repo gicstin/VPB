@@ -23,6 +23,8 @@ namespace VPB
         public int HairSubfilter = 0;
         public int AppearanceSubfilter = 0;
         public int PosePeopleFilter = 0;
+        public int SceneHubSubfilter = 0;
+        public bool HasSceneHubSubfilter;
         public SortState FileSortState = null;
         /// <summary>Title-bar Filter Hidden cycle: 0=Off, 1=Show, 2=Only.</summary>
         public int BrowseHiddenMode = 0;
@@ -78,6 +80,8 @@ namespace VPB
             node["hsf"].AsInt = HairSubfilter;
             node["asf"].AsInt = AppearanceSubfilter;
             node["ppf"].AsInt = PosePeopleFilter;
+            if (HasSceneHubSubfilter)
+                node["shs"].AsInt = SceneHubSubfilter;
 
             var tagsArr = new JSONArray();
             if (Tags != null)
@@ -132,6 +136,11 @@ namespace VPB
                 s.HairSubfilter = node["hsf"] != null ? node["hsf"].AsInt : 0;
                 s.AppearanceSubfilter = node["asf"].AsInt;
                 s.PosePeopleFilter = node["ppf"].AsInt;
+                if (node["shs"] != null)
+                {
+                    s.HasSceneHubSubfilter = true;
+                    s.SceneHubSubfilter = node["shs"].AsInt;
+                }
 
                 var tagsArr = node["tags"].AsArray;
                 if (tagsArr != null)

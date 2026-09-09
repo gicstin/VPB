@@ -198,16 +198,19 @@ namespace VPB
             if (!TryGetSideRailButtonPair(idx, out RectTransform left, out RectTransform right)) return;
             // Defense: hide setting means chips absent; never resurrect by name if orphan lingered.
             bool hideCreator = HideCreatorSideRailButtonsRequested();
+            bool hideLookFacet = true;
             if (left != null)
             {
                 bool want = active;
                 if (want && hideCreator && IsCreatorSideRailButtonGO(left.gameObject)) want = false;
+                if (want && hideLookFacet && IsLookFacetSideRailButtonGO(left.gameObject)) want = false;
                 if (left.gameObject.activeSelf != want) left.gameObject.SetActive(want);
             }
             if (right != null)
             {
                 bool want = active;
                 if (want && hideCreator && IsCreatorSideRailButtonGO(right.gameObject)) want = false;
+                if (want && hideLookFacet && IsLookFacetSideRailButtonGO(right.gameObject)) want = false;
                 if (right.gameObject.activeSelf != want) right.gameObject.SetActive(want);
             }
         }
@@ -557,8 +560,7 @@ namespace VPB
             }
             if (SideRailGoIs(go, leftRemoveModeSideBtn, rightRemoveModeSideBtn))
             {
-                tipKey = "gallery.tooltip.remove_mode";
-                tipDefault = "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.";
+                GetRemoveRailTooltip(out tipKey, out tipDefault);
                 return true;
             }
             if (SideRailGoMatches(go, leftCategoryBtnImage, rightCategoryBtnImage, leftCategoryBtnText, rightCategoryBtnText))
@@ -571,6 +573,13 @@ namespace VPB
             {
                 tipKey = "gallery.tooltip.creator_list";
                 tipDefault = "Browse creators (side list). Title bar filters the grid.";
+                return true;
+            }
+            if (SideRailGoMatches(go, leftLookFacetBtnImage, rightLookFacetBtnImage, leftLookFacetBtnText, rightLookFacetBtnText)
+                || SideRailGoIs(go, leftLookFacetSideBtnGO, rightLookFacetSideBtnGO))
+            {
+                tipKey = "gallery.tooltip.looks_like_list";
+                tipDefault = "Browse who looks resemble (Look-A-Pedia). Hub tags: switcher above the list search. Click a row to filter the grid.";
                 return true;
             }
             if (SideRailGoMatches(go, leftPathBtnImage, rightPathBtnImage, leftPathBtnText, rightPathBtnText))
@@ -611,11 +620,14 @@ namespace VPB
             if (SideRailGoIs(go, leftUserTagsSideBtn, rightUserTagsSideBtn))
                 return VPBTranslation.T("gallery.side.overflow_tags", "User Tags");
             if (SideRailGoIs(go, leftRemoveModeSideBtn, rightRemoveModeSideBtn))
-                return VPBTranslation.T("gallery.side.overflow_remove_mode", "Scene Eraser");
+                return GetRemoveRailOverflowLabel();
             if (SideRailGoMatches(go, leftCategoryBtnImage, rightCategoryBtnImage, leftCategoryBtnText, rightCategoryBtnText))
                 return VPBTranslation.T("gallery.side.overflow_category", "Category");
             if (SideRailGoMatches(go, leftCreatorBtnImage, rightCreatorBtnImage, leftCreatorBtnText, rightCreatorBtnText))
                 return VPBTranslation.T("gallery.side.overflow_creator", "Creator");
+            if (SideRailGoMatches(go, leftLookFacetBtnImage, rightLookFacetBtnImage, leftLookFacetBtnText, rightLookFacetBtnText)
+                || SideRailGoIs(go, leftLookFacetSideBtnGO, rightLookFacetSideBtnGO))
+                return VPBTranslation.T("gallery.side.overflow_looks_like", "Looks like");
             if (SideRailGoMatches(go, leftPathBtnImage, rightPathBtnImage, leftPathBtnText, rightPathBtnText))
                 return VPBTranslation.T("gallery.side.overflow_path", "Paths");
             if (SideRailGoMatchesImage(go, leftHistoryBtnImage, rightHistoryBtnImage))

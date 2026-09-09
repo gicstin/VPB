@@ -8,6 +8,7 @@ using System.Threading;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.Networking;
+using VPB.Shared;
 
 namespace VPB
 {
@@ -26,8 +27,6 @@ namespace VPB
         private const string RepoOwner = "gicstin";
         private const string RepoName = "VPB";
         private const string PatchRoot = "vam_patch/";
-        private const string StagingDirName = "vpb_update_staging";
-        private const string PendingFileName = "pending.json";
         private const int TimeoutSeconds = 30;
 
         private readonly string _gameRoot;
@@ -49,7 +48,7 @@ namespace VPB
             _gameRoot = gameRoot;
             _host = host;
             _config = VpbUpdateConfig.Load(gameRoot);
-            HasPendingUpdate = File.Exists(GetPendingPath());
+            HasPendingUpdate = HasAnyPending();
         }
 
         public VpbUpdateConfig Config => _config;
@@ -82,14 +81,30 @@ namespace VPB
 
         public bool IsBusy => _activeCoroutine != null;
 
+        private string GetPluginsDir()
+        {
+            return VpbUpdateManifest.PluginsDir(_gameRoot);
+        }
+
         private string GetStagingDir()
         {
-            return Path.Combine(Path.Combine(Path.Combine(Path.Combine(_gameRoot, "BepInEx"), "plugins"), "VPB"), StagingDirName);
+            return VpbUpdateManifest.NewStagingDir(GetPluginsDir());
+        }
+
+        private string GetLegacyStagingDir()
+        {
+            return VpbUpdateManifest.LegacyStagingDir(GetPluginsDir());
         }
 
         private string GetPendingPath()
         {
-            return Path.Combine(GetStagingDir(), PendingFileName);
+            return VpbUpdateManifest.PendingPath(GetStagingDir());
+        }
+
+        private bool HasAnyPending()
+        {
+            return VpbUpdateManifest.StagingHasPending(GetStagingDir())
+                || VpbUpdateManifest.StagingHasPending(GetLegacyStagingDir());
         }
 
         // ── Coroutine-based update flow using UnityWebRequest ──
@@ -201,7 +216,8 @@ namespace VPB
                 Progress = (float)i / filesToUpdate.Count;
                 StatusMessage = "Downloading " + (i + 1) + "/" + filesToUpdate.Count + ": " + item.RelativePath;
 
-                string rawUrl = "https://raw.githubusercontent.com/" + RepoOwner + "/" + RepoName + "/" + branch + "/" + PatchRoot + item.RelativePath.Replace('\\', '/');
+                string rawUrl = "https://raw.githubusercontent.com/" + RepoOwner + "/" + RepoName + "/" + branch + "/" + PatchRoot
+                    + VpbUpdateManifest.EncodeGitHubRawPath(item.RelativePath);
                 string stagedName = Guid.NewGuid().ToString("N") + ".tmp";
                 string stagedPath = Path.Combine(filesDir, stagedName);
 
@@ -248,9 +264,11 @@ namespace VPB
                 });
             }
 
-            // 7. Write pending.json
+            // 7. Write pending.json (and mirror for pre-subfolder VPB.Patcher.dll)
             Progress = 1f;
             WritePendingJson(stagingDir, remoteVersion, branch, pendingEntries);
+            if (!VpbUpdateManifest.CopyStaging(stagingDir, GetLegacyStagingDir()))
+                LogUtil.LogWarning("[VpbUpdater] Could not mirror staging to plugins/vpb_update_staging; old patcher may miss this update.");
 
             _config.LastCheckUtc = DateTime.UtcNow.ToString("o");
             _config.LastStagedVersion = remoteVersion;
@@ -392,7 +410,7 @@ namespace VPB
             }
             root["files"] = arr;
 
-            string path = Path.Combine(stagingDir, PendingFileName);
+            string path = VpbUpdateManifest.PendingPath(stagingDir);
             File.WriteAllText(path, VPB.src.util.JsonSerializationUtil.Serialize(root, 1024));
         }
 
@@ -525,6 +543,7 @@ namespace VPB
         public void ClearStagedUpdate()
         {
             string stagingDir = GetStagingDir();
+            string legacyStagingDir = GetLegacyStagingDir();
             string pendingPath = GetPendingPath();
             bool cleared = true;
 
@@ -549,6 +568,12 @@ namespace VPB
                     if (!TryDeleteDirectoryRecursive(stagingDir))
                         cleared = false;
                 }
+
+                if (Directory.Exists(legacyStagingDir))
+                {
+                    if (!TryDeleteDirectoryRecursive(legacyStagingDir))
+                        cleared = false;
+                }
             }
             catch (Exception ex)
             {
@@ -556,7 +581,7 @@ namespace VPB
                 LogUtil.LogError("[VpbUpdater] ClearStagedUpdate failed: " + ex.Message);
             }
 
-            HasPendingUpdate = File.Exists(GetPendingPath());
+            HasPendingUpdate = HasAnyPending();
             _config.LastStagedVersion = "";
             _config.Save();
 

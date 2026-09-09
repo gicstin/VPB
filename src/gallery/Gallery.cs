@@ -29,11 +29,11 @@ namespace VPB
                 suppressAutoRefresh = suppress; 
                 if (suppress)
                 {
-                    LogUtil.Log("[VPB] Gallery auto-refresh SUPPRESSED");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Gallery auto-refresh SUPPRESSED");
                 }
                 else
                 {
-                    LogUtil.Log("[VPB] Gallery auto-refresh ENABLED");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Gallery auto-refresh ENABLED");
                 }
             } 
         }
@@ -306,24 +306,24 @@ namespace VPB
                 {
                     if (!pendingPackageDelta)
                     {
-                        LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
                         return;
                     }
                     try
                     {
-                        LogUtil.Log("[VPB.Gallery.Delta] OnFileManagerRefresh manualRefreshOnly -> pending delta apply");
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnFileManagerRefresh manualRefreshOnly -> pending delta apply");
                     }
                     catch { }
                 }
                 else
                 {
-                    LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh INITIAL (manual refresh only, first-run exemption)");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh INITIAL (manual refresh only, first-run exemption)");
                 }
             }
 
             if (IsSuppressed())
             {
-                LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (suppressed)");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (suppressed)");
                 return;
             }
 
@@ -338,7 +338,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] OnFileManagerRefresh SKIPPED stale clock scanTime="
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnFileManagerRefresh SKIPPED stale clock scanTime="
                         + refreshTime.ToString("o") + " lastObserved=" + lastObservedPackageRefreshTime.ToString("o"));
                 }
                 catch { }
@@ -346,7 +346,7 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
             if (pendingPackageDelta)
                 GalleryFileListSnapshotCache.Clear();
             else
@@ -355,6 +355,14 @@ namespace VPB
             // Process-lifetime static L1 caches: drop on package library change (stability / bound memory).
             try { GallerySortManager.ClearSceneDependencyCache(); } catch { }
             try { PackageHidePrefs.InvalidateSceneJsonCountCache(); } catch { }
+            try
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem((_) =>
+                {
+                    try { PackageHidePrefs.TryCollapseLegacyFannedOutPackageHides(); } catch { }
+                });
+            }
+            catch { }
             try { UIDraggableItem.ClearGlobalRegionCache(); } catch { }
             try { LooseVapGenderProbe.InvalidateMemoryCache(); } catch { }
             try { VpbLocalDatabase.ClearDeepDirMtimeCache(); } catch { }
@@ -459,7 +467,7 @@ namespace VPB
                     bool hasPackageDelta = (added != null && added.Count > 0) || (removed != null && removed.Count > 0);
                     try
                     {
-                        LogUtil.Log("[VPB.Gallery.Delta] AutoRefresh scanTime=" + refreshTime.ToString("o")
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] AutoRefresh scanTime=" + refreshTime.ToString("o")
                             + " added=" + (added != null ? added.Count : 0)
                             + " removed=" + (removed != null ? removed.Count : 0)
                             + " hasDelta=" + (hasPackageDelta ? "1" : "0")
@@ -511,7 +519,7 @@ namespace VPB
                     }
                     else if (hasPackageDelta && !ackDelta)
                     {
-                        try { LogUtil.Log("[VPB.Gallery.Delta] AutoRefresh kept pending delta (no panel applied changes)"); } catch { }
+                        try { if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] AutoRefresh kept pending delta (no panel applied changes)"); } catch { }
                     }
 
                     if (!autoRefreshPending) break;
@@ -765,7 +773,7 @@ namespace VPB
 
         public void Show(string title, string extension, string path)
         {
-            LogUtil.Log("[Gallery] Gallery.Show: title='" + title + "' path='" + path + "' panelCount=" + panels.Count + " anyLoaded=" + AnyPanelHasLoadedContent);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] Gallery.Show: title='" + title + "' path='" + path + "' panelCount=" + panels.Count + " anyLoaded=" + AnyPanelHasLoadedContent);
             VpbPerfDiag.LogTransition("Gallery.Show", "title=" + title + " panels=" + panels.Count);
             if (panels.Count == 0)
             {
@@ -1068,16 +1076,16 @@ namespace VPB
         {
             if (VPBConfig.Instance == null || VPBConfig.Instance.BaMigrationPromptDismissed)
             {
-                LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: skipped (dismissed=" + (VPBConfig.Instance?.BaMigrationPromptDismissed) + ")");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: skipped (dismissed=" + (VPBConfig.Instance?.BaMigrationPromptDismissed) + ")");
                 return;
             }
             if (!BaImporter.TryDetectBaDataDir(out _))
             {
-                LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: BA data dir not found — prompt suppressed");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: BA data dir not found — prompt suppressed");
                 return;
             }
             _baMigrationPromptPending = true;
-            LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: prompt pending — will fire next time gallery panel opens");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: prompt pending — will fire next time gallery panel opens");
         }
 
         // Called from GalleryPanel.Show() when a panel becomes visible
@@ -1085,7 +1093,7 @@ namespace VPB
         {
             if (singleton == null || !singleton._baMigrationPromptPending) return false;
             singleton._baMigrationPromptPending = false;
-            LogUtil.Log("[VPB BA] TryConsumeBaMigrationPromptPending: consuming pending prompt");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] TryConsumeBaMigrationPromptPending: consuming pending prompt");
             return true;
         }
 

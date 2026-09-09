@@ -651,7 +651,6 @@ namespace VPB
                 if (_confirmEscIsDismiss)
                 {
                     _confirmEscIsDismiss = false;
-                    _deferredStickyEnter = StickyToolMode.None;
                     CloseConfirmOverlay(invokeCancel: false);
                     return true;
                 }

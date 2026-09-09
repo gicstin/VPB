@@ -13,8 +13,18 @@ namespace VPB
         private static readonly HashSet<string> s_HitBuffer = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, string> s_HitPkgUidByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_Lock = new object();
-        private static float s_LastQueueTime = 0f;
-        private static bool s_FlushPending = false;
+        private static double s_LastQueueTime;
+        private static bool s_FlushActive;
+        private static bool s_FlushRequested;
+        private static double s_RetryAfter;
+        private static string[] s_RetryPaths;
+        private static List<VpbLocalDatabase.CacheUsagePkgRow> s_RetryPkgRows;
+
+        private static double FlushClockSeconds()
+        {
+            return (double)System.Diagnostics.Stopwatch.GetTimestamp() / System.Diagnostics.Stopwatch.Frequency;
+        }
+        private static volatile bool s_FlushPending = false;
 
         public static bool IsScanning => s_Scanning;
 
@@ -69,7 +79,7 @@ namespace VPB
                         if (!string.IsNullOrEmpty(uid)) s_HitPkgUidByPath[path] = uid;
                     }
                 }
-                s_LastQueueTime = Time.realtimeSinceStartup;
+                s_LastQueueTime = FlushClockSeconds();
                 s_FlushPending = true;
             }
         }
@@ -77,72 +87,87 @@ namespace VPB
         public static void CheckAutoFlush()
         {
             if (!s_FlushPending) return;
-            
-            // Auto flush if idle for 3 seconds or buffer is getting large (500 items)
-            bool shouldFlush = false;
             lock (s_HitBuffer)
             {
-                if (s_HitBuffer.Count > 0)
-                {
-                    if (s_HitBuffer.Count >= 500 || (Time.realtimeSinceStartup - s_LastQueueTime) > 3f)
-                    {
-                        shouldFlush = true;
-                    }
-                }
-                else
-                {
-                    s_FlushPending = false;
-                }
+                if (s_FlushActive || FlushClockSeconds() < s_RetryAfter) return;
+                if (s_RetryPaths == null && !s_FlushRequested && s_HitBuffer.Count < 500
+                    && FlushClockSeconds() - s_LastQueueTime <= 3.0) return;
             }
-
-            if (shouldFlush)
-            {
-                FlushHitsBatch();
-            }
+            FlushHitsBatch();
         }
 
         public static void FlushHitsBatch()
         {
             string[] toFlush;
-            List<VpbLocalDatabase.CacheUsagePkgRow> pkgRows = null;
+            List<VpbLocalDatabase.CacheUsagePkgRow> pkgRows;
             lock (s_HitBuffer)
             {
-                if (s_HitBuffer.Count == 0)
+                s_FlushRequested = true;
+                if (s_FlushActive || FlushClockSeconds() < s_RetryAfter) return;
+                if (s_RetryPaths != null)
                 {
-                    s_FlushPending = false;
-                    return;
+                    // Keep failed and newly arrived cohorts separate: each committed cohort counts once.
+                    toFlush = s_RetryPaths;
+                    pkgRows = s_RetryPkgRows;
+                    s_RetryPaths = null;
+                    s_RetryPkgRows = null;
                 }
-                toFlush = new string[s_HitBuffer.Count];
-                s_HitBuffer.CopyTo(toFlush);
-                s_HitBuffer.Clear();
-                if (s_HitPkgUidByPath.Count > 0)
+                else
                 {
+                    if (s_HitBuffer.Count == 0)
+                    {
+                        s_FlushRequested = false;
+                        s_FlushPending = false;
+                        return;
+                    }
+                    toFlush = new string[s_HitBuffer.Count];
+                    s_HitBuffer.CopyTo(toFlush);
                     pkgRows = new List<VpbLocalDatabase.CacheUsagePkgRow>(s_HitPkgUidByPath.Count);
                     foreach (var kvp in s_HitPkgUidByPath)
                     {
-                        if (string.IsNullOrEmpty(kvp.Key) || string.IsNullOrEmpty(kvp.Value)) continue;
-                        pkgRows.Add(new VpbLocalDatabase.CacheUsagePkgRow { CachePath = kvp.Key, PackageUid = kvp.Value });
+                        if (!string.IsNullOrEmpty(kvp.Key) && !string.IsNullOrEmpty(kvp.Value))
+                            pkgRows.Add(new VpbLocalDatabase.CacheUsagePkgRow { CachePath = kvp.Key, PackageUid = kvp.Value });
                     }
+                    s_HitBuffer.Clear();
                     s_HitPkgUidByPath.Clear();
                 }
-                s_FlushPending = false;
+                s_FlushActive = true;
+                // Retrying an older cohort must preserve the request to drain newer buffered hits.
+                s_FlushRequested = s_HitBuffer.Count > 0;
+                s_FlushPending = s_HitBuffer.Count > 0;
             }
 
-            ThreadPool.QueueUserWorkItem(_ =>
+            bool queued = false;
+            try
             {
-                try
+                queued = ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    VpbLocalDatabase.TryRecordCacheHitsBatch(toFlush);
-                    if (pkgRows != null && pkgRows.Count > 0)
-                        VpbLocalDatabase.TryRecordCacheUsagePackagesBatch(pkgRows);
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("[VPB] Failed to flush cache hits batch: " + ex.Message);
-                }
-            });
+                    bool success = false;
+                    try { success = VpbLocalDatabase.TryRecordCacheUsageBatch(toFlush, pkgRows); }
+                    catch (Exception ex) { LogUtil.LogError("[VPB] Cache hit flush failed: " + ex.Message); }
+                    finally { CompleteHitsFlush(toFlush, pkgRows, success); }
+                });
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] Cache hit worker submission failed: " + ex.Message); }
+            if (!queued) CompleteHitsFlush(toFlush, pkgRows, false);
         }
 
+        private static void CompleteHitsFlush(string[] paths, List<VpbLocalDatabase.CacheUsagePkgRow> rows, bool success)
+        {
+            lock (s_HitBuffer)
+            {
+                if (!success)
+                {
+                    s_RetryPaths = paths;
+                    s_RetryPkgRows = rows;
+                    s_RetryAfter = FlushClockSeconds() + 3.0;
+                }
+                else s_RetryAfter = 0;
+                s_FlushActive = false;
+                s_FlushPending = s_RetryPaths != null || s_HitBuffer.Count > 0;
+                if (!s_FlushPending) s_FlushRequested = false;
+            }
+        }
         public static void StartScan(int daysOlderThan, int maxHits)
         {
             if (s_Scanning) return;

@@ -1,3 +1,4 @@
+using VPB.src.util;
 using Prime31.MessageKit;
 using System.Runtime.InteropServices;
 //using MVR.FileManagement;
@@ -94,7 +95,7 @@ namespace VPB
 
         void InstallInBackground()
         {
-            LogUtil.Log("InstallInBackground "+fullPath);
+            if (VPBLogger.Verbose) LogUtil.Log("InstallInBackground "+fullPath);
             if (browser != null)
             {
                 if (browser.inGame)
@@ -133,7 +134,7 @@ namespace VPB
         }
         public void OnClick()
         {
-            LogUtil.Log("OnClick "+this.fullPath);
+            if (VPBLogger.Verbose) LogUtil.Log("OnClick "+this.fullPath);
             try
             {
                 if (!string.IsNullOrEmpty(fullPath)
@@ -293,7 +294,7 @@ namespace VPB
                     : package.InstallRecursive();
                 if (dirty)
                 {
-                    LogUtil.Log("Installed " + key + " path=" + path);
+                    if (VPBLogger.Verbose) LogUtil.Log("Installed " + key + " path=" + path);
                     flag = true;
                 }
                 return true;

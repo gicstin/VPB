@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  push:
+    branches: [main, experiments, multiplayer]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static:
+    name: repository invariants
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore tests/VPB.Tests.Static/VPB.Tests.Static.csproj
+
+      - name: Test
+        run: dotnet test tests/VPB.Tests.Static/VPB.Tests.Static.csproj --nologo -c Release --no-restore --logger "trx;LogFileName=static.trx"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-test-results
+          path: tests/VPB.Tests.Static/TestResults/*.trx
+          if-no-files-found: ignore
+
+# VPB.Tests.Vam is not run here on purpose. It compiles the whole VPB source tree against
+# VaM's own managed assemblies, which are proprietary and cannot be committed or fetched
+# in CI. Run it locally: pwsh -File tests/run.ps1 -Vam  (or let the pre-push hook do it).

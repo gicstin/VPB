@@ -239,6 +239,8 @@ namespace VPB
                 _creatorSideRailOrphansPurged = false;
                 try { ApplySideButtonScale(UiMetrics, false); } catch { }
             }
+            try { CreateLeftLookFacetSideRailButton(); } catch { }
+            try { CreateRightLookFacetSideRailButton(); } catch { }
             if (!_creatorSideRailOrphansPurged)
             {
                 try { PurgeAllOrphanCreatorSideRailButtons(); } catch { }

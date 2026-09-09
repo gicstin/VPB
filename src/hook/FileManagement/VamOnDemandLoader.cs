@@ -8,6 +8,7 @@ using System.Threading;
 using System.Diagnostics;
 using UnityEngine;
 using System.Linq;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -254,7 +255,7 @@ namespace VPB
         private static string NormalizeOnDemandRequestUid(string uidOrPath)
         {
             if (string.IsNullOrEmpty(uidOrPath)) return null;
-            string s = uidOrPath.Trim();
+            string s = uidOrPath.Trim().Replace('\\', '/');
             if (s.Length == 0) return null;
             if (s.StartsWith(UidOnlyPathPrefix, StringComparison.Ordinal))
                 s = s.Substring(UidOnlyPathPrefix.Length);
@@ -276,7 +277,7 @@ namespace VPB
             {
                 s = s.Substring(0, s.Length - latestSuffix.Length);
             }
-            return s;
+            return s.IndexOf('/') >= 0 ? null : s;
         }
 
         /// <summary>Returns true when this UID was newly queued.</summary>
@@ -594,6 +595,8 @@ namespace VPB
         private static long s_StartupFailCount;
         private static long s_StartupSkippedRecentFailCount;
         private static long s_StartupAttemptTotalMs;
+        private static long s_StartupAttemptMinMs;
+        private static long s_StartupAttemptMaxMs;
         private static long s_StartupVamNotReadyDeferredCount;
         private static bool s_StartupSummaryLogged;
         private static bool s_StartupFinalSummaryLogged;
@@ -615,7 +618,6 @@ namespace VPB
         private static readonly HashSet<string> s_RefreshInProgressDeferredUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_RefreshInProgressLock = new object();
         private const string UidOnlyPathPrefix = "uid:";
-        private static int s_UidOnlyResolveFailLogged;
         private static readonly object s_RefreshRequestLock = new object();
         private static bool s_PendingVamRefresh;
         private static float s_PendingVamRefreshRequestedAt;
@@ -741,6 +743,8 @@ namespace VPB
                 s_StartupFailCount = 0;
                 s_StartupSkippedRecentFailCount = 0;
                 s_StartupAttemptTotalMs = 0;
+                s_StartupAttemptMinMs = 0;
+                s_StartupAttemptMaxMs = 0;
                 s_StartupSummaryLogged = false;
                 s_StartupFinalSummaryLogged = false;
                 s_StartupAttemptsByUid.Clear();
@@ -773,7 +777,6 @@ namespace VPB
                 s_VamNotReadyDeferredPaths.Clear();
                 s_VamNotReadyDeferredUids.Clear();
             }
-            Interlocked.Exchange(ref s_UidOnlyResolveFailLogged, 0);
             lock (s_CatalogStaleLock)
             {
                 s_CatalogStaleUids.Clear();
@@ -1469,8 +1472,16 @@ namespace VPB
             bool skipMorphs = ShouldSkipPackageMorphRefreshForCatalogUpdate();
             Action run = delegate
             {
-                PausePhysicsForCatalogRefresh();
-                MVR.FileManagement.FileManager.Refresh();
+                var timingScope = VamCatalogRefreshProfiler.Begin(reason);
+                try
+                {
+                    PausePhysicsForCatalogRefresh();
+                    MVR.FileManagement.FileManager.Refresh();
+                }
+                finally
+                {
+                    VamCatalogRefreshProfiler.End(timingScope);
+                }
             };
 
             if (skipMorphs)
@@ -1508,16 +1519,15 @@ namespace VPB
                 || p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase);
         }
 
-        public static string TryRegisterPackageOnDemand(string uid, bool persistUidOverride = false)
+        public static string TryRegisterPackageOnDemand(string uid, bool persistUidOverride = false, bool bypassStartupDefer = false)
         {
             if (string.IsNullOrEmpty(uid)) return null;
             if (!ScanWhitelistManager.Instance.IsEnabled) return null;
             if (!VamScanFilter.HasRegisterMethodAccess) return null;
             if (!persistUidOverride && IsRawVarFilesystemPath(uid)) return null;
 
-            string normalized = NormalizeOnDemandRequestUid(uid);
-            if (!string.IsNullOrEmpty(normalized))
-                uid = normalized;
+            uid = NormalizeOnDemandRequestUid(uid);
+            if (string.IsNullOrEmpty(uid)) return null;
 
             // Already registered this session — but only skip if VaM still has the package.
             // Native Refresh under scan whitelist can drop it while this set still contains the UID.
@@ -1542,13 +1552,14 @@ namespace VPB
                 if (EnqueueVamNotReadyDefer(uid, null))
                 {
                     string deferUidEarly = NormalizeOnDemandRequestUid(uid);
-                    if (!string.IsNullOrEmpty(deferUidEarly))
+                    if (VPBLogger.Verbose && !string.IsNullOrEmpty(deferUidEarly))
                         LogUtil.Log("[VPB OnDemand] Defer before VaM FileManager ready: " + deferUidEarly);
                 }
                 return null;
             }
 
             // Non-script / heavy-script policy until READY — queue UID only (resolve on promote).
+            if (!bypassStartupDefer)
             {
                 string deferUidPolicy = NormalizeOnDemandRequestUid(uid);
                 if (!string.IsNullOrEmpty(deferUidPolicy)
@@ -1567,6 +1578,7 @@ namespace VPB
                 {
                     // Genuinely unresolvable: arm the failure cooldown so repeated probes for the same uid
                     // short-circuit instead of re-running the recursive AddonPackages walk on every hook call.
+                    LogUtil.LogWarning("[VPB OnDemand] Package resolve failed: " + uid);
                     MarkFailure(uid);
                 }
                 return null;
@@ -1594,14 +1606,14 @@ namespace VPB
                             if (ScanWhitelistManager.Instance.AddUidOverride(resolvedUid))
                             {
                                 ScanWhitelistManager.Instance.Save();
-                                LogUtil.Log("[VPB OnDemand] Persisted plugin whitelist UID override: +" + resolvedUid);
+                                if (VPBLogger.Verbose) LogUtil.Log("[VPB OnDemand] Added plugin whitelist UID override, save requested: +" + resolvedUid);
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { VPBLogger.Files.LogWarning("[VPB OnDemand] Plugin whitelist update failed uid=" + resolvedUid + ": " + ex.Message, false); }
                     }
 
                     var added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(new[] { resolvedUid });
-                    if (added != null && added.Count > 0)
+                    if (VPBLogger.Verbose && added != null && added.Count > 0)
                     {
                         LogUtil.Log("[VPB OnDemand] Temporary allow-list +"
                             + string.Join(", ", added.ToArray()) + " for runtime request '" + uid + "'");
@@ -1614,6 +1626,19 @@ namespace VPB
             {
                 lock (s_RegisteredLock)
                     s_RegisteredOnDemand.Add(resolvedUid);
+                return null;
+            }
+
+            string onDiskUid = UidFromVarPath(varPath);
+            if (!string.IsNullOrEmpty(onDiskUid)
+                && !string.Equals(onDiskUid, resolvedUid, StringComparison.OrdinalIgnoreCase)
+                && IsUidAlreadyRegisteredInVam(onDiskUid))
+            {
+                lock (s_RegisteredLock)
+                {
+                    s_RegisteredOnDemand.Add(onDiskUid);
+                    if (!string.IsNullOrEmpty(resolvedUid)) s_RegisteredOnDemand.Add(resolvedUid);
+                }
                 return null;
             }
 
@@ -1638,15 +1663,16 @@ namespace VPB
                     if (added)
                         s_RefreshInProgressDeferredPaths.Enqueue(varPath);
                 }
-                if (added)
+                if (VPBLogger.Verbose && added)
                     LogUtil.Log("[VPB OnDemand] Defer during VaM Refresh: " + deferUid);
                 return null;
             }
 
             try { VamStartupOptimizations.InvalidateVamXAbsentCacheIfVamXPackageTouched(resolvedUid ?? uid); } catch { }
 
-            LogUtil.Log("[VPB OnDemand] Registering package on demand: req=" + uid
-                + " resolved=" + resolvedUid + " path=" + normPath);
+            if (VPBLogger.Verbose)
+                LogUtil.Log("[VPB OnDemand] Registering package on demand: req=" + uid
+                    + " resolved=" + resolvedUid + " path=" + normPath);
             SafeRecordStartupOnDemandActivity();
 
             if (IsMainThread())
@@ -1713,21 +1739,62 @@ namespace VPB
             string uid = p.Substring(0, colonIdx);
             if (string.IsNullOrEmpty(uid)) return null;
 
-            // Only rewrite casing when we can resolve the same UID/version.
             try
             {
-                VarPackage pkg = FileManager.GetPackage(uid, ensureInstalled: false);
-                if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) return null;
+                string registeredUid;
+                if (!FileManager.TryMapLookupUidToRegisteredUid(uid, out registeredUid)
+                    || string.IsNullOrEmpty(registeredUid))
+                    return null;
 
-                if (string.Equals(pkg.Uid, uid, StringComparison.Ordinal)) return null;
-                if (!string.Equals(pkg.Uid, uid, StringComparison.OrdinalIgnoreCase)) return null;
-
-                string rewritten = pkg.Uid + p.Substring(colonIdx);
+                string rewritten = registeredUid + p.Substring(colonIdx);
                 LogPathRewriteProbeLimited(p, rewritten,
-                    "[VPB OnDemand] Rewrote entry UID by case-insensitive package lookup: req=" + p + " -> " + rewritten);
+                    "[VPB OnDemand] Rewrote entry UID to registered package: req=" + p + " -> " + rewritten);
                 return rewritten;
             }
             catch { return null; }
+        }
+
+        internal static bool TryNativeGetPackageWithRegisteredUid(
+            string requestedUid,
+            ref MVR.FileManagement.VarPackage result)
+        {
+            string registeredUid;
+            if (!FileManager.TryMapLookupUidToRegisteredUid(requestedUid, out registeredUid))
+                return false;
+            result = MVR.FileManagement.FileManager.GetPackage(registeredUid);
+            return result != null;
+        }
+
+        internal static bool TryNativeIsPackageWithRegisteredUid(string requestedUid, ref bool result)
+        {
+            string registeredUid;
+            if (!FileManager.TryMapLookupUidToRegisteredUid(requestedUid, out registeredUid))
+                return false;
+            result = MVR.FileManagement.FileManager.IsPackage(registeredUid);
+            return result;
+        }
+
+        internal static bool TryNativeGetPackageGroupWithRegisteredUid(
+            string requestedGroupId,
+            ref MVR.FileManagement.VarPackageGroup result)
+        {
+            string registeredGroupId;
+            if (!FileManager.TryMapLookupGroupIdToRegisteredGroupId(requestedGroupId, out registeredGroupId))
+                return false;
+            result = MVR.FileManagement.FileManager.GetPackageGroup(registeredGroupId);
+            return result != null;
+        }
+
+        internal static bool TryNativeGetVarFileEntryWithRegisteredUid(
+            string path,
+            ref MVR.FileManagement.VarFileEntry result)
+        {
+            string rewritten = TryRewriteEntryPathUidByCaseInsensitiveLookup(path);
+            if (string.IsNullOrEmpty(rewritten)
+                || string.Equals(rewritten, path, StringComparison.Ordinal))
+                return false;
+            result = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
+            return result != null;
         }
 
         public static string RewriteEntryPathToBestAvailable(string entryPath, bool attemptRegister)
@@ -1792,7 +1859,7 @@ namespace VPB
                 if (!string.IsNullOrEmpty(uid) && s_StartupDeferredScriptUids.Contains(uid))
                 {
                     lock (s_StartupStatsLock) s_StartupDeferredScriptCount++;
-                    lock (s_StartupDeferredLock)
+                    if (VPBLogger.Verbose) lock (s_StartupDeferredLock)
                     {
                         if (s_StartupDeferredScriptUidsLogged.Add(uid))
                             LogUtil.Log("[VPB OnDemand] Startup defer heavy script package: " + uid + " entry=" + p);
@@ -1811,7 +1878,7 @@ namespace VPB
             }
 
             lock (s_StartupStatsLock) s_StartupDeferredNonScriptCount++;
-            if (!string.IsNullOrEmpty(uid))
+            if (VPBLogger.Verbose && !string.IsNullOrEmpty(uid))
             {
                 lock (s_StartupDeferredLock)
                 {
@@ -1827,6 +1894,61 @@ namespace VPB
             string uid = UidFromEntryPath(entryPath);
             if (string.IsNullOrEmpty(uid)) return null;
             return TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
+        }
+
+        public static bool LooksLikePackageEntryPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            if (path.IndexOf(":/", StringComparison.Ordinal) > 0) return true;
+            return path.IndexOf(":\\", StringComparison.Ordinal) > 0;
+        }
+
+        public static MVR.FileManagement.VarFileEntry TryResolveNativeVarFileEntryForImmediateRead(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+
+            MVR.FileManagement.VarFileEntry vfe = null;
+            try { vfe = MVR.FileManagement.FileManager.GetVarFileEntry(path); }
+            catch { }
+            if (vfe != null) return vfe;
+
+            if (!LooksLikePackageEntryPath(path)) return null;
+
+            try
+            {
+                if (ScanWhitelistManager.Instance.IsEnabled)
+                {
+                    string uid = UidFromEntryPath(path);
+                    if (!string.IsNullOrEmpty(uid))
+                    {
+                        TryRegisterPackageOnDemand(uid,
+                            persistUidOverride: IsPluginEntryPath(path),
+                            bypassStartupDefer: true);
+                    }
+                }
+
+                vfe = MVR.FileManagement.FileManager.GetVarFileEntry(path);
+                if (vfe != null) return vfe;
+
+                if (TryNativeGetVarFileEntryWithRegisteredUid(path, ref vfe) && vfe != null)
+                    return vfe;
+
+                string rewritten = TryRewriteLatestEntryPath(path, attemptRegister: true);
+                if (!string.IsNullOrEmpty(rewritten)
+                    && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    vfe = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
+                    if (vfe != null) return vfe;
+                }
+
+                string rewrittenBest = TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
+                if (!string.IsNullOrEmpty(rewrittenBest)
+                    && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
+                    vfe = MVR.FileManagement.FileManager.GetVarFileEntry(rewrittenBest);
+            }
+            catch { }
+
+            return vfe;
         }
 
         // Plugins resolve dependency morphs by display name (not by file path), so the reactive
@@ -1855,12 +1977,11 @@ namespace VPB
             foreach (string dep in deps)
             {
                 if (string.IsNullOrEmpty(dep)) continue;
-                // Resolves ".latest", dedupes, skips already-registered, defers when VaM not ready;
-                // non-null return means it registered the package this call.
+                // A returned path records an attempt, not proof that VaM accepted registration.
                 if (!string.IsNullOrEmpty(TryRegisterPackageOnDemand(dep))) registered++;
             }
             if (registered > 0)
-                LogUtil.Log("[VPB PluginDep] " + resolved + ": registered " + registered + "/" + deps.Count + " declared dep(s)");
+                VPBLogger.Files.LogMessage("[VPB PluginDep] " + resolved + ": registration_attempts=" + registered + " declared_dependencies=" + deps.Count, false);
             return registered > 0;
         }
 
@@ -1936,9 +2057,7 @@ namespace VPB
                 if (string.IsNullOrEmpty(req)) return false;
                 if (!TryResolveVarPathForUid(req, out uid, out varPath))
                 {
-                    int n = Interlocked.Increment(ref s_UidOnlyResolveFailLogged);
-                    if (n <= 8)
-                        LogUtil.LogWarning("[VPB OnDemand] Deferred UID resolve failed: " + req);
+                    LogUtil.LogWarning("[VPB OnDemand] Deferred UID resolve failed: " + req);
                     return false;
                 }
                 return !string.IsNullOrEmpty(varPath);
@@ -1960,10 +2079,16 @@ namespace VPB
 
             // Deferred startup requests can become "already registered" by the time they drain
             // (e.g. VaM's first Refresh scanned the temporary allow-list). Skip duplicate invokes.
-            if (IsUidAlreadyRegisteredInVam(uid))
+            string diskUid = UidFromVarPath(varPath);
+            bool sameAsDisk = string.IsNullOrEmpty(diskUid)
+                || string.Equals(diskUid, uid, StringComparison.OrdinalIgnoreCase);
+            if (IsUidAlreadyRegisteredInVam(uid) || (!sameAsDisk && IsUidAlreadyRegisteredInVam(diskUid)))
             {
                 lock (s_RegisteredLock)
+                {
                     s_RegisteredOnDemand.Add(uid);
+                    if (!sameAsDisk) s_RegisteredOnDemand.Add(diskUid);
+                }
                 lock (s_FailedLock)
                     s_LastFailedAttemptTicksByUid.Remove(uid);
                 return;
@@ -1977,6 +2102,8 @@ namespace VPB
             {
                 s_StartupAttemptCount++;
                 s_StartupAttemptTotalMs += elapsedMs;
+                if (s_StartupAttemptCount == 1 || elapsedMs < s_StartupAttemptMinMs) s_StartupAttemptMinMs = elapsedMs;
+                if (elapsedMs > s_StartupAttemptMaxMs) s_StartupAttemptMaxMs = elapsedMs;
                 int a = 0;
                 s_StartupAttemptsByUid.TryGetValue(uid, out a);
                 s_StartupAttemptsByUid[uid] = a + 1;
@@ -2005,6 +2132,7 @@ namespace VPB
             }
             else
             {
+                LogUtil.LogWarning("[VPB OnDemand] Registration failed: uid=" + uid + " path=" + varPath);
                 MarkFailure(uid);
             }
         }
@@ -2180,6 +2308,17 @@ namespace VPB
             string all = NormalizePath(Path.Combine("AllPackages", filename));
             if (File.Exists(all)) return all;
 
+            string registeredUid;
+            if (FileManager.TryMapLookupUidToRegisteredUid(uid, out registeredUid)
+                && !string.IsNullOrEmpty(registeredUid))
+            {
+                string aliasFilename = registeredUid + ".var";
+                string aliasAddon = NormalizePath(Path.Combine("AddonPackages", aliasFilename));
+                if (File.Exists(aliasAddon)) return aliasAddon;
+                string aliasAll = NormalizePath(Path.Combine("AllPackages", aliasFilename));
+                if (File.Exists(aliasAll)) return aliasAll;
+            }
+
             // Recursive walk is expensive on large libraries — never during Refresh / pre-ready.
             if (VamScanFilter.IsVamRefreshInProgress
                 || (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged()))
@@ -2193,6 +2332,13 @@ namespace VPB
                     string[] matches = Directory.GetFiles(root, filename, SearchOption.AllDirectories);
                     if (matches != null && matches.Length > 0)
                         return NormalizePath(matches[0]);
+                    if (!string.IsNullOrEmpty(registeredUid)
+                        && !string.Equals(registeredUid + ".var", filename, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string[] aliasMatches = Directory.GetFiles(root, registeredUid + ".var", SearchOption.AllDirectories);
+                        if (aliasMatches != null && aliasMatches.Length > 0)
+                            return NormalizePath(aliasMatches[0]);
+                    }
                 }
                 catch { }
             }
@@ -2221,7 +2367,7 @@ namespace VPB
         public static void DrainMainThreadQueue()
         {
             if (!ScanWhitelistManager.Instance.IsEnabled) return;
-            MaybeLogStartupSummary();
+            MaybeLogStartupSummary(false);
             if (VamScanFilter.IsVamRefreshInProgress) return;
 
             // Non-script requests deferred after first Refresh but before READY were stuck in
@@ -2266,6 +2412,7 @@ namespace VPB
             }
 
             DrainCoalescedVamRefresh();
+            MaybeLogStartupSummary(true);
         }
 
         // Interactive FileManager.Refresh rebuilds every live Person's clothing/hair; on a female soft-body
@@ -2543,21 +2690,30 @@ namespace VPB
             {
                 LogUtil.LogWarning("[VPB OnDemand] Forced FileManager.Refresh failed: " + ex.Message);
             }
-
             return true;
         }
 
-        private static void MaybeLogStartupSummary()
+        private static void MaybeLogStartupSummary(bool allowFinal)
         {
-            bool ready = SafeIsStartupReadyLogged();
+            if (s_StartupFinalSummaryLogged) return;
+            bool ready = allowFinal && SafeIsStartupReadyLogged();
+            if (ready)
+            {
+                // READY can promote more registrations; final totals belong after all queues drain.
+                if (HasPendingCoalescedVamRefresh() || VamScanFilter.IsVamRefreshInProgress) return;
+                lock (s_QueueLock) if (s_PendingPaths.Count != 0) return;
+                lock (s_VamNotReadyLock) if (s_VamNotReadyDeferredPaths.Count != 0) return;
+                lock (s_RefreshInProgressLock) if (s_RefreshInProgressDeferredPaths.Count != 0) return;
+            }
             if (!ready && s_StartupSummaryLogged) return;
             if (ready && s_StartupFinalSummaryLogged) return;
             if (!ready && LogUtil.GetStartupSecondsForDisplay() < 12.0) return;
 
-            long a, s, f, sk, ms, ds, dn, ascr;
+            long a, s, f, sk, ms, minMs, maxMs, ds, dn, ascr;
             string topFail = "";
             lock (s_StartupStatsLock)
             {
+                if (s_StartupFinalSummaryLogged) return;
                 if (!ready && s_StartupSummaryLogged) return;
                 if (ready && s_StartupFinalSummaryLogged) return;
                 a = s_StartupAttemptCount;
@@ -2565,6 +2721,8 @@ namespace VPB
                 f = s_StartupFailCount;
                 sk = s_StartupSkippedRecentFailCount;
                 ms = s_StartupAttemptTotalMs;
+                minMs = s_StartupAttemptMinMs;
+                maxMs = s_StartupAttemptMaxMs;
                 ds = s_StartupDeferredScriptCount;
                 dn = s_StartupDeferredNonScriptCount;
                 ascr = s_StartupAllowedScriptCount;
@@ -2591,6 +2749,9 @@ namespace VPB
                 .Append(" deferred_script=").Append(ds)
                 .Append(" deferred_vam_not_ready=").Append(vamNotReady)
                 .Append(" invoke_ms_total=").Append(ms)
+                .Append(" invoke_ms_avg=").Append((a == 0 ? 0 : (double)ms / a).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))
+                .Append(" invoke_ms_min=").Append(minMs)
+                .Append(" invoke_ms_max=").Append(maxMs)
                 .Append(" cooldown_ms=").Append(FailedRetryCooldownMs)
                 .Append(" top_fail_uids=").Append(string.IsNullOrEmpty(topFail) ? "(none)" : topFail);
             AppendPathRewriteProbeSummaryIfNeeded(summary);
@@ -2599,7 +2760,7 @@ namespace VPB
             {
                 summary.Append(" catalog_meta_json_probes_suppressed=").Append(catalogProbes);
             }
-            LogUtil.Log(summary.ToString());
+            VPBLogger.Files.LogMessage(summary.ToString(), false);
         }
 
         public static string UidFromVarPath(string varPath)

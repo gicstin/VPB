@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -1052,7 +1053,7 @@ namespace VPB
             _hubEnabled = b;
             if (_hubEnabled)
             {
-                LogUtil.Log("HubBrowse hub enabled");
+                if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log("HubBrowse hub enabled");
                 if (_isShowing)
                 {
                     GetHubInfo();
@@ -1094,7 +1095,7 @@ namespace VPB
         public void Show()
         {
             bool alreadyShowing = _isShowing;
-            LogUtil.Log($"HubBrowse.Show: alreadyShowing={alreadyShowing}, hubEnabled={_hubEnabled}");
+            if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log($"HubBrowse.Show: alreadyShowing={alreadyShowing}, hubEnabled={_hubEnabled}");
             if (preShowCallbacks != null)
             {
                 preShowCallbacks();
@@ -1291,7 +1292,7 @@ namespace VPB
                     {
                         numResourcesJSON.val = "Total: " + totalFound;
                     }
-                    LogUtil.Log($"HubBrowse.RefreshCallback DONE page={page} items={count} ms={sw.ElapsedMilliseconds}");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log($"HubBrowse.RefreshCallback DONE page={page} items={count} ms={sw.ElapsedMilliseconds}");
                     return;
                 }
                 finally
@@ -1309,7 +1310,7 @@ namespace VPB
 
         public void RefreshResources()
         {
-            LogUtil.Log($"HubBrowse.RefreshResources: Page={_currentPageString}, Sort={_sortPrimary},{_sortSecondary}, Filter=[Hosted:{_hostedOption}, Pay:{_payTypeFilter}, Cat:{_categoryFilter}, Creator:{_creatorFilter}, Tags:{_tagsFilter}, Search:{_searchFilter}, OnlyDl:{(onlyDownloadable != null && onlyDownloadable.val)}, HideDownloaded:{(hideDownloaded != null && hideDownloaded.val)}]");
+            if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log($"HubBrowse.RefreshResources: Page={_currentPageString}, Sort={_sortPrimary},{_sortSecondary}, Filter=[Hosted:{_hostedOption}, Pay:{_payTypeFilter}, Cat:{_categoryFilter}, Creator:{_creatorFilter}, Tags:{_tagsFilter}, Search:{_searchFilter}, OnlyDl:{(onlyDownloadable != null && onlyDownloadable.val)}, HideDownloaded:{(hideDownloaded != null && hideDownloaded.val)}]");
             _hasBeenRefreshed = true;
             if (_hubEnabled)
             {
@@ -1622,7 +1623,7 @@ namespace VPB
 
         protected void ResetFilters()
         {
-            LogUtil.Log("HubBrowse.ResetFilters called");
+            if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log("HubBrowse.ResetFilters called");
             _hostedOption = "All";
             if (hostedOptionChooser != null) hostedOptionChooser.valNoCallback = "All";
             _payTypeFilter = "All";
@@ -1655,7 +1656,7 @@ namespace VPB
 
         protected void ResetFiltersAndRefresh()
         {
-            LogUtil.Log("HubBrowse.ResetFiltersAndRefresh (Reset Filters button) pressed");
+            if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log("HubBrowse.ResetFiltersAndRefresh (Reset Filters button) pressed");
             ResetFilters();
             ResetRefresh();
         }
@@ -2325,14 +2326,13 @@ namespace VPB
                 if (!string.IsNullOrEmpty(pinned)) int.TryParse(pinned, out concreteVer);
             }
 
-            // .latest (and loose rows) → concrete Author.Name.N.var from Hub latest_version/filename.
             if (concreteVer > 0)
             {
                 string concreteFn = group + "." + concreteVer + ".var";
                 bool filenameBad = string.IsNullOrEmpty(filename) || filename == "null"
                     || filename.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) >= 0
                     || !Regex.IsMatch(filename, "\\.([0-9]+)\\.var$", RegexOptions.IgnoreCase);
-                if (requestLatest || filenameBad)
+                if (filenameBad)
                     j["filename"] = concreteFn;
                 j["version"] = concreteVer.ToString();
                 if (string.IsNullOrEmpty(latestVersion) || latestVersion == "null")
@@ -2444,6 +2444,11 @@ namespace VPB
                 if (serverPackages != null)
                     serverPackages.TryGetValue(checkMissingPackageName, out jSONClass);
                 jSONClass = ResolveFindPackagesEntry(checkMissingPackageName, jSONClass);
+
+                string resolvedFn = jSONClass != null ? jSONClass["filename"] : null;
+                if (FileManager.GetExactRegisteredPackage(resolvedFn) != null
+                    || FileManager.GetExactRegisteredPackage(checkMissingPackageName) != null)
+                    continue;
 
                 HubResourcePackage hubResourcePackage = new HubResourcePackage(jSONClass, this, true);
                 RectTransform rectTransform = CreateDownloadPrefabInstance();
@@ -2579,7 +2584,7 @@ namespace VPB
                 }
                 processed++;
             }
-            LogUtil.Log($"HubBrowse.GetPackagesJSONCallback DONE processed={processed} groups={(packageGroupToLatestVersion != null ? packageGroupToLatestVersion.Count : 0)} ids={(packageIdToResourceId != null ? packageIdToResourceId.Count : 0)} ms={sw.ElapsedMilliseconds}");
+            if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log($"HubBrowse.GetPackagesJSONCallback DONE processed={processed} groups={(packageGroupToLatestVersion != null ? packageGroupToLatestVersion.Count : 0)} ids={(packageIdToResourceId != null ? packageIdToResourceId.Count : 0)} ms={sw.ElapsedMilliseconds}");
         }
 
         protected void FindUpdatesErrorCallback(string err)
@@ -2799,7 +2804,6 @@ namespace VPB
         }
 
         private bool _deferredRefreshAfterDownloads;
-        private HashSet<string> _deferredDownloadUids;
         private int _deferredDownloadRegisterCount;
 
         /// <summary>True while Hub downloads should register only — no per-file full library refresh.</summary>
@@ -2811,16 +2815,11 @@ namespace VPB
         public void DeferRefreshUntilQueueDrains()
         {
             _deferredRefreshAfterDownloads = true;
-            if (_deferredDownloadUids == null)
-                _deferredDownloadUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
         public void NoteDeferredDownloadUid(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return;
-            if (_deferredDownloadUids == null)
-                _deferredDownloadUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            _deferredDownloadUids.Add(uid);
             _deferredDownloadRegisterCount++;
         }
 
@@ -2832,29 +2831,11 @@ namespace VPB
 
             _deferredRefreshAfterDownloads = false;
 
-            HashSet<string> uids = _deferredDownloadUids;
             int registerCount = _deferredDownloadRegisterCount;
-            _deferredDownloadUids = null;
             _deferredDownloadRegisterCount = 0;
 
-            // Packages already live via RegisterHubDownloadedPackage — avoid full AddonPackages walk.
-            try
-            {
-                if (registerCount > 0)
-                    VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(registerCount, 0);
-            }
-            catch { }
-            try { FileManager.InvalidateAllMissingDepsCounts(); } catch { }
-            try { DependencyGraph.Invalidate(); } catch { }
-
-            try
-            {
-                FileManagerBridge.Refresh(
-                    "hub_deferred_downloads",
-                    RefreshScope.InstallOnly,
-                    uids);
-            }
-            catch { }
+            // InstallOnly assumes unchanged content and never scans new ZIP entries for Scenes/category membership.
+            if (registerCount > 0) FileManager.ScheduleHubDownloadRefresh();
 
             try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
             RefreshResources();
@@ -2998,7 +2979,7 @@ namespace VPB
             try
             {
                 int nItems = items != null ? items.Count : 0;
-                LogUtil.Log("[VPB.HubDownload] HubBrowse refresh hub rows after package scan items=" + nItems);
+                if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log("[VPB.HubDownload] HubBrowse refresh hub rows after package scan items=" + nItems);
                 OnPackageRefresh();
             }
             catch (Exception ex)
@@ -3230,7 +3211,7 @@ namespace VPB
             if (packagesJSONUrl != null && packagesJSONUrl != string.Empty && text != null)
             {
                 string uri = packagesJSONUrl + "?" + text;
-                LogUtil.Log($"HubBrowse requesting packages.json uri={uri}");
+                if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log($"HubBrowse requesting packages.json uri={uri}");
                 StartCoroutine(GetRequest(uri, GetPackagesJSONCallback, GetPackagesJSONErrorCallback));
             }
 
@@ -3377,7 +3358,7 @@ namespace VPB
         {
             if (!hubInfoRefreshing)
             {
-                LogUtil.Log("HubBrowse.GetHubInfo START");
+                if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log("HubBrowse.GetHubInfo START");
                 if (failedGetInfoPanel != null)
                 {
                     failedGetInfoPanel.gameObject.SetActive(false);
@@ -3386,7 +3367,7 @@ namespace VPB
                 jSONClass["source"] = "VaM";
                 jSONClass["action"] = "getInfo";
                 string postData = jSONClass.ToString();
-                LogUtil.Log($"HubBrowse.GetHubInfo POST prepared len={(postData != null ? postData.Length : 0)}");
+                if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log($"HubBrowse.GetHubInfo POST prepared len={(postData != null ? postData.Length : 0)}");
                 hubInfoRefreshing = true;
                 if (refreshingGetInfoPanel != null)
                 {

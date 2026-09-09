@@ -106,6 +106,7 @@ namespace VPB
 
         private static readonly List<SkinnedMeshRenderer> _smrBuf = new List<SkinnedMeshRenderer>();
         private static readonly HashSet<Transform> _drawnBones = new HashSet<Transform>();
+        private readonly HashSet<Transform> _meshBones = new HashSet<Transform>();
 
         private void OnPostRender()
         {
@@ -144,6 +145,10 @@ namespace VPB
             Transform[] bones = smr.bones;
             if (bones == null || bones.Length == 0) return;
 
+            _meshBones.Clear();
+            for (int i = 0; i < bones.Length; i++)
+                if (bones[i] != null) _meshBones.Add(bones[i]);
+
             GL.Begin(GL.LINES);
             for (int i = 0; i < bones.Length; i++)
             {
@@ -151,7 +156,7 @@ namespace VPB
                 if (bone == null) continue;
 
                 Transform parent = bone.parent;
-                bool parentIsBone = parent != null && BoneIsInArray(bones, parent);
+                bool parentIsBone = parent != null && _meshBones.Contains(parent);
 
                 if (parentIsBone)
                 {
@@ -167,6 +172,7 @@ namespace VPB
                 DrawDot(bone.position, 0.01f);
             }
             GL.End();
+            _meshBones.Clear();
         }
 
         private static void DrawDot(Vector3 center, float size)
@@ -177,13 +183,6 @@ namespace VPB
             GL.Vertex(center - Vector3.up * size);
             GL.Vertex(center + Vector3.forward * size);
             GL.Vertex(center - Vector3.forward * size);
-        }
-
-        private static bool BoneIsInArray(Transform[] arr, Transform t)
-        {
-            for (int i = 0; i < arr.Length; i++)
-                if (arr[i] == t) return true;
-            return false;
         }
     }
 }

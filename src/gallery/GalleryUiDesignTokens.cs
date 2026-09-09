@@ -1,4 +1,4 @@
-﻿namespace VPB
+namespace VPB
 {
     /// <summary>Design-reference pixel sizes at gallery UI scale 1.0 (before host/DPI factors).</summary>
     public static class GalleryUiDesignTokens
@@ -116,6 +116,8 @@
         public const float FloatSearchRowHeightRef = SearchFieldHeightRef + FloatSearchRowPadRef * 2f;
         /// <summary>Window-type glyph in float title bars (settings gear, tags, filter, import).</summary>
         public const float FloatTitleWindowIconSizeRef = 22f;
+        /// <summary>Venus / Mars well beside a person atom name — same edge as regular chrome buttons.</summary>
+        public const float PersonGenderBadgeRef = ButtonSizeRef;
         /// <summary>Space after window icon before title label (design px at scale 1).</summary>
         public const float FloatTitleWindowIconGapRef = TightGapRef;
         /// <summary>Float title bar L/R pad — keep icon near left (grip + this).</summary>
@@ -409,6 +411,7 @@
         public const float SettingsFloatRowHeightRef = 48f;
         /// <summary>Multi-line TextArea rows — host prefers 72 + chrome pad.</summary>
         public const float SettingsFloatTextAreaRowHeightRef = 112f;
+        public const float SettingsFloatWrapRowHeightRef = 88f;
         /// <summary>Wheel step (UGUI). 25 jumped ~2 viewports on large Win deltas.</summary>
         public const float SettingsFloatScrollSensitivityRef = 8f;
         /// <summary>Creator Strip Scene keep selector float — same chrome family as Settings/Plugins.</summary>

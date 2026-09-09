@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -18,6 +18,14 @@ namespace VPB
             // Subscribe to config changes
             if (VPBConfig.Instance != null)
             {
+                try
+                {
+                    VpbDataPackService.RequestInitialSync(
+                        VPBConfig.Instance.DataPackLookapediaEnabled,
+                        VPBConfig.Instance.DataPackHubTagsEnabled);
+                }
+                catch { }
+
                 bool isVR = XrUtils.IsVrActive();
 
                 // First pane may auto-dock; later panes only when the user already docks and an edge is free.
@@ -472,7 +480,7 @@ namespace VPB
 
             titleBarRefreshBtnText = refreshBtn.GetComponentInChildren<Text>();
             VPBUiFont.ApplyTo(titleBarRefreshBtnText);
-            AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages (right-click: VaM file list only)");
+            AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Rescan packages from disk — picks up .var files added or renamed outside VaM (right-click: VaM file list only)");
             { var s = UI.LoadIconSprite("refresh", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(refreshBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
 
             // Settings (title bar, left of filter presets; side rails no longer host Settings)
@@ -829,12 +837,13 @@ namespace VPB
                 });
                 rightRefreshEt.triggers.Add(rightRefreshPointerClick);
 
-                AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages (right-click: VaM file list only)");
+                AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Rescan packages from disk — picks up .var files added or renamed outside VaM (right-click: VaM file list only)");
 
                 _rightMainSideSearchOnValueChanged = (val) => {
                     if (_suppressMainSideSearchValueChanged) return;
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
                     else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
+                    else if (rightActiveContent == ContentType.Lookapedia) lookapediaFilter = val;
                     else if (rightActiveContent == ContentType.UserTags) userTagFilter = val;
                     else if (rightActiveContent == ContentType.Path) pathFilter = val;
                     else if (rightActiveContent == ContentType.History) historyTabFilter = val;
@@ -851,6 +860,10 @@ namespace VPB
                     if (rightActiveContent == ContentType.Creator) {
                         ClearCreatorFilters();
                         OnCreatorFilterChanged(refreshFilesAndTabs: true);
+                    }
+                    else if (rightActiveContent == ContentType.Lookapedia) {
+                        ClearLookapediaListSearch();
+                        try { ApplyLookFacetSideFilterIfOpen(); } catch { }
                     }
                     else if (rightActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
@@ -1118,6 +1131,7 @@ namespace VPB
                     if (_suppressMainSideSearchValueChanged) return;
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
                     else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
+                    else if (leftActiveContent == ContentType.Lookapedia) lookapediaFilter = val;
                     else if (leftActiveContent == ContentType.UserTags) userTagFilter = val;
                     else if (leftActiveContent == ContentType.Path) pathFilter = val;
                     else if (leftActiveContent == ContentType.History) historyTabFilter = val;
@@ -1134,6 +1148,10 @@ namespace VPB
                     if (leftActiveContent == ContentType.Creator) {
                         ClearCreatorFilters();
                         OnCreatorFilterChanged(refreshFilesAndTabs: true);
+                    }
+                    else if (leftActiveContent == ContentType.Lookapedia) {
+                        ClearLookapediaListSearch();
+                        try { ApplyLookFacetSideFilterIfOpen(); } catch { }
                     }
                     else if (leftActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
@@ -1236,6 +1254,8 @@ namespace VPB
                     galleryReplaceSprite = UI.LoadIconSprite("replace", sideTint);
                     galleryRemoveSprite = UI.LoadIconSprite("user-minus", sideTint)
                         ?? UI.LoadIconSprite("backspace", sideTint);
+                    galleryRemoveModeSprite = UI.LoadIconSprite("trash", UI.SideRailIconGlyphTint)
+                        ?? galleryRemoveSprite;
                     galleryRemoveClothingSprite = UI.LoadIconSprite("shirt-off", sideTint)
                         ?? galleryRemoveSprite;
                     galleryRemoveHairSprite = UI.LoadIconSprite("scissors-off", sideTint)
@@ -1396,12 +1416,13 @@ namespace VPB
                     }
                     rightSideButtons.Add(rightUserTagsBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(rightUserTagsBtn, () => ToggleSideFromRailButton(ContentType.UserTags, false, true));
-                    AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
+                    AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags, plus Looks like / Hub tags from data packs (read-only sections). Filter here; Edit opens tag manager.");
                 }
 
                 // Creator — Path B only when hide setting off (Path A: never create).
                 if (!HideCreatorSideRailButtonsRequested())
                     CreateRightCreatorSideRailButton();
+                CreateRightLookFacetSideRailButton();
 
                 // Path (Blue)
                 {
@@ -1456,9 +1477,8 @@ namespace VPB
                     Color colorRemoveModeRail = RemoveModeRailBackdrop;
                     float rmW = sideIconBtn;
                     float rmH = sideIconBtn;
-                    Sprite rmSpr = null;
-                    try { rmSpr = UI.LoadIconSprite("trash", UI.SideRailIconGlyphTint); } catch { }
-                    GameObject rightRemoveModeBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveMode(false, false));
+                    Sprite rmSpr = galleryRemoveModeSprite;
+                    GameObject rightRemoveModeBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveRailButton(false, false));
                     rightRemoveModeSideBtn = rightRemoveModeBtn;
                     Image rmImg = rightRemoveModeBtn.GetComponent<Image>();
                     Text rmTxt = rightRemoveModeBtn.GetComponentInChildren<Text>(true);
@@ -1473,15 +1493,15 @@ namespace VPB
                         rmImg.color = colorRemoveModeRail;
                         if (rmTxt != null)
                         {
-                            rmTxt.text = VPBTranslation.T("gallery.side.remove_mode_short", "Eraser");
+                            rmTxt.text = GetRemoveRailShortLabel();
                             rmTxt.fontSize = btnFontSize;
                             rmTxt.gameObject.SetActive(true);
                         }
                     }
                     rightRemoveModeBtnOutline = RemoveModeAddRailOutline(rightRemoveModeBtn);
                     rightSideButtons.Add(rightRemoveModeBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(rightRemoveModeBtn, () => ToggleRemoveMode(false, true));
-                    AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Scene Eraser: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene. Esc exits.");
+                    AddRightClickDelegate(rightRemoveModeBtn, () => ToggleRemoveRailButton(false, true));
+                    AddDynamicTooltip(rightRemoveModeBtn, GetRemoveRailTooltipText);
                 }
 
                 {
@@ -1686,12 +1706,13 @@ namespace VPB
                     }
                     leftSideButtons.Add(leftUserTagsBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftUserTagsBtn, () => ToggleSideFromRailButton(ContentType.UserTags, true, true));
-                    AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
+                    AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags, plus Looks like / Hub tags from data packs (read-only sections). Filter here; Edit opens tag manager.");
                 }
 
                 // Creator — Path B only when hide setting off (Path A: never create).
                 if (!HideCreatorSideRailButtonsRequested())
                     CreateLeftCreatorSideRailButton();
+                CreateLeftLookFacetSideRailButton();
 
                 // Path (Blue)
                 {
@@ -1742,9 +1763,8 @@ namespace VPB
                     Color colorRemoveModeRailL = RemoveModeRailBackdrop;
                     float rmW = sideIconBtn;
                     float rmH = sideIconBtn;
-                    Sprite rmSprL = null;
-                    try { rmSprL = UI.LoadIconSprite("trash", UI.SideRailIconGlyphTint); } catch { }
-                    GameObject leftRemoveModeBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveMode(true, false));
+                    Sprite rmSprL = galleryRemoveModeSprite;
+                    GameObject leftRemoveModeBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveRailButton(true, false));
                     leftRemoveModeSideBtn = leftRemoveModeBtn;
                     Image rmImgL = leftRemoveModeBtn.GetComponent<Image>();
                     Text rmTxtL = leftRemoveModeBtn.GetComponentInChildren<Text>(true);
@@ -1759,15 +1779,16 @@ namespace VPB
                         rmImgL.color = colorRemoveModeRailL;
                         if (rmTxtL != null)
                         {
-                            rmTxtL.text = VPBTranslation.T("gallery.side.remove_mode_short", "Eraser");
+                            rmTxtL.text = GetRemoveRailShortLabel();
                             rmTxtL.fontSize = btnFontSize;
                             rmTxtL.gameObject.SetActive(true);
                         }
                     }
                     leftRemoveModeBtnOutline = RemoveModeAddRailOutline(leftRemoveModeBtn);
                     leftSideButtons.Add(leftRemoveModeBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(leftRemoveModeBtn, () => ToggleRemoveMode(true, true));
-                    AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Scene Eraser: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene. Esc exits.");
+                    AddRightClickDelegate(leftRemoveModeBtn, () => ToggleRemoveRailButton(true, true));
+                    AddDynamicTooltip(leftRemoveModeBtn, GetRemoveRailTooltipText);
+                    try { SyncRemoveRailButtonChrome(); } catch { }
                 }
 
                 {

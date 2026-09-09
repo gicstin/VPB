@@ -29,11 +29,127 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Fill <paramref name="dest"/> with up to <paramref name="max"/> distinct random candidates from the
-        /// live filtered view. Rejection sampling — never copies or sorts the pool. First pass also rejects
-        /// anything inside the scope's recency window; the relaxed pass only runs if that starves the sample.
-        /// </summary>
+        internal int QuickMenu_CopyRandomPoolFromCurrentView(List<FileEntry> dest)
+        {
+            if (dest == null)
+            {
+                _copiedRandomPoolFilterCaption = null;
+                return 0;
+            }
+            dest.Clear();
+            try
+            {
+                List<FileEntry> pool = GetRandomCandidatePool();
+                if (pool != null && pool.Count > 0)
+                {
+                    if (dest.Capacity < pool.Count) dest.Capacity = pool.Count;
+                    for (int i = 0; i < pool.Count; i++)
+                    {
+                        FileEntry f = pool[i];
+                        if (f != null) dest.Add(f);
+                    }
+                }
+            }
+            catch { }
+            _copiedRandomPoolFilterCaption = FormatRandomPoolFilterCaption(dest.Count);
+            return dest.Count;
+        }
+
+        private string _copiedRandomPoolFilterCaption;
+
+        /// <summary>Caption from the last <see cref="QuickMenu_CopyRandomPoolFromCurrentView"/> (watch reel). Null if unfiltered.</summary>
+        internal string QuickMenu_CopiedRandomPoolFilterCaption
+        {
+            get { return _copiedRandomPoolFilterCaption; }
+        }
+
+        /// <summary>Live caption for the view now showing. Null when random uses the unfiltered category set.</summary>
+        internal string QuickMenu_FormatRandomPoolFilterCaption()
+        {
+            List<FileEntry> pool = GetRandomCandidatePool();
+            int n = pool != null ? pool.Count : 0;
+            return FormatRandomPoolFilterCaption(n);
+        }
+
+        private string FormatRandomPoolFilterCaption(int poolCount)
+        {
+            bool userFiltered = false;
+            try
+            {
+                userFiltered = HasActiveNameFilter()
+                    || HasActiveBrowseFiltersExcludingTitleSearch()
+                    || IsFilterActive;
+            }
+            catch { }
+            if (!userFiltered) return null;
+
+            int total = 0;
+            try
+            {
+                string cat = currentCategoryTitle ?? "";
+                if (categoryCounts != null && cat.Length > 0)
+                    categoryCounts.TryGetValue(cat, out total);
+                if (total <= poolCount)
+                {
+                    if (cat.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
+                        && clothingSubfilterCountAll > total)
+                        total = clothingSubfilterCountAll;
+                    else if (cat.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
+                        && hairSubfilterCountAll > total)
+                        total = hairSubfilterCountAll;
+                    else if (cat.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
+                        && appearanceSubfilterCountAll > total)
+                        total = appearanceSubfilterCountAll;
+                }
+            }
+            catch { }
+
+            if (total > poolCount)
+            {
+                return string.Format(
+                    VPBTranslation.T("hook.qmpreview.filtered_xy", "Filtered ({0} out of {1})"),
+                    poolCount, total);
+            }
+            return string.Format(
+                VPBTranslation.T("hook.qmpreview.filtered_x", "Filtered ({0})"),
+                poolCount);
+        }
+
+        internal static Text QuickMenu_CreateFilterHeader(GameObject cardGo, int font, float height)
+        {
+            if (cardGo == null) return null;
+            GameObject strip = UI.CreateChildRT(cardGo, "FilterHeader", AnchorPresets.hStretchTop,
+                new Vector2(0f, height), Vector2.zero);
+            if (strip == null) return null;
+            Image bg = UI.AddImage(strip, new Color(0.12f, 0.09f, 0.03f, 0.94f), false);
+            if (bg != null) bg.raycastTarget = false;
+            int f = font;
+            if (f < GalleryUiDesignTokens.FontTitleRef) f = GalleryUiDesignTokens.FontTitleRef;
+            Text t = UI.CreateLabel(strip, "", f, GalleryUiColorTokens.RandomGlyph,
+                TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                false, false, AnchorPresets.stretchAll, Vector2.zero, Vector2.zero, "FilterLabel");
+            if (t != null)
+            {
+                t.resizeTextForBestFit = false;
+                t.fontStyle = FontStyle.Bold;
+            }
+            strip.SetActive(false);
+            return t;
+        }
+
+        internal static void QuickMenu_ApplyFilterStrip(Text label, string caption)
+        {
+            if (label == null) return;
+            bool on = !string.IsNullOrEmpty(caption);
+            Transform parent = label.transform.parent;
+            if (parent != null)
+            {
+                GameObject strip = parent.gameObject;
+                if (strip.activeSelf != on) strip.SetActive(on);
+            }
+            if (on) label.text = caption;
+        }
+
         internal int QuickMenu_FillRandomSampleFromCurrentView(List<FileEntry> dest, int max)
         {
             if (dest == null) return 0;
@@ -42,13 +158,8 @@ namespace VPB
 
             try
             {
-                var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
-                    ? currentFilteredFiles
-                    : lastFilteredFiles;
+                List<FileEntry> pool = GetRandomCandidatePool();
                 if (pool == null || pool.Count == 0) return 0;
-
-                bool appearanceCat, subSceneCat, sceneCat;
-                bool gated = ComputeRandomPoolCategoryGates(out appearanceCat, out subSceneCat, out sceneCat);
 
                 string scope = GetRandomHistoryScope();
                 int window = VpbRandomHistory.ComputeWindow(pool.Count);
@@ -63,7 +174,6 @@ namespace VPB
                     {
                         FileEntry cand = pool[VpbRandom.Next(pool.Count)];
                         if (cand == null) continue;
-                        if (gated && !IsRandomPoolEntryAllowedForGates(cand, appearanceCat, subSceneCat, sceneCat)) continue;
                         if (passWindow > 0 && VpbRandomHistory.IsRecent(scope, cand, passWindow)) continue;
 
                         bool dup = false;
@@ -85,13 +195,9 @@ namespace VPB
             return dest.Count;
         }
 
-        /// <summary>
-        /// Navigate to <paramref name="categoryName"/>, wait for the refresh, take a sample, restore the
-        /// previous view. Cold path only — the caller caches the sample so repeat hovers cost nothing.
-        /// </summary>
-        internal Coroutine QuickMenu_PrepareRandomSampleForCategory(string categoryName, List<FileEntry> dest, int max, Action<int> onDone)
+        internal Coroutine QuickMenu_PrepareRandomSampleForCategory(string categoryName, List<FileEntry> dest, Action<int> onDone)
         {
-            try { return StartCoroutine(QuickMenu_PrepareRandomSampleRoutine(categoryName, dest, max, onDone)); }
+            try { return StartCoroutine(QuickMenu_PrepareRandomSampleRoutine(categoryName, dest, onDone)); }
             catch
             {
                 if (onDone != null) { try { onDone(0); } catch { } }
@@ -99,13 +205,13 @@ namespace VPB
             }
         }
 
-        private IEnumerator QuickMenu_PrepareRandomSampleRoutine(string categoryName, List<FileEntry> dest, int max, Action<int> onDone)
+        private IEnumerator QuickMenu_PrepareRandomSampleRoutine(string categoryName, List<FileEntry> dest, Action<int> onDone)
         {
             int filled = 0;
 
             if (QuickMenu_IsShowingRandomCategory(categoryName))
             {
-                filled = QuickMenu_FillRandomSampleFromCurrentView(dest, max);
+                filled = QuickMenu_CopyRandomPoolFromCurrentView(dest);
                 if (onDone != null) { try { onDone(filled); } catch { } }
                 yield break;
             }
@@ -138,7 +244,7 @@ namespace VPB
             }
             if (guard == 0) yield return null;
 
-            filled = QuickMenu_FillRandomSampleFromCurrentView(dest, max);
+            filled = QuickMenu_CopyRandomPoolFromCurrentView(dest);
 
             // Preview must never leave the panel parked on another category.
             if (!string.IsNullOrEmpty(prevTitle))
@@ -290,6 +396,8 @@ namespace VPB
         private const float TboxRandPreviewPad = 14f;
         private const float TboxRandPreviewLabelH = 26f;
         private const float TboxRandPreviewSubH = 20f;
+        private const float TboxRandPreviewFilterH = 36f;
+        private const int TboxRandPreviewFilterFont = 22;
         /// <summary>Card is clipped by the grid viewport, so shrink to fit rather than overflow a small pane.</summary>
         private const float TboxRandPreviewHostMargin = 16f;
         private const float TboxRandPreviewMinThumb = 140f;
@@ -306,6 +414,8 @@ namespace VPB
         private RawImage _tboxRandPreviewImg;
         private Text _tboxRandPreviewLabel;
         private Text _tboxRandPreviewSub;
+        private Text _tboxRandPreviewFilterLabel;
+        private RectTransform _tboxRandPreviewFilterStripRt;
         private FileEntry _tboxRandPreviewPick;
         private FileEntry _tboxRandPreviewLastPick;
         private List<FileEntry> _tboxRandPreviewScratch;
@@ -464,6 +574,10 @@ namespace VPB
                 _tboxRandPreviewImg.raycastTarget = false;
                 _tboxRandPreviewImg.color = TboxRandPreviewThumbPlaceholder;
             }
+            _tboxRandPreviewFilterLabel = QuickMenu_CreateFilterHeader(card,
+                TboxRandPreviewFilterFont, TboxRandPreviewFilterH);
+            if (_tboxRandPreviewFilterLabel != null && _tboxRandPreviewFilterLabel.transform.parent != null)
+                _tboxRandPreviewFilterStripRt = _tboxRandPreviewFilterLabel.transform.parent as RectTransform;
 
             _tboxRandPreviewLabel = UI.CreateLabel(card, "", GalleryUiDesignTokens.FontTitleRef, GalleryUiColorTokens.TextPrimary,
                 TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate, false, false,
@@ -489,13 +603,13 @@ namespace VPB
             if (!_tboxRandPreviewRoot.activeSelf) _tboxRandPreviewRoot.SetActive(true);
             try { _tboxRandPreviewRoot.transform.SetAsLastSibling(); } catch { }
 
-            TboxLayoutRandomPreviewCard();
-
             if (_tboxRandPreviewPick == null)
             {
                 if (_tboxRandPreviewImg != null) ClearThumbnailTarget(_tboxRandPreviewImg);
                 TboxSetPreviewLabel(_tboxRandPreviewLabel, VPBTranslation.T("hook.qmpreview.empty", "No items"));
                 TboxSetPreviewLabel(_tboxRandPreviewSub, VPBTranslation.T("hook.qmpreview.empty_sub", "Nothing in this pool"));
+                QuickMenu_ApplyFilterStrip(_tboxRandPreviewFilterLabel, QuickMenu_FormatRandomPoolFilterCaption());
+                TboxLayoutRandomPreviewCard();
                 return;
             }
 
@@ -506,6 +620,8 @@ namespace VPB
             QuickMenu_GetPreviewLabelLines(_tboxRandPreviewPick, out primary, out secondary);
             TboxSetPreviewLabel(_tboxRandPreviewLabel, primary);
             TboxSetPreviewLabel(_tboxRandPreviewSub, secondary);
+            QuickMenu_ApplyFilterStrip(_tboxRandPreviewFilterLabel, QuickMenu_FormatRandomPoolFilterCaption());
+            TboxLayoutRandomPreviewCard();
         }
 
         /// <summary>Live ChromeScale + corner sync. Hide immediately when the settings toggle is off.</summary>
@@ -537,6 +653,9 @@ namespace VPB
             float pad = TboxRandPreviewPad * s;
             float labelH = TboxRandPreviewLabelH * s;
             float subH = TboxRandPreviewSubH * s;
+            bool headerOn = _tboxRandPreviewFilterStripRt != null
+                && _tboxRandPreviewFilterStripRt.gameObject.activeSelf;
+            float filterH = headerOn ? TboxRandPreviewFilterH * s : 0f;
 
             // Root stretches the grid viewport, which masks: a card wider than the pane loses its edges.
             RectTransform hostRt = _tboxRandPreviewRootRt;
@@ -545,18 +664,26 @@ namespace VPB
             {
                 float margin = TboxRandPreviewHostMargin * s;
                 float fitW = hostRt.rect.width - margin * 2f - pad * 2f;
-                float fitH = hostRt.rect.height - margin * 2f - pad * 2f - labelH - subH;
+                float fitH = hostRt.rect.height - margin * 2f - pad * 2f - labelH - subH - filterH;
                 float fit = Mathf.Min(fitW, fitH);
                 if (fit < thumb)
                     thumb = Mathf.Max(fit, TboxRandPreviewMinThumb * s);
             }
 
             float innerW = thumb;
-            _tboxRandPreviewCardRt.sizeDelta = new Vector2(thumb + pad * 2f, thumb + pad * 2f + labelH + subH);
+            _tboxRandPreviewCardRt.sizeDelta = new Vector2(thumb + pad * 2f, thumb + pad * 2f + labelH + subH + filterH);
             if (_tboxRandPreviewThumbRt != null)
             {
                 _tboxRandPreviewThumbRt.sizeDelta = new Vector2(thumb, thumb);
-                _tboxRandPreviewThumbRt.anchoredPosition = new Vector2(0f, (labelH + subH) * 0.5f);
+                _tboxRandPreviewThumbRt.anchoredPosition = new Vector2(0f, (labelH + subH) * 0.5f - filterH * 0.5f);
+            }
+            if (_tboxRandPreviewFilterStripRt != null)
+                _tboxRandPreviewFilterStripRt.sizeDelta = new Vector2(0f, TboxRandPreviewFilterH * s);
+            if (_tboxRandPreviewFilterLabel != null)
+            {
+                int ff = Mathf.RoundToInt(TboxRandPreviewFilterFont * s);
+                if (ff < GalleryUiDesignTokens.FontTitleRef) ff = GalleryUiDesignTokens.FontTitleRef;
+                if (_tboxRandPreviewFilterLabel.fontSize != ff) _tboxRandPreviewFilterLabel.fontSize = ff;
             }
             TboxLayoutPreviewLabel(_tboxRandPreviewLabel, innerW, labelH, new Vector2(0f, pad * 0.5f + subH),
                 GalleryUiDesignTokens.FontTitleRef, s);
@@ -627,6 +754,8 @@ namespace VPB
             _tboxRandPreviewImg = null;
             _tboxRandPreviewLabel = null;
             _tboxRandPreviewSub = null;
+            _tboxRandPreviewFilterLabel = null;
+            _tboxRandPreviewFilterStripRt = null;
         }
 
         private static void TboxSetPreviewLabel(Text label, string s)

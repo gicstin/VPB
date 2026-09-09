@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -310,7 +311,7 @@ namespace VPB
 				return false;
 			}
 
-			/// <summary>Decode/file paths only supply base mip in <see cref="raw"/>; mip chain is built on <see cref="Texture2D.Apply"/>.</summary>
+
 			bool ShouldAllocateMipChainForRawLoad()
 			{
 				if (!createMipMaps) return false;
@@ -320,6 +321,20 @@ namespace VPB
 				int baseSize = TextureUtil.GetExpectedRawDataSize(width, height, textureFormat);
 				if (baseSize <= 0) return true;
 				return len > baseSize;
+			}
+
+			bool ShouldAllocateMipChain()
+			{
+				if (!createMipMaps) return false;
+				if (ShouldAllocateMipChainForRawLoad()) return true;
+				return TextureUtil.CanGenerateMipsFromBaseLevel(width, height, textureFormat);
+			}
+
+			bool ShouldGenerateMipsOnApply()
+			{
+				if (!createMipMaps) return false;
+				if (ShouldAllocateMipChainForRawLoad()) return false;
+				return TextureUtil.CanGenerateMipsFromBaseLevel(width, height, textureFormat);
 			}
 
 			void LogLoadRawDiagnostics(string pathLabel, string errorMsg)
@@ -347,7 +362,7 @@ namespace VPB
 					}
 					try
 					{
-						tex = new Texture2D(width, height, textureFormat, ShouldAllocateMipChainForRawLoad(), linear);
+						tex = new Texture2D(width, height, textureFormat, ShouldAllocateMipChain(), linear);
 					}
 					catch (Exception ex)
 					{
@@ -488,7 +503,7 @@ namespace VPB
                 }
                 if (imgPath != null && imgPath.StartsWith("http"))
                 {
-                    LogUtil.Log("[VPB] [Loader] Thread processing: " + imgPath);
+                    if (VPBLogger.Verbose) LogUtil.Log("[VPB] [Loader] Thread processing: " + imgPath);
                 }
 				if (imgPath != null && imgPath != "NULL")
 				{
@@ -1036,6 +1051,7 @@ namespace VPB
 					jSONClass["format"] = tex.format.ToString();
 					byte[] rawTextureData2 = tex.GetRawTextureData();
 					TextureUtil.WriteMipFieldsToMeta(jSONClass, tex.width, tex.height, tex.format, rawTextureData2 != null ? rawTextureData2.Length : 0, createMipMaps);
+					TextureUtil.WriteCacheVersionToMeta(jSONClass);
 					string contents = VPB.src.util.JsonSerializationUtil.Serialize(jSONClass, 1024);
 					File.WriteAllText(text + "meta", contents);
 					File.WriteAllBytes(text, rawTextureData2);
@@ -1096,7 +1112,7 @@ namespace VPB
 					}
 					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
 					bool keepReadable = onDemandCacheBuild || isThumbnail;
-					bool genMipsOnApply = createMipMaps && !ShouldAllocateMipChainForRawLoad();
+					bool genMipsOnApply = ShouldGenerateMipsOnApply();
 					tex.Apply(genMipsOnApply, !keepReadable && !isSimTexture);
 					if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
 					{
@@ -1121,9 +1137,9 @@ namespace VPB
 					Texture2D texture2D = null;
                     try
                     {
-					    texture2D = new Texture2D(width, height, textureFormat, createMipMaps, linear);
+					    texture2D = new Texture2D(width, height, textureFormat, ShouldAllocateMipChain(), linear);
 					    TextureUtil.SafeLoadRawTextureData(texture2D, raw, width, height, textureFormat);
-					    texture2D.Apply(false, false);
+					    texture2D.Apply(ShouldGenerateMipsOnApply(), false);
 					    if (canCompress)
 					    {
 						    try { texture2D.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed (dxt) " + ex + " path=" + imgPath); canCompress = false; }
@@ -1149,7 +1165,7 @@ namespace VPB
 					    TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat);
 						bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
 						bool keepReadable = onDemandCacheBuild || isThumbnail;
-						bool genMipsOnApply = createMipMaps && !ShouldAllocateMipChainForRawLoad();
+						bool genMipsOnApply = ShouldGenerateMipsOnApply();
 					    tex.Apply(genMipsOnApply, !keepReadable && !isSimTexture);
 					    if (canCompress)
 					    {
@@ -1265,7 +1281,8 @@ namespace VPB
             bool invert,
             float bumpStrength,
             bool suppressNativeDiskWrite,
-            bool takeOwnershipOfDecodedRaw = false)
+            bool takeOwnershipOfDecodedRaw = false,
+            bool capturePayload = true)
         {
             var result = new OnDemandCacheBuildResult();
             CustomImageLoaderThreaded loader = singleton;
@@ -1341,7 +1358,7 @@ namespace VPB
 
                 try
                 {
-                    result.payload = qi.tex.GetRawTextureData();
+                    if (capturePayload) result.payload = qi.tex.GetRawTextureData();
                 }
                 catch (Exception ex)
                 {
@@ -1359,7 +1376,9 @@ namespace VPB
                     }
                 }
 
-                result.success = result.payload != null && result.payload.Length > 0;
+                result.success = capturePayload
+                    ? result.payload != null && result.payload.Length > 0
+                    : result.wroteNativeCache;
 
                 return result;
             }
@@ -1398,7 +1417,8 @@ namespace VPB
             int targetWidth,
             int targetHeight,
             bool decodeFromSourceOnly,
-            bool suppressNativeDiskWrite)
+            bool suppressNativeDiskWrite,
+            bool capturePayload = true)
         {
             var result = new OnDemandCacheBuildResult();
             CustomImageLoaderThreaded loader = singleton;
@@ -1486,7 +1506,7 @@ namespace VPB
 
                 try
                 {
-                    result.payload = qi.tex.GetRawTextureData();
+                    if (capturePayload) result.payload = qi.tex.GetRawTextureData();
                 }
                 catch (Exception ex)
                 {
@@ -1515,7 +1535,9 @@ namespace VPB
                     }
                 }
 
-                result.success = result.payload != null && result.payload.Length > 0;
+                result.success = capturePayload
+                    ? result.payload != null && result.payload.Length > 0
+                    : result.wroteNativeCache;
 
                 return result;
             }
@@ -1644,6 +1666,8 @@ namespace VPB
             lock (typeof(CustomImageLoaderThreaded))
             {
                 if (_varThumbIoThread != null && _varThumbIoThread.IsAlive) return;
+                if (VpbShutdown.IsQuitting) return;
+                try { VpbShutdown.Register("var-thumb-io", StopVarThumbIoWorker); } catch { }
                 _varThumbIoStop = false;
                 _varThumbIoThread = new Thread(VarThumbIoLoop)
                 {
@@ -1654,9 +1678,19 @@ namespace VPB
             }
         }
 
+        private static void StopVarThumbIoWorker()
+        {
+            _varThumbIoStop = true;
+            Thread t = _varThumbIoThread;
+            if (t != null && t.IsAlive)
+            {
+                try { t.Join(250); } catch { }
+            }
+        }
+
         private static void VarThumbIoLoop()
         {
-            while (!_varThumbIoStop)
+            while (!_varThumbIoStop && !VpbShutdown.IsQuitting)
             {
                 QueuedImage qi = null;
                 try
@@ -2539,14 +2573,14 @@ namespace VPB
                 numRealQueuedImages--;
 
                 if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
-                    LogUtil.Log(ByteArrayPool.GetStatus());
+                    { if (VPBLogger.Verbose) LogUtil.Log(ByteArrayPool.GetStatus()); }
 
                 if (numRealQueuedImages == 0)
                 {
                     progress = 0;
                     progressMax = 0;
                     if (progressHUD != null) progressHUD.SetActive(false);
-                    if (ByteArrayPool.TotalRented > 0) LogUtil.Log(ByteArrayPool.GetStatus());
+                    if (ByteArrayPool.TotalRented > 0) { if (VPBLogger.Verbose) LogUtil.Log(ByteArrayPool.GetStatus()); }
                 }
                 else
                 {
@@ -2582,7 +2616,7 @@ namespace VPB
             }
             // Callbacks must stay RawImage/bind-only (gallery closure). Do not rebind UI listeners here.
             value.DoCallback();
-            if (value.imgPath != null && value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath);
+            if (value.imgPath != null && value.imgPath.StartsWith("http")) { if (VPBLogger.Verbose) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath); }
             pool.Return(value);
         }
 
@@ -2668,7 +2702,7 @@ namespace VPB
 						value.webRequest = UnityWebRequest.Get(value.imgPath);
                         value.webRequest.timeout = 30;
 						value.webRequest.SendWebRequest();
-                        if (value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Started WebRequest: " + value.imgPath);
+                        if (value.imgPath.StartsWith("http")) { if (VPBLogger.Verbose) LogUtil.Log("[VPB] [Loader] Started WebRequest: " + value.imgPath); }
 					}
 					if (value.webRequest.isDone)
 					{
@@ -2676,7 +2710,7 @@ namespace VPB
 						{
 							if (value.webRequest.responseCode == 200)
 							{
-                                if (value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] WebRequest Success: " + value.imgPath);
+                                if (value.imgPath.StartsWith("http")) { if (VPBLogger.Verbose) LogUtil.Log("[VPB] [Loader] WebRequest Success: " + value.imgPath); }
 								value.webRequestData = value.webRequest.downloadHandler.data;
 								value.webRequestDone = true;
 							}

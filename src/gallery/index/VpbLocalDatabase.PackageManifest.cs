@@ -51,7 +51,7 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg_manifest ADD COLUMN payload BLOB;");
             try
             {
-                using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) SELECT ?1,?2 WHERE NOT EXISTS (SELECT 1 FROM meta WHERE k=?1 AND v=?2)"))
                 {
                     st.BindText(1, MetaManifestSchemaKey);
                     st.BindText(2, PackageManifestSchemaVersion.ToString());

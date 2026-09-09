@@ -12,9 +12,40 @@ namespace VPB
     internal static partial class VpbLocalDatabase
     {
         const string MetaVarPathInventoryCountKey = "var_path_inventory_count_v1";
-        const string MetaVarPathInventoryAddonRootMtimeKey = "var_path_inventory_addon_root_mtime_v1";
-        const string MetaVarPathInventoryAllRootMtimeKey = "var_path_inventory_all_root_mtime_v1";
+        const string MetaVarPathInventoryAddonRootSigKey = "var_path_inventory_addon_root_sig_v2";
+        const string MetaVarPathInventoryAllRootSigKey = "var_path_inventory_all_root_sig_v2";
         const string MetaRegistryWarmInvSigKey = "registry_warm_inv_sig_v1";
+
+        const string ScanRootAddon = "AddonPackages";
+        const string ScanRootAll = "AllPackages";
+
+        struct ScanRootSignature
+        {
+            internal long MaxMtimeBinary;
+            internal int VarCount;
+            internal bool SawUnresolvableLink;
+            internal bool RootIsLink;
+
+            internal string ToMetaValue()
+            {
+                return MaxMtimeBinary.ToString() + ":" + VarCount.ToString();
+            }
+        }
+
+        static readonly object s_ScanRootSigLock = new object();
+        static readonly Dictionary<string, KeyValuePair<long, ScanRootSignature>> s_ScanRootSigCache =
+            new Dictionary<string, KeyValuePair<long, ScanRootSignature>>(StringComparer.OrdinalIgnoreCase);
+        static readonly long ScanRootSigCacheTtlTicks = TimeSpan.FromSeconds(3).Ticks;
+
+        /// <summary>
+        /// Drops the in-process scan-root signature and deep-mtime TTL caches so a user-forced rescan
+        /// re-probes the filesystem instead of replaying a value sampled seconds before their file drop.
+        /// </summary>
+        internal static void InvalidateScanRootSignatureCaches()
+        {
+            lock (s_ScanRootSigLock) { s_ScanRootSigCache.Clear(); }
+            try { ClearDeepDirMtimeCache(); } catch { }
+        }
 
         struct VarPathRow
         {
@@ -33,34 +64,109 @@ namespace VPB
                 "mtime_ticks INTEGER NOT NULL);");
         }
 
-        static bool TryGetScanRootMtimeUtcTicks(string root, out long ticks)
+        /// <summary>
+        /// Deep max directory mtime PLUS live .var count for a scan root. The mtime alone cannot be trusted
+        /// as an addition detector: a junctioned/symlinked root reports the link node's frozen timestamp, and
+        /// timestamp-preserving copy tools, network shares and exFAT granularity all defeat it. The count is
+        /// what actually catches "a file appeared"; the walk enumerates directories only, so it costs far less
+        /// than the per-file stat pass the cache exists to avoid.
+        /// </summary>
+        static bool TryComputeScanRootSignature(string root, out ScanRootSignature sig)
         {
-            ticks = 0;
+            sig = new ScanRootSignature();
+            if (string.IsNullOrEmpty(root)) return false;
+
+            long nowTicks = DateTime.UtcNow.Ticks;
+            lock (s_ScanRootSigLock)
+            {
+                KeyValuePair<long, ScanRootSignature> cached;
+                if (s_ScanRootSigCache.TryGetValue(root, out cached)
+                    && (nowTicks - cached.Key) < ScanRootSigCacheTtlTicks)
+                {
+                    sig = cached.Value;
+                    return true;
+                }
+            }
+
             try
             {
-                // Nonexistent root is a valid "0" cache key (no files to track).
                 if (!Directory.Exists(root))
+                {
+                    lock (s_ScanRootSigLock)
+                        s_ScanRootSigCache[root] = new KeyValuePair<long, ScanRootSignature>(nowTicks, sig);
                     return true;
-                // NTFS only bumps a directory's own mtime on immediate-child changes; deep walk is
-                // required to detect files added inside subfolders.
-                ticks = DeepMaxDirMtimeBinary(root);
-                // 0 on an existing dir means the probe failed; refuse so a 0/0 cached pair can't pass.
-                return ticks > 0;
+                }
+
+                long rootMtime;
+                bool rootLink;
+                if (FileManager.TryGetDirectoryLastWriteBinaryFollowingLinks(root, out rootMtime, out rootLink))
+                {
+                    sig.RootIsLink = rootLink;
+                    if (rootMtime > sig.MaxMtimeBinary) sig.MaxMtimeBinary = rootMtime;
+                }
+                else
+                {
+                    sig.RootIsLink = true;
+                    sig.SawUnresolvableLink = true;
+                }
+
+                sig.VarCount += CountVarFilesInDirectory(root);
+
+                var dirs = new List<string>(256);
+                try { FileManager.SafeGetDirectories(root, "*", dirs); }
+                catch { }
+
+                for (int i = 0; i < dirs.Count; i++)
+                {
+                    string dir = dirs[i];
+                    long m;
+                    bool link;
+                    if (FileManager.TryGetDirectoryLastWriteBinaryFollowingLinks(dir, out m, out link))
+                    {
+                        if (m > sig.MaxMtimeBinary) sig.MaxMtimeBinary = m;
+                    }
+                    else
+                    {
+                        sig.SawUnresolvableLink = true;
+                    }
+                    sig.VarCount += CountVarFilesInDirectory(dir);
+                }
             }
             catch
             {
                 return false;
             }
+
+            lock (s_ScanRootSigLock)
+            {
+                if (s_ScanRootSigCache.Count >= 32 && !s_ScanRootSigCache.ContainsKey(root))
+                    s_ScanRootSigCache.Clear();
+                s_ScanRootSigCache[root] = new KeyValuePair<long, ScanRootSignature>(nowTicks, sig);
+            }
+            return true;
+        }
+
+        static int CountVarFilesInDirectory(string dir)
+        {
+            try
+            {
+                string[] files = Directory.GetFiles(dir, "*.var");
+                return files != null ? files.Length : 0;
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         static bool TryLoadVarPathInventoryRootMeta(
             VpbSqlite3.Connection conn,
-            out long addonRootMtimeTicks,
-            out long allRootMtimeTicks,
+            out string addonRootSig,
+            out string allRootSig,
             out int savedCount)
         {
-            addonRootMtimeTicks = 0;
-            allRootMtimeTicks = 0;
+            addonRootSig = null;
+            allRootSig = null;
             savedCount = 0;
             if (conn == null) return false;
             try
@@ -69,8 +175,8 @@ namespace VPB
                     "SELECT k, v FROM meta WHERE k IN (?, ?, ?)"))
                 {
                     st.BindText(1, MetaVarPathInventoryCountKey);
-                    st.BindText(2, MetaVarPathInventoryAddonRootMtimeKey);
-                    st.BindText(3, MetaVarPathInventoryAllRootMtimeKey);
+                    st.BindText(2, MetaVarPathInventoryAddonRootSigKey);
+                    st.BindText(3, MetaVarPathInventoryAllRootSigKey);
                     while (st.Step() == VpbSqlite3.SqliteRow)
                     {
                         string key = st.ColumnText(0) ?? string.Empty;
@@ -81,21 +187,15 @@ namespace VPB
                             if (int.TryParse(val, out c))
                                 savedCount = c;
                         }
-                        else if (key == MetaVarPathInventoryAddonRootMtimeKey)
-                        {
-                            long t;
-                            if (long.TryParse(val, out t))
-                                addonRootMtimeTicks = t;
-                        }
-                        else if (key == MetaVarPathInventoryAllRootMtimeKey)
-                        {
-                            long t;
-                            if (long.TryParse(val, out t))
-                                allRootMtimeTicks = t;
-                        }
+                        else if (key == MetaVarPathInventoryAddonRootSigKey)
+                            addonRootSig = val;
+                        else if (key == MetaVarPathInventoryAllRootSigKey)
+                            allRootSig = val;
                     }
                 }
-                return savedCount > 0;
+                return savedCount > 0
+                    && !string.IsNullOrEmpty(addonRootSig)
+                    && !string.IsNullOrEmpty(allRootSig);
             }
             catch
             {
@@ -106,10 +206,11 @@ namespace VPB
         static void SaveVarPathInventoryRootMeta(VpbSqlite3.Connection conn, int pathCount)
         {
             if (conn == null || pathCount <= 0) return;
-            long addonTicks;
-            long allTicks;
-            if (!TryGetScanRootMtimeUtcTicks("AddonPackages", out addonTicks)) return;
-            if (!TryGetScanRootMtimeUtcTicks("AllPackages", out allTicks)) return;
+            ScanRootSignature addonSig;
+            ScanRootSignature allSig;
+            if (!TryComputeScanRootSignature(ScanRootAddon, out addonSig)) return;
+            if (!TryComputeScanRootSignature(ScanRootAll, out allSig)) return;
+            if (addonSig.SawUnresolvableLink || allSig.SawUnresolvableLink) return;
 
             using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
             {
@@ -117,28 +218,70 @@ namespace VPB
                 st.BindText(2, pathCount.ToString());
                 st.Step();
                 st.Reset();
-                st.BindText(1, MetaVarPathInventoryAddonRootMtimeKey);
-                st.BindText(2, addonTicks.ToString());
+                st.BindText(1, MetaVarPathInventoryAddonRootSigKey);
+                st.BindText(2, addonSig.ToMetaValue());
                 st.Step();
                 st.Reset();
-                st.BindText(1, MetaVarPathInventoryAllRootMtimeKey);
-                st.BindText(2, allTicks.ToString());
+                st.BindText(1, MetaVarPathInventoryAllRootSigKey);
+                st.BindText(2, allSig.ToMetaValue());
                 st.Step();
             }
         }
 
         static bool TryFastRejectVarPathInventory(
             int rowCount,
-            long cachedAddonRootMtimeTicks,
-            long cachedAllRootMtimeTicks,
-            int cachedCount)
+            string cachedAddonRootSig,
+            string cachedAllRootSig,
+            int cachedCount,
+            out string rejectDetail)
         {
-            if (rowCount <= 0 || cachedCount != rowCount) return false;
-            long addonNow;
-            long allNow;
-            if (!TryGetScanRootMtimeUtcTicks("AddonPackages", out addonNow)) return false;
-            if (!TryGetScanRootMtimeUtcTicks("AllPackages", out allNow)) return false;
-            return addonNow == cachedAddonRootMtimeTicks && allNow == cachedAllRootMtimeTicks;
+            rejectDetail = "";
+            if (rowCount <= 0) return false;
+            if (cachedCount != rowCount)
+            {
+                rejectDetail = "meta_count=" + cachedCount + " rows=" + rowCount;
+                return false;
+            }
+            if (string.IsNullOrEmpty(cachedAddonRootSig) || string.IsNullOrEmpty(cachedAllRootSig))
+            {
+                rejectDetail = "no_v2_root_sig";
+                return false;
+            }
+
+            ScanRootSignature addonNow;
+            ScanRootSignature allNow;
+            if (!TryComputeScanRootSignature(ScanRootAddon, out addonNow)
+                || !TryComputeScanRootSignature(ScanRootAll, out allNow))
+            {
+                rejectDetail = "root_sig_probe_failed";
+                return false;
+            }
+
+            if (addonNow.SawUnresolvableLink || allNow.SawUnresolvableLink)
+            {
+                rejectDetail = "unresolvable_reparse_point addonLink=" + (addonNow.RootIsLink ? "1" : "0")
+                    + " allLink=" + (allNow.RootIsLink ? "1" : "0");
+                return false;
+            }
+
+            string addonNowSig = addonNow.ToMetaValue();
+            string allNowSig = allNow.ToMetaValue();
+            if (!string.Equals(addonNowSig, cachedAddonRootSig, StringComparison.Ordinal))
+            {
+                rejectDetail = "addon sig now=" + addonNowSig + " cached=" + cachedAddonRootSig
+                    + " link=" + (addonNow.RootIsLink ? "1" : "0");
+                return false;
+            }
+            if (!string.Equals(allNowSig, cachedAllRootSig, StringComparison.Ordinal))
+            {
+                rejectDetail = "all sig now=" + allNowSig + " cached=" + cachedAllRootSig
+                    + " link=" + (allNow.RootIsLink ? "1" : "0");
+                return false;
+            }
+
+            rejectDetail = "addon=" + addonNowSig + " link=" + (addonNow.RootIsLink ? "1" : "0")
+                + " all=" + allNowSig + " link=" + (allNow.RootIsLink ? "1" : "0");
+            return true;
         }
 
         /// <summary>Load cached paths and validate size/mtime in parallel (no recursive directory walk).</summary>
@@ -173,16 +316,19 @@ namespace VPB
 
                 if (rows.Count == 0) return false;
 
-                long cachedAddonRootMtimeTicks = 0;
-                long cachedAllRootMtimeTicks = 0;
+                string cachedAddonRootSig = null;
+                string cachedAllRootSig = null;
                 int cachedCount = 0;
                 using (var connMeta = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(connMeta);
-                    TryLoadVarPathInventoryRootMeta(connMeta, out cachedAddonRootMtimeTicks, out cachedAllRootMtimeTicks, out cachedCount);
+                    TryLoadVarPathInventoryRootMeta(connMeta, out cachedAddonRootSig, out cachedAllRootSig, out cachedCount);
                 }
 
-                if (TryFastRejectVarPathInventory(rows.Count, cachedAddonRootMtimeTicks, cachedAllRootMtimeTicks, cachedCount))
+                string fastRejectDetail;
+                bool fastAccept = TryFastRejectVarPathInventory(
+                    rows.Count, cachedAddonRootSig, cachedAllRootSig, cachedCount, out fastRejectDetail);
+                if (fastAccept)
                 {
                     paths = new List<string>(rows.Count);
                     for (int i = 0; i < rows.Count; i++)
@@ -191,11 +337,18 @@ namespace VPB
                     try
                     {
                         LogUtil.Log("Var path inventory cache HIT paths=" + paths.Count
-                            + " validate_ms=" + sw.ElapsedMilliseconds + " mode=root_mtime_fast_reject");
+                            + " validate_ms=" + sw.ElapsedMilliseconds
+                            + " mode=root_sig_fast_reject " + fastRejectDetail);
                     }
                     catch { }
                     return true;
                 }
+
+                try
+                {
+                    LogUtil.Log("Var path inventory root sig mismatch -> full validate | " + fastRejectDetail);
+                }
+                catch { }
 
                 int failCount = 0;
                 int chunkSize = 512;
@@ -420,12 +573,13 @@ namespace VPB
                             rowCount = (int)Math.Min(Math.Max(st.ColumnInt64(0), 0), int.MaxValue);
                     }
                     if (rowCount <= 0) return false;
-                    long addonCached;
-                    long allCached;
+                    string addonCached;
+                    string allCached;
                     int cachedCount;
                     if (!TryLoadVarPathInventoryRootMeta(conn, out addonCached, out allCached, out cachedCount))
                         return false;
-                    return TryFastRejectVarPathInventory(rowCount, addonCached, allCached, cachedCount);
+                    string detail;
+                    return TryFastRejectVarPathInventory(rowCount, addonCached, allCached, cachedCount, out detail);
                 }
             }
             catch

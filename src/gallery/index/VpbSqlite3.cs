@@ -89,6 +89,9 @@ namespace VPB
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int D_sqlite3_busy_timeout(IntPtr db, int ms);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void D_sqlite3_interrupt(IntPtr db);
+
         private static D_sqlite3_open_v2 s_open_v2;
         private static D_sqlite3_close s_close;
         private static D_sqlite3_exec s_exec;
@@ -105,6 +108,7 @@ namespace VPB
         private static D_sqlite3_column_blob s_column_blob;
         private static D_sqlite3_column_bytes s_column_bytes;
         private static D_sqlite3_busy_timeout s_busy_timeout;
+        private static D_sqlite3_interrupt s_interrupt;
 
         private static T LoadDelegate<T>(IntPtr module, string name) where T : class
         {
@@ -131,6 +135,7 @@ namespace VPB
             s_column_blob = null;
             s_column_bytes = null;
             s_busy_timeout = null;
+            s_interrupt = null;
         }
 
         private static bool TryBindSqliteFunctions(IntPtr h)
@@ -151,6 +156,7 @@ namespace VPB
             s_column_blob = LoadDelegate<D_sqlite3_column_blob>(h, "sqlite3_column_blob");
             s_column_bytes = LoadDelegate<D_sqlite3_column_bytes>(h, "sqlite3_column_bytes");
             s_busy_timeout = LoadDelegate<D_sqlite3_busy_timeout>(h, "sqlite3_busy_timeout");
+            s_interrupt = LoadDelegate<D_sqlite3_interrupt>(h, "sqlite3_interrupt");
             return s_open_v2 != null && s_close != null && s_exec != null && s_free != null
                 && s_prepare_v2 != null && s_step != null && s_reset != null && s_finalize != null
                 && s_bind_text != null && s_bind_int64 != null && s_bind_blob != null
@@ -236,6 +242,63 @@ namespace VPB
         private static int NativeBusyTimeout(IntPtr db, int ms)
         {
             return s_busy_timeout(db, ms);
+        }
+
+        private const int OpenBusyTimeoutMs = 8000;
+        private const int ShutdownBusyTimeoutMs = 50;
+
+        private static readonly object s_LiveConnSync = new object();
+        private static readonly List<Connection> s_LiveConns = new List<Connection>();
+        private static volatile bool s_ShutdownInterrupt;
+
+        private static void TrackConnection(Connection c)
+        {
+            if (c == null) return;
+            lock (s_LiveConnSync)
+            {
+                s_LiveConns.Add(c);
+            }
+            if (s_ShutdownInterrupt) InterruptConnection(c);
+        }
+
+        private static void UntrackConnection(Connection c)
+        {
+            if (c == null) return;
+            lock (s_LiveConnSync)
+            {
+                s_LiveConns.Remove(c);
+            }
+        }
+
+        private static void InterruptConnection(Connection c)
+        {
+            if (c == null) return;
+            IntPtr h = c.Handle;
+            if (h == IntPtr.Zero) return;
+            try { if (s_busy_timeout != null) NativeBusyTimeout(h, ShutdownBusyTimeoutMs); } catch { }
+            try { if (s_interrupt != null) s_interrupt(h); } catch { }
+        }
+
+        /// <summary>
+        /// Abort every in-flight statement so no thread stays parked inside native sqlite3_step at quit.
+        /// Mono cannot preempt a thread inside a P/Invoke, so a blocked writer would otherwise hold the
+        /// process open past teardown. Interrupted writes roll back; the index rebuilds next launch.
+        /// </summary>
+        internal static void InterruptAllForShutdown()
+        {
+            s_ShutdownInterrupt = true;
+            Connection[] snapshot;
+            lock (s_LiveConnSync)
+            {
+                snapshot = s_LiveConns.ToArray();
+            }
+            for (int i = 0; i < snapshot.Length; i++)
+                InterruptConnection(snapshot[i]);
+        }
+
+        internal static bool IsShutdownInterruptRequested
+        {
+            get { return s_ShutdownInterrupt; }
         }
 
         internal static bool IsAvailable
@@ -437,7 +500,8 @@ namespace VPB
                 {
                     Marshal.FreeHGlobal(pPath);
                 }
-                NativeBusyTimeout(Handle, 8000);
+                NativeBusyTimeout(Handle, s_ShutdownInterrupt ? ShutdownBusyTimeoutMs : OpenBusyTimeoutMs);
+                TrackConnection(this);
             }
 
             internal void ExecUtf8(string sqlUtf8)
@@ -486,6 +550,7 @@ namespace VPB
 
             public void Dispose()
             {
+                UntrackConnection(this);
                 if (Handle != IntPtr.Zero)
                 {
                     try { NativeClose(Handle); } catch { }

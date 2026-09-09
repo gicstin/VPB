@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Import Project="VPB.local.props" Condition="Exists('VPB.local.props')" />
@@ -10,6 +10,8 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>VPB</RootNamespace>
     <AssemblyName>VPB</AssemblyName>
+    <!-- Stops Test Explorer probing VPB.dll for tests ("No test is available in ... VPB.dll"). -->
+    <IsTestProject>false</IsTestProject>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -278,8 +280,16 @@
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\util\VPBLogger.cs" />
+    <Compile Include="src\util\VpbLogRepeatGovernor.cs" />
+    <Compile Include="src\util\VpbSessionLog.cs" />
+    <Compile Include="src\util\VpbDiagnosticLogLevel.cs" />
     <Compile Include="src\util\VpbLegacyLayout.cs" />
+    <Compile Include="src\util\VpbUpdateManifest.cs" />
+    <Compile Include="src\util\VpbPassthrough.cs" />
+    <Compile Include="src\util\VpbPassthroughLights.cs" />
+    <Compile Include="src\util\VpbPassthroughLightAtoms.cs" />
     <Compile Include="src\util\VpbPaths.cs" />
+    <Compile Include="src\util\VpbStartupScene.cs" />
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\VpbScrollTuning.cs" />
     <Compile Include="src\util\VpbRandom.cs" />
@@ -304,6 +314,7 @@
     <Compile Include="src\hook\VamStartupOptimizationPatches.cs" />
     <Compile Include="src\hook\perf\VamLoadPerfHooks.cs" />
     <Compile Include="src\hook\perf\VamSceneLoadPhaseProfiler.cs" />
+    <Compile Include="src\hook\perf\VamCatalogRefreshProfiler.cs" />
     <Compile Include="src\hook\perf\VamAssetBundleQueue.cs" />
     <Compile Include="src\hook\perf\VamFrameAttributionProfiler.cs" />
     <Compile Include="src\util\LooseVapGenderProbe.cs" />
@@ -315,6 +326,7 @@
     <Compile Include="src\gallery\GalleryPanel.Modal.RemapAtomUids.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\MVRPluginManagerHook.cs" />
+    <Compile Include="src\hook\PostMagicUiCameraFix.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />
     <Compile Include="src\hook\JSONOptimization.cs" />
     <Compile Include="src\hook\ImageProcessingOptimization.cs" />
@@ -331,7 +343,9 @@
     <Compile Include="src\hook\VpbBusyChrome.cs" />
     <Compile Include="src\hook\VpbOsBusyHeartbeat.cs" />
     <Compile Include="src\hook\VpbProgressService.cs" />
+    <Compile Include="src\hook\VpbShutdown.cs" />
     <Compile Include="src\hook\SceneLoadNativeUiBridge.cs" />
+    <Compile Include="src\hook\VpbVrUiDiagnostics.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
     <Compile Include="src\hook\TurboJpegNative.cs" />
     <Compile Include="src\hook\TurboJpegStats.cs" />
@@ -396,19 +410,24 @@
     <Compile Include="src\VamHookPlugin.Settings.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignFloat.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuBrandPlate.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuRandomPreview.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuVrWatch.cs" />
     <Compile Include="src\ContextMenuPanel.cs" />
     <Compile Include="src\gallery\Gallery.cs" />
     <Compile Include="src\gallery\GalleryFileListSnapshotCache.cs" />
     <Compile Include="src\gallery\GallerySearchQuery.cs" />
+    <Compile Include="src\gallery\GalleryHubCategoryNames.cs" />
+    <Compile Include="src\gallery\GalleryHubTypeItemScope.cs" />
     <Compile Include="src\gallery\GalleryTitleSearchChip.cs" />
     <Compile Include="src\gallery\GalleryPanel.TitleSearchChips.cs" />
     <Compile Include="src\gallery\GalleryTagCountSnapshotCache.cs" />
     <Compile Include="src\gallery\GalleryTagCountBackgroundScan.cs" />
     <Compile Include="src\gallery\CacheCleanupManager.cs" />
     <Compile Include="src\gallery\index\VpbSqlite3.cs" />
+    <Compile Include="src\gallery\index\VpbUidWhitespaceIdentityRepair.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.Dependents.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.ExclusiveDeps.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.HistoryUsage.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PackageManifest.cs" />
@@ -422,6 +441,19 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.PluginsCatalog.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PkgNewest.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.PkgLicense.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.DataPacks.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.DataPackPrefs.cs" />
+    <Compile Include="src\datapack\VpbDataPackFile.cs" />
+    <Compile Include="src\datapack\VpbDataPackService.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.HideMarkers.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.ClothingFootprint.cs" />
+    <Compile Include="src\clothing\VpbBodyRegion.cs" />
+    <Compile Include="src\clothing\VpbSkinRegionMap.cs" />
+    <Compile Include="src\clothing\VpbSkinAreaMap.cs" />
+    <Compile Include="src\clothing\VpbClothingFootprint.cs" />
+    <Compile Include="src\clothing\VpbHairFootprint.cs" />
+    <Compile Include="src\clothing\VpbClothingFootprintCache.cs" />
+    <Compile Include="src\clothing\VpbClothingReplace.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryLabels.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
@@ -444,6 +476,8 @@
     <Compile Include="src\gallery\GalleryPanel.AppearanceAutoSpawn.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsDiagnostics.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsPassthrough.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsMaintenance.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsFloat.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsNav.cs" />
@@ -478,6 +512,7 @@
     <Compile Include="src\gallery\GalleryPanel.TaskChrome.cs" />
     <Compile Include="src\gallery\GalleryPanel.RiskPolicy.cs" />
     <Compile Include="src\gallery\GalleryPanel.UxConsistency.cs" />
+    <Compile Include="src\gallery\GalleryPanel.StartupScene.cs" />
     <Compile Include="src\gallery\GalleryPanel.KeyboardFocus.cs" />
     <Compile Include="src\gallery\GalleryPanel.CommandPalette.cs" />
     <Compile Include="src\gallery\GalleryPanel.TryOn.cs" />
@@ -499,6 +534,7 @@
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Core.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Tags.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Lookapedia.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Remove.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Misc.cs" />
     <Compile Include="src\gallery\GalleryPanel.Thumbnails.cs" />
@@ -570,6 +606,7 @@
     <Compile Include="src\util\PoseImportDiagnostics.cs" />
     <Compile Include="src\util\GalleryAtomListingDiagnostics.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
+    <Compile Include="src\gallery\VpbGalleryFamilyDate.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\CategoryFilterState.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />
@@ -625,6 +662,7 @@
     <Compile Include="src\gallery\GalleryPanel.CreatorRatings.cs" />
     <Compile Include="src\LocalSceneGallerySupport.cs" />
     <Compile Include="src\PackageHidePrefs.cs" />
+    <Compile Include="src\VpbHideIndex.cs" />
     <Compile Include="src\LockedPackagesManager.cs" />
     <Compile Include="src\AutoLoadPackagesManager.cs" />
     <Compile Include="src\DependencyWhitelistManager.cs" />
@@ -734,6 +772,106 @@
     </PropertyGroup>
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
   </Target>
+  <!--
+    Installs tests/hooks into .git/hooks on build, so a fresh clone gets pre-commit/pre-push
+    without anyone having to know a setup command. SkipUnchangedFiles keeps it a no-op after
+    the first build; editing a hook in tests/hooks re-installs it. Skipped when .git/hooks is
+    absent (git worktrees, exported source). Set SkipVPBGitHooks=true to opt out.
+  -->
+  <ItemGroup>
+    <VPBGitHook Include="tests\hooks\*" />
+  </ItemGroup>
+  <Target Name="InstallVPBGitHooks" BeforeTargets="BeforeBuild"
+          Inputs="@(VPBGitHook)"
+          Outputs="@(VPBGitHook->'$(MSBuildProjectDirectory)\.git\hooks\%(Filename)%(Extension)')"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBGitHooks)' != 'true' And Exists('$(MSBuildProjectDirectory)\.git\hooks')">
+    <Copy SourceFiles="@(VPBGitHook)" DestinationFolder="$(MSBuildProjectDirectory)\.git\hooks"
+          ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="CopiedFiles" ItemName="_VPBGitHookInstalled" />
+    </Copy>
+    <Message Importance="high" Condition="'@(_VPBGitHookInstalled)' != ''"
+             Text="VPB: installed git hooks (@(_VPBGitHookInstalled->'%(Filename)', ', ')). Bypass a run with --no-verify; disable with -p:SkipVPBGitHooks=true." />
+  </Target>
+
+  <!--
+    Debug only: rebuild and deploy the in-game test plugin whenever VPB.dll deploys, so a developer
+    never has to remember a second command. Runs after PostBuildDeploy, so it compiles against the
+    VPB.dll that was just written.
+
+    It can never fail this build. A broken or uncompilable test suite is a test problem, not a
+    reason to block shipping the plugin, so every step is WarnAndContinue.
+
+    It also arms the run: the deploy drops a 'run-tests.marker' beside the DLL, so the next VaM
+    launch runs the in-game suite once and consumes it. The build before that reads the report the
+    previous launch wrote and raises one warning per failed in-game test, which is how those reach
+    the IDE error list. That reporting has to happen here rather than in the child project: the Exec
+    below uses IgnoreStandardErrorWarningFormat, which is what keeps a broken suite from failing
+    this build and equally what would reduce the child's warnings to plain text.
+
+    Set SkipVPBRuntimeTests=true to opt out of the whole thing, SkipVPBRuntimeTestArm=true to deploy
+    without arming. Release builds skip it outright.
+  -->
+  <Import Project="tests\VpbRuntimeTestReport.targets" Condition="Exists('tests\VpbRuntimeTestReport.targets')" />
+
+  <Target Name="BuildVPBRuntimeTests" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Debug'
+                     And '$(DesignTimeBuild)' != 'true'
+                     And '$(SkipVPBRuntimeTests)' != 'true'
+                     And Exists('$(MSBuildProjectDirectory)\tests\VPB.Tests.Runtime\VPB.Tests.Runtime.csproj')
+                     And Exists('$(VaMPath)\VaM_Data\Managed\Assembly-CSharp.dll')">
+    <PropertyGroup>
+      <_VPBRuntimeTestsProject>$(MSBuildProjectDirectory)\tests\VPB.Tests.Runtime\VPB.Tests.Runtime.csproj</_VPBRuntimeTestsProject>
+    </PropertyGroup>
+
+    <!--
+      Exec, not the MSBuild task. ContinueOnError on <MSBuild> lets this target continue, but the
+      child project's "error CSxxxx" lines are still logged into the same build, so Visual Studio
+      reports the solution build as failed. IgnoreStandardErrorWarningFormat stops MSBuild parsing
+      the child output into the parent's error list, which is what actually keeps a broken test
+      suite from failing the plugin build.
+    -->
+    <!--
+      Report the last in-game run BEFORE the Exec below re-arms, so the marker check is about the
+      run that was armed last time rather than the one being armed now. It runs here, in the parent,
+      because IgnoreStandardErrorWarningFormat on the Exec would otherwise reduce the child's
+      warnings to plain text that never reaches the IDE error list.
+    -->
+    <CallTarget Targets="VpbRuntimeReportLastRun" ContinueOnError="WarnAndContinue" />
+
+    <Exec Command="dotnet build &quot;$(_VPBRuntimeTestsProject)&quot; -c $(Configuration) -p:VaMPath=&quot;$(VaMPath)&quot; -p:DeployToVaM=true -p:SkipVPBRuntimeTestReport=true --nologo -v:m"
+          WorkingDirectory="$(MSBuildProjectDirectory)"
+          ContinueOnError="true"
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true">
+      <Output TaskParameter="ExitCode" PropertyName="_VPBRuntimeTestsExit" />
+    </Exec>
+
+    <Warning Condition="'$(_VPBRuntimeTestsExit)' != '0'"
+             Text="VPB: the in-game test plugin did not build (exit $(_VPBRuntimeTestsExit)). VPB.dll is unaffected and has already deployed - see the output above for the test-side error. Disable with -p:SkipVPBRuntimeTests=true." />
+  </Target>
+
+  <!--
+    Warns about any src/**/*.cs that is missing from the Compile list above, i.e. code that is
+    committed but never compiled and never reaches VPB.dll - no build error, no log line.
+    Deliberate exclusions go in tests/known-uncompiled.txt (same file the test suite reads).
+    Set SkipVPBSourceAudit=true to skip.
+  -->
+  <Target Name="AuditVPBSourceList" BeforeTargets="CoreCompile"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBSourceAudit)' != 'true'">
+    <ReadLinesFromFile File="tests\known-uncompiled.txt" Condition="Exists('tests\known-uncompiled.txt')">
+      <Output TaskParameter="Lines" ItemName="_VPBAuditAllowRaw" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_VPBAuditAllow Include="$([System.String]::Copy('%(_VPBAuditAllowRaw.Identity)').Replace('/','\'))"
+                      Condition="'%(_VPBAuditAllowRaw.Identity)' != '' And !$([System.String]::Copy('%(_VPBAuditAllowRaw.Identity)').StartsWith('#'))" />
+      <_VPBAuditOnDisk Include="src\**\*.cs" />
+      <_VPBAuditUncompiled Include="@(_VPBAuditOnDisk)" Exclude="@(Compile);@(_VPBAuditAllow)" />
+    </ItemGroup>
+    <Warning Condition="'@(_VPBAuditUncompiled)' != ''"
+             File="%(_VPBAuditUncompiled.Identity)"
+             Text="VPB: this file is not in VPB.csproj, so it is never compiled and never reaches VPB.dll. Add a &lt;Compile Include&gt; entry, or list it in tests/known-uncompiled.txt with a reason." />
+  </Target>
+
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <!-- Deploy logic lives in scripts/PostBuildDeploy.ps1 so cmd-batch quoting and silent copy /Y failures stop eating locked-DLL replacements. Script never fails the build, emits MSBuild-formatted warnings (yellow in Errors panel) on copy/lock issues. -->

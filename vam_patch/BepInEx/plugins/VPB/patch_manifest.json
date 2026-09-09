@@ -120,6 +120,18 @@
         "IsDirectory":  true
     },
     {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/datapacks",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/datapacks/hubtags.tsv",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/VPB/assets/datapacks/lookapedia.tsv",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/VPB/assets/fonts",
         "IsDirectory":  true
     },

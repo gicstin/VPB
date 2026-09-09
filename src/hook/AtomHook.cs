@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+using VPB.src.util;
+using System.Runtime.InteropServices;
 using System.Collections;
 using System.Text.RegularExpressions;
 using System;
@@ -54,7 +55,7 @@ namespace VPB
         [HarmonyPatch(typeof(Atom), "LoadAppearancePreset", new Type[] { typeof(string) })]
         public static void PreLoadAppearancePreset(Atom __instance, string saveName = "savefile")
         {
-            LogUtil.Log("[VPB hook]PreLoadAppearancePreset " + saveName);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]PreLoadAppearancePreset " + saveName);
             // VAM Browser / Person Load Appearance dialog — not VPB gallery apply path.
             try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "appearance"); } catch { }
             SuperControllerHook.ParsePresetForSimTextures(saveName);
@@ -75,7 +76,7 @@ namespace VPB
         [HarmonyPatch(typeof(Atom), "LoadPreset", new Type[] { typeof(string) })]
         public static void PreLoadPreset(Atom __instance, string saveName = "savefile")
         {
-            LogUtil.Log("[VPB hook]PreLoadPreset " + saveName);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]PreLoadPreset " + saveName);
             // Full atom presets via browser / PresetLoader plugins.
             try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "appearance"); } catch { }
             SuperControllerHook.ParsePresetForSimTextures(saveName);
@@ -92,7 +93,7 @@ namespace VPB
         [HarmonyPatch(typeof(MeshVR.PresetManagerControl), "SyncPresetBrowsePath", new Type[] { typeof(string) })]
         protected static void PreSyncPresetBrowsePath(MeshVR.PresetManagerControl __instance, string url)
         {
-            LogUtil.Log("[VPB hook]PreSyncPresetBrowsePath " + url);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]PreSyncPresetBrowsePath " + url);
             VarFileEntry varFileEntry = FileManager.GetVarFileEntry(url);
             if (varFileEntry != null)
             {
@@ -118,7 +119,7 @@ namespace VPB
         [HarmonyPatch(typeof(SubScene), "LoadSubSceneWithPath", new Type[] { typeof(string)})]
         public static void PreLoadSubSceneWithPath(SubScene __instance,string p)
         {
-            LogUtil.Log("[VPB hook]PreLoadSubSceneWithPath " + p);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]PreLoadSubSceneWithPath " + p);
         }
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SubScene), "LoadSubScene")]
@@ -127,7 +128,7 @@ namespace VPB
             MethodInfo getStorePathMethod = typeof(SubScene).GetMethod("GetStorePath", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             object ret= getStorePathMethod.Invoke(__instance, new object[1] {true });
             string path = (string)ret + ".json";
-            LogUtil.Log("[VPB hook]PreLoadSubScene " + path);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]PreLoadSubScene " + path);
             if (path.Contains(":"))
             {
                 string packagename = path.Substring(0,path.IndexOf(":"));
@@ -217,7 +218,7 @@ namespace VPB
             
             if (inputJSON != null && JSONOptimization.HasTimelinePlugin(inputJSON))
             {
-                LogUtil.Log("[VPB hook]Filtering timeline plugin from preset");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]Filtering timeline plugin from preset");
                 processJSON = JSONOptimization.FilterTimelinePlugins(inputJSON);
             }
             
@@ -270,35 +271,38 @@ namespace VPB
             // Appearance pose-preserve: SubScene browse-sync fires empty-name PosePresets and resets pose.
             if (VPB.src.util.AppearancePresetSuppress.ShouldSkipPosePresetAutoLoad(atomName, storableId, presetName))
             {
-                LogUtil.Log("[VPB] Appearance pose-preserve: skip empty PosePresets auto-load on " + atomName);
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB] Appearance pose-preserve: skip empty PosePresets auto-load on " + atomName);
                 return false;
             }
 
-            try
+            if (VPB.src.util.VPBLogger.Verbose || Settings.Instance?.LogStartupDetails?.Value == true)
             {
-                var asm = typeof(AtomHook).Assembly;
-                string asmPath = null;
-                try { asmPath = asm != null ? asm.Location : null; } catch { }
-                if (string.IsNullOrEmpty(asmPath))
+                try
                 {
-                    try
+                    var asm = typeof(AtomHook).Assembly;
+                    string asmPath = null;
+                    try { asmPath = asm != null ? asm.Location : null; } catch { }
+                    if (string.IsNullOrEmpty(asmPath))
                     {
-                        string codeBase = asm != null ? asm.CodeBase : null;
-                        if (!string.IsNullOrEmpty(codeBase))
+                        try
                         {
-                            asmPath = new Uri(codeBase).LocalPath;
+                            string codeBase = asm != null ? asm.CodeBase : null;
+                            if (!string.IsNullOrEmpty(codeBase))
+                            {
+                                asmPath = new Uri(codeBase).LocalPath;
+                            }
                         }
+                        catch { }
                     }
-                    catch { }
+                    string asmVer = asm != null ? asm.GetName().Version.ToString() : "null";
+                    string asmTime = "null";
+                    try { if (!string.IsNullOrEmpty(asmPath)) asmTime = System.IO.File.GetLastWriteTime(asmPath).ToString("yyyy-MM-dd HH:mm:ss"); } catch { }
+                    LogUtil.Log("[VPB] DLL marker (preset hook) | ver=" + asmVer + " | ts=" + asmTime + " | path=" + (string.IsNullOrEmpty(asmPath) ? "null" : asmPath));
                 }
-                string asmVer = asm != null ? asm.GetName().Version.ToString() : "null";
-                string asmTime = "null";
-                try { if (!string.IsNullOrEmpty(asmPath)) asmTime = System.IO.File.GetLastWriteTime(asmPath).ToString("yyyy-MM-dd HH:mm:ss"); } catch { }
-                LogUtil.Log("[VPB] DLL marker (preset hook) | ver=" + asmVer + " | ts=" + asmTime + " | path=" + (string.IsNullOrEmpty(asmPath) ? "null" : asmPath));
-            }
-            catch { }
+                catch { }
 
-            LogUtil.Log($"[VPB hook]PresetManager PreLoadPresetPreFromJSON {atomName} {storableId} {__instance.presetName}");
+                LogUtil.Log($"[VPB hook]PresetManager PreLoadPresetPreFromJSON {atomName} {storableId} {__instance.presetName}");
+            }
             if (processJSON != null)
             {
                 SuperControllerHook.ParsePresetForSimTextures(processJSON, __instance.presetName);
@@ -345,8 +349,8 @@ namespace VPB
                 // Boy1 PosePresets (SubScene) can yank linked Girl1 — restore preserve atom, not only loader.
                 int n = VPB.src.util.AppearancePresetSuppress.TryRestorePreservedPoseAny();
                 if (n > 0)
-                    LogUtil.Log("[VPB] Appearance pose-preserve: re-applied live pose after "
-                        + storable.storeId + " controllers=" + n);
+                    { if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB] Appearance pose-preserve: re-applied live pose after "
+                        + storable.storeId + " controllers=" + n); }
             }
             catch { }
         }
@@ -436,6 +440,50 @@ namespace VPB
                 }
             }
             return result;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Atom), "Store", new Type[] { typeof(JSONArray), typeof(bool), typeof(bool) })]
+        public static bool PreStore(Atom __instance)
+        {
+            try
+            {
+                if (VpbPassthroughLights.IsOwnedAtom(__instance)) return false;
+            }
+            catch { }
+            try { VpbPassthroughLights.RevealSceneLightForStore(__instance); }
+            catch { }
+            return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Atom), "Store", new Type[] { typeof(JSONArray), typeof(bool), typeof(bool) })]
+        public static void PostStore(Atom __instance)
+        {
+            try { VpbPassthroughLights.RepressSceneLightAfterStore(__instance); }
+            catch { }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Atom), "StoreForSubScene", new Type[] { typeof(JSONClass), typeof(bool) })]
+        public static bool PreStoreForSubScene(Atom __instance)
+        {
+            try
+            {
+                if (VpbPassthroughLights.IsOwnedAtom(__instance)) return false;
+            }
+            catch { }
+            try { VpbPassthroughLights.RevealSceneLightForStore(__instance); }
+            catch { }
+            return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Atom), "StoreForSubScene", new Type[] { typeof(JSONClass), typeof(bool) })]
+        public static void PostStoreForSubScene(Atom __instance)
+        {
+            try { VpbPassthroughLights.RepressSceneLightAfterStore(__instance); }
+            catch { }
         }
     }
 }

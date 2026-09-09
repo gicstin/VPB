@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -124,7 +125,7 @@ namespace VPB
             if (string.IsNullOrEmpty(key) || creators == null || counts == null) return;
             lock (s_SharedSideMetaLock)
             {
-                if (s_SharedSideMetaByKey.Count >= SharedSideMetaMaxEntries)
+                if (s_SharedSideMetaByKey.Count >= SharedSideMetaMaxEntries && !s_SharedSideMetaByKey.ContainsKey(key))
                     s_SharedSideMetaByKey.Clear();
                 s_SharedSideMetaByKey[key] = new SharedSideMetaSnapshot
                 {
@@ -410,7 +411,7 @@ namespace VPB
                     if (settingsListViewActive)
                         titleText.text = VPBTranslation.T("settings.title", "Settings");
                     else
-                        titleText.text = currentCategoryTitle;
+                        ApplyGalleryTitleText();
                 }
             }
 
@@ -936,7 +937,7 @@ namespace VPB
 
                     try
                     {
-                        var row = new PackageListEntry(uid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid);
+                        var row = new PackageListEntry(uid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid);
                         if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row))
                         {
                             VpbPackageIndexDiagnostics.Log(uid, "galleryRowSkip", "reason=hide_filter sqlPath='" + (r.VarPath ?? "") + "'");
@@ -1372,9 +1373,71 @@ namespace VPB
             return PassesFilters(entry, false, false);
         }
 
-        /// <summary>
-        /// Clothing path gate (classify + subfilters) for <see cref="VarFileEntry.Path"/> or loose file path form.
-        /// </summary>
+        internal static bool PassesClothingSubfilterFacts(
+            ClothingSubfilter f,
+            bool isPreset,
+            bool isDecal,
+            bool isCustomItem,
+            bool isCustomPresetLoose,
+            ClothingLoadingUtils.ResourceGender gender)
+        {
+            // Default view shows base items only: hide all .vap presets (VAR and custom).
+            if (f == 0) return !isPreset;
+
+            bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+            bool wantsDecalType = ((f & ClothingSubfilter.Decals) != 0);
+
+            bool typeExplicit = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
+            if (typeExplicit)
+            {
+                bool okType = (!isDecal && (f & ClothingSubfilter.RealClothing) != 0) ||
+                              (isDecal && (f & ClothingSubfilter.Decals) != 0);
+                if (!okType) return false;
+            }
+            else
+            {
+                if (wantsRealType && isDecal && !wantsDecalType) return false;
+            }
+
+            bool wantsPresets = (f & ClothingSubfilter.Presets) != 0;
+            bool wantsCustom = (f & ClothingSubfilter.Custom) != 0;
+            bool wantsCustomPreset = (f & ClothingSubfilter.CustomPreset) != 0;
+            if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
+            if (wantsCustom) { if (!isCustomItem) return false; }
+            if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
+            // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
+            if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
+            if ((f & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
+            // If gender unknown, keep visible under either toggle (VaM content often not in gendered folders).
+            if ((f & ClothingSubfilter.Male) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Male && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+            if ((f & ClothingSubfilter.Female) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Female && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+
+            return true;
+        }
+
+        internal static bool PassesHairSubfilterFacts(
+            HairSubfilter f,
+            bool isPreset,
+            bool isCustomItem,
+            bool isCustomPresetLoose,
+            ClothingLoadingUtils.ResourceGender gender)
+        {
+            if (f == 0) return !isPreset;
+
+            bool wantsPresets = (f & HairSubfilter.Presets) != 0;
+            bool wantsCustom = (f & HairSubfilter.Custom) != 0;
+            bool wantsCustomPreset = (f & HairSubfilter.CustomPreset) != 0;
+            if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
+            if (wantsCustom) { if (!isCustomItem) return false; }
+            if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
+            if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
+            if ((f & HairSubfilter.Items) != 0) { if (isPreset) return false; }
+            if ((f & HairSubfilter.Male) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Male && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+            if ((f & HairSubfilter.Female) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Female && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+
+            return true;
+        }
+
         internal static bool PassesClothingGalleryFiltersForPath(string path, ClothingSubfilter clothingSubfilter, bool isVarPackageEntry)
         {
             string p = path ?? "";
@@ -1391,45 +1454,10 @@ namespace VPB
             ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
             if (k != ClothingLoadingUtils.ResourceKind.Clothing) return false;
 
-            bool isDecal = ClothingLoadingUtils.IsDecalLikePath(p);
+            bool isDecal = ClothingLoadingUtils.IsDecalLikePath(ClothingLoadingUtils.NormalizeLooseGalleryPath(p));
 
-            // Default view shows base items only: hide all .vap presets (VAR and custom).
-            if (clothingSubfilter == 0)
-            {
-                if (isPreset) return false;
-            }
-            else
-            {
-                bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
-                bool wantsDecalType = ((clothingSubfilter & ClothingSubfilter.Decals) != 0);
-
-                bool typeExplicit = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
-                if (typeExplicit)
-                {
-                    bool okType = (!isDecal && (clothingSubfilter & ClothingSubfilter.RealClothing) != 0) ||
-                                  (isDecal && (clothingSubfilter & ClothingSubfilter.Decals) != 0);
-                    if (!okType) return false;
-                }
-                else
-                {
-                    if (wantsRealType && isDecal && !wantsDecalType) return false;
-                }
-
-                bool wantsPresets = (clothingSubfilter & ClothingSubfilter.Presets) != 0;
-                bool wantsCustom = (clothingSubfilter & ClothingSubfilter.Custom) != 0;
-                bool wantsCustomPreset = (clothingSubfilter & ClothingSubfilter.CustomPreset) != 0;
-                if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
-                if (wantsCustom) { if (!isCustomItem) return false; }
-                if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
-                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
-                if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
-                if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
-                // If gender unknown, keep visible under either toggle (VaM content often not in gendered folders).
-                if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
-                if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
-            }
-
-            return true;
+            return PassesClothingSubfilterFacts(
+                clothingSubfilter, isPreset, isDecal, isCustomItem, isCustomPresetLoose, g);
         }
 
         /// <summary>
@@ -1452,33 +1480,24 @@ namespace VPB
             ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
             if (k != ClothingLoadingUtils.ResourceKind.Hair) return false;
 
-            // Default view shows base items only: hide all .vap presets (VAR and custom).
-            if (hairSubfilter == 0)
-            {
-                if (isPreset) return false;
-            }
-            else
-            {
-                bool wantsPresets = (hairSubfilter & HairSubfilter.Presets) != 0;
-                bool wantsCustom = (hairSubfilter & HairSubfilter.Custom) != 0;
-                bool wantsCustomPreset = (hairSubfilter & HairSubfilter.CustomPreset) != 0;
-                if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
-                if (wantsCustom) { if (!isCustomItem) return false; }
-                if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
-                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
-                if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
-                if ((hairSubfilter & HairSubfilter.Items) != 0) { if (isPreset) return false; }
-                // If gender unknown, keep visible under either toggle.
-                if ((hairSubfilter & HairSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
-                if ((hairSubfilter & HairSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
-            }
-
-            return true;
+            return PassesHairSubfilterFacts(hairSubfilter, isPreset, isCustomItem, isCustomPresetLoose, g);
         }
 
         private bool PassesFilters(FileEntry entry, bool ignorePosePeopleFilter)
         {
             return PassesFilters(entry, ignorePosePeopleFilter, false);
+        }
+
+        private bool HubItemScopeAllowsEntry(FileEntry entry)
+        {
+            if (_hubItemScopeCategories == null || _hubItemScopeCategories.Count == 0) return true;
+            List<string> scope = EffectiveHubItemScopeCategories();
+            if (scope == null) return true;
+            string ip = null;
+            var ve = entry as VarFileEntry;
+            if (ve != null) ip = ve.InternalPath;
+            if (string.IsNullOrEmpty(ip)) ip = entry.Path;
+            return VpbLocalDatabase.GalleryCategoryScopeContainsPath(scope, ip);
         }
 
         private bool PassesFilters(FileEntry entry, bool ignorePosePeopleFilter, bool skipClothingGalleryFilters)
@@ -1532,6 +1551,8 @@ namespace VPB
                     return false;
             }
 
+            if (!HubItemScopeAllowsEntry(entry)) return false;
+
             // Hide filtering and sort-only narrowing run in PostFilesListHideAndSortFollowupRoutine after the grid is shown.
             // to avoid per-entry FileManager.FileExists calls blocking the scan drain loop.
 
@@ -1576,6 +1597,19 @@ namespace VPB
                 else if (posePeopleFilter == PosePeopleFilter.Dual)
                 {
                     if (!isDual) return false;
+                }
+            }
+
+            if (IsGalleryScenesCategory(title))
+            {
+                SceneHubSubfilter sceneHubEffective = EffectiveSceneHubSubfilter();
+                if (VpbLocalDatabase.SceneHubSubfilterIsNarrowing(sceneHubEffective))
+                {
+                    Dictionary<string, int> sceneHubMasks;
+                    if (VpbLocalDatabase.TryGetSceneHubBucketMasks(out sceneHubMasks)
+                        && !VpbLocalDatabase.PassesSceneHubSubfilterMask(
+                            sceneHubEffective, sceneHubMasks, TryGetFileEntryPackageUidForDataPack(entry)))
+                        return false;
                 }
             }
 
@@ -1653,7 +1687,7 @@ namespace VPB
 
             // Scene Local is global Source Local (early gate). No per-category override.
 
-            // Name Filter (bare terms OR user tags; tag:/creator:/status structured).
+            // Name Filter (bare terms OR user tags OR Look-A-Pedia subject; tag:/creator:/looks:/hubcat:/status structured).
             // Only skip SQL-owned time/loaded/tagged for VAR index rows — loose files need in-memory time match.
             // When deferring, RefreshFiles applies the same in-memory pass as live SetNameFilter after the list builds.
             if (HasActiveNameFilter() && !_refreshDeferNameFilterToInMemory)
@@ -1778,7 +1812,7 @@ namespace VPB
                     }
                     catch { }
                 }
-                LogUtil.Log("[VPB] RetryRefreshAfterNoCacheDelay: retrying refresh for packages with missing cache.");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB] RetryRefreshAfterNoCacheDelay: retrying refresh for packages with missing cache.");
                 // isRetry=true keeps _cacheRetryPending=true so this retry cannot spawn another retry.
                 RefreshFiles(false, false, isRetry: true);
             }
@@ -1822,7 +1856,7 @@ namespace VPB
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
             {
-                LogUtil.Log("[VPB] GalleryPanel.RefreshFiles: SKIPPED (suppressed)");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB] GalleryPanel.RefreshFiles: SKIPPED (suppressed)");
                 CompletePaneLoadTimingIfPending("(refresh suppressed)");
                 return;
             }
@@ -1904,7 +1938,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (stale Path filter cleared)");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (stale Path filter cleared)");
                 }
                 catch { }
                 pathsCached = false;
@@ -1918,7 +1952,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (not loaded yet) title='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (not loaded yet) title='"
                         + (currentCategoryTitle ?? "") + "'");
                 }
                 catch { }
@@ -1942,7 +1976,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta START title='" + (currentCategoryTitle ?? "")
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta START title='" + (currentCategoryTitle ?? "")
                     + "' ext='" + (currentExtension ?? "") + "' path='" + (currentPath ?? "")
                     + "' added=" + (added != null ? added.Count : 0)
                     + " removed=" + (removed != null ? removed.Count : 0)
@@ -2136,7 +2170,7 @@ namespace VPB
                 {
                     try
                     {
-                        LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta append entries=" + newEntries.Count
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta append entries=" + newEntries.Count
                             + " title='" + (currentCategoryTitle ?? "") + "'");
                     }
                     catch { }
@@ -2174,7 +2208,7 @@ namespace VPB
                 refreshOnNextShow = false;
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta NO_CHANGE title='" + (currentCategoryTitle ?? "")
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta NO_CHANGE title='" + (currentCategoryTitle ?? "")
                         + "' skippedNoCache=" + (skippedForNoCache ? "1" : "0"));
                 }
                 catch { }
@@ -2222,7 +2256,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta CHANGED gridAfter="
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta CHANGED gridAfter="
                     + (currentFilteredFiles != null ? currentFilteredFiles.Count : 0)
                     + " title='" + (currentCategoryTitle ?? "") + "'");
             }
@@ -2234,7 +2268,7 @@ namespace VPB
         {
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta SKIP reason=" + reason
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta SKIP reason=" + reason
                     + " title='" + (currentCategoryTitle ?? "") + "'");
             }
             catch { }
@@ -2248,7 +2282,7 @@ namespace VPB
             categoriesCached = false;
             creatorsCached = false;
             _deferSideTabCountsForceRefresh = true;
-            if (!IsVisible && !hasLoadedContent) return;
+            if (!IsVisible) return;
             if (_packageDeltaSideTabsCoroutine != null) return;
             _packageDeltaSideTabsCoroutine = StartCoroutine(CoRefreshSideTabsAfterPackageDelta());
         }
@@ -2257,12 +2291,8 @@ namespace VPB
         {
             yield return null;
             _packageDeltaSideTabsCoroutine = null;
-            try { CacheCategoryCounts(); } catch { }
-            try { CacheCreators(); } catch { }
-            // ApplyPackageDelta already cleared userTagsCached; fill amounts once cat_mem is current.
-            try { CacheUserTagsSideTab(); } catch { }
-            if (!IsVisible && !hasLoadedContent) yield break;
-            try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true); } catch { }
+            // Reopen can already have refreshed counts during this yield.
+            EnsureSideTabsFreshForPackageScan();
         }
 
         /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>
@@ -2369,6 +2399,8 @@ namespace VPB
                 sb.Append('\u001E');
                 SortState st = GetSortState("Files");
                 sb.Append((int)st.Type).Append('\u001E').Append((int)st.Direction);
+                sb.Append('\u001E');
+                try { sb.Append(VpbDataPackService.StatusRevision); } catch { sb.Append(0); }
                 key = sb.ToString();
                 return true;
             }
@@ -2546,7 +2578,7 @@ namespace VPB
                 if (r.PackageSizeOrInvalid != long.MinValue)
                     entrySize = r.PackageSizeOrInvalid;
 
-                VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.ItemUsageKey);
+                VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid, r.ItemUsageKey);
                 bulk.Add(vfe);
             }
             return bulk;
@@ -3379,6 +3411,12 @@ namespace VPB
                     || pathForIndexMain.IndexOf("/Clothing", StringComparison.OrdinalIgnoreCase) >= 0
                     || pathForIndexMain.IndexOf("\\Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
                 HairSubfilter sqliteWorkerHairSub = hairSubfilter;
+                SceneHubSubfilter sqliteWorkerSceneHubSub = EffectiveSceneHubSubfilter();
+                List<string> hubItemScopeSnap = null;
+                {
+                    List<string> hubScopeNow = EffectiveHubItemScopeCategories();
+                    if (hubScopeNow != null) hubItemScopeSnap = new List<string>(hubScopeNow);
+                }
                 bool sqliteDrainApplyHairGateOnMain = (titleForIndexMain.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
                     || pathForIndexMain.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
                     || pathForIndexMain.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -3481,7 +3519,9 @@ namespace VPB
                                 pkgVersionFilterForIndexMain,
                                 userTagGridFilterTaggedOnlySnap,
                                 licenseFilterForIndexMain,
-                                sqliteWorkerHairSub);
+                                sqliteWorkerHairSub,
+                                sqliteWorkerSceneHubSub,
+                                hubItemScopeSnap);
                             if (useSqliteIndex && catQueryStats.AppliedPkgVersionFilter
                                 && sqlPkgVersionFilterAppliedFlag != null)
                                 sqlPkgVersionFilterAppliedFlag[0] = 1;
@@ -3630,7 +3670,7 @@ namespace VPB
                                     if (r.PackageSizeOrInvalid != long.MinValue)
                                         entrySize = r.PackageSizeOrInvalid;
 
-                                    VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, null);
+                                    VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid, null);
                                     bulk.Add(vfe);
                                 }
                             }
@@ -3744,7 +3784,7 @@ namespace VPB
                                                     long sz = r.PackageSizeOrInvalid != long.MinValue ? r.PackageSizeOrInvalid : 0;
                                                     try
                                                     {
-                                                        var row = new PackageListEntry(r.PackageUid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid);
+                                                        var row = new PackageListEntry(r.PackageUid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid);
                                                         if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
                                                         if (utCatMemKeyHits != null)
                                                         {
@@ -4720,7 +4760,7 @@ namespace VPB
                     }
                     catch { }
                 }
-                LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; scheduling one-shot retry.");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; scheduling one-shot retry.");
                 _cacheRetryPending = true;
                 StartCoroutine(RetryRefreshAfterNoCacheDelay());
             }

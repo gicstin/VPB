@@ -101,10 +101,15 @@ namespace VPB
                 || state == TaskChromeState.StickyImport;
         }
 
+        private static bool TaskChromeIsModelessSticky(TaskChromeState state)
+        {
+            return state == TaskChromeState.StickyTryOn;
+        }
+
         /// <summary>Hide / soft-disable 1-Click + Hold while sticky owns input.</summary>
         private bool TaskChromeSuppressArmedApplyChrome(TaskChromeState state)
         {
-            return TaskChromeIsSticky(state);
+            return TaskChromeIsSticky(state) && !TaskChromeIsModelessSticky(state);
         }
 
         /// <summary>Detail strip Load/Hub/Delete — off when sticky rewrites grid semantics.</summary>
@@ -114,7 +119,8 @@ namespace VPB
                 || state == TaskChromeState.Selection
                 || state == TaskChromeState.ArmedApply
                 || state == TaskChromeState.StickyCreator
-                || state == TaskChromeState.StickyImport;
+                || state == TaskChromeState.StickyImport
+                || state == TaskChromeState.StickyTryOn;
         }
 
         /// <summary>
@@ -133,7 +139,7 @@ namespace VPB
         private void ApplyTaskChromeRailPolicy(TaskChromeState state)
         {
             bool armed = state == TaskChromeState.ArmedApply;
-            bool sticky = TaskChromeIsSticky(state);
+            bool sticky = TaskChromeIsSticky(state) && !TaskChromeIsModelessSticky(state);
 
             // Competing sticky enters blocked while another sticky or armed-apply owns chrome.
             // Settings float is modeless — never soft-disables sticky enter rails.
@@ -239,6 +245,10 @@ namespace VPB
                 && state != TaskChromeState.StickyTryOn)
                 return false;
 
+            bool tryOn = state == TaskChromeState.StickyTryOn;
+            bool scanWl = false;
+            try { scanWl = ScanWhitelistManager.Instance.IsEnabled; } catch { }
+
             // Point/pick/session owns input — kill browse action peers.
             show(tboxSettingsCancelBtn, false);
             show(tboxSettingsSaveBtn, false);
@@ -255,8 +265,8 @@ namespace VPB
             show(tboxHideBtn, false);
             show(tboxUnhideBtn, false);
             show(tboxScanWhitelistTemporaryBtn, false);
-            show(tboxLoadBtn, false);
-            show(tboxLoadRandomBtn, false);
+            show(tboxLoadBtn, tryOn && !scanWl);
+            show(tboxLoadRandomBtn, tryOn);
             show(tboxUnloadBtn, false);
             show(tboxLoadDepsBtn, false);
             show(tboxCacheTexturesBtn, false);
@@ -270,13 +280,18 @@ namespace VPB
             show(tboxRemoveHistoryBtn, false);
             show(tboxSelectAllBtn, false);
             show(tboxClearSelectionBtn, true);
-            show(_detailStripExpandBtnGO, false);
+            show(_detailStripExpandBtnGO, tryOn);
 
             for (int i = 0; i < tboxPersonAtomBtns.Count; i++)
                 show(tboxPersonAtomBtns[i], false);
             try { CloseTboxTargetMenu(); } catch { }
 
             SetTboxButtonEnabledVisual(tboxClearSelectionBtn, selectedFiles != null && selectedFiles.Count > 0);
+            if (tryOn)
+            {
+                SetTboxButtonEnabledVisual(tboxLoadBtn, true);
+                SetTboxButtonEnabledVisual(tboxLoadRandomBtn, true);
+            }
 
             try { RefreshSceneImportSideButtonVisibility(); } catch { }
             try { UpdateSideButtonPositions(); } catch { }

@@ -437,6 +437,14 @@ namespace VPB
             return filtered;
         }
 
+        internal List<FileEntry> GetRandomCandidatePool()
+        {
+            var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+                ? currentFilteredFiles
+                : lastFilteredFiles;
+            return FilterRandomPoolForCurrentCategory(pool);
+        }
+
         /// <param name="excludeIdentityKey">
         /// When set and pool has 2+ items, never pick this identity (path/uid). Retries then linear scan.
         /// </param>
@@ -463,23 +471,11 @@ namespace VPB
                     overrideHeld = true;
                 }
 
-                // Prefer the currently visible list (includes top search + filter-mode search).
-                // lastFilteredFiles is a post-refresh snapshot and does not change when the user searches.
-                var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
-                    ? currentFilteredFiles
-                    : lastFilteredFiles;
+                var pool = GetRandomCandidatePool();
 
                 if (pool == null || pool.Count == 0)
                 {
                     LogUtil.LogWarning("[VPB] Load Random: no items available.");
-                    return;
-                }
-
-                // Category-safe pool: Appearance must not pick SubScene/Scene rows if list was polluted.
-                pool = FilterRandomPoolForCurrentCategory(pool);
-                if (pool == null || pool.Count == 0)
-                {
-                    LogUtil.LogWarning("[VPB] Load Random: no category-matching items in filtered view.");
                     return;
                 }
 
@@ -732,7 +728,7 @@ namespace VPB
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool needsInit = canvas == null;
-            LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
             _userHidden = false;
             ClearFloatsOnlyForShow();
 
@@ -766,7 +762,7 @@ namespace VPB
             }
 
             if (needsInit) Init();
-            LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
             // Legacy middle-pane settings only — float Settings is modeless (keep open across Show).
             bool exitedSettingsMode = settingsListViewActive;
@@ -797,7 +793,9 @@ namespace VPB
             bool packagesChanged = refreshOnNextShow || (!hasLoadedContent && packageTimestampAdvanced);
 
             titleText.text = title;
-            bool paramsChanged = (currentExtension != extension || currentPath != path);
+            string nextHubToken = _pendingHubTypeBrowseToken != null ? _pendingHubTypeBrowseToken : "";
+            bool hubTokenChanging = !string.Equals(nextHubToken, _hubTypeBrowseToken ?? "", StringComparison.Ordinal);
+            bool paramsChanged = (currentExtension != extension || currentPath != path) || hubTokenChanging;
             bool categoryTitleChanged = !string.Equals(title, currentCategoryTitle, StringComparison.Ordinal);
 
             // Navigating to a different category while a Try-On preview is still pending should not
@@ -842,6 +840,11 @@ namespace VPB
 
             currentCategoryTitle = title;
 
+            _hubTypeBrowseToken = nextHubToken;
+            _pendingHubTypeBrowseToken = null;
+            _hubItemScopeCategories = _pendingHubItemScopeCategories;
+            _pendingHubItemScopeCategories = null;
+
             bool sameViewReopen = hasLoadedContent && !paramsChanged;
 
             // Save scroll for the category we're leaving; prime the restore target for the new one.
@@ -871,10 +874,14 @@ namespace VPB
                 if (!string.IsNullOrEmpty(cat.name)) currentPaths = cat.paths;
             }
             if (currentPaths == null) currentPaths = new List<string> { path };
+            ApplyHubItemScopePathsToCurrentPaths();
 
             // Restore per-category filters (or clear to defaults for first visit)
             if (paramsChanged)
                 RestoreCategoryFilterState(title, path);
+            if (!string.IsNullOrEmpty(_hubTypeBrowseToken))
+                EnsureHubTypeBrowseSearchChip(_hubTypeBrowseToken);
+            ApplyGalleryTitleText();
 
             // Auto gender subfilter must apply on category change too (before RefreshFiles builds grid).
             ReconcileAutoGenderForCurrentTarget();
@@ -903,7 +910,7 @@ namespace VPB
             {
                 if (shouldRefresh && Gallery.IsSuppressed())
                 {
-                    LogUtil.Log("[VPB] GalleryPanel.Show: Skipping RefreshFiles (suppressed)");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[VPB] GalleryPanel.Show: Skipping RefreshFiles (suppressed)");
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
                     shouldRefresh = false;
                 }
@@ -929,7 +936,7 @@ namespace VPB
                 try { ScheduleDeferredSideTabsFreshAfterReopen(); } catch { }
                 try { TryApplyPendingPackageDeltaOnShow(); } catch { }
                 CancelGalleryCategoryTypeNavigationTiming("same_view_reopen");
-                LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
                 return;
             }
 
@@ -967,7 +974,7 @@ namespace VPB
                 if (startupDeferredInitialRefresh)
                 {
                     _sideTabsNeedFullRebuildAfterFirstRefresh = true;
-                    LogUtil.Log("[VPB] GalleryPanel.Show: deferred initial RefreshFiles until startup ready");
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[VPB] GalleryPanel.Show: deferred initial RefreshFiles until startup ready");
                 }
                 LogGalleryCategoryTypeNavPhase("Show_skip_RefreshFiles");
                 try { TryApplyPendingPackageDeltaOnShow(); } catch { }
@@ -1010,7 +1017,7 @@ namespace VPB
                 CompletePaneLoadTimingIfPending("(Show finished without async refresh)");
             if (refreshCoroutine == null)
                 FinalizeGalleryCategoryTypeNavigationSync("(Show end, no async refresh)");
-            LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryCategoryTypeSwitchTiming) LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
         }
 
         private Coroutine deferredStartupRefreshCoroutine;
@@ -1237,6 +1244,7 @@ namespace VPB
         private void ApplyImmediateVisibility(bool v)
         {
             if (canvas == null) return;
+            bool wasVisible = canvas.enabled;
             canvas.enabled = v;
             var raycaster = canvas.GetComponent<GraphicRaycaster>();
             if (raycaster != null) raycaster.enabled = v;
@@ -1244,6 +1252,9 @@ namespace VPB
             bool wantSubtree = ShouldContentSubtreeBeActive();
             if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != wantSubtree)
                 backgroundBoxGO.SetActive(wantSubtree);
+            // Menu gating can restore a loaded pane without going through Show().
+            if (v && !wasVisible && hasLoadedContent)
+                ScheduleDeferredSideTabsFreshAfterReopen();
         }
 
         // Desired active state for the gallery content subtree (backgroundBoxGO).
@@ -1478,8 +1489,13 @@ namespace VPB
         }
 
 
-        private static string MakeCategoryScrollKey(string title, string path)
-            => (title ?? "") + "|" + (path ?? "");
+        private string MakeCategoryScrollKey(string title, string path)
+        {
+            string hub = _hubTypeBrowseToken ?? "";
+            if (hub.Length == 0)
+                return (title ?? "") + "|" + (path ?? "");
+            return (title ?? "") + "|" + (path ?? "") + "|hub:" + hub;
+        }
 
         private string ScrollCachePath
         {
@@ -1560,14 +1576,26 @@ namespace VPB
                 if (!string.IsNullOrEmpty(cap))
                 {
                     if (!string.IsNullOrEmpty(path))
-                        SetHoverPath(cap + "\n" + path);
+                        SetHoverPath(AppendLookOverlayHoverLine(file, cap + "\n" + path));
                     else
-                        SetHoverPath(cap);
+                        SetHoverPath(AppendLookOverlayHoverLine(file, cap));
                     return;
                 }
             }
 
-            SetHoverPath(path);
+            SetHoverPath(AppendLookOverlayHoverLine(file, path));
+        }
+
+        private static string AppendLookOverlayHoverLine(FileEntry file, string baseText)
+        {
+            VpbLocalDatabase.DataPackLookOverlay overlay;
+            if (!TryGetFileLookOverlay(file, out overlay) || string.IsNullOrEmpty(overlay.Subject))
+                return baseText ?? "";
+            string line = string.Format(
+                VPBTranslation.T("gallery.detail.looks_like_fmt", "Looks like: {0}"),
+                overlay.Subject);
+            if (string.IsNullOrEmpty(baseText)) return line;
+            return baseText + "\n" + line;
         }
 
         /// <summary>
@@ -1882,7 +1910,7 @@ namespace VPB
                         {
                             try { wt = DateTime.FromBinary(r.LastWriteTicksOrInvalid); } catch { wt = DateTime.MinValue; }
                         }
-                        currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid));
+                        currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid, r.PackageFileCreationTicksOrInvalid));
                     }
                     return;
                 }
@@ -1916,6 +1944,7 @@ namespace VPB
                                || (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Creator);
             if (creatorTabOpen)
                 try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
+            try { RebindLookFacetVirtHighlightsIfOpen(); } catch { }
         }
 
         private bool PrepareFileEntryGestureSelection(FileEntry file)
@@ -1976,13 +2005,6 @@ namespace VPB
                 try { HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary: true); }
                 catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick scan whitelist: " + ex); }
             }
-
-            if (isFixedLocally && VPBConfig.Instance != null && DockHeightMode == 0)
-            {
-                DockHeightMode = 1; // Custom height
-                UpdateFooterHeightState();
-                UpdateLayout();
-            }
         }
 
         internal void OnFileMiddleClick(FileEntry file)
@@ -2016,7 +2038,7 @@ namespace VPB
                     copyName = vfe.Package.Uid + ".var";
                 }
                 
-                LogUtil.Log("[VPB] Copying to clipboard: " + copyName);
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Copying to clipboard: " + copyName);
                 GUIUtility.systemCopyBuffer = copyName;
                 ShowTemporaryStatus("Copied to clipboard: " + copyName, 2f);
                 return;
@@ -2572,7 +2594,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] TryApplyPendingPackageDeltaOnShow title='"
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] TryApplyPendingPackageDeltaOnShow title='"
                     + (currentCategoryTitle ?? "") + "' added=" + (added != null ? added.Count : 0));
             }
             catch { }
@@ -2597,7 +2619,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated deferred (package scan in progress) title='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated deferred (package scan in progress) title='"
                         + (currentCategoryTitle ?? "") + "'");
                 }
                 catch { }
@@ -2612,7 +2634,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated SKIP (delta already applied) title='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated SKIP (delta already applied) title='"
                         + (currentCategoryTitle ?? "") + "'");
                 }
                 catch { }
@@ -2646,7 +2668,7 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated ApplyPackageDelta title='"
+                    if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated ApplyPackageDelta title='"
                         + (currentCategoryTitle ?? "") + "' added=" + (added != null ? added.Count : 0));
                 }
                 catch { }
@@ -2661,7 +2683,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated RefreshFiles title='"
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated RefreshFiles title='"
                     + (currentCategoryTitle ?? "") + "' deltaApplied=" + (lastPackageDeltaChangedGrid ? "1" : "0")
                     + " pendingAdded=" + (added != null ? added.Count : 0));
             }

@@ -1,5 +1,8 @@
 /obj/
 /bin/
+tests/**/bin/
+tests/**/obj/
+tests/**/TestResults/
 /.old
 /.vs
 /.sample/sample
@@ -40,3 +43,4 @@ scripts/_icon_contact_sheet.png
 # Icon tooling cache
 scripts/_tabler_probe_cache.npz
 /assets/tabler-icons-3.46.0
+/TESTING_PLAN.md

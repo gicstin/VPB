@@ -1170,12 +1170,39 @@ namespace VPB
             AddTooltip(footerWatchToggleBtn, "gallery.tooltip.vr_watch_toggle", "Show/hide VR wrist watch (look at inner wrist)");
             footerWatchToggleBtn.SetActive(false);
 
+            footerPassthroughToggleBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"P", 20, 0, 0, AnchorPresets.middleCenter, TogglePassthroughMode);
+            footerPassthroughToggleBtnImage = footerPassthroughToggleBtn.GetComponent<Image>();
+            footerPassthroughToggleOnSprite  = UI.LoadIconSprite("eye",     Color.white);
+            footerPassthroughToggleOffSprite = UI.LoadIconSprite("eye-off", Color.white);
+            { Sprite init = footerPassthroughToggleOffSprite ?? footerPassthroughToggleOnSprite; if (init != null) { UI.AddIconToButton(footerPassthroughToggleBtn, init); footerPassthroughToggleIconImage = footerPassthroughToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            AddTooltip(footerPassthroughToggleBtn, "gallery.tooltip.passthrough_toggle", "Passthrough mode on/off (chroma key for your headset streamer)");
+            footerPassthroughToggleBtn.SetActive(false);
+
+            footerPassthroughLightsBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"L", 20, 0, 0, AnchorPresets.middleCenter, TogglePassthroughLights);
+            footerPassthroughLightsBtnImage = footerPassthroughLightsBtn.GetComponent<Image>();
+            { var s = UI.LoadIconSprite("lamp-2", Color.white); if (s != null) UI.AddIconToButton(footerPassthroughLightsBtn, s); }
+            AddTooltip(footerPassthroughLightsBtn, "gallery.tooltip.passthrough_lights", "Real-world lights on/off (lights pinned to your room, not the scene)");
+            footerPassthroughLightsBtn.SetActive(false);
+
             footerFloatsOnlyBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"F", 20, 0, 0, AnchorPresets.middleCenter, ToggleFloatsOnlyMode);
             footerFloatsOnlyBtnImage = footerFloatsOnlyBtn.GetComponent<Image>();
             footerFloatsOnlyOffSprite = UI.LoadIconSprite("layout-sidebar", Color.white);
             footerFloatsOnlyOnSprite  = UI.LoadIconSprite("layout-sidebar-right-collapse", Color.white);
             { Sprite init = footerFloatsOnlyOffSprite ?? footerFloatsOnlyOnSprite; if (init != null) { UI.AddIconToButton(footerFloatsOnlyBtn, init); footerFloatsOnlyIconImage = footerFloatsOnlyBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerFloatsOnlyBtn, "gallery.tooltip.floats_only", "Hide this pane and keep its floating windows (open the gallery to bring it back)");
+
+            footerLogLevelBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef * 2.4f, GalleryUiDesignTokens.ButtonSizeRef, "Log Extra", 14, 0, 0, AnchorPresets.middleCenter, OpenFooterLogLevelSettings);
+            footerLogLevelBtn.name = "Footer_LogLevel";
+            footerLogLevelBtnImage = footerLogLevelBtn.GetComponent<Image>();
+            footerLogLevelBtnText = footerLogLevelBtn.GetComponentInChildren<Text>();
+            if (footerLogLevelBtnText != null)
+            {
+                footerLogLevelBtnText.resizeTextForBestFit = true;
+                footerLogLevelBtnText.resizeTextMinSize = 8;
+                footerLogLevelBtnText.resizeTextMaxSize = 16;
+            }
+            AddDynamicTooltip(footerLogLevelBtn, FooterLogLevelChipTooltip);
+            footerLogLevelBtn.SetActive(false);
 
             // Sidebar toggle lives on the side-rail Scene Import button (above Tags); no footer button.
 
@@ -1324,7 +1351,7 @@ namespace VPB
             }
             var footerBtnGOs = new GameObject[] {
                 footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
-                footerMenuGateBtn, footerWatchToggleBtn, footerFloatsOnlyBtn,
+                footerMenuGateBtn, footerWatchToggleBtn, footerPassthroughToggleBtn, footerPassthroughLightsBtn, footerFloatsOnlyBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerHoldToLaunchToggleBtn,
                 footerApplyModeBtn,
@@ -1339,6 +1366,15 @@ namespace VPB
                 {
                     if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (t) GalleryUiMetrics.ApplyGlyphFont(t, GalleryUiDesignTokens.ButtonSizeRef, s, GalleryUiDesignTokens.FontMinRef);
+                });
+            }
+            {
+                var logRt = footerLogLevelBtn != null ? footerLogLevelBtn.GetComponent<RectTransform>() : null;
+                var logT = footerLogLevelBtnText;
+                innerPaneScaleActions.Add(s =>
+                {
+                    if (logRt) logRt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * 2.4f * s, GalleryUiDesignTokens.ButtonSizeRef * s);
+                    GalleryUiMetrics.ApplyFont(logT, GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
 
@@ -1444,6 +1480,8 @@ namespace VPB
             UpdateFooterAutoHideState();
             UpdateFooterVamMenuGateState();
             UpdateFooterVrWatchState();
+            UpdateFooterPassthroughState();
+            UpdateFooterLogLevelChip();
             try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
             try { ApplyFooterModeButtonVisibility(); } catch { }
             UpdatePaginationText();
@@ -2542,6 +2580,76 @@ namespace VPB
             UpdateFooterVrWatchState();
         }
 
+        internal void TogglePassthroughMode()
+        {
+            if (VPBConfig.Instance == null) return;
+            if (!XrUtils.IsVrActive()) return;
+            SetPassthroughMode(!VPBConfig.Instance.PassthroughEnabled);
+        }
+
+        internal void SetPassthroughMode(bool on)
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.PassthroughEnabled = on;
+            try { VpbPassthrough.NotifySettingsChanged(); } catch { }
+            try { VPBConfig.Instance.Save(false); } catch { }
+            UpdateFooterPassthroughState();
+            try
+            {
+                InvalidateFooterOverflowLayout();
+                ApplyFooterOverflowLayout(ChromeScale);
+            }
+            catch { }
+            if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+        }
+
+        internal void TogglePassthroughLights()
+        {
+            if (VPBConfig.Instance == null) return;
+            if (!XrUtils.IsVrActive()) return;
+            VPBConfig.Instance.PassthroughLightsEnabled = !VPBConfig.Instance.PassthroughLightsEnabled;
+            if (!VPBConfig.Instance.PassthroughLightsEnabled)
+            {
+                try { VpbPassthroughLights.TeardownIfNeeded(); } catch { }
+            }
+            try { VpbPassthrough.NotifySettingsChanged(); } catch { }
+            try { VPBConfig.Instance.Save(false); } catch { }
+            UpdateFooterPassthroughState();
+            if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+        }
+
+        private void UpdateFooterPassthroughState()
+        {
+            bool isVR = XrUtils.IsVrActive();
+            bool collapsed = false;
+            try { collapsed = _footerOverflowCollapsed != null && _footerOverflowCollapsed.Contains(footerPassthroughToggleBtn); } catch { }
+            bool show = isVR && !collapsed;
+            if (footerPassthroughToggleBtn != null && footerPassthroughToggleBtn.activeSelf != show)
+                footerPassthroughToggleBtn.SetActive(show);
+
+            bool on = VPBConfig.Instance != null && VPBConfig.Instance.PassthroughEnabled;
+            bool lightsCollapsed = false;
+            try { lightsCollapsed = _footerOverflowCollapsed != null && _footerOverflowCollapsed.Contains(footerPassthroughLightsBtn); } catch { }
+            bool showLights = isVR && on && !lightsCollapsed;
+            if (footerPassthroughLightsBtn != null && footerPassthroughLightsBtn.activeSelf != showLights)
+                footerPassthroughLightsBtn.SetActive(showLights);
+
+            if (!isVR || VPBConfig.Instance == null) return;
+
+            if (footerPassthroughToggleBtnImage != null)
+                footerPassthroughToggleBtnImage.color = on ? UI.AccentBlue : GalleryUiColorTokens.ChromeIconWell;
+            if (footerPassthroughToggleIconImage != null)
+            {
+                Sprite target = on ? footerPassthroughToggleOnSprite : footerPassthroughToggleOffSprite;
+                if (target != null) UI.SetIconSprite(footerPassthroughToggleIconImage, target);
+            }
+            if (footerPassthroughLightsBtnImage != null)
+            {
+                bool lightsOn = on && VPBConfig.Instance.PassthroughLightsEnabled;
+                footerPassthroughLightsBtnImage.color = lightsOn ? UI.AccentBlue : GalleryUiColorTokens.ChromeIconWell;
+            }
+        }
+
         private void UpdateFooterVrWatchState()
         {
             bool isVR = XrUtils.IsVrActive();
@@ -2780,6 +2888,8 @@ namespace VPB
             UpdateFooterDockButtonState();
             UpdateFooterAutoHideState();
             try { UpdateFooterVrWatchState(); } catch { }
+            try { UpdateFooterPassthroughState(); } catch { }
+            try { UpdateFooterLogLevelChip(); } catch { }
         }
 
         private void ApplyDockAnchorButtonVisual(
@@ -3514,6 +3624,8 @@ namespace VPB
 
         private void ToggleSideFromRailButton(ContentType type, bool fromLeftRailButton, bool rightClick)
         {
+            if (type == ContentType.Lookapedia)
+                type = ContentType.UserTags;
             if (PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick))
                 ToggleLeft(type);
             else
@@ -3539,6 +3651,8 @@ namespace VPB
             }
             bool hadSettingsPanel = IsSettingsPanelOpen();
             bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
+            if (type == ContentType.Lookapedia)
+                type = ContentType.UserTags;
             // Legacy middle-pane settings only — float Settings stays open with side panes (modeless).
             if (settingsListViewActive)
                 ExitInternalSettingsMode(true);
@@ -3590,7 +3704,7 @@ namespace VPB
             SyncActiveContentTypeFromSidePanels();
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             if (!hasHistorySide && hadHistorySide && titleText != null)
-                titleText.text = currentCategoryTitle;
+                ApplyGalleryTitleText();
 
             bool hasSettingsPanel = IsSettingsPanelOpen();
             if (!hadSettingsPanel && hasSettingsPanel)
@@ -3780,7 +3894,7 @@ namespace VPB
             }
             ApplyMode oldMode = ItemApplyMode;
             ApplyMode newMode = (oldMode == ApplyMode.SingleClick) ? ApplyMode.DoubleClick : ApplyMode.SingleClick;
-            LogUtil.Log("[GalleryPanel] ToggleApplyMode: " + oldMode + " -> " + newMode);
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[GalleryPanel] ToggleApplyMode: " + oldMode + " -> " + newMode);
             ItemApplyMode = newMode;
             UpdateApplyModeButtonState();
             try { RefreshModeAmbientChrome(); } catch { }

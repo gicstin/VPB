@@ -16,7 +16,8 @@ namespace VPB.src.util
     /// </summary>
     public static class LooseVapGenderProbe
     {
-        /// <summary>Matches <see cref="GalleryPanel.AppearanceGender"/> ordering: 0=Unknown, 1=Female, 2=Male, 3=Futa. Futa is currently folded into Male at every classifier call site so the UI surfaces only Female/Male; the enum value is kept for cache compatibility.</summary>
+        /// <summary>Matches <see cref="GalleryPanel.AppearanceGender"/> ordering: 0=Unknown, 1=Female, 2=Male, 3=Futa.
+        /// <see cref="Classify"/> still folds Futa→Male for appearance filters. Atom badges use <see cref="ClassifyStorables"/> and keep Futa.</summary>
         public enum Gender { Unknown = 0, Female = 1, Male = 2, Futa = 3 }
 
         private static readonly Dictionary<string, Gender> s_MemCache =
@@ -109,6 +110,28 @@ namespace VPB.src.util
             return FoldFutaForUi(resolved);
         }
 
+        public static Gender ClassifyStorables(JSONNode node)
+        {
+            if (node == null) return Gender.Unknown;
+            try
+            {
+                JSONArray storables = node["storables"].AsArray;
+                if (storables == null) return Gender.Unknown;
+                for (int i = 0; i < storables.Count; i++)
+                {
+                    JSONNode entry = storables[i];
+                    if (entry == null) continue;
+                    string id = entry["id"];
+                    if (string.IsNullOrEmpty(id) || !string.Equals(id, "geometry", StringComparison.Ordinal)) continue;
+
+                    JSONNode charNode = entry["character"];
+                    return Resolve(charNode != null ? charNode.Value : null, ReadUseFemaleMorphsOnMale(entry["useFemaleMorphsOnMale"]));
+                }
+            }
+            catch { }
+            return Gender.Unknown;
+        }
+
         /// <summary>Apply the resolution rules from gender-findings/03 to a (characterName, flag) pair.</summary>
         public static Gender Resolve(string characterName, bool useFemaleMorphsOnMale)
         {
@@ -121,28 +144,44 @@ namespace VPB.src.util
             {
                 if (JSONExtensions.IsCharacterGenderMapInitComplete()
                     && JSONExtensions.CharacterGenderMap != null
-                    && JSONExtensions.CharacterGenderMap.TryGetValue(name, out string g))
+                    && JSONExtensions.CharacterGenderMap.TryGetValue(name, out string mapped))
                 {
-                    if (string.Equals(g, "Male", StringComparison.OrdinalIgnoreCase)) isMaleFromMap = true;
-                    else if (string.Equals(g, "Female", StringComparison.OrdinalIgnoreCase)) isMaleFromMap = false;
+                    if (string.Equals(mapped, "Male", StringComparison.OrdinalIgnoreCase)) isMaleFromMap = true;
+                    else if (string.Equals(mapped, "Female", StringComparison.OrdinalIgnoreCase)) isMaleFromMap = false;
                 }
             }
             catch { isMaleFromMap = null; }
 
-            // Futa fold: VaM treats Futa as a male-base character (isMale=true). The UI currently surfaces only
-            // Female and Male, so Futa-signalled inputs land in Male here. Keep the cached `Gender.Futa` value
-            // working through ReadCacheFolded so we can revive the third badge later without re-scanning.
-            if (isMaleFromMap.HasValue) return isMaleFromMap.Value ? Gender.Male : Gender.Female;
+            Gender g;
+            if (IsFutaCharacterName(name)) g = Gender.Futa;
+            else if (isMaleFromMap.HasValue) g = isMaleFromMap.Value ? Gender.Male : Gender.Female;
+            else if (StartsWithToken(name, "Female")) g = Gender.Female;
+            else if (StartsWithToken(name, "Male")) g = Gender.Male;
+            else g = Gender.Unknown;
 
-            // 2. Prefix heuristic for packs not installed locally.
-            if (StartsWithToken(name, "Female")) return Gender.Female;
-            if (StartsWithToken(name, "Futa"))   return Gender.Male;
-            if (StartsWithToken(name, "Male"))   return Gender.Male;
-            return Gender.Unknown;
+            if (useFemaleMorphsOnMale && g == Gender.Male) return Gender.Futa;
+            return g;
         }
 
-        /// <summary>Cache rows persisted before the Futa→Male fold may hold gender=3. Fold on read.</summary>
+        public static bool IsFutaCharacterName(string name)
+        {
+            return StartsWithToken((name ?? "").Trim(), "Futa");
+        }
+
         private static Gender FoldFutaForUi(Gender g) { return g == Gender.Futa ? Gender.Male : g; }
+
+        private static bool ReadUseFemaleMorphsOnMale(JSONNode flagNode)
+        {
+            if (flagNode == null) return false;
+            try { if (flagNode.AsBool) return true; } catch { }
+            try
+            {
+                string v = flagNode.Value;
+                return string.Equals(v, "true", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(v, "1", StringComparison.Ordinal);
+            }
+            catch { return false; }
+        }
 
         private static bool StartsWithToken(string name, string token)
         {
@@ -182,12 +221,7 @@ namespace VPB.src.util
                 JSONNode charNode = entry["character"];
                 if (charNode != null) characterName = charNode.Value;
 
-                JSONNode flagNode = entry["useFemaleMorphsOnMale"];
-                if (flagNode != null)
-                {
-                    string v = flagNode.Value;
-                    useFemaleMorphsOnMale = string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
-                }
+                useFemaleMorphsOnMale = ReadUseFemaleMorphsOnMale(entry["useFemaleMorphsOnMale"]);
                 return characterName != null;
             }
             return false;

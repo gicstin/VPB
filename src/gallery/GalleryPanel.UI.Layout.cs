@@ -1342,6 +1342,7 @@ namespace VPB
             int idxPath = -1;
             int idxHistory = -1;
             int idxUserTags = -1;
+            int idxLookFacet = -1;
             int idxSceneImport = -1;
             int idxRemoveMode = -1;
             int idxSave = -1;
@@ -1375,6 +1376,14 @@ namespace VPB
                     {
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == utGo);
                         if (i >= 0) idxUserTags = i;
+                    }
+
+                    if (rightLookFacetSideBtnGO != null || leftLookFacetSideBtnGO != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && (
+                            (rightLookFacetSideBtnGO != null && rt.gameObject == rightLookFacetSideBtnGO)
+                            || (leftLookFacetSideBtnGO != null && rt.gameObject == leftLookFacetSideBtnGO)));
+                        if (i >= 0) idxLookFacet = i;
                     }
 
                     GameObject impGo = rightSceneImportSideBtn != null ? rightSceneImportSideBtn : leftSceneImportSideBtn;
@@ -1420,6 +1429,7 @@ namespace VPB
                 new SideButtonLayoutEntry(idxUserTags, 0, showSceneImport ? 0 : zone),
                 new SideButtonLayoutEntry(idxCategory, 0, 0),
                 new SideButtonLayoutEntry(idxCreator, 0, 0),
+                new SideButtonLayoutEntry(idxLookFacet, 0, 0),
                 new SideButtonLayoutEntry(idxPath, 0, 0),
                 new SideButtonLayoutEntry(idxHistory, 0, 0),
                 new SideButtonLayoutEntry(idxRemoveMode, 0, zone),
@@ -1865,15 +1875,15 @@ namespace VPB
             return false;
         }
 
+        private readonly HashSet<string> _sideContextClothingScratch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         private void UpdateSideContextActions()
         {
             RefreshSceneImportSideButtonVisibility();
 
             string title = currentCategoryTitle ?? "";
-            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isClothing, isHair, isScene;
+            GetRemoveCategoryFlags(out isClothing, out isHair, out isScene);
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
             bool showSave = true;
 
@@ -1899,6 +1909,7 @@ namespace VPB
             {
                 try { EnsureRemoveSiderailOpenForCurrentCategory(); } catch { }
             }
+            try { SyncRemoveRailButtonChrome(); } catch { }
 
             // Update arrow indicators immediately (not only after submenu hover).
             bool anyClothingChanged = false;
@@ -1913,26 +1924,27 @@ namespace VPB
                     if (atoms != null) foreach (Atom tgt in atoms)
                     {
                         if (tgt == null || !SceneUtils.IsPersonLikeAtom(tgt)) continue;
-                        HashSet<string> currentUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        // Polling is frequent; only changed snapshots need their own set.
+                        HashSet<string> currentUids = _sideContextClothingScratch;
+                        currentUids.Clear();
                         JSONStorable geometry = tgt.GetStorableByID("geometry");
                         if (geometry != null)
                         {
+                            bool canRestorePreview = (!string.IsNullOrEmpty(previewRemoveClothingAtomUid)
+                                && !string.IsNullOrEmpty(previewRemoveClothingItemUid)
+                                && string.Equals(previewRemoveClothingAtomUid, tgt.uid, StringComparison.OrdinalIgnoreCase)
+                                && previewRemoveClothingPrevGeometryVal.HasValue
+                                && previewRemoveClothingPrevGeometryVal.Value);
                             foreach (var name in geometry.GetBoolParamNames())
                             {
                                 if (string.IsNullOrEmpty(name) || !name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                                string clothingUid = name.Substring(9);
-                                if (!clothingUid.Contains("/")) continue;
-
-                                bool isPreviewItem = (!string.IsNullOrEmpty(previewRemoveClothingAtomUid)
-                                    && !string.IsNullOrEmpty(previewRemoveClothingItemUid)
-                                    && string.Equals(previewRemoveClothingAtomUid, tgt.uid, StringComparison.OrdinalIgnoreCase)
-                                    && string.Equals(previewRemoveClothingItemUid, clothingUid, StringComparison.OrdinalIgnoreCase)
-                                    && previewRemoveClothingPrevGeometryVal.HasValue
-                                    && previewRemoveClothingPrevGeometryVal.Value);
-
+                                if (name.IndexOf('/', 9) < 0) continue;
                                 JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
-                                bool isActive = jsb != null && (jsb.val || isPreviewItem);
-                                if (isActive)
+                                if (jsb == null) continue;
+                                bool isActive = jsb.val;
+                                if (!isActive && !canRestorePreview) continue;
+                                string clothingUid = name.Substring(9);
+                                if (isActive || (canRestorePreview && string.Equals(previewRemoveClothingItemUid, clothingUid, StringComparison.OrdinalIgnoreCase)))
                                 {
                                     count++;
                                     currentUids.Add(clothingUid);
@@ -1947,20 +1959,17 @@ namespace VPB
                         }
 
                         // Detect changes for auto-refresh.
-                        if (!_lastActiveClothingUids.TryGetValue(tgt.uid, out var lastUids))
-                        {
-                            lastUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        }
-
-                        if (!currentUids.SetEquals(lastUids))
+                        bool hadSnapshot = _lastActiveClothingUids.TryGetValue(tgt.uid, out var lastUids);
+                        if (hadSnapshot ? !currentUids.SetEquals(lastUids) : currentUids.Count > 0)
                         {
                             anyClothingChanged = true;
-                            _lastActiveClothingUids[tgt.uid] = currentUids;
+                            _lastActiveClothingUids[tgt.uid] = new HashSet<string>(currentUids, StringComparer.OrdinalIgnoreCase);
                         }
                     }
                 }
                 catch { }
 
+                _sideContextClothingScratch.Clear();
                 if (isClothing) UpdateRemoveClothingButtonLabels(count);
 
                 // Auto-refresh the side tab if the list changed and the tab is open.
@@ -2199,6 +2208,7 @@ namespace VPB
             GameObject cre = isLeft
                 ? (leftCreatorBtnImage != null ? leftCreatorBtnImage.gameObject : null)
                 : (rightCreatorBtnImage != null ? rightCreatorBtnImage.gameObject : null);
+            GameObject looks = isLeft ? leftLookFacetSideBtnGO : rightLookFacetSideBtnGO;
             GameObject path = isLeft
                 ? (leftPathBtnImage != null ? leftPathBtnImage.gameObject : null)
                 : (rightPathBtnImage != null ? rightPathBtnImage.gameObject : null);
@@ -2210,6 +2220,7 @@ namespace VPB
 
             SetSideRailFacetSelected(cat, active == ContentType.Category, ColorCategory);
             SetSideRailFacetSelected(cre, active == ContentType.Creator, ColorCreator);
+            SetSideRailFacetSelected(looks, active == ContentType.Lookapedia, ColorLooksLike);
             SetSideRailFacetSelected(path, active == ContentType.Path, ColorPath);
             SetSideRailFacetSelected(hist, active == ContentType.History, ColorHistoryAccent);
             SetSideRailFacetSelected(tags,

@@ -34,6 +34,7 @@ namespace VPB
 
         private string jsonPath;
         private Dictionary<string, int> ratings = new Dictionary<string, int>();
+        private Dictionary<string, int> packagePrefixRatings;
         private readonly object lockObj = new object();
         private bool hasLoadedSuccessfully = false;
 
@@ -327,6 +328,7 @@ namespace VPB
             {
                 if (ratings.TryGetValue(uid, out int existing) && existing > 0) return false;
                 ratings[uid] = rating;
+                packagePrefixRatings = null;
                 return true;
             }
         }
@@ -337,6 +339,7 @@ namespace VPB
 
             lock (lockObj)
             {
+                packagePrefixRatings = null;
                 ratings.Clear(); // Always clear before loading fresh from JSON
                 string backupPath = jsonPath + ".bak";
                 bool mainExists = File.Exists(jsonPath);
@@ -370,6 +373,7 @@ namespace VPB
                 }
 
                 ratings.Clear();
+                packagePrefixRatings = null;
                 hasLoadedSuccessfully = true; // Even if empty, we start fresh
             }
         }
@@ -399,7 +403,10 @@ namespace VPB
                     foreach (var item in data.ratings)
                     {
                         if (!string.IsNullOrEmpty(item.uid))
+                        {
                             ratings[item.uid] = item.rating;
+                            packagePrefixRatings = null;
+                        }
                     }
                     return true;
                 }
@@ -428,7 +435,14 @@ namespace VPB
                             if (length < 0 || fs.Position + length > fs.Length) break;
                             byte[] bytes = reader.ReadBytes(length);
                             string uid = Encoding.UTF8.GetString(bytes);
-                            if (rating > 0) ratings[uid] = rating;
+                            if (rating > 0)
+                            {
+                                lock (lockObj)
+                                {
+                                    ratings[uid] = rating;
+                                    packagePrefixRatings = null;
+                                }
+                            }
                         }
                         catch { break; }
                     }
@@ -453,16 +467,43 @@ namespace VPB
             {
                 try
                 {
-                    var data = new SerializableRatings();
-                    foreach (var kvp in ratings)
-                    {
-                        data.ratings.Add(new SerializableRating { uid = kvp.Key, rating = kvp.Value });
-                    }
-
                     string json;
                     lock (LogUtil.JsonLock)
                     {
-                        json = JsonConvert.SerializeObject(data, Formatting.Indented);
+                        if (JsonConvert.DefaultSettings == null)
+                        {
+                            using (var output = new StringWriter(System.Globalization.CultureInfo.InvariantCulture))
+                            {
+                                using (var writer = new JsonTextWriter(output))
+                                {
+                                    writer.Formatting = Formatting.Indented;
+                                    writer.WriteStartObject();
+                                    writer.WritePropertyName("ratings");
+                                    writer.WriteStartArray();
+                                    foreach (var kvp in ratings)
+                                    {
+                                        writer.WriteStartObject();
+                                        writer.WritePropertyName("uid");
+                                        writer.WriteValue(kvp.Key);
+                                        writer.WritePropertyName("rating");
+                                        writer.WriteValue(kvp.Value);
+                                        writer.WriteEndObject();
+                                    }
+                                    writer.WriteEndArray();
+                                    writer.WriteEndObject();
+                                }
+                                json = output.ToString();
+                            }
+                        }
+                        else
+                        {
+                            var data = new SerializableRatings();
+                            foreach (var kvp in ratings)
+                            {
+                                data.ratings.Add(new SerializableRating { uid = kvp.Key, rating = kvp.Value });
+                            }
+                            json = JsonConvert.SerializeObject(data, Formatting.Indented);
+                        }
                     }
                     if (string.IsNullOrEmpty(json))
                     {
@@ -566,13 +607,36 @@ namespace VPB
             if (!string.IsNullOrEmpty(pkg.Uid))
             {
                 best = Math.Max(best, GetRating(pkg.Uid));
-                string prefix = pkg.Uid + ":/";
                 lock (lockObj)
                 {
-                    foreach (var kvp in ratings)
+                    if (pkg.Uid.IndexOf(":/", StringComparison.Ordinal) >= 0)
                     {
-                        if (kvp.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                            best = Math.Max(best, kvp.Value);
+                        string prefix = pkg.Uid + ":/";
+                        foreach (var kvp in ratings)
+                        {
+                            if (kvp.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                                best = Math.Max(best, kvp.Value);
+                        }
+                    }
+                    else
+                    {
+                        if (packagePrefixRatings == null)
+                        {
+                            var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var kvp in ratings)
+                            {
+                                int separator = kvp.Key.IndexOf(":/", StringComparison.Ordinal);
+                                if (separator <= 0) continue;
+                                string packageUid = kvp.Key.Substring(0, separator);
+                                int current;
+                                if (!index.TryGetValue(packageUid, out current) || kvp.Value > current)
+                                    index[packageUid] = kvp.Value;
+                            }
+                            packagePrefixRatings = index;
+                        }
+                        int prefixRating;
+                        if (packagePrefixRatings.TryGetValue(pkg.Uid, out prefixRating))
+                            best = Math.Max(best, prefixRating);
                     }
                 }
             }
@@ -610,6 +674,7 @@ namespace VPB
 
                 if (rating > 0) ratings[uid] = rating;
                 else ratings.Remove(uid);
+                packagePrefixRatings = null;
             }
 
             Save();

@@ -401,33 +401,35 @@ namespace VPB
             try { NativeTextureOnDemandCache.RequestCancel(); } catch { }
         }
 
-        private static int s_QuitShutdownDone;
+        /// <summary>
+        /// Baseline quit stoppers for singletons that have no natural start hook to self-register from.
+        /// Everything else enrolls with <see cref="VpbShutdown.Register"/> when it starts.
+        /// </summary>
+        internal static void RegisterShutdownHooks()
+        {
+            VpbShutdown.Register("progress-service", () =>
+            {
+                try { RequestCancelActiveJob(); } catch { }
+                try
+                {
+                    if (ImageLoadingMgr.singleton != null)
+                    {
+                        try { ImageLoadingMgr.singleton.CancelBulkOperation(); } catch { }
+                        try { ImageLoadingMgr.singleton.PrepareForSceneLoad(false); } catch { }
+                    }
+                }
+                catch { }
+                try { ClearBlocking(); } catch { }
+            });
+        }
 
         /// <summary>
-        /// Deterministic process-exit teardown. Clears blocking chrome, cancels workers,
-        /// destroys OS heartbeat message pump, and unblocks companion named-pipe wait
-        /// so VaM can exit without Task Manager.
+        /// Deterministic process-exit teardown. Delegates to the single shutdown gate so every
+        /// registered subsystem stops, whether or not this class knows it exists.
         /// </summary>
         internal static void ShutdownForQuit()
         {
-            if (System.Threading.Interlocked.Exchange(ref s_QuitShutdownDone, 1) != 0)
-                return;
-
-            try { RequestCancelActiveJob(); } catch { }
-            try
-            {
-                if (ImageLoadingMgr.singleton != null)
-                {
-                    try { ImageLoadingMgr.singleton.CancelBulkOperation(); } catch { }
-                    try { ImageLoadingMgr.singleton.PrepareForSceneLoad(false); } catch { }
-                }
-            }
-            catch { }
-            try { OnDemandZstdWriteQueue.RequestCancel(); } catch { }
-            try { ZstdCompressor.KillActiveProcesses(); } catch { }
-            try { VpbCompanionServer.Stop(); } catch { }
-            try { ClearBlocking(); } catch { }
-            try { VpbOsBusyHeartbeat.Shutdown(); } catch { }
+            VpbShutdown.Begin();
         }
 
         internal static void BeginBulkZstd(bool decompress)

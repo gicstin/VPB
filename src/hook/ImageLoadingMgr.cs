@@ -23,7 +23,6 @@ namespace VPB
         public static bool currentProcessingIsThumbnail;
         public static ImageLoaderThreaded.QueuedImage currentProcessingQI;
         
-        private const int AlphaCacheVersion = 3;
         /// <summary>Max decompressed bytes for zstd serve on calling thread (LoadImage immediate, etc.).</summary>
         private const int MaxSyncDecompressedPayloadBytes = 8 * 1024 * 1024;
         /// <summary>Sized for an 8K RGBA full mip chain (8192² × 4 × 4/3 ≈ 341 MiB); 512 MiB is the next round bucket.</summary>
@@ -40,6 +39,12 @@ namespace VPB
         private const int MaxActiveTexturePayloadWorkers = 2;
         private int activeTexturePayloadWorkers;
         private Coroutine mainThreadTextureCreatePump;
+        private DecompressedData activeMainThreadTextureCreate;
+        private bool consumingMainThreadTextureCreate;
+        private readonly Queue<Action> pendingMainThreadActions = new Queue<Action>();
+        private int mainThreadId;
+        private volatile bool stopping;
+        private volatile bool suspended;
 
         private int CurrentLoadGeneration
         {
@@ -48,7 +53,7 @@ namespace VPB
 
         private bool IsLoadGenerationCurrent(int generation)
         {
-            return generation == CurrentLoadGeneration;
+            return !stopping && !suspended && !VpbShutdown.IsQuitting && generation == CurrentLoadGeneration;
         }
 
         private bool TryAcquireTexturePayloadWorker(int generation)
@@ -69,10 +74,89 @@ namespace VPB
             catch { return false; }
         }
 
+        private bool TryQueueTexturePayloadWorker(WaitCallback callback, int generation)
+        {
+            if (callback == null || !TryAcquireTexturePayloadWorker(generation)) return false;
+            // Admit before dispatch so overload uses the caller's fallback without queuing rejected workers.
+            if (TryQueueBackground(state =>
+            {
+                try
+                {
+                    if (IsLoadGenerationCurrent(generation)) callback(state);
+                }
+                finally { Interlocked.Decrement(ref activeTexturePayloadWorkers); }
+            })) return true;
+            Interlocked.Decrement(ref activeTexturePayloadWorkers);
+            return false;
+        }
+
         private void Awake()
         {
+            mainThreadId = Thread.CurrentThread.ManagedThreadId;
             singleton = this;
             System.Threading.ThreadPool.QueueUserWorkItem(_ => CleanStaleAlphaCaches());
+        }
+
+        private bool QueueIfOffMainThread(Action action, int generation)
+        {
+            if (Thread.CurrentThread.ManagedThreadId == mainThreadId) return false;
+            lock (pendingMainThreadLock)
+            {
+                if (IsLoadGenerationCurrent(generation))
+                    pendingMainThreadActions.Enqueue(() =>
+                    {
+                        if (IsLoadGenerationCurrent(generation)) action();
+                    });
+            }
+            return true;
+        }
+
+        private void Update()
+        {
+            if (stopping || VpbShutdown.IsQuitting) return;
+            // Worker completions may request retries or native fallbacks, which touch Unity state.
+            for (int i = 0; i < MaxPendingMainThreadTextureCreates; i++)
+            {
+                Action action;
+                lock (pendingMainThreadLock)
+                {
+                    if (pendingMainThreadActions.Count == 0) break;
+                    action = pendingMainThreadActions.Dequeue();
+                }
+                try { action(); }
+                catch (Exception ex) { LogUtil.LogError("Texture main-thread completion failed: " + ex); }
+            }
+
+            if (mainThreadTextureCreatePump != null) return;
+            lock (pendingMainThreadLock)
+            {
+                if (pendingMainThreadTextureCreates.Count == 0) return;
+            }
+            mainThreadTextureCreatePump = StartCoroutine(PumpCreateTextureOnMainThread());
+        }
+
+        private void OnDisable()
+        {
+            suspended = true;
+            CancelPendingTextureLoads();
+        }
+
+        private void OnEnable()
+        {
+            suspended = false;
+        }
+
+        private void OnDestroy()
+        {
+            stopping = true;
+            CancelPendingTextureLoads();
+            if (object.ReferenceEquals(singleton, this)) singleton = null;
+        }
+
+        private void OnApplicationQuit()
+        {
+            stopping = true;
+            CancelPendingTextureLoads();
         }
 
         private static void CleanStaleAlphaCaches()
@@ -82,7 +166,7 @@ namespace VPB
                 string zstdDir = VamHookPlugin.GetCacheDir();
                 if (string.IsNullOrEmpty(zstdDir) || !Directory.Exists(zstdDir)) return;
 
-                string sentinel = Path.Combine(zstdDir, ".vpb_alpha_v" + AlphaCacheVersion);
+                string sentinel = Path.Combine(zstdDir, ".vpb_texcache_v" + TextureUtil.TextureCacheVersion);
                 if (File.Exists(sentinel)) return;
 
                 string[] metaFiles;
@@ -94,14 +178,12 @@ namespace VPB
                 {
                     try
                     {
-                        var meta = SimpleJSON.JSON.Parse(File.ReadAllText(metaFile));
-                        if (meta == null || meta["vpbVer"].AsInt < AlphaCacheVersion)
-                        {
-                            string dataFile = metaFile.Substring(0, metaFile.Length - 4);
-                            try { if (File.Exists(dataFile)) File.Delete(dataFile); } catch { }
-                            try { File.Delete(metaFile); } catch { }
-                            deleted++;
-                        }
+                        string dataFile = metaFile.Substring(0, metaFile.Length - 4);
+                        if (IsZstdWritePathBusy(dataFile)) continue;
+                        if (!TextureUtil.CacheEntryNeedsSourceRebuild(dataFile)) continue;
+                        try { if (File.Exists(dataFile)) File.Delete(dataFile); } catch { }
+                        try { File.Delete(metaFile); } catch { }
+                        deleted++;
                     }
                     catch { }
                 }
@@ -109,7 +191,7 @@ namespace VPB
                 if (deleted > 0)
                     LogUtil.Log("[VPB] Cleaned " + deleted + " stale alpha cache file(s) from previous version.");
 
-                File.WriteAllText(sentinel, AlphaCacheVersion.ToString());
+                File.WriteAllText(sentinel, TextureUtil.TextureCacheVersion.ToString());
             }
             catch (Exception ex)
             {
@@ -131,6 +213,13 @@ namespace VPB
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
         private readonly object textureCacheLock = new object();
+        private sealed class PendingTextureHandoff
+        {
+            public string CacheKey;
+            public int Callbacks;
+        }
+        // Delayed consumers still need VaM ownership transfer after reuse-cache eviction.
+        private readonly Dictionary<Texture2D, PendingTextureHandoff> pendingTextureHandoffs = new Dictionary<Texture2D, PendingTextureHandoff>();
         private readonly object inflightLock = new object();
         private readonly HashSet<string> quarantinedZstdPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly object quarantineLock = new object();
@@ -153,6 +242,7 @@ namespace VPB
         {
             public string CacheKey;
             public byte[] Data;
+            public long PendingCreateBytes = -1;
             public MetadataEntry Meta;
             public ImageLoaderThreaded.QueuedImage OriginalQI;
             public int Generation;
@@ -169,6 +259,8 @@ namespace VPB
             public int MipCount;
             /// <summary><see cref="TextureUtil.MipStorageBase"/> or <see cref="TextureUtil.MipStorageFull"/>.</summary>
             public string MipStorage;
+
+            public int VpbVer;
         }
 
         private class DiskCachePayload
@@ -462,10 +554,7 @@ namespace VPB
                 {
                     qi.tex = cand.tex;
                     RegisterTexture(cacheKey, cand.tex);
-                    if (Messager.singleton != null)
-                        Messager.singleton.StartCoroutine(DelayDoCallback(qi, generation));
-                    else if (IsLoadGenerationCurrent(generation))
-                        DoCallback(qi);
+                    ScheduleTextureCallback(qi, cacheKey, generation);
                     return true;
                 }
             }
@@ -475,11 +564,9 @@ namespace VPB
 
         private void ScheduleRetryDiskCacheLoad(string cacheKey, string cachePath, ImageLoaderThreaded.QueuedImage qi, int generation)
         {
+            if (QueueIfOffMainThread(() => ScheduleRetryDiskCacheLoad(cacheKey, cachePath, qi, generation), generation)) return;
             if (!IsLoadGenerationCurrent(generation)) return;
-            if (Messager.singleton != null)
-                Messager.singleton.StartCoroutine(RetryDiskCacheLoadCoroutine(cacheKey, cachePath, qi, generation));
-            else if (!TryQueueBackground(_ => LoadAndDecompressBackground(cacheKey, cachePath, qi, generation)))
-                FallbackInflightToNative(cacheKey, qi, generation);
+            StartCoroutine(RetryDiskCacheLoadCoroutine(cacheKey, cachePath, qi, generation));
         }
 
         private IEnumerator RetryDiskCacheLoadCoroutine(string cacheKey, string cachePath, ImageLoaderThreaded.QueuedImage qi, int generation)
@@ -496,14 +583,20 @@ namespace VPB
 
             lock (inflightLock)
             {
-                if (inflightKeys.Contains(cacheKey)) yield break;
+                if (inflightKeys.Contains(cacheKey))
+                {
+                    AddInflightWaiter(cacheKey, qi);
+                    yield break;
+                }
                 inflightKeys.Add(cacheKey);
             }
-            LoadAndDecompressBackground(cacheKey, cachePath, qi, generation);
+            if (!TryQueueTexturePayloadWorker(_ => LoadAndDecompressBackground(cacheKey, cachePath, qi, generation), generation))
+                FallbackInflightToNative(cacheKey, qi, generation);
         }
 
         private void HandleBusyOrTransientDiskCacheFailure(string cacheKey, string diskPath, ImageLoaderThreaded.QueuedImage qi, DiskCacheFailureKind kind, int generation)
         {
+            if (QueueIfOffMainThread(() => HandleBusyOrTransientDiskCacheFailure(cacheKey, diskPath, qi, kind, generation), generation)) return;
             if (!IsLoadGenerationCurrent(generation)) return;
             lock (inflightLock)
             {
@@ -642,12 +735,13 @@ namespace VPB
                 qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength);
         }
 
-        private void CollectInflightTargets(string cacheKey, ImageLoaderThreaded.QueuedImage primaryQi, List<ImageLoaderThreaded.QueuedImage> targets)
+        private void CollectInflightTargets(string cacheKey, ImageLoaderThreaded.QueuedImage primaryQi, List<ImageLoaderThreaded.QueuedImage> targets, int generation)
         {
             if (targets == null) return;
-            if (primaryQi != null) targets.Add(primaryQi);
             lock (inflightLock)
             {
+                if (!IsLoadGenerationCurrent(generation)) return;
+                if (primaryQi != null) targets.Add(primaryQi);
                 inflightKeys.Remove(cacheKey);
                 if (inflightWaiters.TryGetValue(cacheKey, out var waiters))
                 {
@@ -656,6 +750,18 @@ namespace VPB
                     inflightWaiters.Remove(cacheKey);
                 }
             }
+        }
+
+        private void AddInflightWaiter(string cacheKey, ImageLoaderThreaded.QueuedImage qi)
+        {
+            // Callers hold inflightLock so recovery joins the same completion as ordinary requests.
+            List<ImageLoaderThreaded.QueuedImage> waiters;
+            if (!inflightWaiters.TryGetValue(cacheKey, out waiters))
+            {
+                waiters = new List<ImageLoaderThreaded.QueuedImage>();
+                inflightWaiters[cacheKey] = waiters;
+            }
+            waiters.Add(qi);
         }
 
         private void FailDiskCacheLoadAndFallback(string cacheKey, string diskPath, ImageLoaderThreaded.QueuedImage qi, DiskCacheFailureKind kind, int generation)
@@ -668,7 +774,7 @@ namespace VPB
             InvalidateMetadataCacheForDiskPath(diskPath);
 
             var targets = new List<ImageLoaderThreaded.QueuedImage>();
-            CollectInflightTargets(cacheKey, qi, targets);
+            CollectInflightTargets(cacheKey, qi, targets, generation);
             for (int i = 0; i < targets.Count; i++)
                 ScheduleVaMLoadFallback(targets[i], kind, generation);
         }
@@ -686,11 +792,17 @@ namespace VPB
                 {
                     lock (inflightLock)
                     {
-                        if (inflightKeys.Contains(cacheKey)) return;
+                        if (!IsLoadGenerationCurrent(generation)) return;
+                        if (inflightKeys.Contains(cacheKey))
+                        {
+                            AddInflightWaiter(cacheKey, qi);
+                            return;
+                        }
                         inflightKeys.Add(cacheKey);
                     }
-                    if (TryQueueBackground(_ => LoadVaMNativeDiskCacheBackground(cacheKey, nativeDiskPath, qi, generation))) return;
-                    lock (inflightLock) inflightKeys.Remove(cacheKey);
+                    if (TryQueueTexturePayloadWorker(_ => LoadVaMNativeDiskCacheBackground(cacheKey, nativeDiskPath, qi, generation), generation)) return;
+                    FallbackInflightToNative(cacheKey, qi, generation);
+                    return;
                 }
             }
 
@@ -699,21 +811,19 @@ namespace VPB
 
         private void EnqueueVaMImageLoadOnMainThread(ImageLoaderThreaded.QueuedImage qi, int generation)
         {
-            if (!IsLoadGenerationCurrent(generation)) return;
-            if (Messager.singleton != null)
-                Messager.singleton.StartCoroutine(RequeueVaMImageLoadCoroutine(qi, generation));
-            else
-                SuperControllerHook.RequeueVaMImageLoad(qi);
+            if (QueueIfOffMainThread(() => EnqueueVaMImageLoadOnMainThread(qi, generation), generation)) return;
+            if (qi == null || !IsLoadGenerationCurrent(generation)) return;
+            StartCoroutine(RequeueVaMImageLoadCoroutine(qi, generation));
         }
 
         private IEnumerator RequeueVaMImageLoadCoroutine(ImageLoaderThreaded.QueuedImage qi, int generation)
         {
-            while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
+            while (!qi.cancel && (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive()))
             {
                 if (!IsLoadGenerationCurrent(generation)) yield break;
                 yield return null;
             }
-            yield return waitForEndOfFrame;
+            if (!qi.cancel) yield return waitForEndOfFrame;
             if (!IsLoadGenerationCurrent(generation)) yield break;
             SuperControllerHook.RequeueVaMImageLoad(qi);
         }
@@ -805,6 +915,63 @@ namespace VPB
             }
 
             return false;
+        }
+
+        private static bool IsStaleVersionMeta(MetadataEntry meta)
+        {
+            if (meta == null) return false;
+            if (string.IsNullOrEmpty(meta.MipStorage)) return false;
+            if (meta.VpbVer >= TextureUtil.TextureCacheVersion) return false;
+            return !TextureUtil.IsMipMetaRepairableOnServe(meta.CreateMipMaps, meta.MipStorage, meta.Width, meta.Height, meta.Format);
+        }
+
+        private bool TryPurgeStaleVersionCache(string cachePath, MetadataEntry meta)
+        {
+            if (string.IsNullOrEmpty(cachePath) || !IsStaleVersionMeta(meta)) return false;
+            if (IsZstdCachePathBusy(cachePath)) return false;
+
+            lock (metadataCacheLock)
+            {
+                metadataCache.Remove(cachePath);
+            }
+
+            lock (decompressedCacheLock)
+            {
+                CachedDecompressed entry;
+                if (decompressedCache.TryGetValue(cachePath, out entry))
+                {
+                    currentMemoryUsage -= entry.Data != null ? entry.Data.Length : 0;
+                    if (currentMemoryUsage < 0) currentMemoryUsage = 0;
+                    if (entry.LRUNode != null) lruOrder.Remove(entry.LRUNode);
+                    decompressedCache.Remove(cachePath);
+                }
+            }
+
+            bool removed = false;
+            try { if (File.Exists(cachePath)) { File.Delete(cachePath); removed = true; } } catch { }
+            try
+            {
+                string metaPath = cachePath + "meta";
+                if (File.Exists(metaPath)) { File.Delete(metaPath); removed = true; }
+            }
+            catch { }
+
+            if (removed) LogStaleVersionPurge(cachePath);
+            return true;
+        }
+
+        private static int staleVersionPurges;
+        private static int staleVersionPurgeLogged;
+
+        private static void LogStaleVersionPurge(string cachePath)
+        {
+            int n = Interlocked.Increment(ref staleVersionPurges);
+            if (n != 1 && n % 1000 != 0) return;
+            if (Interlocked.Exchange(ref staleVersionPurgeLogged, n) == n) return;
+            LogUtil.Log("[VPB] One-time cache migration to v" + TextureUtil.TextureCacheVersion
+                + ": dropped " + n + " block-compressed entr(ies) whose mip chain cannot be rebuilt in place."
+                + " Run Compress Cache to convert the rest in bulk instead of during scene loads. Latest: "
+                + Path.GetFileName(cachePath ?? string.Empty));
         }
 
         private static void TryUpgradeDiskCacheMetaIfStale(string cachePath, MetadataEntry resolvedMeta, int rawLength, bool queueCreateMipMaps)
@@ -1114,10 +1281,19 @@ namespace VPB
             Interlocked.Increment(ref loadGeneration);
             lock (pendingMainThreadLock)
             {
-                pendingMainThreadTextureCreates.Clear();
-                pendingMainThreadTextureCreateCount = 0;
-                pendingMainThreadTextureCreateBytes = 0;
+                pendingMainThreadActions.Clear();
+                while (pendingMainThreadTextureCreates.Count > 0)
+                    ReleaseTextureCreatePayloadLocked(pendingMainThreadTextureCreates.Dequeue());
+                // Reentrant cancellation must not discard bytes still used by the synchronous factory.
+                if (!consumingMainThreadTextureCreate)
+                    ReleaseActiveTextureCreateLocked(activeMainThreadTextureCreate);
             }
+            if (mainThreadTextureCreatePump != null)
+            {
+                StopCoroutine(mainThreadTextureCreatePump);
+                mainThreadTextureCreatePump = null;
+            }
+            pendingTextureHandoffs.Clear();
             lock (inflightLock)
             {
                 inflightKeys.Clear();
@@ -1127,12 +1303,15 @@ namespace VPB
         
         private MetadataEntry FastLoadMetadata(string cachePath)
         {
+            MetadataEntry cachedEntry = null;
             lock (metadataCacheLock)
             {
-                if (metadataCache.TryGetValue(cachePath, out var cached))
-                {
-                    return cached;
-                }
+                metadataCache.TryGetValue(cachePath, out cachedEntry);
+            }
+            if (cachedEntry != null)
+            {
+                if (!IsStaleVersionMeta(cachedEntry)) return cachedEntry;
+                if (TryPurgeStaleVersionCache(cachePath, cachedEntry)) return null;
             }
 
             if (IsZstdCachePathBusy(cachePath))
@@ -1170,9 +1349,11 @@ namespace VPB
                 bool createMipMaps = false;
                 int mipCount = 0;
                 string mipStorage = null;
+                int vpbVer = 0;
                 try { createMipMaps = metaJson["createMipMaps"].AsBool; } catch { }
                 try { mipCount = metaJson["mipCount"].AsInt; } catch { }
                 try { mipStorage = metaJson["mipStorage"].Value; } catch { }
+                try { vpbVer = metaJson["vpbVer"].AsInt; } catch { }
 
                 var entry = new MetadataEntry
                 {
@@ -1183,8 +1364,11 @@ namespace VPB
                     IsReadable = isRead,
                     CreateMipMaps = createMipMaps,
                     MipCount = mipCount > 0 ? mipCount : TextureUtil.CountMipLevels(w, h),
-                    MipStorage = mipStorage
+                    MipStorage = mipStorage,
+                    VpbVer = vpbVer
                 };
+
+                if (TryPurgeStaleVersionCache(cachePath, entry)) return null;
 
                 lock (metadataCacheLock)
                 {
@@ -1344,10 +1528,16 @@ namespace VPB
             if (removed) TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
         }
 
-        internal bool TryGetTextureCachePath(Texture2D tex, out string path)
+        internal bool TryGetTextureOwnershipPath(Texture2D tex, out string path)
         {
             path = null;
             if (tex == null) return false;
+            PendingTextureHandoff handoff;
+            if (pendingTextureHandoffs.TryGetValue(tex, out handoff))
+            {
+                path = handoff.CacheKey;
+                return true;
+            }
             lock (textureCacheLock)
             {
                 foreach (var item in textureCache)
@@ -1362,9 +1552,17 @@ namespace VPB
             return false;
         }
 
-        internal void ReleaseTextureCacheReference(string path)
+        internal void ReleaseTextureCacheReference(string path, Texture2D tex)
         {
-            RemoveTextureFromCache(path);
+            bool removed = false;
+            lock (textureCacheLock)
+            {
+                CachedTexture entry;
+                // A delayed handoff must not evict a replacement registered under the same key.
+                if (textureCache.TryGetValue(path, out entry) && object.ReferenceEquals(entry.Texture, tex))
+                    removed = RemoveTextureFromCacheLocked(path);
+            }
+            if (removed) TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
         }
 
         private void EvictTextureCacheIfNeededLocked()
@@ -1506,25 +1704,64 @@ namespace VPB
             }
         }
 
-        IEnumerator DelayDoCallback(ImageLoaderThreaded.QueuedImage qi, int generation)
+        private void ScheduleTextureCallback(ImageLoaderThreaded.QueuedImage qi, string cacheKey, int generation)
         {
-            while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
+            if (qi == null || qi.cancel || !IsLoadGenerationCurrent(generation)) return;
+            Texture2D tex = qi.tex;
+            PendingTextureHandoff handoff = null;
+            if (tex != null)
             {
-                if (!IsLoadGenerationCurrent(generation)) yield break;
-                yield return null;
+                if (!pendingTextureHandoffs.TryGetValue(tex, out handoff))
+                {
+                    handoff = new PendingTextureHandoff { CacheKey = cacheKey };
+                    pendingTextureHandoffs.Add(tex, handoff);
+                }
+                handoff.Callbacks++;
             }
-            yield return waitForEndOfFrame;
-            if (!IsLoadGenerationCurrent(generation)) yield break;
-            // MaterialOptions: one EOF is enough outside scene load; second EOF widens the
-            // window where late material reconnect can overwrite the custom slot with defaults.
-            if (!IsMaterialOptionsCustomCallback(qi))
+            try { StartCoroutine(DelayDoCallback(qi, generation, tex, handoff)); }
+            catch
+            {
+                ReleasePendingTextureHandoff(tex, handoff);
+                throw;
+            }
+        }
+
+        private void ReleasePendingTextureHandoff(Texture2D tex, PendingTextureHandoff handoff)
+        {
+            if (handoff == null) return;
+            PendingTextureHandoff current;
+            // An old generation's finally must not release a new handoff for the same texture.
+            if (pendingTextureHandoffs.TryGetValue(tex, out current) && object.ReferenceEquals(current, handoff)
+                && --handoff.Callbacks == 0)
+                pendingTextureHandoffs.Remove(tex);
+        }
+
+        private IEnumerator DelayDoCallback(ImageLoaderThreaded.QueuedImage qi, int generation, Texture2D tex, PendingTextureHandoff handoff)
+        {
+            try
+            {
+                while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
+                {
+                    if (qi.cancel || !IsLoadGenerationCurrent(generation)) yield break;
+                    yield return null;
+                }
                 yield return waitForEndOfFrame;
-            if (!IsLoadGenerationCurrent(generation)) yield break;
-            DoCallback(qi);
+                if (qi.cancel || !IsLoadGenerationCurrent(generation)) yield break;
+                // MaterialOptions: a second EOF widens the window for stale material reconnects.
+                if (!IsMaterialOptionsCustomCallback(qi))
+                    yield return waitForEndOfFrame;
+                if (qi.cancel || !IsLoadGenerationCurrent(generation)) yield break;
+                DoCallback(qi);
+            }
+            finally
+            {
+                ReleasePendingTextureHandoff(tex, handoff);
+            }
         }
 
         public bool RequestImmediate(ImageLoaderThreaded.QueuedImage qi)
         {
+            if (!IsLoadGenerationCurrent(CurrentLoadGeneration)) return false;
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
             if (qi.skipCache) return false;
             // Match VaM ImageLoaderThreaded: forceReload must reprocess, not serve VPB RAM/disk hit.
@@ -1591,6 +1828,7 @@ namespace VPB
 
         public bool Request(ImageLoaderThreaded.QueuedImage qi)
         {
+            if (!IsLoadGenerationCurrent(CurrentLoadGeneration)) return false;
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
             LogUtil.MarkImageActivity();
             if (qi.skipCache) return false;
@@ -1627,14 +1865,7 @@ namespace VPB
             if (cacheTexture != null && TextureMeetsCpuReadableRequirement(qi, cacheTexture))
             {
                 qi.tex = cacheTexture;
-                if (Messager.singleton != null)
-                {
-                    Messager.singleton.StartCoroutine(DelayDoCallback(qi, generation));
-                }
-                else if (IsLoadGenerationCurrent(generation))
-                {
-                    DoCallback(qi);
-                }
+                ScheduleTextureCallback(qi, cacheKey, generation);
                 return true;
             }
             // Stale non-readable RAM entry (pre-fix character/sim serve): drop and rebuild readable.
@@ -1654,12 +1885,7 @@ namespace VPB
             {
                 if (inflightKeys.Contains(cacheKey))
                 {
-                    if (!inflightWaiters.TryGetValue(cacheKey, out var waiters))
-                    {
-                        waiters = new List<ImageLoaderThreaded.QueuedImage>();
-                        inflightWaiters[cacheKey] = waiters;
-                    }
-                    waiters.Add(qi);
+                    AddInflightWaiter(cacheKey, qi);
                     return true;
                 }
 
@@ -1667,7 +1893,7 @@ namespace VPB
                 if (vpbCachePath != null)
                 {
                     inflightKeys.Add(cacheKey);
-                    if (TryQueueBackground((state) => LoadAndDecompressBackground(cacheKey, vpbCachePath, qi, generation))) return true;
+                    if (TryQueueTexturePayloadWorker((state) => LoadAndDecompressBackground(cacheKey, vpbCachePath, qi, generation), generation)) return true;
                     inflightKeys.Remove(cacheKey);
                     return false;
                 }
@@ -1678,7 +1904,7 @@ namespace VPB
                 if (!string.IsNullOrEmpty(nativeDiskPath))
                 {
                     inflightKeys.Add(cacheKey);
-                    if (TryQueueBackground((state) => LoadVaMNativeDiskCacheBackground(cacheKey, nativeDiskPath, qi, generation))) return true;
+                    if (TryQueueTexturePayloadWorker((state) => LoadVaMNativeDiskCacheBackground(cacheKey, nativeDiskPath, qi, generation), generation)) return true;
                     inflightKeys.Remove(cacheKey);
                     return false;
                 }
@@ -1699,11 +1925,6 @@ namespace VPB
         private void LoadVaMNativeDiskCacheBackground(string cacheKey, string nativePath, ImageLoaderThreaded.QueuedImage qi, int generation)
         {
             if (!IsLoadGenerationCurrent(generation)) return;
-            if (!TryAcquireTexturePayloadWorker(generation))
-            {
-                FallbackInflightToNative(cacheKey, qi, generation);
-                return;
-            }
             try
             {
                 var meta = FastLoadMetadata(nativePath);
@@ -1757,20 +1978,11 @@ namespace VPB
                 LogUtil.LogError("LoadVaMNativeDiskCacheBackground failed for " + nativePath + ": " + ex.Message);
                 FailDiskCacheLoadAndFallback(cacheKey, nativePath, qi, DiskCacheFailureKind.VaMNative, generation);
             }
-            finally
-            {
-                Interlocked.Decrement(ref activeTexturePayloadWorkers);
-            }
         }
 
         private void LoadAndDecompressBackground(string cacheKey, string cachePath, ImageLoaderThreaded.QueuedImage qi, int generation)
         {
             if (!IsLoadGenerationCurrent(generation)) return;
-            if (!TryAcquireTexturePayloadWorker(generation))
-            {
-                FallbackInflightToNative(cacheKey, qi, generation);
-                return;
-            }
             try
             {
                 if (IsZstdPathQuarantined(cachePath))
@@ -1848,24 +2060,16 @@ namespace VPB
                 LogUtil.LogError("LoadAndDecompressBackground failed for " + cachePath + ": " + ex.Message);
                 HandleBusyOrTransientDiskCacheFailure(cacheKey, cachePath, qi, DiskCacheFailureKind.VpbZstd, generation);
             }
-            finally
-            {
-                Interlocked.Decrement(ref activeTexturePayloadWorkers);
-            }
         }
 
         private void ScheduleCreateTextureOnMainThread(DecompressedData data)
         {
             if (data == null || data.Data == null || !IsLoadGenerationCurrent(data.Generation)) return;
-            if (Messager.singleton == null)
-            {
-                CreateTexture(data);
-                return;
-            }
 
             var dropped = new List<DecompressedData>();
             lock (pendingMainThreadLock)
             {
+                if (!IsLoadGenerationCurrent(data.Generation)) return;
                 if (data.Data.LongLength > MaxPendingMainThreadTextureCreateBytes)
                 {
                     dropped.Add(data);
@@ -1877,8 +2081,7 @@ namespace VPB
                             || pendingMainThreadTextureCreateBytes + data.Data.LongLength > MaxPendingMainThreadTextureCreateBytes))
                     {
                         DecompressedData oldest = pendingMainThreadTextureCreates.Dequeue();
-                        pendingMainThreadTextureCreateCount--;
-                        pendingMainThreadTextureCreateBytes -= oldest != null && oldest.Data != null ? oldest.Data.LongLength : 0;
+                        ReleaseTextureCreatePayloadLocked(oldest);
                         dropped.Add(oldest);
                     }
 
@@ -1890,19 +2093,15 @@ namespace VPB
                     else
                     {
                         pendingMainThreadTextureCreates.Enqueue(data);
+                        data.PendingCreateBytes = data.Data.LongLength;
                         pendingMainThreadTextureCreateCount++;
-                        pendingMainThreadTextureCreateBytes += data.Data.LongLength;
+                        pendingMainThreadTextureCreateBytes += data.PendingCreateBytes;
                     }
                 }
             }
 
             for (int i = 0; i < dropped.Count; i++)
                 FallbackInflightToNative(dropped[i]);
-
-            if (dropped.Count > 0 && object.ReferenceEquals(dropped[dropped.Count - 1], data)) return;
-
-            if (mainThreadTextureCreatePump == null)
-                mainThreadTextureCreatePump = Messager.singleton.StartCoroutine(PumpCreateTextureOnMainThread());
         }
 
         private void FallbackInflightToNative(DecompressedData data)
@@ -1915,13 +2114,16 @@ namespace VPB
         {
             if (!IsLoadGenerationCurrent(generation)) return;
             var targets = new List<ImageLoaderThreaded.QueuedImage>();
-            CollectInflightTargets(cacheKey, qi, targets);
+            CollectInflightTargets(cacheKey, qi, targets, generation);
             for (int i = 0; i < targets.Count; i++)
                 EnqueueVaMImageLoadOnMainThread(targets[i], generation);
         }
 
         private IEnumerator PumpCreateTextureOnMainThread()
         {
+            int generation = CurrentLoadGeneration;
+            try
+            {
             while (true)
             {
                 DecompressedData data = null;
@@ -1933,11 +2135,11 @@ namespace VPB
                         yield break;
                     }
                     data = pendingMainThreadTextureCreates.Dequeue();
-                    pendingMainThreadTextureCreateCount--;
-                    pendingMainThreadTextureCreateBytes -= data != null && data.Data != null ? data.Data.LongLength : 0;
-                    if (pendingMainThreadTextureCreateBytes < 0) pendingMainThreadTextureCreateBytes = 0;
+                    activeMainThreadTextureCreate = data;
                 }
 
+                try
+                {
                 yield return waitForEndOfFrame;
 
                 while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
@@ -1946,13 +2148,78 @@ namespace VPB
                     yield return null;
                 }
 
-                if (IsLoadGenerationCurrent(data.Generation)) CreateTexture(data);
+                if (IsLoadGenerationCurrent(data.Generation))
+                {
+                    ConsumeTextureCreate(data);
+                }
+                }
+                finally
+                {
+                    lock (pendingMainThreadLock) { ReleaseActiveTextureCreateLocked(data); }
+                }
+                if (!IsLoadGenerationCurrent(generation)) yield break;
+            }
+            }
+            finally
+            {
+                if (generation == CurrentLoadGeneration) mainThreadTextureCreatePump = null;
+            }
+        }
+
+        private void ReleaseTextureCreatePayloadLocked(DecompressedData data)
+        {
+            if (data == null || data.PendingCreateBytes < 0) return;
+            pendingMainThreadTextureCreateCount--;
+            pendingMainThreadTextureCreateBytes -= data.PendingCreateBytes;
+            data.PendingCreateBytes = -1;
+            // Drop this request's reference only; a cache may independently own the same array.
+            data.Data = null;
+        }
+
+        private void ConsumeTextureCreate(DecompressedData data)
+        {
+            // Keep this finally outside the iterator: reentrant coroutine disposal must not release factory input.
+            consumingMainThreadTextureCreate = true;
+            try { CreateTexture(data); }
+            finally
+            {
+                consumingMainThreadTextureCreate = false;
+                lock (pendingMainThreadLock) { ReleaseActiveTextureCreateLocked(data); }
+            }
+        }
+
+        private void ReleaseActiveTextureCreateLocked(DecompressedData data)
+        {
+            if (consumingMainThreadTextureCreate) return;
+            if (data == null || !object.ReferenceEquals(activeMainThreadTextureCreate, data)) return;
+            activeMainThreadTextureCreate = null;
+            ReleaseTextureCreatePayloadLocked(data);
+        }
+
+        private bool TryDiscardCanceledTextureCreate(DecompressedData data)
+        {
+            lock (inflightLock)
+            {
+                // Never retire a new generation's requests under a reused cache key.
+                if (!IsLoadGenerationCurrent(data.Generation)) return true;
+                if (data.OriginalQI != null && !data.OriginalQI.cancel) return false;
+                List<ImageLoaderThreaded.QueuedImage> waiters;
+                if (inflightWaiters.TryGetValue(data.CacheKey, out waiters))
+                {
+                    foreach (var waiter in waiters)
+                        if (waiter != null && !waiter.cancel) return false;
+                }
+                // A later live request must start its own load instead of joining discarded work.
+                inflightWaiters.Remove(data.CacheKey);
+                inflightKeys.Remove(data.CacheKey);
+                return true;
             }
         }
 
         private void CreateTexture(DecompressedData data)
         {
             if (data == null || data.OriginalQI == null || !IsLoadGenerationCurrent(data.Generation)) return;
+            if (TryDiscardCanceledTextureCreate(data)) return;
             var sw = Stopwatch.StartNew();
             try
             {
@@ -1975,7 +2242,7 @@ namespace VPB
                     if (!string.IsNullOrEmpty(diskPath))
                         HandleBusyOrTransientDiskCacheFailure(data.CacheKey, diskPath, data.OriginalQI, DiskCacheFailureKind.VpbZstd, data.Generation);
                     else
-                        EnqueueVaMImageLoadOnMainThread(data.OriginalQI, data.Generation);
+                        FallbackInflightToNative(data);
                     return;
                 }
 
@@ -1987,7 +2254,7 @@ namespace VPB
                     createMipMaps, data.OriginalQI.linear, !forceReadable, forceReadable);
                 if (tex == null)
                 {
-                    EnqueueVaMImageLoadOnMainThread(data.OriginalQI, data.Generation);
+                    FallbackInflightToNative(data);
                     return;
                 }
 
@@ -2004,21 +2271,14 @@ namespace VPB
                     TextureUtil.MarkDownscaledActive(GetDownscaledKey(data.CacheKey));
                 
                 ResolveInflight(data.CacheKey, tex, data.Generation);
-                if (Messager.singleton != null)
-                {
-                    Messager.singleton.StartCoroutine(DelayDoCallback(data.OriginalQI, data.Generation));
-                }
-                else if (IsLoadGenerationCurrent(data.Generation))
-                {
-                    DoCallback(data.OriginalQI);
-                }
+                ScheduleTextureCallback(data.OriginalQI, data.CacheKey, data.Generation);
             }
             catch (Exception ex)
             {
                 if (IsLoadGenerationCurrent(data.Generation))
                 {
                     LogUtil.LogError("CreateTexture failed for " + data.CacheKey + ": " + ex.Message);
-                    EnqueueVaMImageLoadOnMainThread(data.OriginalQI, data.Generation);
+                    FallbackInflightToNative(data);
                 }
             }
             finally
@@ -2079,14 +2339,7 @@ namespace VPB
                 foreach (var w in waiters)
                 {
                     w.tex = tex;
-                    if (Messager.singleton != null)
-                    {
-                        Messager.singleton.StartCoroutine(DelayDoCallback(w, generation));
-                    }
-                    else if (IsLoadGenerationCurrent(generation))
-                    {
-                        DoCallback(w);
-                    }
+                    ScheduleTextureCallback(w, cacheKey, generation);
                 }
             }
         }
@@ -2221,9 +2474,14 @@ namespace VPB
                             queueMip = metaJson["createMipMaps"].AsBool;
                         }
                         catch { }
-                        if (!hadMipFields && !queueMip && (fmt == TextureFormat.DXT1 || fmt == TextureFormat.DXT5))
-                            queueMip = true;
+                        if (!hadMipFields && !queueMip && TextureUtil.IsBlockCompressedFormat(fmt))
+                            queueMip = TextureUtil.GetExpectedFullMipChainSize(w, h, fmt) == (int)rawByteLength;
                         TextureUtil.WriteMipFieldsToMeta(metaJson, w, h, fmt, (int)rawByteLength, queueMip);
+
+                        if (TextureUtil.IsMipPayloadConsistent(
+                                metaJson["createMipMaps"].AsBool, metaJson["mipStorage"].Value,
+                                (int)rawByteLength, w, h, fmt))
+                            TextureUtil.WriteCacheVersionToMeta(metaJson);
                     }
                     File.WriteAllText(targetPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(metaJson, 1024));
                     return;
@@ -2419,7 +2677,7 @@ namespace VPB
                 {
                     try
                     {
-                        while (!CurrentZstdStats.CancelRequested)
+                        while (!CurrentZstdStats.CancelRequested && !VpbShutdown.IsQuitting)
                         {
                             BulkZstdWorkItem item = null;
                             lock (queueLock)
@@ -2443,7 +2701,7 @@ namespace VPB
                 worker.Start();
             }
 
-            done.WaitOne();
+            VpbShutdown.WaitOrQuit(done);
             done.Close();
         }
 
@@ -2880,18 +3138,19 @@ namespace VPB
                     byte[] raw;
                     TextureFormat format;
                     int w, h;
-                    if (!TryCaptureAlphaTextureBytesForZstdWrite(texture, item.Linear, out raw, out format, out w, out h)) return;
+                    if (!TryCaptureAlphaTextureBytesForZstdWrite(texture, item.Linear, item.QueueCreateMipMaps, out raw, out format, out w, out h)) return;
                     if (raw == null || raw.Length == 0 || raw.Length > MaxRuntimeZstdWritePayloadBytes) return;
 
                     int level = 3;
                     try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
                     string pathCopy = zstdPath;
+                    bool alphaMip = item.QueueCreateMipMaps;
                     Interlocked.Increment(ref activeRuntimeZstdWrites);
                     try
                     {
                         queuedToWorker = ThreadPool.QueueUserWorkItem(_ =>
                         {
-                            try { WriteCapturedBytesToZstdCache(pathCopy, raw, w, h, format, false, false, level, AlphaCacheVersion); }
+                            try { WriteCapturedBytesToZstdCache(pathCopy, raw, w, h, format, false, alphaMip, level); }
                             finally { Interlocked.Decrement(ref activeRuntimeZstdWrites); }
                         });
                     }
@@ -2906,7 +3165,7 @@ namespace VPB
                 byte[] rawBytes;
                 TextureFormat fmt;
                 int width, height;
-                if (!TryGetTextureBytesForZstdWrite(texture, item.Linear, item.IsSimPath, out rawBytes, out fmt, out width, out height))
+                if (!TryGetTextureBytesForZstdWrite(texture, item.Linear, item.IsSimPath, item.QueueCreateMipMaps, out rawBytes, out fmt, out width, out height))
                     return;
                 if (rawBytes == null || rawBytes.Length == 0 || rawBytes.Length > MaxRuntimeZstdWritePayloadBytes) return;
 
@@ -2920,7 +3179,7 @@ namespace VPB
                 {
                     queuedToWorker = ThreadPool.QueueUserWorkItem(_ =>
                     {
-                        try { WriteCapturedBytesToZstdCache(pathForWorker, rawBytes, width, height, fmt, isSim, queueMip, zlevel, 0); }
+                        try { WriteCapturedBytesToZstdCache(pathForWorker, rawBytes, width, height, fmt, isSim, queueMip, zlevel); }
                         finally { Interlocked.Decrement(ref activeRuntimeZstdWrites); }
                     });
                 }
@@ -2937,6 +3196,7 @@ namespace VPB
         private static bool TryCaptureAlphaTextureBytesForZstdWrite(
             Texture2D src,
             bool linear,
+            bool createMipMaps,
             out byte[] raw,
             out TextureFormat format,
             out int w,
@@ -2948,6 +3208,8 @@ namespace VPB
             h = 0;
             if (src == null) return false;
 
+            bool mipChain = createMipMaps && TextureUtil.CanGenerateMipsFromBaseLevel(src.width, src.height, TextureFormat.RGBA32);
+
             RenderTexture rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32, linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
             Texture2D rgba = null;
             RenderTexture prev = RenderTexture.active;
@@ -2955,9 +3217,9 @@ namespace VPB
             {
                 Graphics.Blit(src, rt);
                 RenderTexture.active = rt;
-                rgba = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, linear);
+                rgba = new Texture2D(src.width, src.height, TextureFormat.RGBA32, mipChain, linear);
                 rgba.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0, false);
-                rgba.Apply(false, false);
+                rgba.Apply(mipChain, false);
                 w = src.width;
                 h = src.height;
                 raw = rgba.GetRawTextureData();
@@ -2979,8 +3241,7 @@ namespace VPB
             TextureFormat format,
             bool isSimPath,
             bool queueCreateMipMaps,
-            int zstdLevel,
-            int alphaCacheVersion)
+            int zstdLevel)
         {
             if (string.IsNullOrEmpty(zstdPath) || raw == null || raw.Length == 0 || w <= 0 || h <= 0) return;
 
@@ -3002,7 +3263,7 @@ namespace VPB
                 zmeta["height"] = h.ToString();
                 zmeta["format"] = format.ToString();
                 if (isSimPath) zmeta["isReadable"] = "true";
-                if (alphaCacheVersion > 0) zmeta["vpbVer"].AsInt = alphaCacheVersion;
+                TextureUtil.WriteCacheVersionToMeta(zmeta);
                 zmeta["zstdLevel"].AsInt = zstdLevel;
                 TextureUtil.WriteMipFieldsToMeta(zmeta, w, h, format, raw.Length, queueCreateMipMaps);
                 File.WriteAllText(metaTmp, VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
@@ -3206,7 +3467,7 @@ namespace VPB
                     if (pendingZstdWrites.Contains(alphaPath)) return true;
                     pendingZstdWrites.Add(alphaPath);
                 }
-                EnqueueRuntimeZstdWrite(qi, alphaPath, false, true, false);
+                EnqueueRuntimeZstdWrite(qi, alphaPath, false, true, ResolveQueueCreateMipMaps(qi));
                 return true;
             }
 
@@ -3279,7 +3540,7 @@ namespace VPB
             return IsTextureReadableForCacheWrite(tex);
         }
 
-        private static bool TryGetTextureBytesForZstdWrite(Texture2D src, bool linear, bool forceReadable, out byte[] raw, out TextureFormat format, out int w, out int h)
+        private static bool TryGetTextureBytesForZstdWrite(Texture2D src, bool linear, bool forceReadable, bool createMipMaps, out byte[] raw, out TextureFormat format, out int w, out int h)
         {
             raw = null;
             format = src.format;
@@ -3296,6 +3557,8 @@ namespace VPB
                 catch { }
             }
 
+            bool mipChain = (createMipMaps || src.mipmapCount > 1) && TextureUtil.CanGenerateMipsFromBaseLevel(w, h, TextureFormat.RGBA32);
+
             RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
             Texture2D rgba = null;
             RenderTexture prev = RenderTexture.active;
@@ -3303,9 +3566,9 @@ namespace VPB
             {
                 Graphics.Blit(src, rt);
                 RenderTexture.active = rt;
-                rgba = new Texture2D(w, h, TextureFormat.RGBA32, false, linear);
+                rgba = new Texture2D(w, h, TextureFormat.RGBA32, mipChain, linear);
                 rgba.ReadPixels(new Rect(0, 0, w, h), 0, 0, false);
-                rgba.Apply(false, false);
+                rgba.Apply(mipChain, false);
                 raw = rgba.GetRawTextureData();
                 format = TextureFormat.RGBA32;
                 return raw != null && raw.Length > 0;

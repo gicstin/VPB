@@ -86,6 +86,8 @@ namespace VPB
             public long LastWriteTicksOrInvalid;
             public long PackageSizeOrInvalid;
             public long PackageCreationTicksOrInvalid;
+            /// <summary>NTFS creation time from <c>pkg.pctime</c>, kept separate from internal ZIP creation time.</summary>
+            public long PackageFileCreationTicksOrInvalid;
             /// <summary>First time VPB indexed this VAR uid (<c>pkg.first_scanned</c>, <see cref="DateTime.ToBinary"/>); 0 when unknown.</summary>
             public long FirstScannedTicksOrInvalid;
             /// <summary>
@@ -112,6 +114,8 @@ namespace VPB
             public long LastWriteTicksOrInvalid;
             public long PackageSizeOrInvalid;
             public long PackageCreationTicksOrInvalid;
+            /// <summary>NTFS creation time from <c>pkg.pctime</c>, kept separate from internal ZIP creation time.</summary>
+            public long PackageFileCreationTicksOrInvalid;
             /// <summary>First time VPB indexed this VAR uid (<c>pkg.first_scanned</c>, <see cref="DateTime.ToBinary"/>); 0 or <see cref="long.MinValue"/> when unknown.</summary>
             public long FirstScannedTicksOrInvalid;
             public bool PackageIsLoaded;
@@ -336,9 +340,19 @@ namespace VPB
                 }
                 catch
                 {
-                    return ResolveDatabaseFilePath(Application.temporaryCachePath);
+                    string fallback = null;
+                    try { fallback = UnityTemporaryCachePath(); } catch { }
+                    if (string.IsNullOrEmpty(fallback))
+                        fallback = Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
+                    return ResolveDatabaseFilePath(fallback);
                 }
             }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static string UnityTemporaryCachePath()
+        {
+            return Application.temporaryCachePath;
         }
 
         internal static string GetLocalDatabasePathForDiagnostics()
@@ -409,6 +423,35 @@ namespace VPB
             if (totalPkgs <= 0) return false;
             long maxGap = Math.Max(32L, totalPkgs / 500L);
             return missing <= maxGap;
+        }
+
+        private static bool HasRecoverableCategoryGaps(VpbSqlite3.Connection conn)
+        {
+            var missingUids = new List<string>();
+            using (var st = conn.Prepare(
+                "SELECT uid FROM pkg WHERE COALESCE(no_cat,0)=0 AND uid NOT IN (SELECT pkg_uid FROM cat_mem)"))
+            {
+                while (st.Step() == VpbSqlite3.SqliteRow)
+                    missingUids.Add(st.ColumnText(0));
+            }
+            for (int i = 0; i < missingUids.Count; i++)
+            {
+                VarPackage pkg;
+                lock (FileManager.packagesLock)
+                {
+                    if (FileManager.PackagesByUid == null
+                        || !FileManager.PackagesByUid.TryGetValue(missingUids[i], out pkg)) continue;
+                }
+                if (pkg == null) continue;
+                List<string> names;
+                List<long> ticks;
+                List<long> sizes;
+                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) continue;
+                // A scanned meta.json always has category membership; corrupt or unscanned gaps still tolerate retry.
+                for (int j = 0; j < names.Count; j++)
+                    if (string.Equals(names[j], "meta.json", StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         /// <summary>True when pkg row count + inventory sig match and cat_mem coverage is complete or within gap.</summary>
@@ -554,6 +597,8 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_cm_pkg ON cat_mem(pkg_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_src ON pkg_dep(src_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_dep ON pkg_dep(dep_uid);" +
+                // Default LIKE needs NOCASE to seek package families instead of scanning every dependency edge.
+                "CREATE INDEX IF NOT EXISTS idx_pd_dep_nocase ON pkg_dep(dep_uid COLLATE NOCASE);" +
                 "CREATE INDEX IF NOT EXISTS idx_sf_key ON sys_file(cache_key);" +
                 "CREATE TABLE IF NOT EXISTS cache_usage (cache_path TEXT PRIMARY KEY, hit_count INTEGER NOT NULL DEFAULT 0, last_accessed INTEGER NOT NULL);" +
                 "CREATE TABLE IF NOT EXISTS cache_usage_pkg (cache_path TEXT NOT NULL, pkg_uid TEXT NOT NULL, PRIMARY KEY(cache_path, pkg_uid));" +
@@ -613,6 +658,7 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN first_scanned INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN no_cat INTEGER;");
+            try { conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_pkg_missing_first_scanned ON pkg(uid,wtime) WHERE first_scanned IS NULL;"); } catch { }
 
             // Backfill NULL first_scanned from wtime as a best-effort "when user got this" proxy.
             // wtime is FileInfo.LastWriteTime.ToBinary() (Local kind); convert to UTC binary so
@@ -667,6 +713,90 @@ namespace VPB
             EnsureLayoutPresetTables(conn);
             EnsurePkgNewestSchema(conn);
             EnsurePkgLicenseSchema(conn);
+            EnsureHideMarkerSchema(conn);
+            EnsureDataPackSchema(conn);
+            try { EnsureSceneAtomCacheSchema(conn); } catch { }
+
+            VpbUidWhitespaceIdentityRepair.EnsureSchema(conn);
+            const string UidWhitespaceRepairKey = "uid_whitespace_identity_repair_v3_inplace_uid_remap";
+            if (string.IsNullOrEmpty(MetaGet(conn, UidWhitespaceRepairKey)))
+            {
+                int repaired;
+                if (TryRepairPkgRowsWithMismatchedVarPathUid(conn, out repaired))
+                {
+                    if (repaired > 0)
+                    {
+                        try { RestampPkgInventorySignatureAfterUidRepair(conn); } catch { }
+                        try { LogUtil.Log("[VPB.DB] uid/var_path identity repair remapped " + repaired + " package rows in place"); } catch { }
+                    }
+                    MetaSet(conn, UidWhitespaceRepairKey, "1");
+                }
+            }
+        }
+
+        /// <summary>In-place uid remap for pkg rows whose uid disagrees with var_path; keeps first_scanned.</summary>
+        static bool TryRepairPkgRowsWithMismatchedVarPathUid(VpbSqlite3.Connection conn, out int repaired)
+        {
+            repaired = 0;
+            List<VpbUidWhitespaceIdentityRepair.Candidate> stale = null;
+            try
+            {
+                using (var sel = conn.Prepare("SELECT uid, ifnull(var_path,''), ifnull(first_scanned,0) FROM pkg WHERE var_path IS NOT NULL AND var_path <> ''"))
+                {
+                    int rc;
+                    while ((rc = sel.Step()) == VpbSqlite3.SqliteRow)
+                    {
+                        string uid = sel.ColumnText(0);
+                        if (string.IsNullOrEmpty(uid)) continue;
+                        string varPath = sel.ColumnText(1);
+                        if (string.IsNullOrEmpty(varPath)) continue;
+
+                        string fileUid = UidFromVarPathForRepair(varPath);
+                        if (string.IsNullOrEmpty(fileUid)) continue;
+                        if (string.Equals(fileUid, uid, StringComparison.OrdinalIgnoreCase)) continue;
+
+                        if (stale == null) stale = new List<VpbUidWhitespaceIdentityRepair.Candidate>();
+                        stale.Add(new VpbUidWhitespaceIdentityRepair.Candidate(uid, fileUid, sel.ColumnInt64(2)));
+                    }
+                    VpbUidWhitespaceIdentityRepair.RequireReadCompleted(rc);
+                }
+            }
+            catch { return false; }
+
+            if (stale == null || stale.Count == 0) return true;
+
+            try { repaired = VpbUidWhitespaceIdentityRepair.Apply(conn, stale); }
+            catch { return false; }
+            if (repaired != stale.Count) return false;
+            try { VpbUidWhitespaceIdentityRepair.ConsumeApplied(conn); } catch { }
+            return true;
+        }
+
+        static void RestampPkgInventorySignatureAfterUidRepair(VpbSqlite3.Connection conn)
+        {
+            if (conn == null) return;
+            string dbInv = ComputePackageInventorySignatureFromDatabase(conn);
+            if (string.IsNullOrEmpty(dbInv)) return;
+            MetaSet(conn, "pkg_inv_sig", dbInv);
+            lock (s_Sync)
+            {
+                s_ReadyPkgInvSig = dbInv;
+                s_CachedInvSig = null;
+                s_CachedInvScanBinary = long.MinValue;
+            }
+        }
+
+        static string UidFromVarPathForRepair(string varPath)
+        {
+            if (string.IsNullOrEmpty(varPath)) return null;
+            string parsed;
+            try
+            {
+                if (FileManager.TryGetCanonicalUidFromVarPath(varPath, out parsed) && !string.IsNullOrEmpty(parsed))
+                    return parsed;
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process. Returns true on success (including no-op).</summary>
@@ -1676,9 +1806,15 @@ namespace VPB
             catch { }
         }
 
-        internal static void TryRecordCacheHitsBatch(IEnumerable<string> cachePaths)
+        internal struct CacheUsagePkgRow
         {
-            if (!VpbSqlite3.IsAvailable || cachePaths == null) return;
+            public string CachePath;
+            public string PackageUid;
+        }
+
+        internal static bool TryRecordCacheUsageBatch(IEnumerable<string> cachePaths, IEnumerable<CacheUsagePkgRow> rows)
+        {
+            if (!VpbSqlite3.IsAvailable || cachePaths == null) return false;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -1696,50 +1832,28 @@ namespace VPB
                                 st.Reset();
                                 st.BindText(1, path);
                                 st.BindInt64(2, now);
-                                st.Step();
+                                if (st.Step() != VpbSqlite3.SqliteDone)
+                                    throw new InvalidOperationException("Cache hit write did not complete");
                             }
                         }
-                        conn.ExecUtf8("COMMIT;");
-                    }
-                    catch
-                    {
-                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
-                        throw;
-                    }
-                }
-            }
-            catch { }
-        }
-
-        internal struct CacheUsagePkgRow
-        {
-            public string CachePath;
-            public string PackageUid;
-        }
-
-        internal static void TryRecordCacheUsagePackagesBatch(IEnumerable<CacheUsagePkgRow> rows)
-        {
-            if (!VpbSqlite3.IsAvailable || rows == null) return;
-            try
-            {
-                using (var conn = new VpbSqlite3.Connection(DbPath))
-                {
-                    EnsureSchema(conn);
-                    conn.ExecUtf8("BEGIN IMMEDIATE;");
-                    try
-                    {
-                        using (var st = conn.Prepare("INSERT OR IGNORE INTO cache_usage_pkg(cache_path, pkg_uid) VALUES(?, ?)"))
+                        if (rows != null)
                         {
-                            foreach (var r in rows)
+                            using (var st = conn.Prepare("INSERT OR IGNORE INTO cache_usage_pkg(cache_path, pkg_uid) VALUES(?, ?)"))
                             {
-                                if (string.IsNullOrEmpty(r.CachePath) || string.IsNullOrEmpty(r.PackageUid)) continue;
-                                st.Reset();
-                                st.BindText(1, r.CachePath);
-                                st.BindText(2, r.PackageUid);
-                                st.Step();
+                                foreach (var row in rows)
+                                {
+                                    if (string.IsNullOrEmpty(row.CachePath) || string.IsNullOrEmpty(row.PackageUid)) continue;
+                                    st.Reset();
+                                    st.BindText(1, row.CachePath);
+                                    st.BindText(2, row.PackageUid);
+                                    if (st.Step() != VpbSqlite3.SqliteDone)
+                                        throw new InvalidOperationException("Cache package mapping write did not complete");
+                                }
                             }
                         }
+                        // Hits and exemption mappings must commit together before the cohort is retired.
                         conn.ExecUtf8("COMMIT;");
+                        return true;
                     }
                     catch
                     {
@@ -1748,9 +1862,12 @@ namespace VPB
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] Cache usage batch deferred: " + ex.Message);
+                return false;
+            }
         }
-
         internal static void TryGetCacheUsagePackages(string cachePath, List<string> outUids)
         {
             if (outUids == null) return;
@@ -1867,29 +1984,58 @@ namespace VPB
 
         internal static void TryDeleteCacheUsage(string cachePath)
         {
-            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(cachePath)) return;
-            try
+            using (var session = new CacheUsageDeleteSession())
+                session.TryDelete(cachePath);
+        }
+
+        internal sealed class CacheUsageDeleteSession : IDisposable
+        {
+            private VpbSqlite3.Connection connection;
+
+            internal void TryDelete(string cachePath)
             {
-                using (var conn = new VpbSqlite3.Connection(DbPath))
+                if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(cachePath)) return;
+                try
                 {
-                    EnsureSchema(conn);
+                    if (connection == null)
+                    {
+                        var opened = new VpbSqlite3.Connection(DbPath);
+                        try
+                        {
+                            EnsureSchema(opened);
+                            connection = opened;
+                        }
+                        catch
+                        {
+                            opened.Dispose();
+                            throw;
+                        }
+                    }
                     try
                     {
-                        using (var st2 = conn.Prepare("DELETE FROM cache_usage_pkg WHERE cache_path = ?"))
+                        using (var st = connection.Prepare("DELETE FROM cache_usage_pkg WHERE cache_path = ?"))
                         {
-                            st2.BindText(1, cachePath);
-                            st2.Step();
+                            st.BindText(1, cachePath);
+                            st.Step();
                         }
                     }
                     catch { }
-                    using (var st = conn.Prepare("DELETE FROM cache_usage WHERE cache_path = ?"))
+                    using (var st = connection.Prepare("DELETE FROM cache_usage WHERE cache_path = ?"))
                     {
                         st.BindText(1, cachePath);
                         st.Step();
                     }
                 }
+                catch { }
             }
-            catch { }
+
+            public void Dispose()
+            {
+                var opened = connection;
+                connection = null;
+                try { if (opened != null) opened.Dispose(); }
+                catch { }
+            }
         }
 
         internal struct SystemFileRow
@@ -1969,12 +2115,11 @@ namespace VPB
             try
             {
                 if (!Directory.Exists(root)) return max;
-                try
-                {
-                    long rootM = Directory.GetLastWriteTimeUtc(root).ToBinary();
-                    if (rootM > max) max = rootM;
-                }
-                catch { }
+                long rootM;
+                bool rootLink;
+                if (FileManager.TryGetDirectoryLastWriteBinaryFollowingLinks(root, out rootM, out rootLink)
+                    && rootM > max)
+                    max = rootM;
 
                 string[] dirs;
                 try { dirs = Directory.GetDirectories(root, "*", SearchOption.AllDirectories); }
@@ -1984,12 +2129,11 @@ namespace VPB
                 {
                     for (int i = 0; i < dirs.Length; i++)
                     {
-                        try
-                        {
-                            long m = Directory.GetLastWriteTimeUtc(dirs[i]).ToBinary();
-                            if (m > max) max = m;
-                        }
-                        catch { }
+                        long m;
+                        bool link;
+                        if (FileManager.TryGetDirectoryLastWriteBinaryFollowingLinks(dirs[i], out m, out link)
+                            && m > max)
+                            max = m;
                     }
                 }
             }
@@ -2111,7 +2255,17 @@ namespace VPB
         internal static bool TryReadLooseSceneDeps(string filePath, long expectedWtimeBinary, long expectedSize, HashSet<string> outDeps)
         {
             if (outDeps == null) return false;
-            outDeps.Clear();
+            return TryReadLooseSceneDepsCore(filePath, expectedWtimeBinary, expectedSize, outDeps);
+        }
+
+        internal static bool HasFreshLooseSceneDeps(string filePath, long expectedWtimeBinary, long expectedSize)
+        {
+            return TryReadLooseSceneDepsCore(filePath, expectedWtimeBinary, expectedSize, null);
+        }
+
+        private static bool TryReadLooseSceneDepsCore(string filePath, long expectedWtimeBinary, long expectedSize, HashSet<string> outDeps)
+        {
+            if (outDeps != null) outDeps.Clear();
             if (!VpbSqlite3.IsAvailable) return false;
             if (string.IsNullOrEmpty(filePath)) return false;
             try
@@ -2119,34 +2273,80 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    using (var st = conn.Prepare("SELECT wtime, size, deps FROM loose_deps WHERE path = ?"))
-                    {
-                        st.BindText(1, filePath);
-                        if (st.Step() != VpbSqlite3.SqliteRow) return false;
-
-                        long wt = long.MinValue, sz = long.MinValue;
-                        string wtxt = st.ColumnText(0);
-                        string sztxt = st.ColumnText(1);
-                        if (string.IsNullOrEmpty(wtxt) || !long.TryParse(wtxt, out wt)) return false;
-                        if (string.IsNullOrEmpty(sztxt) || !long.TryParse(sztxt, out sz)) return false;
-                        if (wt != expectedWtimeBinary || sz != expectedSize) return false;
-
-                        string deps = st.ColumnText(2) ?? "";
-                        if (deps.Length == 0) return true;
-                        string[] parts = deps.Split('|');
-                        for (int i = 0; i < parts.Length; i++)
-                        {
-                            string p = parts[i];
-                            if (!string.IsNullOrEmpty(p)) outDeps.Add(p);
-                        }
-                        return true;
-                    }
+                    return TryReadLooseSceneDeps(conn, filePath, expectedWtimeBinary, expectedSize, outDeps);
                 }
             }
             catch
             {
-                outDeps.Clear();
+                if (outDeps != null) outDeps.Clear();
                 return false;
+            }
+        }
+
+        private static bool TryReadLooseSceneDeps(VpbSqlite3.Connection conn, string filePath, long expectedWtimeBinary, long expectedSize, HashSet<string> outDeps)
+        {
+            using (var st = conn.Prepare("SELECT wtime, size, deps FROM loose_deps WHERE path = ?"))
+            {
+                st.BindText(1, filePath);
+                if (st.Step() != VpbSqlite3.SqliteRow) return false;
+
+                long wt = long.MinValue, sz = long.MinValue;
+                string wtxt = st.ColumnText(0);
+                string sztxt = st.ColumnText(1);
+                if (string.IsNullOrEmpty(wtxt) || !long.TryParse(wtxt, out wt)) return false;
+                if (string.IsNullOrEmpty(sztxt) || !long.TryParse(sztxt, out sz)) return false;
+                if (wt != expectedWtimeBinary || sz != expectedSize) return false;
+
+                if (outDeps == null) return true;
+                string deps = st.ColumnText(2) ?? "";
+                if (deps.Length == 0) return true;
+                string[] parts = deps.Split('|');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    string p = parts[i];
+                    if (!string.IsNullOrEmpty(p)) outDeps.Add(p);
+                }
+                return true;
+            }
+        }
+
+        internal sealed class LooseSceneDepsReadSession : IDisposable
+        {
+            private VpbSqlite3.Connection connection;
+            private int reads;
+
+            internal bool HasFresh(string filePath, long expectedWtimeBinary, long expectedSize)
+            {
+                if (string.IsNullOrEmpty(filePath) || !VpbSqlite3.IsAvailable)
+                {
+                    Dispose();
+                    return false;
+                }
+                try
+                {
+                    if (connection == null)
+                    {
+                        connection = new VpbSqlite3.Connection(DbPath);
+                        EnsureSchema(connection);
+                    }
+                    bool fresh = TryReadLooseSceneDeps(connection, filePath, expectedWtimeBinary, expectedSize, null);
+                    // Fresh statements retain live reads; bounded reuse avoids repeating schema setup for every hit.
+                    if (!fresh || ++reads >= 32) Dispose();
+                    return fresh;
+                }
+                catch
+                {
+                    Dispose();
+                    return false;
+                }
+            }
+
+            public void Dispose()
+            {
+                var opened = connection;
+                connection = null;
+                reads = 0;
+                if (opened != null) opened.Dispose();
             }
         }
 
@@ -2897,6 +3097,19 @@ namespace VPB
 
         internal static bool IsGalleryIndexRebuildActive() => s_RebuildRunning || s_RebuildScheduled;
 
+        /// <summary>
+        /// Quit stopper: give a running index worker a short window to leave its loops cleanly, then
+        /// interrupt every open connection so nothing stays parked inside native sqlite3_step.
+        /// </summary>
+        internal static void RegisterShutdownHooks()
+        {
+            VpbShutdown.Register("gallery-sql-index", () =>
+            {
+                VpbShutdown.WaitForIdleOrTimeout(() => s_RebuildRunning, 1200, 25);
+                try { VpbSqlite3.InterruptAllForShutdown(); } catch { }
+            });
+        }
+
         /// <summary>True while gallery SQLite index is being built or about to start (startup overlay).</summary>
         internal static bool ShouldShowGalleryIndexBuildOverlay()
         {
@@ -3333,7 +3546,8 @@ namespace VPB
                             int.TryParse(stPkg.ColumnText(0), out pkgCount);
                     }
                     pkgsMissingCatMem = CountPackagesMissingCatMem(conn);
-                    if (!IsAcceptableMissingCatMem(pkgsMissingCatMem, pkgCount))
+                    if (!IsAcceptableMissingCatMem(pkgsMissingCatMem, pkgCount)
+                        || (pkgsMissingCatMem > 0 && HasRecoverableCategoryGaps(conn)))
                     {
                         try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: packages_missing_cat_mem=" + pkgsMissingCatMem); } catch { }
                         return false;
@@ -3435,14 +3649,8 @@ namespace VPB
             }
         }
 
-        static bool TryValidateDatabaseMetaForIncremental(VpbSqlite3.Connection conn, out string catSig)
+        static bool TryValidateDatabaseMetaForIncremental(VpbSqlite3.Connection conn, string catSig)
         {
-            catSig = null;
-            Gallery g = Gallery.singleton;
-            if (g == null) return false;
-            List<Gallery.Category> catSnap = g.CloneCategoriesForIndex();
-            if (catSnap == null || catSnap.Count == 0) return false;
-            catSig = BuildCategoriesSignature(catSnap);
             if (string.IsNullOrEmpty(catSig)) return false;
 
             string metaVer = MetaGet(conn, "schema_version");
@@ -3546,18 +3754,31 @@ namespace VPB
 
             using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned,family,ver,is_newest,license,no_cat) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"))
             using (var insDep = conn.Prepare("INSERT OR IGNORE INTO pkg_dep(src_uid,dep_uid) VALUES(?,?)"))
+            using (var delMem = conn.Prepare("DELETE FROM cat_mem WHERE pkg_uid=?"))
+            using (var delDep = conn.Prepare("DELETE FROM pkg_dep WHERE src_uid=?"))
             {
                 long depTicksIgnored = 0;
                 for (int pi = 0; pi < pkgArray.Length; pi++)
                 {
                     VarPackage pkg = pkgArray[pi];
                     if (pkg == null) continue;
+                    List<string> names;
+                    List<long> ticks;
+                    List<long> sizes;
+                    if (ComputeNoCatFlagForInsert(pkg) != 0
+                        || pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes))
+                    {
+                        // Replaced VARs keep UID and first-seen date, but their old outgoing content must not survive.
+                        delMem.BindText(1, pkg.Uid); delMem.Step(); delMem.Reset();
+                        delDep.BindText(1, pkg.Uid); delDep.Step(); delDep.Reset();
+                    }
                     InsertPackageIndexPkgAndDepRows(pkg, existingFirstScanned, insPkg, insDep, ref nPkgInserted, ref nDepInserted, ref depTicksIgnored);
                 }
 
                 if (parallelCatMem)
                 {
                     ParallelClassifyCatMemForPackages(pkgArray, classifier, workerCatMemLists, classifyWorkers, out classifyTicks);
+                    ThrowIfQuitting();
                     FlushWorkerCatMemRowLists(workerCatMemLists, classifyWorkers, catMemBatch, insMem, ref nCatMemInserted, ref catMemSqlTicks);
                 }
                 else
@@ -3567,6 +3788,7 @@ namespace VPB
                     {
                         VarPackage pkg = pkgArray[pi];
                         if (pkg == null) continue;
+                        if ((pi & 0x3F) == 0) ThrowIfQuitting();
                         seqRows.Clear();
                         ClassifyPackageCatMemRows(pkg, classifier, seqRows);
                         FlushCatMemRows(seqRows, catMemBatch, insMem, ref nCatMemInserted, ref catMemSqlTicks);
@@ -3746,7 +3968,8 @@ namespace VPB
                                 Math.Max((long)liveCount, pkgCount)))
                             return true;
                         long missingCat = CountPackagesMissingCatMem(conn);
-                        if (!IsAcceptableMissingCatMem(missingCat, pkgCount))
+                        if (!IsAcceptableMissingCatMem(missingCat, pkgCount)
+                            || (missingCat > 0 && HasRecoverableCategoryGaps(conn)))
                             return true;
                     }
                 }
@@ -3787,6 +4010,22 @@ namespace VPB
             // Brand-new uid: stamp now. ict (creator build date) and wt (file mtime) don't reflect
             // when VPB first saw this uid, so they're unused here.
             return DateTime.UtcNow.ToBinary();
+        }
+
+        static Dictionary<string, long> ReadFirstScannedForRebuild(VpbSqlite3.Connection conn)
+        {
+            var result = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            using (var sel = conn.Prepare("SELECT uid, first_scanned FROM pkg"))
+            {
+                while (sel.Step() == VpbSqlite3.SqliteRow)
+                {
+                    string uid = sel.ColumnText(0);
+                    if (!string.IsNullOrEmpty(uid))
+                        result[uid] = sel.ColumnInt64(1);
+                }
+            }
+            VpbUidWhitespaceIdentityRepair.MergePreservedFirstScanned(conn, result);
+            return result;
         }
 
         static int CountPackagesWithFileEntryCache(Dictionary<string, VarPackage> pkgSnap)
@@ -4134,6 +4373,7 @@ namespace VPB
 
         static bool TryClaimGalleryIndexRebuildSlot()
         {
+            if (VpbShutdown.IsQuitting) return false;
             lock (s_Sync)
             {
                 if (s_RebuildScheduled || s_RebuildRunning)
@@ -4252,23 +4492,35 @@ namespace VPB
             IList<string> removedUidsOnly,
             long scanAtStart)
         {
+            return TryIncrementalGalleryIndexUpdateCoreWith(
+                added, removedPackages, removedUidsOnly, scanAtStart,
+                ReadLiveCategories, ReadLiveRefreshClock, ReadLivePackageSnapshot);
+        }
+
+        internal static bool TryIncrementalGalleryIndexUpdateCoreWith(
+            IList<VarPackage> added,
+            IList<VarPackage> removedPackages,
+            IList<string> removedUidsOnly,
+            long scanAtStart,
+            Func<List<Gallery.Category>> categoriesProvider,
+            Func<DateTime> refreshClockProvider,
+            Func<Dictionary<string, VarPackage>> packagesProvider)
+        {
+            if (categoriesProvider == null) categoriesProvider = ReadLiveCategories;
+            if (refreshClockProvider == null) refreshClockProvider = ReadLiveRefreshClock;
+            if (packagesProvider == null) packagesProvider = ReadLivePackageSnapshot;
+
             if (!VpbSqlite3.IsAvailable) return false;
             if (scanAtStart == 0) return false;
 
-            Gallery g = Gallery.singleton;
-            if (g == null) return false;
-            List<Gallery.Category> catSnap = g.CloneCategoriesForIndex();
+            List<Gallery.Category> catSnap = categoriesProvider();
             if (catSnap == null || catSnap.Count == 0) return false;
             string catSig = BuildCategoriesSignature(catSnap);
             if (string.IsNullOrEmpty(catSig)) return false;
 
             var classifier = new CategoryClassifier(catSnap);
-            Dictionary<string, VarPackage> pkgSnap;
-            lock (FileManager.packagesLock)
-            {
-                if (FileManager.PackagesByUid == null) return false;
-                pkgSnap = new Dictionary<string, VarPackage>(FileManager.PackagesByUid, StringComparer.OrdinalIgnoreCase);
-            }
+            Dictionary<string, VarPackage> pkgSnap = packagesProvider();
+            if (pkgSnap == null) return false;
             string invSigForMeta = ComputePackageInventorySignature(pkgSnap);
 
             int nRemoved = (removedPackages != null ? removedPackages.Count : 0) + (removedUidsOnly != null ? removedUidsOnly.Count : 0);
@@ -4287,10 +4539,7 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    string metaCatSig;
-                    if (!TryValidateDatabaseMetaForIncremental(conn, out metaCatSig))
-                        return false;
-                    if (!string.Equals(metaCatSig, catSig, StringComparison.Ordinal))
+                    if (!TryValidateDatabaseMetaForIncremental(conn, catSig))
                         return false;
 
                     conn.ExecUtf8("BEGIN IMMEDIATE;");
@@ -4298,20 +4547,12 @@ namespace VPB
                     {
                         RemovePackagesFromIndexConnection(conn, removedPackages, removedUidsOnly);
 
-                        var existingFirstScanned = new Dictionary<string, long>(StringComparer.Ordinal);
+                        Dictionary<string, long> existingFirstScanned;
                         try
                         {
-                            using (var sel = conn.Prepare("SELECT uid, first_scanned FROM pkg"))
-                            {
-                                while (sel.Step() == VpbSqlite3.SqliteRow)
-                                {
-                                    string uidRow = sel.ColumnText(0);
-                                    if (string.IsNullOrEmpty(uidRow)) continue;
-                                    existingFirstScanned[uidRow] = sel.ColumnInt64(1);
-                                }
-                            }
+                            existingFirstScanned = ReadFirstScannedForRebuild(conn);
                         }
-                        catch { existingFirstScanned.Clear(); }
+                        catch { existingFirstScanned = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase); }
 
                         bool useBatchCatMem = VamStartupOptimizations.SqlBatchCatMemInserts;
                         CatMemInsertBatcher catMemBatch = useBatchCatMem
@@ -4331,6 +4572,7 @@ namespace VPB
                             try { if (catMemBatch != null) catMemBatch.Flush(); } catch { }
                             try { if (insMem != null) insMem.Dispose(); } catch { }
                         }
+                        VpbUidWhitespaceIdentityRepair.ConsumeApplied(conn);
 
                         pkgRowsAfter = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg;");
                         packagesMissingCatMem = CountPackagesMissingCatMem(conn);
@@ -4341,6 +4583,7 @@ namespace VPB
                         // Always recompute after remove and/or add (IndexVarPackages may no-op on empty add).
                         try { RefreshAllPkgNewestFlags(conn); } catch { }
                         try { MarkPkgLicenseBackfillComplete(conn); } catch { }
+                        RefreshDataPackLinksAfterIndexChange(conn);
 
                         // Ready meta describes whole live inventory. Never publish it over a partial delta.
                         if (indexComplete)
@@ -4365,7 +4608,7 @@ namespace VPB
             }
 
             long scanNow = 0;
-            try { scanNow = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+            try { scanNow = refreshClockProvider().ToBinary(); } catch { }
             if (scanNow != scanAtStart)
             {
                 try
@@ -4424,6 +4667,7 @@ namespace VPB
             List<VarPackage> removedPackages,
             List<string> removedUidsOnly)
         {
+            if (VpbShutdown.IsQuitting) return;
             bool queueFullRebuild = false;
             bool pendingReschedule = false;
             try
@@ -4467,6 +4711,7 @@ namespace VPB
             }
 
             if (!queueFullRebuild && !pendingReschedule) return;
+            if (VpbShutdown.IsQuitting) return;
 
             bool bulkScan = false;
             try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
@@ -4531,6 +4776,11 @@ namespace VPB
 
         private static void RebuildWorker()
         {
+            if (VpbShutdown.IsQuitting)
+            {
+                lock (s_Sync) { s_RebuildScheduled = false; }
+                return;
+            }
             long readyBefore;
             lock (s_Sync) { readyBefore = s_ReadyScanBinary; }
             long readyAfter = long.MinValue;
@@ -4892,6 +5142,16 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Abort an index build in progress at quit so the open transaction rolls back instead of
+        /// committing partial rows. No ready stamp is written, so the next launch repairs it.
+        /// </summary>
+        static void ThrowIfQuitting()
+        {
+            if (VpbShutdown.IsQuitting)
+                throw new OperationCanceledException("VPB gallery index build aborted: VaM is quitting");
+        }
+
         /// <summary>Parallel classify pass; each worker list is filled independently.</summary>
         static int ParallelClassifyCatMemForPackages(
             VarPackage[] packages,
@@ -4918,7 +5178,7 @@ namespace VPB
                     try
                     {
                         List<CatMemRow> rows = workerLists[wi];
-                        while (true)
+                        while (!VpbShutdown.IsQuitting)
                         {
                             int i = Interlocked.Increment(ref nextIndex);
                             if (i >= packages.Length) break;
@@ -4937,7 +5197,7 @@ namespace VPB
                 });
             }
 
-            doneEvent.WaitOne();
+            VpbShutdown.WaitOrQuit(doneEvent);
             try { doneEvent.Close(); } catch { }
 
             long tsFreq = Stopwatch.Frequency;
@@ -5233,8 +5493,80 @@ namespace VPB
             }
         }
 
+        static CategoryClassifier s_ScopeClassifier;
+        static string s_ScopeClassifierSig;
+        static readonly object s_ScopeClassifierSync = new object();
+
+        internal static bool GalleryCategoryScopeContainsPath(List<string> scope, string internalPath)
+        {
+            if (scope == null || scope.Count == 0) return true;
+            if (string.IsNullOrEmpty(internalPath)) return false;
+
+            CategoryClassifier cl = GetGalleryScopeClassifier();
+            if (cl == null) return true;
+            string cat = cl.Classify(internalPath);
+            if (string.IsNullOrEmpty(cat)) return false;
+            for (int i = 0; i < scope.Count; i++)
+            {
+                if (string.Equals(scope[i], cat, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        static CategoryClassifier GetGalleryScopeClassifier()
+        {
+            string sig;
+            lock (s_Sync) { sig = s_ReadyCategoriesSig; }
+            lock (s_ScopeClassifierSync)
+            {
+                if (s_ScopeClassifier != null
+                    && string.Equals(s_ScopeClassifierSig, sig, StringComparison.Ordinal))
+                    return s_ScopeClassifier;
+                Gallery g = Gallery.singleton;
+                List<Gallery.Category> snap = g != null ? g.CloneCategoriesForIndex() : null;
+                if (snap == null || snap.Count == 0) return null;
+                s_ScopeClassifier = new CategoryClassifier(snap);
+                s_ScopeClassifierSig = sig;
+                return s_ScopeClassifier;
+            }
+        }
+
+        private static List<Gallery.Category> ReadLiveCategories()
+        {
+            Gallery g = Gallery.singleton;
+            List<Gallery.Category> cats = g != null ? g.CloneCategoriesForIndex() : null;
+            return cats ?? new List<Gallery.Category>();
+        }
+
+        private static DateTime ReadLiveRefreshClock()
+        {
+            try { return FileManager.lastPackageRefreshTime; }
+            catch { return DateTime.MinValue; }
+        }
+
+        private static Dictionary<string, VarPackage> ReadLivePackageSnapshot()
+        {
+            lock (FileManager.packagesLock)
+            {
+                if (FileManager.PackagesByUid == null) return null;
+                return new Dictionary<string, VarPackage>(FileManager.PackagesByUid, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
         private static void RebuildCore()
         {
+            RebuildCoreWith(ReadLiveCategories, ReadLiveRefreshClock, ReadLivePackageSnapshot);
+        }
+
+        internal static void RebuildCoreWith(
+            Func<List<Gallery.Category>> categoriesProvider,
+            Func<DateTime> refreshClockProvider,
+            Func<Dictionary<string, VarPackage>> packagesProvider)
+        {
+            if (categoriesProvider == null) categoriesProvider = ReadLiveCategories;
+            if (refreshClockProvider == null) refreshClockProvider = ReadLiveRefreshClock;
+            if (packagesProvider == null) packagesProvider = ReadLivePackageSnapshot;
+
             if (!VpbSqlite3.IsAvailable)
             {
                 if (!s_LoggedSqliteUnavailable)
@@ -5252,8 +5584,7 @@ namespace VPB
                 return;
             }
 
-            Gallery g = Gallery.singleton;
-            List<Gallery.Category> catSnap = g != null ? g.CloneCategoriesForIndex() : new List<Gallery.Category>();
+            List<Gallery.Category> catSnap = categoriesProvider();
             if (catSnap == null) catSnap = new List<Gallery.Category>();
 
             if (catSnap.Count == 0)
@@ -5288,7 +5619,7 @@ namespace VPB
             // Never rebuild against an unstamped clock: DateTime.MinValue.ToBinary() is 0 and would publish
             // s_ReadyScanBinary=0 while real scans use a non-zero stamp — SQL fast path stays disabled forever.
             DateTime refreshClock = DateTime.MinValue;
-            try { refreshClock = FileManager.lastPackageRefreshTime; } catch { }
+            try { refreshClock = refreshClockProvider(); } catch { }
             if (refreshClock == DateTime.MinValue)
                 return;
 
@@ -5300,12 +5631,8 @@ namespace VPB
             string catSig = BuildCategoriesSignature(catSnap);
             var classifier = new CategoryClassifier(catSnap);
 
-            Dictionary<string, VarPackage> pkgSnap;
-            lock (FileManager.packagesLock)
-            {
-                if (FileManager.PackagesByUid == null) return;
-                pkgSnap = new Dictionary<string, VarPackage>(FileManager.PackagesByUid, StringComparer.OrdinalIgnoreCase);
-            }
+            Dictionary<string, VarPackage> pkgSnap = packagesProvider();
+            if (pkgSnap == null) return;
 
             int pkgTotal = pkgSnap != null ? pkgSnap.Count : 0;
             int pkgWithCache = CountPackagesWithFileEntryCache(pkgSnap);
@@ -5393,21 +5720,12 @@ namespace VPB
                         tDropIdx += Stopwatch.GetTimestamp() - t0;
 
                         // Preserve per-uid first_scanned across the DELETE+INSERT rebuild so "Date Added" history survives.
-                        var existingFirstScanned = new Dictionary<string, long>(StringComparer.Ordinal);
+                        Dictionary<string, long> existingFirstScanned;
                         try
                         {
-                            using (var sel = conn.Prepare("SELECT uid, first_scanned FROM pkg"))
-                            {
-                                while (sel.Step() == VpbSqlite3.SqliteRow)
-                                {
-                                    string uidRow = sel.ColumnText(0);
-                                    if (string.IsNullOrEmpty(uidRow)) continue;
-                                    long fs = sel.ColumnInt64(1);
-                                    existingFirstScanned[uidRow] = fs;
-                                }
-                            }
+                            existingFirstScanned = ReadFirstScannedForRebuild(conn);
                         }
-                        catch { existingFirstScanned.Clear(); }
+                        catch { existingFirstScanned = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase); }
 
                         t0 = Stopwatch.GetTimestamp();
                         conn.ExecUtf8("DELETE FROM cat_mem; DELETE FROM pkg_dep; DELETE FROM pkg;");
@@ -5540,6 +5858,7 @@ namespace VPB
                                 try { if (insMem != null) insMem.Dispose(); } catch { }
                             }
                         }
+                        VpbUidWhitespaceIdentityRepair.ConsumeApplied(conn);
 
                         pkgRowsAfter = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg;");
                         packagesMissingCatMem = CountPackagesMissingCatMem(conn);
@@ -5550,6 +5869,7 @@ namespace VPB
 
                         try { RefreshAllPkgNewestFlags(conn); } catch { }
                         try { MarkPkgLicenseBackfillComplete(conn); } catch { }
+                        RefreshDataPackLinksAfterIndexChange(conn);
 
                         long tMeta0 = Stopwatch.GetTimestamp();
                         if (catMemIndexComplete)
@@ -5607,13 +5927,13 @@ namespace VPB
             }
 
             long scanNow = 0;
-            try { scanNow = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+            try { scanNow = refreshClockProvider().ToBinary(); } catch { }
             if (scanNow != scanAtStart || scanAtStart == 0)
             {
                 rebuildAbortReason = "scan_changed";
             }
 
-            string catSigNow = BuildCategoriesSignature(g.CloneCategoriesForIndex());
+            string catSigNow = BuildCategoriesSignature(categoriesProvider());
             if (catSigNow != catSig)
             {
                 if (rebuildAbortReason == null) rebuildAbortReason = "categories_changed";
@@ -5919,12 +6239,32 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Side-tab creator file counts from <c>cat_mem</c> + <c>pkg</c> (distinct VAR file rows), using the same extension + path rules as the legacy package scan.
-        /// Only files that appear in the index (assigned to at least one category) are counted; unclassified VAR files are excluded.
-        /// </summary>
+        internal enum FileCountGroupMode
+        {
+            Creator = 0,
+            DataPackHubTag = 1,
+            DataPackSubject = 2,
+            DataPackHubCategory = 3,
+        }
+
         internal static bool TryReadCreatorFileCounts(
             Dictionary<string, int> countsOut,
+            string extensionPipeSeparated,
+            List<string> pathPrefixes,
+            string singlePathPrefix,
+            HashSet<string> activeTags = null,
+            string categoryTitle = null,
+            string packagePathFilter = null,
+            HashSet<string> activeUserTags = null)
+        {
+            return TryReadGroupedFileCounts(countsOut, FileCountGroupMode.Creator,
+                extensionPipeSeparated, pathPrefixes, singlePathPrefix,
+                activeTags, categoryTitle, packagePathFilter, activeUserTags);
+        }
+
+        internal static bool TryReadGroupedFileCounts(
+            Dictionary<string, int> countsOut,
+            FileCountGroupMode groupMode,
             string extensionPipeSeparated,
             List<string> pathPrefixes,
             string singlePathPrefix,
@@ -5985,11 +6325,53 @@ namespace VPB
                     // EVERYTHING grid is all cat_mem (minus previews); category.paths are loose-disk roots only — do not AND them here.
                     bool hasPathPrefix = !isEverythingC3
                         && ((pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix));
+                    bool packMode = groupMode != FileCountGroupMode.Creator;
+                    if (packMode && !DataPackTablesPresent(conn)) return false;
+
+                    string groupExpr;
+                    string groupGuard;
+                    if (groupMode == FileCountGroupMode.DataPackHubTag)
+                    {
+                        groupExpr = "dt.tag";
+                        groupGuard = "length(trim(ifnull(dt.tag,''))) > 0";
+                    }
+                    else if (groupMode == FileCountGroupMode.DataPackSubject)
+                    {
+                        groupExpr = "de.subject";
+                        groupGuard = "length(trim(ifnull(de.subject,''))) > 0";
+                    }
+                    else if (groupMode == FileCountGroupMode.DataPackHubCategory)
+                    {
+                        groupExpr = "de.category";
+                        groupGuard = "length(trim(ifnull(de.category,''))) > 0";
+                    }
+                    else
+                    {
+                        groupExpr = "p.creator";
+                        groupGuard = "length(trim(coalesce(p.creator,''))) > 0";
+                    }
+
                     var sb = new StringBuilder();
-                    string countExpr = (hasCat && !isEverythingC3) ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
-                    sb.Append("SELECT p.creator, ").Append(countExpr).Append(" ");
+                    string countExpr = (hasCat && !isEverythingC3 && !packMode)
+                        ? "COUNT(*)"
+                        : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
+                    sb.Append("SELECT ").Append(groupExpr).Append(", ").Append(countExpr).Append(" ");
                     sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
-                    sb.Append("WHERE length(trim(coalesce(p.creator,''))) > 0");
+                    if (packMode)
+                    {
+                        sb.Append("CROSS JOIN datapack_link dl ON dl.pkg_uid = m.pkg_uid ");
+                        if (groupMode == FileCountGroupMode.DataPackHubTag)
+                            sb.Append("CROSS JOIN datapack_tag dt ON dt.pack_id=dl.pack_id AND dt.entry_id=dl.entry_id AND dt.ns='hub' ");
+                        else
+                            sb.Append("CROSS JOIN datapack_entry de ON de.pack_id=dl.pack_id AND de.entry_id=dl.entry_id ");
+                    }
+                    sb.Append("WHERE ").Append(groupGuard);
+                    if (packMode && groupMode != FileCountGroupMode.DataPackHubCategory)
+                        AppendDataPackLinkIdentityOnlySql(sb, "dl");
+                    if (groupMode == FileCountGroupMode.DataPackHubTag)
+                        AppendDataPackTagNotHiddenSql(sb, "dt.tag", "m.pkg_uid");
+                    if (groupMode == FileCountGroupMode.DataPackHubCategory)
+                        AppendDataPackHubTypePackScopeSql(sb);
                     if (hasCat && !isEverythingC3) sb.Append(" AND m.category = ?");
                     if (isEverythingC3) sb.Append(BuildEverythingNonPreviewAnd("m.internal_path"));
                     if (hasPackagePathFilter)
@@ -6043,7 +6425,7 @@ namespace VPB
                     var utBind = new List<string>();
                     AppendSqlActiveUserTagExists(sb, utBind, activeUserTags, "m", isEverythingC3 ? Gallery.EverythingCategoryName : null);
 
-                    sb.Append(" GROUP BY p.creator");
+                    sb.Append(" GROUP BY ").Append(groupExpr);
 
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
@@ -6086,11 +6468,11 @@ namespace VPB
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
                         {
-                            string creator = stmt.ColumnText(0);
+                            string key = stmt.ColumnText(0);
                             int n;
-                            if (!int.TryParse(stmt.ColumnText(1), out n)) n = 0;
-                            if (!string.IsNullOrEmpty(creator))
-                                countsOut[creator] = n;
+                            if (!int.TryParse(stmt.ColumnText(1), out n)) n = (int)stmt.ColumnInt64(1);
+                            if (!string.IsNullOrEmpty(key))
+                                countsOut[key] = n;
                         }
                     }
                 }
@@ -6687,9 +7069,25 @@ namespace VPB
             return " AND " + col + " NOT LIKE '%.jpg' AND " + col + " NOT LIKE '%.jpeg' AND " + col + " NOT LIKE '%.png'";
         }
 
-        // Shared WHERE context built by BuildGalleryCategoryWhere.
-        // Holds the non-SELECT, non-ORDER portion of the cat_mem + pkg query so both the paged SELECT
-        // and per-chip COUNT(*) queries can reuse it with only the cloth AND swapped.
+        internal static string BuildEverythingCategoryScopeAnd(bool isEverything, List<string> categoryScope)
+        {
+            if (!isEverything || categoryScope == null || categoryScope.Count == 0) return "";
+            var sb = new StringBuilder(96);
+            sb.Append(" AND m.category IN (");
+            bool first = true;
+            for (int i = 0; i < categoryScope.Count; i++)
+            {
+                string c = categoryScope[i];
+                if (string.IsNullOrEmpty(c)) continue;
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append(SqlLiteral(c));
+            }
+            if (first) return "";
+            sb.Append(')');
+            return sb.ToString();
+        }
+
         internal struct GalleryCategoryWhereContext
         {
             // FROM + WHERE prefix up to and including the cloth AND placeholder point.
@@ -6998,7 +7396,9 @@ namespace VPB
             int pkgVersionFilter = PkgVersionFilterOff,
             bool userTagsTaggedOnly = false,
             string licenseFilter = null,
-            GalleryPanel.HairSubfilter hairSubfilterForSql = 0)
+            GalleryPanel.HairSubfilter hairSubfilterForSql = 0,
+            GalleryPanel.SceneHubSubfilter sceneHubSubfilterForSql = 0,
+            List<string> everythingCategoryScope = null)
         {
             return TryQueryGalleryCategoryRows(
                 categoryTitle, currentExtension, creatorFilter, outRows, out stats,
@@ -7006,7 +7406,8 @@ namespace VPB
                 GallerySearchQuery.FromLegacyNameTerms(nameTerms),
                 pathExclusions, pathInclusions, activeTags, activeUserTags, sortState,
                 userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags, pkgVersionFilter,
-                userTagsTaggedOnly, licenseFilter, hairSubfilterForSql);
+                userTagsTaggedOnly, licenseFilter, hairSubfilterForSql, sceneHubSubfilterForSql,
+                everythingCategoryScope);
         }
 
         internal static bool TryQueryGalleryCategoryRows(
@@ -7029,7 +7430,9 @@ namespace VPB
             int pkgVersionFilter = PkgVersionFilterOff,
             bool userTagsTaggedOnly = false,
             string licenseFilter = null,
-            GalleryPanel.HairSubfilter hairSubfilterForSql = 0)
+            GalleryPanel.HairSubfilter hairSubfilterForSql = 0,
+            GalleryPanel.SceneHubSubfilter sceneHubSubfilterForSql = 0,
+            List<string> everythingCategoryScope = null)
         {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
@@ -7106,6 +7509,7 @@ namespace VPB
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
                     // Grid: default-hide presets when idle (same as PassesHairGalleryFiltersForPath).
                     string hairSqlAnd = BuildHairSubfilterSqlAnd(conn, categoryTitle, hairSubfilterForSql, true);
+                    string sceneHubSqlAnd = BuildSceneHubSubfilterSqlAnd(conn, categoryTitle, sceneHubSubfilterForSql);
                     string loadedSelect = ctx.PkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
 
                     string orderBy = "";
@@ -7124,7 +7528,7 @@ namespace VPB
                     var sbSql = new StringBuilder(512);
                     sbSql.Append("SELECT ");
                     if (ctx.IsEverything) sbSql.Append("DISTINCT ");
-                    sbSql.Append("m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), ");
+                    sbSql.Append("m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), p.pctime, ");
                     // cloth_attr forced '' for EVERYTHING: DISTINCT needs a stable value across real-category rows with packed attrs.
                     sbSql.Append(ctx.IsEverything ? "''" : "ifnull(m.cloth_attr,'')");
                     sbSql.Append(", ");
@@ -7132,12 +7536,14 @@ namespace VPB
                     sbSql.Append(", ifnull(p.first_scanned, 0)");
                     sbSql.Append(" FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE ");
                     if (ctx.IsEverything)
-                        sbSql.Append("1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                        sbSql.Append("1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"))
+                             .Append(BuildEverythingCategoryScopeAnd(true, everythingCategoryScope));
                     else
                         sbSql.Append("m.category = ?");
                     sbSql.Append(ctx.CreatorAndFragment);
                     sbSql.Append(clothSqlAnd);
                     sbSql.Append(hairSqlAnd);
+                    sbSql.Append(sceneHubSqlAnd);
                     sbSql.Append(ctx.LoadedAndFragment).Append(ctx.VersionAndFragment).Append(ctx.LicenseAndFragment)
                          .Append(ctx.NameAndFragment)
                          .Append(ctx.SearchTimeAndFragment)
@@ -7176,9 +7582,10 @@ namespace VPB
                             r.LastWriteTicksOrInvalid = stmt.ColumnInt64(4);
                             r.PackageSizeOrInvalid = stmt.ColumnInt64(5);
                             r.PackageCreationTicksOrInvalid = stmt.ColumnInt64(6);
-                            r.ClothingAttrPacked = (int)stmt.ColumnInt64(7);
-                            r.PackageIsLoaded = stmt.ColumnInt64(8) != 0;
-                            r.FirstScannedTicksOrInvalid = stmt.ColumnInt64(9);
+                            r.PackageFileCreationTicksOrInvalid = stmt.ColumnInt64(7);
+                            r.ClothingAttrPacked = (int)stmt.ColumnInt64(8);
+                            r.PackageIsLoaded = stmt.ColumnInt64(9) != 0;
+                            r.FirstScannedTicksOrInvalid = stmt.ColumnInt64(10);
                             r.ItemUsageCount = 0;
                             r.ItemLastUsedBinary = 0;
                             if (r.PackageUid.Length > 0 && r.InternalPath.Length > 0)
@@ -7213,7 +7620,7 @@ namespace VPB
                             string loadedSel = "0";
                             try { if (PkgHasLoadedColumn(conn2)) loadedSel = "ifnull(p.loaded,0)"; } catch { }
                             string sqlRetry =
-                                "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), ifnull(m.cloth_attr,''), "
+                                "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), p.pctime, ifnull(m.cloth_attr,''), "
                                 + loadedSel + ", ifnull(p.first_scanned, 0) "
                                 + "FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE m.category = ?";
                             using (var stmt2 = conn2.Prepare(sqlRetry))
@@ -7231,9 +7638,10 @@ namespace VPB
                                     r.LastWriteTicksOrInvalid = stmt2.ColumnInt64(4);
                                     r.PackageSizeOrInvalid = stmt2.ColumnInt64(5);
                                     r.PackageCreationTicksOrInvalid = stmt2.ColumnInt64(6);
-                                    r.ClothingAttrPacked = (int)stmt2.ColumnInt64(7);
-                                    r.PackageIsLoaded = stmt2.ColumnInt64(8) != 0;
-                                    r.FirstScannedTicksOrInvalid = stmt2.ColumnInt64(9);
+                                    r.PackageFileCreationTicksOrInvalid = stmt2.ColumnInt64(7);
+                                    r.ClothingAttrPacked = (int)stmt2.ColumnInt64(8);
+                                    r.PackageIsLoaded = stmt2.ColumnInt64(9) != 0;
+                                    r.FirstScannedTicksOrInvalid = stmt2.ColumnInt64(10);
                                     r.ItemUsageCount = 0;
                                     r.ItemLastUsedBinary = 0;
                                     if (r.PackageUid.Length > 0 && r.InternalPath.Length > 0)
@@ -7375,7 +7783,7 @@ namespace VPB
                         GalleryHistoryResolvedInternalPathSql() + ", " +
                         "TRIM(COALESCE(mx.list_path, mr.list_path,'')), " +
                         "ifnull(p.var_path,''), " +
-                        "p.wtime, p.psize, ifnull(p.ictime, p.pctime), " +
+                        "p.wtime, p.psize, ifnull(p.ictime, p.pctime), p.pctime, " +
                         "ifnull(COALESCE(mx.cloth_attr, mr.cloth_attr),''), " +
                         loadedSelect +
                         ", i.use_count, i.last_used, ifnull(p.first_scanned, 0) ");
@@ -7406,11 +7814,12 @@ namespace VPB
                             r.LastWriteTicksOrInvalid = stmt.ColumnInt64(5);
                             r.PackageSizeOrInvalid = stmt.ColumnInt64(6);
                             r.PackageCreationTicksOrInvalid = stmt.ColumnInt64(7);
-                            r.ClothingAttrPacked = (int)stmt.ColumnInt64(8);
-                            r.PackageIsLoaded = stmt.ColumnInt64(9) != 0;
-                            r.ItemUsageCount = (int)Math.Min(Math.Max(stmt.ColumnInt64(10), 0), int.MaxValue);
-                            r.ItemLastUsedBinary = stmt.ColumnInt64(11);
-                            r.FirstScannedTicksOrInvalid = stmt.ColumnInt64(12);
+                            r.PackageFileCreationTicksOrInvalid = stmt.ColumnInt64(8);
+                            r.ClothingAttrPacked = (int)stmt.ColumnInt64(9);
+                            r.PackageIsLoaded = stmt.ColumnInt64(10) != 0;
+                            r.ItemUsageCount = (int)Math.Min(Math.Max(stmt.ColumnInt64(11), 0), int.MaxValue);
+                            r.ItemLastUsedBinary = stmt.ColumnInt64(12);
+                            r.FirstScannedTicksOrInvalid = stmt.ColumnInt64(13);
                             if (dbgSampleKeys != null && dbgSampleKeys.Count < 18 && !string.IsNullOrEmpty(r.ItemUsageKey))
                                 dbgSampleKeys.Add(r.ItemUsageKey);
                             if (r.PackageUid.Length > 0 && r.InternalPath.Length > 0)
@@ -7562,6 +7971,7 @@ namespace VPB
                         r.LastWriteTicksOrInvalid = long.MinValue;
                         r.PackageSizeOrInvalid = long.MinValue;
                         r.PackageCreationTicksOrInvalid = long.MinValue;
+                        r.PackageFileCreationTicksOrInvalid = long.MinValue;
                         r.FirstScannedTicksOrInvalid = 0;
                         r.ClothingAttrPacked = 0;
                         r.PackageIsLoaded = true; // loose files under the VaM tree are always "loaded"
@@ -7834,7 +8244,7 @@ namespace VPB
                     }
 
                     var sbSql = new StringBuilder(512);
-                    sbSql.Append("SELECT p.uid, ifnull(p.var_path,''), p.wtime, p.psize, ifnull(p.ictime, p.pctime), ").Append(loadedSelect).Append(", ifnull(p.first_scanned, 0) FROM pkg p WHERE 1=1");
+                    sbSql.Append("SELECT p.uid, ifnull(p.var_path,''), p.wtime, p.psize, ifnull(p.ictime, p.pctime), p.pctime, ").Append(loadedSelect).Append(", ifnull(p.first_scanned, 0) FROM pkg p WHERE 1=1");
                     if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
                     if (hasPath) sbSql.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     sbSql.Append(loadedSqlAnd).Append(versionSqlAnd).Append(licenseSqlAnd).Append(nameSqlAnd).Append(orderBy);
@@ -7864,14 +8274,15 @@ namespace VPB
                             r.LastWriteTicksOrInvalid = st.ColumnInt64(2);
                             r.PackageSizeOrInvalid = st.ColumnInt64(3);
                             r.PackageCreationTicksOrInvalid = st.ColumnInt64(4);
+                            r.PackageFileCreationTicksOrInvalid = st.ColumnInt64(5);
                             r.PackageIsLoaded = false;
-                            string loadedTxt = st.ColumnText(5) ?? "";
+                            string loadedTxt = st.ColumnText(6) ?? "";
                             int loadedInt = 0;
                             if (!string.IsNullOrEmpty(loadedTxt) && int.TryParse(loadedTxt, out loadedInt))
                                 r.PackageIsLoaded = loadedInt != 0;
                             else
                                 r.PackageIsLoaded = ComputePackageLoadedFlagFromVarPath(r.VarPath) != 0;
-                            r.FirstScannedTicksOrInvalid = st.ColumnInt64(6);
+                            r.FirstScannedTicksOrInvalid = st.ColumnInt64(7);
                             if (!string.IsNullOrEmpty(r.PackageUid)) outRows.Add(r);
                         }
                     }
@@ -7992,7 +8403,7 @@ namespace VPB
             if (conn == null || chunkUids == null || chunkUids.Count == 0) return true;
 
             var sb = new StringBuilder(128 + chunkUids.Count * 2 + (termsLower != null ? termsLower.Length * 32 : 0));
-            sb.Append("SELECT uid, ifnull(var_path,''), wtime, psize, ifnull(ictime, pctime), ifnull(loaded,''), ifnull(first_scanned, 0) FROM pkg WHERE uid IN (");
+            sb.Append("SELECT uid, ifnull(var_path,''), wtime, psize, ifnull(ictime, pctime), pctime, ifnull(loaded,''), ifnull(first_scanned, 0) FROM pkg WHERE uid IN (");
             for (int i = 0; i < chunkUids.Count; i++)
             {
                 if (i != 0) sb.Append(',');
@@ -8035,22 +8446,26 @@ namespace VPB
                     r.LastWriteTicksOrInvalid = long.MinValue;
                     r.PackageSizeOrInvalid = long.MinValue;
                     r.PackageCreationTicksOrInvalid = long.MinValue;
+                    r.PackageFileCreationTicksOrInvalid = long.MinValue;
                     r.FirstScannedTicksOrInvalid = 0L;
                     r.PackageIsLoaded = false;
 
                     string wtxt = st.ColumnText(2);
                     string sztxt = st.ColumnText(3);
                     string ctxt = st.ColumnText(4);
-                    string loadedTxt = st.ColumnText(5) ?? "";
-                    string fstxt = st.ColumnText(6);
+                    string fileCtxt = st.ColumnText(5);
+                    string loadedTxt = st.ColumnText(6) ?? "";
+                    string fstxt = st.ColumnText(7);
 
-                    long wtL, szL, ctL, fsL;
+                    long wtL, szL, ctL, fileCtL, fsL;
                     if (!string.IsNullOrEmpty(wtxt) && long.TryParse(wtxt, out wtL))
                         r.LastWriteTicksOrInvalid = wtL;
                     if (!string.IsNullOrEmpty(sztxt) && long.TryParse(sztxt, out szL))
                         r.PackageSizeOrInvalid = szL;
                     if (!string.IsNullOrEmpty(ctxt) && long.TryParse(ctxt, out ctL))
                         r.PackageCreationTicksOrInvalid = ctL;
+                    if (!string.IsNullOrEmpty(fileCtxt) && long.TryParse(fileCtxt, out fileCtL))
+                        r.PackageFileCreationTicksOrInvalid = fileCtL;
                     if (!string.IsNullOrEmpty(fstxt) && long.TryParse(fstxt, out fsL))
                         r.FirstScannedTicksOrInvalid = fsL;
                     int loadedInt = 0;
@@ -8071,7 +8486,7 @@ namespace VPB
             if (conn == null || chunkUids == null || chunkUids.Count == 0) return true;
 
             var sb = new StringBuilder(96 + chunkUids.Count * 2);
-            sb.Append("SELECT uid, ifnull(var_path,''), wtime, psize, ifnull(ictime, pctime), ifnull(loaded,''), ifnull(first_scanned, 0) FROM pkg WHERE uid IN (");
+            sb.Append("SELECT uid, ifnull(var_path,''), wtime, psize, ifnull(ictime, pctime), pctime, ifnull(loaded,''), ifnull(first_scanned, 0) FROM pkg WHERE uid IN (");
             for (int i = 0; i < chunkUids.Count; i++)
             {
                 if (i != 0) sb.Append(',');
@@ -8093,22 +8508,26 @@ namespace VPB
                     r.LastWriteTicksOrInvalid = long.MinValue;
                     r.PackageSizeOrInvalid = long.MinValue;
                     r.PackageCreationTicksOrInvalid = long.MinValue;
+                    r.PackageFileCreationTicksOrInvalid = long.MinValue;
                     r.FirstScannedTicksOrInvalid = 0L;
                     r.PackageIsLoaded = false;
 
                     string wtxt = st.ColumnText(2);
                     string sztxt = st.ColumnText(3);
                     string ctxt = st.ColumnText(4);
-                    string loadedTxt = st.ColumnText(5) ?? "";
-                    string fstxt = st.ColumnText(6);
+                    string fileCtxt = st.ColumnText(5);
+                    string loadedTxt = st.ColumnText(6) ?? "";
+                    string fstxt = st.ColumnText(7);
 
-                    long wtL, szL, ctL, fsL;
+                    long wtL, szL, ctL, fileCtL, fsL;
                     if (!string.IsNullOrEmpty(wtxt) && long.TryParse(wtxt, out wtL))
                         r.LastWriteTicksOrInvalid = wtL;
                     if (!string.IsNullOrEmpty(sztxt) && long.TryParse(sztxt, out szL))
                         r.PackageSizeOrInvalid = szL;
                     if (!string.IsNullOrEmpty(ctxt) && long.TryParse(ctxt, out ctL))
                         r.PackageCreationTicksOrInvalid = ctL;
+                    if (!string.IsNullOrEmpty(fileCtxt) && long.TryParse(fileCtxt, out fileCtL))
+                        r.PackageFileCreationTicksOrInvalid = fileCtL;
                     if (!string.IsNullOrEmpty(fstxt) && long.TryParse(fstxt, out fsL))
                         r.FirstScannedTicksOrInvalid = fsL;
                     int loadedInt = 0;
@@ -8357,10 +8776,10 @@ namespace VPB
                     if (!string.IsNullOrEmpty(targetShort))
                     {
                         using (var st = conn.Prepare(
-                            "SELECT COUNT(DISTINCT src_uid) FROM pkg_dep WHERE dep_uid = ? OR dep_uid LIKE ?"))
+                            "SELECT COUNT(DISTINCT src_uid) FROM pkg_dep WHERE dep_uid = ? OR dep_uid LIKE ? ESCAPE '\\'"))
                         {
                             st.BindText(1, targetUid);
-                            st.BindText(2, targetShort + ".%");
+                            st.BindText(2, EscapeLike(targetShort) + ".%");
                             if (st.Step() == VpbSqlite3.SqliteRow)
                                 count = (int)st.ColumnInt64(0);
                         }
@@ -8381,6 +8800,67 @@ namespace VPB
             catch
             {
                 count = 0;
+                return false;
+            }
+        }
+
+        internal static bool TryCountDependentUidsBatch(Dictionary<string, string> uidToShort, out Dictionary<string, int> counts)
+        {
+            counts = null;
+            if (uidToShort == null || uidToShort.Count == 0 || !VpbSqlite3.IsAvailable) return false;
+            long scanBin = FileManager.lastPackageRefreshTime.ToBinary();
+            string catSig;
+            lock (s_Sync)
+            {
+                catSig = s_ReadyCategoriesSig;
+                if (s_ReadyScanBinary != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+                    return false;
+            }
+
+            try
+            {
+                var result = new Dictionary<string, int>(uidToShort.Count, StringComparer.Ordinal);
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    long version = ScalarInt64(conn, "PRAGMA data_version");
+                    if (version < 0) return false;
+                    // Every count must see one snapshot, even if a rebuild commits between lookups.
+                    conn.ExecUtf8("BEGIN;");
+                    if (uidToShort.Count < DependentScanMinimumTargets || !TryCountDependentUidsByScan(conn, uidToShort, result))
+                    {
+                        using (var family = conn.Prepare(
+                            "SELECT COUNT(DISTINCT src_uid) FROM pkg_dep WHERE dep_uid = ? OR dep_uid LIKE ? ESCAPE '\\'"))
+                        using (var exact = conn.Prepare("SELECT COUNT(DISTINCT src_uid) FROM pkg_dep WHERE dep_uid = ?"))
+                        {
+                            foreach (var pair in uidToShort)
+                            {
+                                if (string.IsNullOrEmpty(pair.Key)) return false;
+                                bool hasFamily = !string.IsNullOrEmpty(pair.Value);
+                                var st = hasFamily ? family : exact;
+                                st.BindText(1, pair.Key);
+                                if (hasFamily) st.BindText(2, EscapeLike(pair.Value) + ".%");
+                                if (st.Step() != VpbSqlite3.SqliteRow) return false;
+                                result.Add(pair.Key, Math.Max(0, (int)st.ColumnInt64(0)));
+                                st.Reset();
+                            }
+                        }
+                    }
+                    conn.ExecUtf8("COMMIT;");
+                    // Also reject a rebuild that started and finished while the batch was reading.
+                    if (ScalarInt64(conn, "PRAGMA data_version") != version)
+                        return false;
+                }
+                lock (s_Sync)
+                {
+                    if (s_RebuildRunning || s_ReadyScanBinary != scanBin || s_ReadyCategoriesSig != catSig
+                        || FileManager.lastPackageRefreshTime.ToBinary() != scanBin)
+                        return false;
+                }
+                counts = result;
+                return true;
+            }
+            catch
+            {
                 return false;
             }
         }
@@ -8428,9 +8908,9 @@ namespace VPB
                     // Group match (Author.Name.*): includes .latest, .minX, numeric versions, etc.
                     if (!string.IsNullOrEmpty(targetShort))
                     {
-                        using (var st2 = conn.Prepare("SELECT DISTINCT src_uid FROM pkg_dep WHERE dep_uid LIKE ?"))
+                        using (var st2 = conn.Prepare("SELECT DISTINCT src_uid FROM pkg_dep WHERE dep_uid LIKE ? ESCAPE '\\'"))
                         {
-                            st2.BindText(1, targetShort + ".%");
+                            st2.BindText(1, EscapeLike(targetShort) + ".%");
                             int step2;
                             while ((step2 = st2.Step()) == VpbSqlite3.SqliteRow)
                             {
@@ -8524,13 +9004,18 @@ namespace VPB
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
-                using (var st = conn.Prepare("SELECT ifnull(var_path,'') FROM pkg WHERE uid = ? LIMIT 1"))
                 {
-                    st.BindText(1, uid);
-                    if (st.Step() != VpbSqlite3.SqliteRow) return false;
-                    string p = st.ColumnText(0) ?? "";
-                    if (string.IsNullOrEmpty(p)) return false;
-                    varPath = p;
+                    string path = SelectVarPathForUid(conn, uid);
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        string registeredUid;
+                        if (FileManager.TryMapLookupUidToRegisteredUid(uid, out registeredUid)
+                            && !string.IsNullOrEmpty(registeredUid)
+                            && !string.Equals(registeredUid, uid, StringComparison.OrdinalIgnoreCase))
+                            path = SelectVarPathForUid(conn, registeredUid);
+                    }
+                    if (string.IsNullOrEmpty(path)) return false;
+                    varPath = path;
                     return true;
                 }
             }
@@ -8538,6 +9023,18 @@ namespace VPB
             {
                 varPath = null;
                 return false;
+            }
+        }
+
+        static string SelectVarPathForUid(VpbSqlite3.Connection conn, string uid)
+        {
+            if (conn == null || string.IsNullOrEmpty(uid)) return null;
+            using (var st = conn.Prepare("SELECT ifnull(var_path,'') FROM pkg WHERE uid = ? LIMIT 1"))
+            {
+                st.BindText(1, uid);
+                if (st.Step() != VpbSqlite3.SqliteRow) return null;
+                string p = st.ColumnText(0) ?? "";
+                return string.IsNullOrEmpty(p) ? null : p;
             }
         }
 
@@ -8568,9 +9065,9 @@ namespace VPB
                 int bestVersion = -1;
                 string bestUid = null;
                 using (var conn = new VpbSqlite3.Connection(DbPath))
-                using (var st = conn.Prepare("SELECT uid FROM pkg WHERE uid LIKE ?"))
+                using (var st = conn.Prepare("SELECT uid FROM pkg WHERE uid LIKE ? ESCAPE '\\'"))
                 {
-                    st.BindText(1, packageGroup + ".%");
+                    st.BindText(1, EscapeLike(packageGroup) + ".%");
                     for (;;)
                     {
                         int rc = st.Step();

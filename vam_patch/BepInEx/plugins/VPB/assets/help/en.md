@@ -58,7 +58,7 @@ The language button on the title bar (e.g. EN) switches UI text. Help content lo
 
 ## Advanced search
 
-Title-bar search is a **universal filter**. Bare words match name/path/creator/uid **or** user-tag text.
+Title-bar search is a **universal filter**. Bare words match name/path/creator/uid, user-tag text, **or** Look-A-Pedia “looks like” names (so typing `jinx` finds a look packaged as Kinx).
 
 ### Filter chips (Enter to commit)
 - Type `@creatorA` then **Enter**, then `#tagB` then **Enter** — each becomes its own chip under **Include**.
@@ -79,14 +79,18 @@ Title-bar search is a **universal filter**. Bare words match name/path/creator/u
 - **IF** — optional preface before a status/badge word. Same as writing the status alone: `IF loaded` ≡ `loaded`. Use it when you think “only IF this is true…”.
 
 ### Text and tags
-- Bare words — `dress man` (each word must match somewhere; AND)
-- **Broad exclude** — `-wet` (must **not** match name/path/creator/uid **or** user-tag text). Chip Exclude / Shift+Enter on a bare word uses this.
+- Bare words — `dress man` (each word must match somewhere; AND). Also matches Look-A-Pedia **looks like** names when that pack is on.
+- **Broad exclude** — `-wet` (must **not** match name/path/creator/uid, user-tag text, or Look-A-Pedia subject). Chip Exclude / Shift+Enter on a bare word uses this.
 - User tag — `tag:wet` or `#wet`
 - **Multiple tags** (comma list) — `tag:wet,shiny,-nsfw` or `#wet,#shiny,-nsfw` or shorthand `wet,shiny,-nsfw`
   - plain name = must have that tag
   - `-name` = must **not** have that tag
 - Exclude tag — `-tag:nsfw` or `-#nsfw` (user-tag only; different from bare `-wet`)
 - Creator — `creator:Acid` or `@Acid` (comma list OK: `@Acid,@Other`)
+- **Looks like** — **Looks like** section in {{icon:tags|Tags}} (amber, read-only), or `looks:jinx` (Look-A-Pedia subject only; comma list = **any of**). Click **Looks like** on the detail strip to commit this chip.
+- **Hub type** — **HUB TYPE** at the **top of {{icon:category|Categories}}** (chevron; click to expand), or `hubcat:Looks`. Click **Looks** there and you get a grid of **looks as items** — appearance presets *and* the scene files that deliver a look — not a package list. Same category icons as the file-type rows. Still not Looks like (that is who a look resembles; this is what the creator uploaded it as). Click **Hub type** on the detail strip to commit a `hubcat:` chip on the current grid. Leading `-` excludes (`-hubcat:Looks`).
+- **Hub tag** — **Hub tags** section in {{icon:tags|Tags}} (green, read-only), or `hubtag:nier` (comma list = **any of**). With the Hub data pack on, every package the Hub knows carries its Hub tags, not just Look-A-Pedia entries. Look-A-Pedia and Hub rows that share a Hub resource id also share package matches (Hub filenames fill empty Look-A-Pedia `vars`, and the other way around). Select an item: Hub tags on the **detail strip** are clickable filters (right-click excludes), same as the Tags list. Open the tag list to see them in green under your own tags: read-only there, but **click** hides one on that package and **right-click** hides it everywhere (Settings shows the count and can undo the lot). Same string can still be **Create Tag** as a user tag — different namespace, no conflict.
+- **Any pack field** — `lap:gaming` (subject, title, creator, category, tag line, or tags — across both packs). Leading `-` excludes (`-looks:`, `-hubtag:`, `-hubcat:`, `-lap:`).
 
 ### Status and badges
 Grid letter badges: **A** auto-install, **H** hidden, **W** scan-whitelist excluded, **T** user tags.
@@ -102,6 +106,11 @@ Grid letter badges: **A** auto-install, **H** hidden, **W** scan-whitelist exclu
 - `whitelist` / `badge:w` — scan-excluded badge **W**
 
 ### Examples
+- Open {{icon:category|Categories}} → **HUB TYPE** → **Looks** — every look you own, presets and scenes, no syntax
+- `jinx` — name/path **or** Look-A-Pedia “looks like” (finds Kinx)
+- `looks:jinx` — only Look-A-Pedia subject (expert)
+- `hubcat:Looks` — Hub listing type Looks (look-delivery items, even when they are scene files)
+- `hubtag:nier` — Hub tag from the Hub / Look-A-Pedia packs (Tags list Hub tags section)
 - `tag:fav,outfit,-nsfw` — has fav and outfit tags, not nsfw
 - `#wet OR #shiny` — either tag
 - `dress AND IF loaded` — name/path contains dress, and package is loaded
@@ -122,6 +131,29 @@ At the top of the Tags column, pick a mode:
 - **Tag** — assign your tags to packages (Applied / Available lists).
 - **Filter** — filter the grid by selected tags (AND/OR in Settings → Gallery side lists).
 - **Filter untagged** — show only items with no user tags.
+
+**HUB TYPE** (Hub data pack) sits **pinned at the top of {{icon:category|Categories}}** — chevron, all-caps so it is not a file-type row. Collapsed it is just **HUB TYPE**; the click that expands it buys the counts, which is why they are not there until you ask. Expanded it becomes **HUB TYPE (N)** with one row per listing type, ordered by how much of your library each covers.
+
+Click **Looks** (or Scenes, Clothing, …) and you browse **items, not packages** — the grid fills with the files those packages actually deliver, and the number on the row is exactly how many you get:
+
+| Hub type | opens | Hub type | opens |
+| --- | --- | --- | --- |
+| Looks | Appearance + Scenes | Poses | Pose |
+| Scenes / Demo + Lite / Comics | Scenes | Mocap + Animation | Animation + Pose |
+| Environments / Lighting + HDRI | SubScenes + Scenes | Morphs | Morphs |
+| Clothing | Clothing | Textures | Skin |
+| Hairstyles | Hair | Plugins + Scripts | Plugins |
+| Assets + Accessories | CUA | Guides, Audio, Toolkits, Other | every item |
+
+**Looks is the point of all this.** A look is not a file type — creators ship it as an appearance preset *or* as a scene, and VaM has no idea which. Hub type Looks shows both together, so a look you were never given a `.vap` for still lands in your Looks. Categories you do not have a folder for are simply skipped.
+
+Click the row you are already on to leave and go back to the category you came from. Command palette **Hub type** jumps here. `hubcat:` in title search still filters any grid.
+
+**Hub type** also appears as a **filter facet** in {{icon:tags|Tags}}, above Looks like — same closed list, but counted as **items in the category you are browsing**. Click filters the grid with `hubcat:`, right-click excludes. Use Categories to *navigate* to a Hub type, Tags to *narrow* the category you are already in.
+
+**Looks like** (Look-A-Pedia pack) sits in an **amber Looks like (N)** header at the top of Tags Available. **Hub tags** sit in a **green Hub tags (N)** header under that. Both stay on screen while you scroll. Click filters the grid (`looks:` / `hubtag:`); they cannot be applied. Type the same Hub-tag name and use **Create Tag** if you want that string as a user tag.
+
+When **Scenes** is the current category, the Scenes row accordion still has Hub-type chips: **Hub: Scenes**, **Hub: Looks**, **Unclassified**, **Other Hub types**. Default is Hub: Scenes + Unclassified so look-delivery scene JSON stays out of the playable-scene grid. Click **Hub: Looks** there to show those scene files without leaving Scenes. Dismiss the **Hub type** chip in the filter bar to show every Hub listing type in Scenes. Adding a `hubcat:` filter while those chips are still at their default lifts the default for you, so asking for Hub type Looks inside Scenes returns Looks instead of nothing; once you click a chip yourself, your choice is kept.
 
 Use **Edit** in the Tags column header to open the tag editor **Database** mode (create, rename, merge, purge, categories, YAML). Same window as detail-strip **Set Tags** / **T** — switch **Tag** ↔ **Database** in the mode tabs.
 
@@ -167,7 +199,7 @@ Select rows, then use the **toolbox** at the bottom for cleanup actions: filter 
 Select one or more rows to expand the **toolbox** at the bottom (hover the bar if it is collapsed).
 
 **Detail strip** — select a row for an info card above the toolbox: thumb + status badges (A/H/W/T), facts, and clickable chips. Collapse with the chevron left of the item name; expand again from the Details button (top-left in the toolbox action row). Hover the preview thumb: scroll wheel steps selection; hold right-click and scroll to raise/lower the star rating; double-click to launch or apply. Drag the thin bar at the top of the strip to resize height (preview stays square; path/desc/tags hide when short). Settings → Visuals → **Detail preview side** puts the image left or right. Preferences are remembered.
-- **Description & package tags** — wide+short pane uses a side column (scrollable description + native tags). Tall strip moves those into regular rows under actions; narrow pane keeps a short description row. Turn off **Show description & package tags** in Settings → Visuals to hide them.
+- **Description & package tags** — wide+short pane uses a side column (scrollable description + native tags). Tall strip moves those into regular rows under actions; narrow pane keeps a short description row. **Hub tags** in that line are clickable chips (filter / right-click exclude), same as user-tag chips. Turn off **Show description & package tags** in Settings → Visuals to hide them.
 - **D / M / Dn** — filter grid to dependencies / missing / dependents (hover for tip).
 - **Creator** — filter by creator.
 - **Tag** or tags line — quick-tag menu (Applied | Add). Filter box scopes **Add** list only. Sort button on Add cycles A→Z / Z→A / count 1→9 / 9→1 (remembers). Remove with ✓, or **New tag…**.

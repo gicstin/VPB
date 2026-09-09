@@ -135,11 +135,53 @@ namespace VPB
                 le.preferredWidth = prefer;
                 le.minWidth = Mathf.Min(minW, prefer);
             }
+            GameObject badgeGO = new GameObject("GenderBadge");
+            badgeGO.transform.SetParent(go.transform, false);
+            RectTransform badgeRT = badgeGO.AddComponent<RectTransform>();
+            badgeRT.anchorMin = new Vector2(0f, 0.5f);
+            badgeRT.anchorMax = new Vector2(0f, 0.5f);
+            badgeRT.pivot = new Vector2(0f, 0.5f);
+            Image badge = badgeGO.AddComponent<Image>();
+            badge.raycastTarget = false;
+            badge.preserveAspect = true;
+            badgeGO.SetActive(false);
+
             var meta = go.AddComponent<PluginsFloatDestChipMeta>();
             meta.background = bg;
             meta.label = t;
+            meta.labelRT = t != null ? t.GetComponent<RectTransform>() : null;
+            meta.genderBadge = badge;
+            meta.genderBadgeRT = badgeRT;
             meta.isPerson = false;
             return go;
+        }
+
+        private static float ApplyPluginsFloatChipGender(
+            PluginsFloatDestChipMeta meta, VPB.src.util.LooseVapGenderProbe.Gender gender, float s)
+        {
+            if (meta == null || meta.genderBadge == null) return 0f;
+
+            Sprite spr = UI.LoadGenderIconSprite(gender);
+            float pad = GalleryUiDesignTokens.FloatChromeIconPadRef * s;
+            float size = Mathf.Max(0f, GalleryUiDesignTokens.PersonGenderBadgeRef * s - pad * 2f);
+
+            if (spr == null)
+            {
+                if (meta.genderBadge.gameObject.activeSelf) meta.genderBadge.gameObject.SetActive(false);
+                if (meta.labelRT != null) meta.labelRT.offsetMin = new Vector2(0f, meta.labelRT.offsetMin.y);
+                return 0f;
+            }
+
+            UI.SetIconSprite(meta.genderBadge, spr);
+            if (!meta.genderBadge.gameObject.activeSelf) meta.genderBadge.gameObject.SetActive(true);
+            if (meta.genderBadgeRT != null)
+            {
+                meta.genderBadgeRT.sizeDelta = new Vector2(size, size);
+                meta.genderBadgeRT.anchoredPosition = new Vector2(pad, 0f);
+            }
+            if (meta.labelRT != null)
+                meta.labelRT.offsetMin = new Vector2(pad + size + pad, meta.labelRT.offsetMin.y);
+            return size + pad * 2f;
         }
 
         private static float EstimatePluginsFloatChipWidth(string label, float s)
@@ -223,12 +265,14 @@ namespace VPB
                     meta.isPerson = true;
                     meta.personUid = uid;
                     if (meta.label != null) meta.label.text = display;
+                    float badgeW = ApplyPluginsFloatChipGender(
+                        meta, VPB.src.util.AtomGenderUtils.ClassifyForBadge(person), s);
                     LayoutElement le = go.GetComponent<LayoutElement>();
                     if (le != null)
                     {
-                        float prefer = Mathf.Clamp(EstimatePluginsFloatChipWidth(display, s), 64f * s, 120f * s);
+                        float prefer = Mathf.Clamp(EstimatePluginsFloatChipWidth(display, s), 64f * s, 120f * s) + badgeW;
                         le.preferredWidth = prefer;
-                        le.minWidth = 56f * s;
+                        le.minWidth = 56f * s + badgeW;
                         le.minHeight = le.preferredHeight = chromeSz;
                         le.flexibleHeight = 0f;
                     }
@@ -563,5 +607,8 @@ namespace VPB
         public string personUid;
         public Image background;
         public Text label;
+        public RectTransform labelRT;
+        public Image genderBadge;
+        public RectTransform genderBadgeRT;
     }
 }

@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -224,7 +225,7 @@ namespace VPB
 			if (manager != null && manager.configurableSpacerPrefab != null)
 			{
 				Transform transform = CreateRightUIElement(manager.configurableSpacerPrefab.transform, yOffset);
-				LogUtil.Log("CreateLeftSpacer "+transform.localScale);
+				if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("CreateLeftSpacer "+transform.localScale);
 				if (transform != null)
 				{
 					result = transform.GetComponent<UIDynamic>();

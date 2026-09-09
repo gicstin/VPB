@@ -13,6 +13,8 @@ namespace VPB
     {
         private enum RemoveTargetKind { None, ClothingItem, HairItem, Atom }
 
+        private enum RemoveRailJob { SceneEraser, UnequipClothing, UnequipHair }
+
         private sealed class RemoveTarget
         {
             public RemoveTargetKind kind;
@@ -164,16 +166,26 @@ namespace VPB
         private sealed class WrapGeom
         {
             public DAZDynamicItem item;
-            public Vector3[] verts;
-            public int[] tris;
+            public RemoveModeTriangle[] triangles;
             public Vector3 min;
             public Vector3 max;
+        }
+
+        private struct RemoveModeTriangle
+        {
+            public Vector3 v0;
+            public Vector3 e1;
+            public Vector3 e2;
         }
 
         // Per body atom: its baked garment geometry. Built lazily on first hover and reused every
         // frame while the scene is frozen; cleared on enter/exit and after any removal so a changed
         // garment set is re-baked exactly once.
         private readonly Dictionary<Atom, List<WrapGeom>> _wrapGeomCache = new Dictionary<Atom, List<WrapGeom>>();
+        private const float RemoveModeHoverInterval = 1f / 30f;
+        private float _removeNextHoverTime;
+        private RemoveTarget _removeHoverTarget;
+        private bool _removeHoverValid;
 
         // Side buttons (for square-chrome sizing) + their outline and icon image (recolored by state).
         private GameObject rightRemoveModeSideBtn;
@@ -234,6 +246,210 @@ namespace VPB
             else RemoveModeEnter(PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick));
         }
 
+        internal void ToggleRemoveRailButton(bool fromLeftRailButton, bool rightClick = false)
+        {
+            RemoveRailJob job = GetRemoveRailJob();
+            bool useLeft = PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick);
+            if (job == RemoveRailJob.UnequipClothing)
+            {
+                if (_removeModeActive) RemoveModeExit();
+                ToggleClothingSubmenuFromSideButtons(null, useLeft);
+                return;
+            }
+            if (job == RemoveRailJob.UnequipHair)
+            {
+                if (_removeModeActive) RemoveModeExit();
+                ToggleHairSubmenuFromSideButtons(null, useLeft);
+                return;
+            }
+            ToggleRemoveMode(fromLeftRailButton, rightClick);
+        }
+
+        private void GetRemoveCategoryFlags(out bool isClothing, out bool isHair, out bool isScene)
+        {
+            string title = currentCategoryTitle ?? "";
+            isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+            isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (isClothing || isHair || isScene || isSubScene) return;
+            ApplyHubTypeRemoveCategoryFlags(ref isClothing, ref isHair, ref isScene);
+        }
+
+        private bool TryGetHubTypeRemoveDisplayName(out string hub)
+        {
+            hub = null;
+            if (!string.IsNullOrEmpty(_hubTypeBrowseToken))
+            {
+                hub = VpbLocalDatabase.DataPackHubCategoryDisplayName(_hubTypeBrowseToken);
+                if (!string.IsNullOrEmpty(hub)) return true;
+            }
+            try
+            {
+                string shown = titleText != null ? titleText.text : null;
+                if (!string.IsNullOrEmpty(shown)
+                    && shown.StartsWith("Hub:", StringComparison.OrdinalIgnoreCase)
+                    && shown.Length > 4)
+                {
+                    hub = shown.Substring(4).Trim();
+                    if (!string.IsNullOrEmpty(hub)) return true;
+                }
+            }
+            catch { }
+
+            string token = TryGetSinglePackHubCatIncludeToken();
+            if (string.IsNullOrEmpty(token)) return false;
+            hub = VpbLocalDatabase.DataPackHubCategoryDisplayName(token);
+            return !string.IsNullOrEmpty(hub);
+        }
+
+        private string TryGetSinglePackHubCatIncludeToken()
+        {
+            if (nameFilterQuery == null || nameFilterQuery.Branches == null) return null;
+            string found = null;
+            int n = 0;
+            for (int i = 0; i < nameFilterQuery.Branches.Count; i++)
+            {
+                GallerySearchBranch br = nameFilterQuery.Branches[i];
+                if (br == null || br.PackHubCatInclude == null) continue;
+                for (int t = 0; t < br.PackHubCatInclude.Count; t++)
+                {
+                    string term = br.PackHubCatInclude[t];
+                    if (string.IsNullOrEmpty(term)) continue;
+                    if (term.Length > 1 && term[0] == '=') term = term.Substring(1);
+                    n++;
+                    if (n > 1) return null;
+                    found = term;
+                }
+            }
+            return found;
+        }
+
+        private void ApplyHubTypeRemoveCategoryFlags(ref bool isClothing, ref bool isHair, ref bool isScene)
+        {
+            string hub;
+            if (!TryGetHubTypeRemoveDisplayName(out hub)) return;
+
+            string[] cats = GalleryHubTypeItemScope.CategoriesFor(hub);
+            if (cats != null)
+            {
+                for (int i = 0; i < cats.Length; i++)
+                {
+                    string c = cats[i];
+                    if (string.IsNullOrEmpty(c)) continue;
+                    if (c.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
+                        isClothing = true;
+                    else if (c.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+                        isHair = true;
+                }
+            }
+
+            if (string.Equals(hub, "Scenes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(hub, "Demo + Lite", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(hub, "Comics + Storytelling", StringComparison.OrdinalIgnoreCase))
+                isScene = true;
+        }
+
+        private RemoveRailJob GetRemoveRailJob()
+        {
+            bool isClothing, isHair, isScene;
+            GetRemoveCategoryFlags(out isClothing, out isHair, out isScene);
+            if (isClothing) return RemoveRailJob.UnequipClothing;
+            if (isHair) return RemoveRailJob.UnequipHair;
+            return RemoveRailJob.SceneEraser;
+        }
+
+        private void GetRemoveRailTooltip(out string key, out string englishDefault)
+        {
+            switch (GetRemoveRailJob())
+            {
+                case RemoveRailJob.UnequipClothing:
+                    key = "gallery.tooltip.remove_clothing";
+                    englishDefault = "Unequip clothing items (preview list). Hover a row to preview takeoff, click to remove.";
+                    return;
+                case RemoveRailJob.UnequipHair:
+                    key = "gallery.tooltip.remove_hair";
+                    englishDefault = "Unequip hair items (preview list). Hover a row to preview takeoff, click to remove.";
+                    return;
+                default:
+                    key = "gallery.tooltip.remove_mode";
+                    englishDefault = "Scene Eraser: point at an item to fade it, click to remove. Esc exits.";
+                    return;
+            }
+        }
+
+        private string GetRemoveRailTooltipText()
+        {
+            string key, englishDefault;
+            GetRemoveRailTooltip(out key, out englishDefault);
+            return VPBTranslation.T(key, englishDefault);
+        }
+
+        private string GetRemoveRailOverflowLabel()
+        {
+            switch (GetRemoveRailJob())
+            {
+                case RemoveRailJob.UnequipClothing:
+                    return SidePanelHeaderTranslation("gallery.side.remove_clothing", "Unequip Clothing");
+                case RemoveRailJob.UnequipHair:
+                    return SidePanelHeaderTranslation("gallery.side.remove_hair", "Unequip Hair");
+                default:
+                    return VPBTranslation.T("gallery.side.overflow_remove_mode", "Scene Eraser");
+            }
+        }
+
+        private string GetRemoveRailShortLabel()
+        {
+            switch (GetRemoveRailJob())
+            {
+                case RemoveRailJob.UnequipClothing:
+                    return SidePanelHeaderTranslation("gallery.side.remove_clothing", "Unequip Clothing");
+                case RemoveRailJob.UnequipHair:
+                    return SidePanelHeaderTranslation("gallery.side.remove_hair", "Unequip Hair");
+                default:
+                    return VPBTranslation.T("gallery.side.remove_mode_short", "Eraser");
+            }
+        }
+
+        private Sprite GetRemoveRailIconSprite()
+        {
+            switch (GetRemoveRailJob())
+            {
+                case RemoveRailJob.UnequipClothing:
+                    if (galleryRemoveClothingSprite != null) return galleryRemoveClothingSprite;
+                    break;
+                case RemoveRailJob.UnequipHair:
+                    if (galleryRemoveHairSprite != null) return galleryRemoveHairSprite;
+                    break;
+            }
+            return galleryRemoveModeSprite;
+        }
+
+        private void SyncRemoveRailButtonChrome()
+        {
+            Sprite spr = GetRemoveRailIconSprite();
+            if (spr != null)
+            {
+                if (rightRemoveModeBtnIconImage != null) rightRemoveModeBtnIconImage.sprite = spr;
+                if (leftRemoveModeBtnIconImage != null) leftRemoveModeBtnIconImage.sprite = spr;
+            }
+            else
+            {
+                string shortLabel = GetRemoveRailShortLabel();
+                TrySetRemoveRailFallbackText(rightRemoveModeSideBtn, shortLabel);
+                TrySetRemoveRailFallbackText(leftRemoveModeSideBtn, shortLabel);
+            }
+        }
+
+        private static void TrySetRemoveRailFallbackText(GameObject btn, string text)
+        {
+            if (btn == null || string.IsNullOrEmpty(text)) return;
+            Text t = btn.GetComponentInChildren<Text>(true);
+            if (t == null) return;
+            t.text = text;
+        }
+
         private void RemoveModeEnter(bool useLeftSide)
         {
             _removeModeSiderailUseLeft = useLeftSide;
@@ -282,11 +498,8 @@ namespace VPB
         /// <summary>Open clothing/hair/atom remove list siderail to match current gallery category (with Remove Mode).</summary>
         private void EnsureRemoveSiderailOpenForCurrentCategory()
         {
-            string title = currentCategoryTitle ?? "";
-            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isClothing, isHair, isScene;
+            GetRemoveCategoryFlags(out isClothing, out isHair, out isScene);
 
             if (!isClothing && !isHair && !isScene)
             {
@@ -616,6 +829,11 @@ namespace VPB
                 _removeHighlightedIdentity = newIdentity;
                 _removeHelpCached = target != null ? ("Click to remove " + target.DisplayName()) : null;
             }
+            if (desktop)
+            {
+                _removeHoverTarget = target;
+                _removeHoverValid = true;
+            }
 
             // Re-assert help every frame: VaM SyncHelpText overwrites with its own point target
             // (e.g. "wall") while remove mode is active. Reuse cached string — no per-frame concat.
@@ -912,17 +1130,21 @@ namespace VPB
 
             if (desktop)
             {
-                Camera cam = sc.MonitorCenterCamera != null ? sc.MonitorCenterCamera : Camera.main;
-                if (cam == null) return null;
-                Ray ray = cam.ScreenPointToRay(Input.mousePosition);
-                RemoveTarget t = ResolveTargetForRay(ray);
                 // GetMouseSelect() alone proved unreliable here (clicks never registered), so also
                 // accept a raw left-mouse-down. The gallery-window guard above already prevents this
                 // from firing while the pointer is over the panel.
                 bool sel = false; try { sel = sc.GetMouseSelect(); } catch { }
                 bool down = false; try { down = Input.GetMouseButtonDown(0); } catch { }
                 clickThisFrame = sel || down;
-                return t;
+                // Hover can lag one sample; deletion must always resolve the current ray.
+                float now = Time.unscaledTime;
+                if (!clickThisFrame && _removeHoverValid && now < _removeNextHoverTime
+                    && (_removeHoverTarget == null || _removeHoverTarget.identity != null))
+                    return _removeHoverTarget;
+                _removeNextHoverTime = now + RemoveModeHoverInterval;
+                Camera cam = sc.MonitorCenterCamera != null ? sc.MonitorCenterCamera : Camera.main;
+                if (cam == null) return null;
+                return ResolveTargetForRay(cam.ScreenPointToRay(Input.mousePosition));
             }
 
             RemoveTarget best = null;
@@ -1122,7 +1344,7 @@ namespace VPB
             for (int g = 0; g < geoms.Count; g++)
             {
                 WrapGeom geom = geoms[g];
-                if (geom == null || geom.verts == null || geom.tris == null) continue;
+                if (geom == null || geom.triangles == null) continue;
 
                 // A garment removed (or undone) mid-session changes which items are live; skip any
                 // baked geometry whose item is no longer active rather than re-bake every frame.
@@ -1132,7 +1354,7 @@ namespace VPB
 
                 if (!RayHitsAabb(o, d, geom.min, geom.max)) continue;
 
-                if (RayMeshNearest(o, d, geom.verts, geom.tris, out float t) && t < bestT)
+                if (RayMeshNearest(o, d, geom.triangles, out float t) && t < bestT)
                 {
                     bestT = t;
                     best = geom.item;
@@ -1201,7 +1423,7 @@ namespace VPB
                     if (p.z < mn.z) mn.z = p.z; else if (p.z > mx.z) mx.z = p.z;
                 }
 
-                geoms.Add(new WrapGeom { item = item, verts = verts, tris = tris, min = mn, max = mx });
+                geoms.Add(new WrapGeom { item = item, triangles = BakeRemoveModeTriangles(verts, tris), min = mn, max = mx });
             }
 
             return geoms;
@@ -1235,20 +1457,40 @@ namespace VPB
             return true;
         }
 
-        // Nearest double-sided ray/triangle hit over a mesh (Moller-Trumbore). t is in world units.
-        private static bool RayMeshNearest(Vector3 o, Vector3 d, Vector3[] verts, int[] tris, out float bestT)
+        private static RemoveModeTriangle[] BakeRemoveModeTriangles(Vector3[] verts, int[] tris)
         {
-            bestT = float.MaxValue;
-            bool found = false;
             int vcount = verts.Length;
-            const float EPS = 1e-7f;
+            int count = 0;
             for (int i = 0; i + 2 < tris.Length; i += 3)
             {
                 int i0 = tris[i], i1 = tris[i + 1], i2 = tris[i + 2];
                 if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vcount || i1 >= vcount || i2 >= vcount) continue;
-                Vector3 v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
-                Vector3 e1 = v1 - v0;
-                Vector3 e2 = v2 - v0;
+                count++;
+            }
+            // Exact allocation avoids retaining the indexed arrays or a second triangle buffer.
+            var result = new RemoveModeTriangle[count];
+            int next = 0;
+            for (int i = 0; i + 2 < tris.Length; i += 3)
+            {
+                int i0 = tris[i], i1 = tris[i + 1], i2 = tris[i + 2];
+                if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vcount || i1 >= vcount || i2 >= vcount) continue;
+                Vector3 v0 = verts[i0];
+                result[next++] = new RemoveModeTriangle { v0 = v0, e1 = verts[i1] - v0, e2 = verts[i2] - v0 };
+            }
+            return result;
+        }
+
+        // Nearest double-sided ray/triangle hit over a mesh (Moller-Trumbore). t is in world units.
+        private static bool RayMeshNearest(Vector3 o, Vector3 d, RemoveModeTriangle[] triangles, out float bestT)
+        {
+            bestT = float.MaxValue;
+            bool found = false;
+            const float EPS = 1e-7f;
+            for (int i = 0; i < triangles.Length; i++)
+            {
+                Vector3 v0 = triangles[i].v0;
+                Vector3 e1 = triangles[i].e1;
+                Vector3 e2 = triangles[i].e2;
                 Vector3 p = Vector3.Cross(d, e2);
                 float det = Vector3.Dot(e1, p);
                 if (det > -EPS && det < EPS) continue;
@@ -1269,6 +1511,8 @@ namespace VPB
         {
             try { if (_removeHighlight != null) _removeHighlight.Clear(); } catch { }
             _removeHighlightedIdentity = null;
+            _removeHoverTarget = null;
+            _removeHoverValid = false;
         }
 
         private void RemoveModeExecuteRemoval(RemoveTarget target)

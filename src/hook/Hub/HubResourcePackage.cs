@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -523,15 +524,29 @@ namespace VPB
             isDownloadingJSON.val = false;
             isDownloadedJSON.val = true;
             string value;
-            string text;
+            string dispositionName = null;
             if (responseHeaders.TryGetValue("Content-Disposition", out value))
             {
                 value = Regex.Replace(value, ";$", string.Empty);
-                text = Regex.Replace(value, ".*filename=\"?([^\"]+)\"?.*", "$1");
+                dispositionName = Regex.Replace(value, ".*filename=\"?([^\"]+)\"?.*", "$1");
             }
-            else
+            string text = ChooseHubSaveFileName(dispositionName, resolvedVarName);
+            if (FileManager.GetExactRegisteredPackage(resolvedVarName) != null
+                || FileManager.GetExactRegisteredPackage(dispositionName) != null
+                || FileManager.GetExactRegisteredPackage(text) != null)
             {
-                text = resolvedVarName;
+                alreadyHaveJSON.val = true;
+                updateAvailableJSON.val = false;
+                isDownloadingJSON.val = false;
+                isDownloadedJSON.val = false;
+                SyncDeleteButton();
+                try
+                {
+                    if (VPBLogger.Verbose || Settings.Instance?.LogHubRequests?.Value == true) LogUtil.Log("[VPB.HubDownload] skip save, exact package already on disk name='"
+                        + (resolvedVarName ?? "") + "' disp='" + (dispositionName ?? "") + "'");
+                }
+                catch { }
+                return;
             }
             try
             {
@@ -551,10 +566,11 @@ namespace VPB
                 catch { }
 
                 VarPackage registered = null;
-                bool deferRefresh = browser != null && browser.ShouldDeferDownloadRefresh;
+                bool deferRefresh = browser != null;
+                if (deferRefresh) browser.DeferRefreshUntilQueueDrains();
                 try
                 {
-                    // Batch Hub downloads: register live, skip per-file inventory notify + full refresh.
+                    // Hub rows need immediate registration; category indexing waits for the worker scan.
                     registered = FileManager.RegisterHubDownloadedPackage(
                         localPackagePath,
                         notifyInventoryChange: !deferRefresh);
@@ -574,17 +590,10 @@ namespace VPB
                 }
                 else
                 {
-                    // Single Hub download: light path (register already done) — no full library scan.
+                    // Without a Hub queue, still run the content scan before publishing gallery readiness.
                     try
                     {
-                        var one = new List<string>(1);
-                        if (registered != null && !string.IsNullOrEmpty(registered.Uid))
-                            one.Add(registered.Uid);
-                        FileManager.InvalidateAllMissingDepsCounts();
-                        try { DependencyGraph.Invalidate(); } catch { }
-                        FileManagerBridge.Refresh("hub_download", RefreshScope.InstallOnly, one.Count > 0 ? one : null);
-                        try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
-                        try { if (browser != null) browser.RefreshResources(); } catch { }
+                        FileManager.ScheduleHubDownloadRefresh();
                     }
                     catch { }
                 }
@@ -899,26 +908,35 @@ namespace VPB
             }
         }
 
+        static string ChooseHubSaveFileName(string dispositionName, string hubResolvedName)
+        {
+            if (!string.IsNullOrEmpty(hubResolvedName) && hubResolvedName != "null")
+                return hubResolvedName;
+            if (!string.IsNullOrEmpty(dispositionName) && dispositionName != "null")
+                return dispositionName;
+            return hubResolvedName;
+        }
+
         public void Refresh()
         {
             isDownloadedJSON.val = false;
             VarPackage package = null;
             if (isDependencyJSON.val)
             {
-                // Prefer exact Hub integer id; fall back to group.latest so older installs count as present.
-                package = FileManager.GetPackage(nameJSON.val, ensureInstalled: false);
+                package = FileManager.GetExactRegisteredPackage(nameJSON.val);
                 if (package == null)
                 {
                     string depGroup = FileManager.PackageIDToPackageGroupID(nameJSON.val);
-                    if (!string.IsNullOrEmpty(depGroup))
-                        package = FileManager.GetPackage(depGroup + ".latest", ensureInstalled: false);
+                    VarPackageGroup exactGroup = FileManager.GetExactPackageGroup(depGroup);
+                    if (exactGroup != null)
+                        package = exactGroup.NewestPackage;
                 }
             }
             else
             {
                 string text = FileManager.PackageIDToPackageGroupID(nameJSON.val);
-                string packageUidOrPath = text + ".latest";
-                package = FileManager.GetPackage(packageUidOrPath, ensureInstalled: false);
+                VarPackageGroup exactGroup = FileManager.GetExactPackageGroup(text);
+                package = exactGroup != null ? exactGroup.NewestPackage : null;
             }
             if (package != null)
             {
@@ -960,12 +978,11 @@ namespace VPB
         {
             try
             {
-                if (isDependencyJSON.val)
-                {
-                    return FileManager.GetPackage(nameJSON.val, ensureInstalled: false);
-                }
+                VarPackage exact = FileManager.GetExactRegisteredPackage(nameJSON.val);
+                if (exact != null) return exact;
                 string packageGroupId = FileManager.PackageIDToPackageGroupID(nameJSON.val);
-                return FileManager.GetPackage(packageGroupId + ".latest", ensureInstalled: false);
+                VarPackageGroup g = FileManager.GetExactPackageGroup(packageGroupId);
+                return g != null ? g.NewestPackage : null;
             }
             catch
             {

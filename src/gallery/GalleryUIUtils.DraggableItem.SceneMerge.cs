@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -107,7 +108,7 @@ namespace VPB
                 return;
             }
 
-            LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
+            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
             MethodInfo loadMethod = typeof(SubScene).GetMethod(
                 "LoadSubSceneWithPath",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -171,13 +172,13 @@ namespace VPB
             {
                 Atom a = toRemove[i];
                 string uid = a != null ? a.uid : "?";
-                LogUtil.Log($"[VPB] Replace mode: RemoveAtom SubScene {i + 1}/{toRemove.Count} '{uid}' begin");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] Replace mode: RemoveAtom SubScene {i + 1}/{toRemove.Count} '{uid}' begin");
                 float t0 = Time.realtimeSinceStartup;
                 try { if (a != null) SuperController.singleton.RemoveAtom(a); } catch (Exception ex)
                 {
                     LogUtil.LogWarning("[VPB] Replace mode: RemoveAtom failed '" + uid + "': " + ex.Message);
                 }
-                LogUtil.Log($"[VPB] Replace mode: RemoveAtom SubScene {i + 1}/{toRemove.Count} '{uid}' done ms="
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] Replace mode: RemoveAtom SubScene {i + 1}/{toRemove.Count} '{uid}' done ms="
                     + ((Time.realtimeSinceStartup - t0) * 1000f).ToString("F0"));
                 yield return null;
                 yield return null;
@@ -359,7 +360,7 @@ namespace VPB
                 }
             }
 
-            LogUtil.Log($"[DragDropDebug] Attempting to apply. FullPath: {normalizedPath}, LegacyPath: {legacyPath}, Installed: {installed}");
+            LogUtil.LogVerbose($"[DragDropDebug] Attempting to apply. FullPath: {normalizedPath}, LegacyPath: {legacyPath}, Installed: {installed}");
 
             JSONStorable geometry = atom.GetStorableByID("geometry");
 
@@ -388,7 +389,7 @@ namespace VPB
                 {
                     try
                     {
-                        LogUtil.Log("[VPB] Undo capture: itemType=" + itemType + " atomType=" + atom.type + " entryPath=" + (FileEntry != null ? FileEntry.Path : "<null>"));
+                        if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Undo capture: itemType=" + itemType + " atomType=" + atom.type + " entryPath=" + (FileEntry != null ? FileEntry.Path : "<null>"));
                     }
                     catch { }
 
@@ -445,32 +446,51 @@ namespace VPB
 
             bool replaceMode = Panel != null && Panel.DragDropReplaceMode;
             bool isClothingOrHair = (itemType == ItemType.Clothing || itemType == ItemType.Hair || itemType == ItemType.ClothingItem || itemType == ItemType.HairItem || itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset);
-            LogUtil.Log($"[DragDropDebug] Panel={Panel != null}, ReplaceMode={replaceMode}, ItemType={itemType}, IsClothingOrHair={isClothingOrHair}");
+            LogUtil.LogVerbose($"[DragDropDebug] Panel={Panel != null}, ReplaceMode={replaceMode}, ItemType={itemType}, IsClothingOrHair={isClothingOrHair}");
 
             if (Panel != null && Panel.DragDropReplaceMode && isClothingOrHair)
             {
                 bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem || itemType == ItemType.HairPreset);
                 bool isClothing = (itemType == ItemType.Clothing || itemType == ItemType.ClothingItem || itemType == ItemType.ClothingPreset);
 
-                if (geometry != null)
+                bool wearableHere = VpbClothingReplace.TargetGenderAcceptsPath(
+                    atom, FileEntry != null ? FileEntry.Uid : normalizedPath);
+                if (!wearableHere)
                 {
-                     LogUtil.Log($"[DragDropDebug] Replace mode check: Checking types...");
-                     
-                     HashSet<string> droppedRegions = isHair ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry);
+                    LogUtil.LogVerbose("[VPB.Replace] "
+                        + (FileEntry != null ? FileEntry.Uid : normalizedPath)
+                        + " is for the other gender; leaving the current look alone.");
+                }
+
+                if (geometry != null && wearableHere)
+                {
+                     LogUtil.LogVerbose($"[DragDropDebug] Replace mode check: Checking types...");
+
+                     bool handledGeometrically = false;
+                     if (isClothing)
+                     {
+                         string droppedUid = FileEntry != null ? FileEntry.Uid : normalizedPath;
+                         try { handledGeometrically = VpbClothingReplace.TryApply(atom, droppedUid, FileEntry); }
+                         catch (Exception ex) { LogUtil.LogWarning("[VPB.Replace] geometric pass failed: " + ex.Message); }
+                     }
+
+                     HashSet<string> droppedRegions = handledGeometrically
+                         ? new HashSet<string>()
+                         : (isHair ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry));
                      ClothingLoadingUtils.ClothingWearClass droppedWearClass = ClothingLoadingUtils.ClothingWearClass.Unknown;
                      if (isClothing)
                          droppedWearClass = ClothingLoadingUtils.ClassifyClothingWearClass(
                              FileEntry != null ? FileEntry.Uid : normalizedPath, FileEntry, atom);
-                     LogUtil.Log($"[DragDropDebug] Dropped regions: {string.Join(",", droppedRegions.ToArray())}, wearClass={droppedWearClass}");
+                     LogUtil.LogVerbose($"[DragDropDebug] Dropped regions: {string.Join(",", droppedRegions.ToArray())}, wearClass={droppedWearClass}");
 
-                     List<string> all = geometry.GetBoolParamNames();
+                     List<string> all = handledGeometrically ? null : geometry.GetBoolParamNames();
                      if (all != null)
                      {
                          foreach(string n in all)
                          {
                              bool check = false;
                              string paramType = "";
-                             if (isHair && n.StartsWith("hair:")) 
+                             if (isHair && n.StartsWith("hair:"))
                              {
                                  check = true; 
                                  paramType = "hair";
@@ -484,8 +504,25 @@ namespace VPB
                              if (check)
                              {
                                  string itemName = n.Substring(paramType.Length + 1); // remove "hair:" or "clothing:"
+                                 JSONStorableBool wornParam = geometry.GetBoolJSONParam(n);
+                                 if (wornParam == null || !wornParam.val) continue;
+
+                                 if (isHair)
+                                 {
+                                     bool mayDisplace = true;
+                                     try
+                                     {
+                                         mayDisplace = VpbClothingReplace.HairMayDisplace(
+                                             atom, FileEntry != null ? FileEntry.Uid : normalizedPath, FileEntry, itemName);
+                                     }
+                                     catch (Exception ex) { LogUtil.LogWarning("[VPB.Replace] hair gate failed: " + ex.Message); }
+
+                                     if (!mayDisplace) continue;
+                                 }
+
                                  VarFileEntry existingEntry = FileManager.GetVarFileEntry(itemName);
-                                 
+
+
                                  HashSet<string> existingRegions;
                                  if (existingEntry != null)
                                  {
@@ -505,24 +542,20 @@ namespace VPB
                                      if (!ClothingLoadingUtils.ShouldClearClothingOnReplace(droppedWearClass, existingWearClass))
                                      {
                                          if (VPBConfig.Instance.IsDevMode)
-                                             LogUtil.Log($"[DragDropDebug] Preserving {paramType} {n} (wearClass={existingWearClass}, dropped={droppedWearClass}) — different clothing class.");
+                                             LogUtil.LogVerbose($"[DragDropDebug] Preserving {paramType} {n} (wearClass={existingWearClass}, dropped={droppedWearClass}) — different clothing class.");
                                          continue;
                                      }
                                  }
 
                                  if (droppedRegions.Overlaps(existingRegions))
                                  {
-                                     JSONStorableBool p = geometry.GetBoolJSONParam(n);
-                                     if (p != null && p.val) 
-                                     {
-                                         var intersection = droppedRegions.Intersect(existingRegions);
-                                         LogUtil.Log($"[DragDropDebug] Clearing overlapping {paramType} {n}. Dropped regions: [{string.Join(",", droppedRegions.ToArray())}]. Existing regions: [{string.Join(",", existingRegions.ToArray())}]. Overlap on: [{string.Join(",", intersection.ToArray())}]");
-                                         p.val = false;
-                                     }
+                                     var intersection = droppedRegions.Intersect(existingRegions);
+                                     LogUtil.LogVerbose($"[DragDropDebug] Clearing overlapping {paramType} {n}. Dropped regions: [{string.Join(",", droppedRegions.ToArray())}]. Existing regions: [{string.Join(",", existingRegions.ToArray())}]. Overlap on: [{string.Join(",", intersection.ToArray())}]");
+                                     wornParam.val = false;
                                  }
                                  else if (VPBConfig.Instance.IsDevMode)
                                  {
-                                     LogUtil.Log($"[DragDropDebug] Preserving {paramType} {n} (Regions: {string.Join(",", existingRegions.ToArray())}) - No overlap.");
+                                     LogUtil.LogVerbose($"[DragDropDebug] Preserving {paramType} {n} (Regions: {string.Join(",", existingRegions.ToArray())}) - No overlap.");
                                  }
                              }
                          }
@@ -531,13 +564,13 @@ namespace VPB
             }
             else
             {
-                LogUtil.Log($"[DragDropDebug] Add Mode (Replace OFF). Skipping overlap checks for {normalizedPath}");
+                LogUtil.LogVerbose($"[DragDropDebug] Add Mode (Replace OFF). Skipping overlap checks for {normalizedPath}");
             }
 
             if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
             {
                 // Clothing/Hair Item Presets (.vap)
-                LogUtil.Log($"[DragDropDebug] Applying {itemType}: {normalizedPath}");
+                LogUtil.LogVerbose($"[DragDropDebug] Applying {itemType}: {normalizedPath}");
                 ActivateClothingHairItemPreset(atom, FileEntry, itemType == ItemType.ClothingPreset);
                 return;
             }
@@ -578,7 +611,7 @@ namespace VPB
                     {
                         if (loadOnSelectJSB != null) loadOnSelectJSB.val = false;
 
-                        LogUtil.Log($"[DragDropDebug] Loading preset type={itemType}, storableId={storableId}, path={normalizedPath}, SuppressRoot={suppressRoot}");
+                        LogUtil.LogVerbose($"[DragDropDebug] Loading preset type={itemType}, storableId={storableId}, path={normalizedPath}, SuppressRoot={suppressRoot}");
                         
                         // Get the storable for this preset type
                         if (presetStorable != null)
@@ -658,7 +691,7 @@ namespace VPB
                                         FileManagerBridge.Refresh("scene_merge_preset_deps", RefreshScope.Both);
                                     }
 
-                                    LogUtil.Log($"[DragDropDebug] JSON loaded successfully from {normalizedPath}");
+                                    LogUtil.LogVerbose($"[DragDropDebug] JSON loaded successfully from {normalizedPath}");
 
                                     // Function to clean presets array (Shared logic)
                                         void CleanPresets(JSONArray presets)
@@ -674,7 +707,7 @@ namespace VPB
                                                     if (p.HasKey("position")) p.Remove("position");
                                                     if (p.HasKey("rotation")) p.Remove("rotation");
 
-                                                    LogUtil.Log("[DragDropDebug] Suppressed root node (control) properties from Pose Preset.");
+                                                    LogUtil.LogVerbose("[DragDropDebug] Suppressed root node (control) properties from Pose Preset.");
                                                     break; 
                                                 }
                                             }
@@ -724,7 +757,7 @@ namespace VPB
                                             // VPB-refactor: native atom restore, deferred from import-unification
                                             if (itemType == ItemType.Pose)
                                             {
-                                                LogUtil.Log($"[DragDropDebug] Loading Pose via direct PresetManager injection (Bypassing temp files)");
+                                                LogUtil.LogVerbose($"[DragDropDebug] Loading Pose via direct PresetManager injection (Bypassing temp files)");
                                                 
                                                 // Specific logging for .json files debugging
                                                 if (ext == ".json")
@@ -732,13 +765,13 @@ namespace VPB
                                                     // Convert Keys to array for string.Join compatibility in older .NET/Unity versions
                                                     string[] keys = new string[0];
                                                     if (presetJSON.Keys != null) keys = presetJSON.Keys.ToArray();
-                                                    LogUtil.Log($"[DragDropDebug] .json Pose Debug: Keys in JSON: {string.Join(", ", keys)}");
+                                                    LogUtil.LogVerbose($"[DragDropDebug] .json Pose Debug: Keys in JSON: {string.Join(", ", keys)}");
                                                     
-                                                    if (presetJSON["id"] != null) LogUtil.Log($"[DragDropDebug] .json Pose Debug: Existing 'id': {presetJSON["id"].Value}");
-                                                    else LogUtil.Log($"[DragDropDebug] .json Pose Debug: No 'id' field found.");
+                                                    if (presetJSON["id"] != null) LogUtil.LogVerbose($"[DragDropDebug] .json Pose Debug: Existing 'id': {presetJSON["id"].Value}");
+                                                    else LogUtil.LogVerbose($"[DragDropDebug] .json Pose Debug: No 'id' field found.");
                                                     
-                                                    if (presetJSON["presets"] != null) LogUtil.Log($"[DragDropDebug] .json Pose Debug: Found 'presets' array.");
-                                                    if (presetJSON["storables"] != null) LogUtil.Log($"[DragDropDebug] .json Pose Debug: Found 'storables' array.");
+                                                    if (presetJSON["presets"] != null) LogUtil.LogVerbose($"[DragDropDebug] .json Pose Debug: Found 'presets' array.");
+                                                    if (presetJSON["storables"] != null) LogUtil.LogVerbose($"[DragDropDebug] .json Pose Debug: Found 'storables' array.");
                                                 }
                                             }
 
@@ -751,7 +784,7 @@ namespace VPB
                                                 // Optimized Native Loading: Use direct Atom.Restore for maximum performance and compatibility
                                                 if (presetJSON["atoms"] != null)
                                                 {
-                                                    LogUtil.Log($"[DragDropDebug] 'atoms' root key detected. Using optimized Native Atom Restoration...");
+                                                    LogUtil.LogVerbose($"[DragDropDebug] 'atoms' root key detected. Using optimized Native Atom Restoration...");
                                                     JSONArray atomsArray = presetJSON["atoms"] as JSONArray;
                                                     
                                                     if (atomsArray != null && atomsArray.Count > 0)
@@ -771,7 +804,7 @@ namespace VPB
 
                                                         if (targetAtom != null)
                                                         {
-                                                            LogUtil.Log($"[DragDropDebug] Restoring atom data from '{targetAtom["id"]?.Value}' directly to '{atom.name}'");
+                                                            LogUtil.LogVerbose($"[DragDropDebug] Restoring atom data from '{targetAtom["id"]?.Value}' directly to '{atom.name}'");
 
                                                             // Handle Suppress Root (Load in Place)
                                                             if (suppressRoot)
@@ -787,7 +820,7 @@ namespace VPB
                                                                         {
                                                                              if (s.HasKey("position")) s.Remove("position");
                                                                              if (s.HasKey("rotation")) s.Remove("rotation");
-                                                                             LogUtil.Log($"[DragDropDebug] Suppressed root motion in legacy atom dump.");
+                                                                             LogUtil.LogVerbose($"[DragDropDebug] Suppressed root motion in legacy atom dump.");
                                                                              break;
                                                                         }
                                                                     }
@@ -812,7 +845,7 @@ namespace VPB
                                                             atom.LateRestore(targetAtom, true, false, false);
                                                             atom.PostRestore(true, false);
                                                             
-                                                            LogUtil.Log($"[DragDropDebug] Native Atom Restoration complete.");
+                                                            LogUtil.LogVerbose($"[DragDropDebug] Native Atom Restoration complete.");
 
                                                             // Post-fixup: sim clothing often needs a reset after pose/physics restore.
                                                             SceneLoadingUtils.SchedulePostPersonApplyFixup(atom);
@@ -828,18 +861,18 @@ namespace VPB
                                                 {
                                                     if (presetJSON["id"] == null || presetJSON["id"].Value != storableId)
                                                     {
-                                                        LogUtil.Log($"[DragDropDebug] Injecting missing/correcting ID '{storableId}' into preset JSON (No 'storables' detected)");
+                                                        LogUtil.LogVerbose($"[DragDropDebug] Injecting missing/correcting ID '{storableId}' into preset JSON (No 'storables' detected)");
                                                         presetJSON["id"] = storableId;
                                                     }
                                                 }
                                                 else
                                                 {
-                                                    LogUtil.Log($"[DragDropDebug] 'storables' detected (or created). Preserving container structure.");
+                                                    LogUtil.LogVerbose($"[DragDropDebug] 'storables' detected (or created). Preserving container structure.");
                                                 }
                                             }
                                             else
                                             {
-                                                LogUtil.Log($"[DragDropDebug] 'storables' detected in JSON. Keeping existing ID '{presetJSON["id"]?.Value}' to preserve container structure.");
+                                                LogUtil.LogVerbose($"[DragDropDebug] 'storables' detected in JSON. Keeping existing ID '{presetJSON["id"]?.Value}' to preserve container structure.");
                                             }
 
                                             // Special handling for legacy .json files:
@@ -854,7 +887,23 @@ namespace VPB
                                             ClothingApplyMode mode = ResolvePresetMergeMode(itemType, ddReplaceMode);
                                             if (ddReplaceMode && isPersonClothingPreset)
                                             {
-                                                ClothingLoadingUtils.RemoveRealGarmentClothing(atom);
+                                                bool outfitHandled = false;
+                                                try
+                                                {
+                                                    outfitHandled = VpbClothingReplace.TryApplyOutfitPreset(
+                                                        atom, presetJSON, normalizedPath);
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    LogUtil.LogWarning("[VPB.Replace] outfit preset pass failed: " + ex.Message);
+                                                }
+
+                                                if (!outfitHandled) ClothingLoadingUtils.RemoveRealGarmentClothing(atom);
+                                                try { presetJSON["setUnlistedParamsToDefault"] = "false"; }
+                                                catch (Exception ex)
+                                                {
+                                                    LogUtil.LogWarning("[VPB.Replace] could not make outfit preset additive: " + ex.Message);
+                                                }
                                                 mode = ClothingApplyMode.Replace;
                                             }
 
@@ -926,12 +975,12 @@ namespace VPB
 
             if (geometry != null)
             {
-                LogUtil.Log($"[DragDropDebug] Trying legacy toggle with: {legacyPath}");
+                LogUtil.LogVerbose($"[DragDropDebug] Trying legacy toggle with: {legacyPath}");
                 if (TryToggleLegacyClothingHairParam(geometry, legacyPath, "[DragDropDebug]")) return;
 
                 if (normalizedPath != legacyPath)
                 {
-                    LogUtil.Log($"[DragDropDebug] Trying legacy toggle with full path: {normalizedPath}");
+                    LogUtil.LogVerbose($"[DragDropDebug] Trying legacy toggle with full path: {normalizedPath}");
                     if (TryToggleLegacyClothingHairParam(geometry, normalizedPath, "[DragDropDebug]")) return;
                 }
 
@@ -939,13 +988,13 @@ namespace VPB
                 if (ext == ".vam")
                 {
                     string vajPath = legacyPath.Substring(0, legacyPath.Length - 4) + ".vaj";
-                    LogUtil.Log($"[DragDropDebug] Trying .vaj toggle with: {vajPath}");
+                    LogUtil.LogVerbose($"[DragDropDebug] Trying .vaj toggle with: {vajPath}");
                     if (TryToggleLegacyClothingHairParam(geometry, vajPath, "[DragDropDebug]")) return;
 
                     if (normalizedPath != legacyPath)
                     {
                         string vajFullPath = normalizedPath.Substring(0, normalizedPath.Length - 4) + ".vaj";
-                        LogUtil.Log($"[DragDropDebug] Trying .vaj toggle with full path: {vajFullPath}");
+                        LogUtil.LogVerbose($"[DragDropDebug] Trying .vaj toggle with full path: {vajFullPath}");
                         if (TryToggleLegacyClothingHairParam(geometry, vajFullPath, "[DragDropDebug]")) return;
                     }
                 }
@@ -970,7 +1019,7 @@ namespace VPB
             }
             else
             {
-                LogUtil.Log("[DragDropDebug] Geometry storable not found on atom.");
+                LogUtil.LogVerbose("[DragDropDebug] Geometry storable not found on atom.");
             }
         }
 
@@ -1013,7 +1062,7 @@ namespace VPB
 
                     if (!loggedWait)
                     {
-                        LogUtil.Log($"[DragDropDebug] Deferred toggle waiting for catalog refresh to expose geometry bools: {legacyPath}");
+                        LogUtil.LogVerbose($"[DragDropDebug] Deferred toggle waiting for catalog refresh to expose geometry bools: {legacyPath}");
                         loggedWait = true;
                     }
 
@@ -1036,7 +1085,7 @@ namespace VPB
             JSONStorableBool param = geometry.GetBoolJSONParam(paramName);
             if (param != null)
             {
-                LogUtil.Log($"{logPrefix} found clothing param: {paramName}, setting to true.");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"{logPrefix} found clothing param: {paramName}, setting to true.");
                 param.val = true;
                 return true;
             }
@@ -1045,7 +1094,7 @@ namespace VPB
             param = geometry.GetBoolJSONParam(paramName);
             if (param != null)
             {
-                LogUtil.Log($"{logPrefix} found hair param: {paramName}, setting to true.");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"{logPrefix} found hair param: {paramName}, setting to true.");
                 param.val = true;
                 return true;
             }
@@ -1067,7 +1116,7 @@ namespace VPB
                         var p = geometry.GetBoolJSONParam(n);
                         if (p != null)
                         {
-                            LogUtil.Log($"{logPrefix} found param by suffix match: {n}, setting to true.");
+                            if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"{logPrefix} found param by suffix match: {n}, setting to true.");
                             p.val = true;
                             return true;
                         }
@@ -1076,7 +1125,6 @@ namespace VPB
             }
             catch { }
 
-            LogUtil.Log($"{logPrefix} param not found: {paramName}");
             return false;
         }
 
@@ -1162,7 +1210,7 @@ namespace VPB
             VamOnDemandLoader.CancelPendingCoalescedVamRefresh("light_clothing_hair_catalog_ready");
             try
             {
-                LogUtil.Log("[VPB OnDemand] Light clothing/hair catalog ready — skipped native FileManager.Refresh");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB OnDemand] Light clothing/hair catalog ready — skipped native FileManager.Refresh");
             }
             catch { }
             return true;

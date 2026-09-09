@@ -1,3 +1,4 @@
+using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -128,6 +129,13 @@ namespace VPB
              if (name.Contains("glove")) regions.Add("hands");
              
              if (name.Contains("hat") || name.Contains("cap") || name.Contains("mask") || name.Contains("glasses")) regions.Add("head");
+             if (name.Contains("earring") || name.Contains("piercing") || name.Contains("necklace")
+                 || name.Contains("choker") || name.Contains("bracelet") || name.Contains("anklet")
+                 || name.Contains("jewelry") || name.Contains("jewellery") || name.Contains("accessory"))
+             {
+                 regions.Add("accessory");
+                 regions.Add("jewelry");
+             }
              
              return regions;
         }
@@ -140,7 +148,7 @@ namespace VPB
             
             try
             {
-                LogUtil.Log("[Gallery] Applying Dual Pose...");
+                if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] Applying Dual Pose...");
                 
                 string p1Id = dualPoseNode["Person1"]?.Value;
                 string p2Id = dualPoseNode["Person2"]?.Value;
@@ -249,13 +257,13 @@ namespace VPB
                 
                 if (targetAtom != null && targetData != null)
                 {
-                     LogUtil.Log($"[Gallery] Applying dual pose to target {targetAtom.name}");
+                     if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[Gallery] Applying dual pose to target {targetAtom.name}");
                      ApplyPoseToAtom(targetAtom, targetData);
                 }
                 
                 if (partnerAtom != null && partnerData != null)
                 {
-                     LogUtil.Log($"[Gallery] Applying dual pose to partner {partnerAtom.name}");
+                     if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[Gallery] Applying dual pose to partner {partnerAtom.name}");
                      ApplyPoseToAtom(partnerAtom, partnerData);
                 }
             }

@@ -20,7 +20,7 @@ namespace VPB
 
         public static void Parse(string text, HashSet<string> results)
         {
-            if (string.IsNullOrEmpty(text)) return;
+            if (string.IsNullOrEmpty(text) || text.IndexOf(':') < 0) return;
             
             // Use local StringBuilder instead of static s_TempBuilder
             StringBuilder builder = new StringBuilder();

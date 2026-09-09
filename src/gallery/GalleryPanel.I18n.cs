@@ -147,6 +147,10 @@ namespace VPB
                 rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creators");
             if (leftCreatorBtnIconImage == null && leftCreatorBtnText != null)
                 leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creators");
+            if (rightLookFacetBtnIconImage == null && rightLookFacetBtnText != null)
+                rightLookFacetBtnText.text = VPBTranslation.T("gallery.side.hub_tags_and_looks", "Hub Tags & Looks");
+            if (leftLookFacetBtnIconImage == null && leftLookFacetBtnText != null)
+                leftLookFacetBtnText.text = VPBTranslation.T("gallery.side.hub_tags_and_looks", "Hub Tags & Looks");
             if (rightPathBtnIconImage == null && rightPathBtnText != null)
                 rightPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
             if (leftPathBtnIconImage == null && leftPathBtnText != null)
@@ -162,6 +166,7 @@ namespace VPB
                     titleBarSettingsBtnText.text = VPBTranslation.T("gallery.title.settings_abbrev", "S");
             }
             try { SyncSideRailFacetCaptions(); } catch { }
+            try { SyncLookFacetModeChrome(ChromeScale); } catch { }
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }
