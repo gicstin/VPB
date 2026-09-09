@@ -15,14 +15,10 @@ namespace VPB.Patcher
         private static ManualLogSource Log;
 
         private const string StagingDirName = VpbLegacyLayout.StagingDirName;
-        private const string PendingFileName = VpbLegacyLayout.PendingFileName;
-        private const string RetryFileName = "retry.count";
         private const string OldFileSuffix = VpbLegacyLayout.OldFileSuffix;
         private const string PluginSubDirName = VpbLegacyLayout.PluginSubDirName;
         private const string ManifestFileName = "patch_manifest.json";
-        private const string ManifestOwnedPrefix = "BepInEx/plugins/VPB/";
         private const int MinManifestRowsToPrune = 4;
-        private const int MaxPendingRetries = 3;
 
         private static readonly string[] PruneKeepNames =
         {
@@ -52,11 +48,8 @@ namespace VPB.Patcher
                     return;
                 }
 
-                var pluginsDir = Path.Combine(Path.Combine(gameRoot, "BepInEx"), "plugins");
-
                 CleanupOldFiles(gameRoot);
-                ApplyPendingUpdate(gameRoot, Path.Combine(Path.Combine(pluginsDir, PluginSubDirName), StagingDirName));
-                ApplyPendingUpdate(gameRoot, Path.Combine(pluginsDir, StagingDirName));
+                VpbUpdateManifest.ApplyStagedUpdates(gameRoot, LogPruneInfo, LogPruneWarning, LogPruneError);
                 PruneLegacyLayout(gameRoot);
             }
             catch (Exception ex)
@@ -65,129 +58,27 @@ namespace VPB.Patcher
             }
         }
 
-        private static void ApplyPendingUpdate(string gameRoot, string stagingDir)
-        {
-            try
-            {
-                var pendingPath = Path.Combine(stagingDir, PendingFileName);
-
-                if (!File.Exists(pendingPath))
-                    return;
-
-                Log.LogInfo("Found pending update, applying...");
-
-                var pending = ParsePendingJson(pendingPath);
-                if (pending == null || pending.Files == null || pending.Files.Count == 0)
-                {
-                    Log.LogWarning("pending.json empty or malformed, removing");
-                    TryDelete(pendingPath);
-                    TryDelete(Path.Combine(stagingDir, RetryFileName));
-                    return;
-                }
-
-                var filesDir = Path.Combine(stagingDir, "files");
-                int applied = 0;
-                int failed = 0;
-                int blocked = 0;
-
-                foreach (var entry in pending.Files)
-                {
-                    try
-                    {
-                        var target = Path.Combine(gameRoot, entry.RelativePath.Replace('/', Path.DirectorySeparatorChar));
-                        var staged = Path.Combine(filesDir, entry.StagedFileName);
-
-                        if (!File.Exists(staged))
-                        {
-                            Log.LogWarning("Staged file missing: " + entry.StagedFileName);
-                            failed++;
-                            continue;
-                        }
-
-                        var targetDir = Path.GetDirectoryName(target);
-                        if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
-                            Directory.CreateDirectory(targetDir);
-
-                        if (File.Exists(target))
-                        {
-                            var oldPath = target + OldFileSuffix;
-                            TryDelete(oldPath);
-                            try
-                            {
-                                File.Move(target, oldPath);
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.LogWarning("Cannot rename " + entry.RelativePath + ": " + ex.Message);
-                                failed++;
-                                blocked++;
-                                continue;
-                            }
-                        }
-
-                        File.Move(staged, target);
-                        applied++;
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.LogError("Failed to apply " + entry.RelativePath + ": " + ex.Message);
-                        failed++;
-                        blocked++;
-                    }
-                }
-
-                Log.LogInfo("Update applied: " + applied + " files updated, " + failed + " failed");
-
-                var retryPath = Path.Combine(stagingDir, RetryFileName);
-                int retries = ReadRetryCount(retryPath);
-
-                if (blocked > 0 && retries < MaxPendingRetries)
-                {
-                    WriteRetryCount(retryPath, retries + 1);
-                    Log.LogWarning("Update incomplete: " + blocked + " file(s) locked; keeping pending for retry "
-                        + (retries + 1) + "/" + MaxPendingRetries + " at next launch");
-                    return;
-                }
-
-                if (blocked > 0)
-                {
-                    Log.LogError("Update abandoned after " + retries + " retries; " + blocked
-                        + " file(s) could not be replaced. Reinstall VPB manually.");
-                }
-
-                TryDelete(pendingPath);
-                TryDelete(retryPath);
-
-                if (Directory.Exists(filesDir))
-                {
-                    try
-                    {
-                        var remaining = Directory.GetFiles(filesDir);
-                        if (remaining.Length == 0)
-                            Directory.Delete(filesDir, false);
-                    }
-                    catch { }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.LogError("VPB.Patcher pending-update error: " + ex);
-            }
-        }
-
         private static void PruneLegacyLayout(string gameRoot)
         {
             try
             {
-                var pluginsDir = Path.Combine(Path.Combine(gameRoot, "BepInEx"), "plugins");
-                var vpbDir = Path.Combine(pluginsDir, PluginSubDirName);
+                var pluginsDir = VpbUpdateManifest.PluginsDir(gameRoot);
+                var vpbDir = VpbUpdateManifest.PluginDir(pluginsDir);
                 if (!File.Exists(Path.Combine(vpbDir, "VPB.dll")))
                     return;
 
-                int removed = VpbLegacyLayout.SweepPluginsRoot(pluginsDir, LogPruneInfo, LogPruneWarning);
-                removed += VpbLegacyLayout.SweepMpOnlyUnderVpbDir(vpbDir, LogPruneInfo);
+                var files = new List<string>();
+                var dirs = new List<string>();
+                bool haveManifest = TryReadOwnedManifest(Path.Combine(vpbDir, ManifestFileName), files, dirs);
 
-                removed += PruneUnshippedFiles(vpbDir);
+                int removed = VpbLegacyLayout.SweepPluginsRoot(pluginsDir, LogPruneInfo, LogPruneWarning);
+                if (haveManifest && VpbUpdateManifest.ShouldSweepMpOnly(files, dirs))
+                    removed += VpbLegacyLayout.SweepMpOnlyUnderVpbDir(vpbDir, LogPruneInfo);
+                else if (haveManifest)
+                    Log.LogInfo("Keeping net/; shipped manifest lists the multiplayer companion");
+
+                if (haveManifest)
+                    removed += PruneUnshippedFiles(vpbDir, files, dirs);
 
                 if (removed > 0)
                     Log.LogInfo("Removed " + removed + " stale VPB item(s); the shipped tree is BepInEx/plugins/" + PluginSubDirName);
@@ -198,16 +89,9 @@ namespace VPB.Patcher
             }
         }
 
-        private static int PruneUnshippedFiles(string vpbDir)
+        private static int PruneUnshippedFiles(string vpbDir, List<string> files, List<string> dirs)
         {
-            var manifestPath = Path.Combine(vpbDir, ManifestFileName);
-            if (!File.Exists(manifestPath))
-                return 0;
-
-            var files = new List<string>();
-            var dirs = new List<string>();
-            if (!TryReadOwnedManifest(manifestPath, files, dirs))
-                return 0;
+            if (files == null || dirs == null) return 0;
 
             if (files.Count < MinManifestRowsToPrune || !files.Contains("vpb.dll"))
             {
@@ -287,6 +171,7 @@ namespace VPB.Patcher
         {
             try
             {
+                if (!File.Exists(path)) return false;
                 var json = File.ReadAllText(path);
                 if (json == null || !json.TrimEnd().EndsWith("]", StringComparison.Ordinal))
                 {
@@ -294,24 +179,7 @@ namespace VPB.Patcher
                     return false;
                 }
 
-                var rows = SimpleJsonParser.ParseManifestRows(json);
-                if (rows == null || rows.Count == 0) return false;
-
-                for (int i = 0; i < rows.Count; i++)
-                {
-                    var rel = rows[i].RelativePath;
-                    if (string.IsNullOrEmpty(rel)) continue;
-                    rel = rel.Replace('\\', '/');
-                    if (!rel.StartsWith(ManifestOwnedPrefix, StringComparison.OrdinalIgnoreCase)) continue;
-
-                    var owned = rel.Substring(ManifestOwnedPrefix.Length);
-                    if (owned.Length == 0) continue;
-
-                    if (rows[i].IsDirectory) dirs.Add(owned);
-                    else files.Add(owned.ToLowerInvariant());
-                }
-
-                return true;
+                return VpbUpdateManifest.TryReadOwnedManifest(json, files, dirs);
             }
             catch (Exception ex)
             {
@@ -330,32 +198,14 @@ namespace VPB.Patcher
             Log.LogWarning(message);
         }
 
+        private static void LogPruneError(string message)
+        {
+            Log.LogError(message);
+        }
+
         private static bool RetireFile(string path)
         {
             return VpbLegacyLayout.RetireFile(path, LogPruneWarning);
-        }
-
-        private static int ReadRetryCount(string path)
-        {
-            try
-            {
-                if (!File.Exists(path)) return 0;
-                int value;
-                if (int.TryParse(File.ReadAllText(path).Trim(), out value) && value > 0) return value;
-            }
-            catch { }
-            return 0;
-        }
-
-        private static void WriteRetryCount(string path, int value)
-        {
-            try
-            {
-                var dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllText(path, value.ToString());
-            }
-            catch { }
         }
 
         private static void CleanupOldFiles(string gameRoot)
