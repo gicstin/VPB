@@ -93,6 +93,7 @@ namespace VPB
             new QmAssignCatalogEntry(QuickMenuAssignableAction.TargetAtom, QmAssignGroupScene),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.CompressCache, QmAssignGroupScene),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.FpsCounter, QmAssignGroupPerf),
+            new QmAssignCatalogEntry(QuickMenuAssignableAction.PassthroughToggle, QmAssignGroupCore),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.PerfMode, QmAssignGroupPerf),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.PerfStepUp, QmAssignGroupPerf),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.PerfStepDown, QmAssignGroupPerf),
@@ -1099,6 +1100,7 @@ namespace VPB
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide");
                 case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.qmbutton.show_hidden", "Show Hidden");
                 case QuickMenuAssignableAction.FpsCounter: return VPBTranslation.T("hook.qmbutton.fps", "FPS Counter");
+                case QuickMenuAssignableAction.PassthroughToggle: return VPBTranslation.T("hook.qmbutton.passthrough", "Passthrough");
                 case QuickMenuAssignableAction.History: return VPBTranslation.T("hook.qmbutton.history", "History");
                 case QuickMenuAssignableAction.LayoutPresets: return VPBTranslation.T("hook.qmassign.layout_presets", "Layout Presets");
                 case QuickMenuAssignableAction.PerfMode: return VPBTranslation.T("hook.qmbutton.perf_mode", "Perf Mode");

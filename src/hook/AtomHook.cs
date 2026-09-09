@@ -441,5 +441,49 @@ namespace VPB
             }
             return result;
         }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Atom), "Store", new Type[] { typeof(JSONArray), typeof(bool), typeof(bool) })]
+        public static bool PreStore(Atom __instance)
+        {
+            try
+            {
+                if (VpbPassthroughLights.IsOwnedAtom(__instance)) return false;
+            }
+            catch { }
+            try { VpbPassthroughLights.RevealSceneLightForStore(__instance); }
+            catch { }
+            return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Atom), "Store", new Type[] { typeof(JSONArray), typeof(bool), typeof(bool) })]
+        public static void PostStore(Atom __instance)
+        {
+            try { VpbPassthroughLights.RepressSceneLightAfterStore(__instance); }
+            catch { }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Atom), "StoreForSubScene", new Type[] { typeof(JSONClass), typeof(bool) })]
+        public static bool PreStoreForSubScene(Atom __instance)
+        {
+            try
+            {
+                if (VpbPassthroughLights.IsOwnedAtom(__instance)) return false;
+            }
+            catch { }
+            try { VpbPassthroughLights.RevealSceneLightForStore(__instance); }
+            catch { }
+            return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Atom), "StoreForSubScene", new Type[] { typeof(JSONClass), typeof(bool) })]
+        public static void PostStoreForSubScene(Atom __instance)
+        {
+            try { VpbPassthroughLights.RepressSceneLightAfterStore(__instance); }
+            catch { }
+        }
     }
 }

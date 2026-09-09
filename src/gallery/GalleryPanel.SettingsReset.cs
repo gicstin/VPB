@@ -218,6 +218,7 @@ namespace VPB
                         return Mathf.Abs(a - b) <= 1e-4f;
                     }
                     case InternalSettingControlType.Cycle:
+                    case InternalSettingControlType.Choice:
                     case InternalSettingControlType.TextArea:
                     case InternalSettingControlType.Hotkey:
                         return string.Equals(def.GetString != null ? def.GetString() : null, def.DefaultString ?? "", StringComparison.OrdinalIgnoreCase);
@@ -251,6 +252,7 @@ namespace VPB
                     return def.DefaultFloat.ToString("F" + decimals);
                 }
                 case InternalSettingControlType.Cycle:
+                case InternalSettingControlType.Choice:
                     return FormatSettingsCycleOption(def.DefaultString ?? "");
                 case InternalSettingControlType.Hotkey:
                 case InternalSettingControlType.TextArea:

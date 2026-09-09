@@ -1321,6 +1321,20 @@ namespace VPB
             LogUiStateChange("HideMainHUD");
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SuperController), "HideMainHUD")]
+        public static void PostHideMainHUD()
+        {
+            try { VpbPassthroughLightAtoms.DismissNativeLightUiOnHudHide(); }
+            catch { }
+            try
+            {
+                if (VpbPassthroughLights.HandlesVisible)
+                    VpbPassthroughLightAtoms.ApplyPlacement();
+            }
+            catch { }
+        }
+
         static bool s_ReturnToSceneViewOnStartupApplied;
 
         static bool IsReturnToSceneViewOnStartupEnabled()
@@ -1381,11 +1395,18 @@ namespace VPB
         [HarmonyPatch(typeof(SuperController), "GetFreeNavigateVector")]
         public static void PostGetFreeNavigateVector(ref Vector4 __result)
         {
-            if (!GalleryVrThumbstickScroll.ShouldSuppressFreeNavigate) return;
-            __result.x = 0f;
-            __result.y = 0f;
-            __result.z = 0f;
-            __result.w = 0f;
+            try
+            {
+                bool suppress = GalleryVrThumbstickScroll.ShouldSuppressFreeNavigate;
+                if (!suppress)
+                    suppress = VpbPassthroughLights.SuppressNavigate;
+                if (!suppress) return;
+                __result.x = 0f;
+                __result.y = 0f;
+                __result.z = 0f;
+                __result.w = 0f;
+            }
+            catch { }
         }
 
         [HarmonyPrefix]

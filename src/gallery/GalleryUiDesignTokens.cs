@@ -1,4 +1,4 @@
-﻿namespace VPB
+namespace VPB
 {
     /// <summary>Design-reference pixel sizes at gallery UI scale 1.0 (before host/DPI factors).</summary>
     public static class GalleryUiDesignTokens
@@ -411,6 +411,7 @@
         public const float SettingsFloatRowHeightRef = 48f;
         /// <summary>Multi-line TextArea rows — host prefers 72 + chrome pad.</summary>
         public const float SettingsFloatTextAreaRowHeightRef = 112f;
+        public const float SettingsFloatWrapRowHeightRef = 88f;
         /// <summary>Wheel step (UGUI). 25 jumped ~2 viewports on large Win deltas.</summary>
         public const float SettingsFloatScrollSensitivityRef = 8f;
         /// <summary>Creator Strip Scene keep selector float — same chrome family as Settings/Plugins.</summary>

@@ -57,6 +57,24 @@ VerboseLogging = false
 
 Setting `VerboseLogging = true` restores guarded detail and bypasses the exact-repeat governor. It does not enable expensive profiling, queue probes, or every separate diagnostic switch. Those remain independent.
 
+Users do not have to edit the file. Gallery → Settings → **Troubleshooting** exposes **Log detail** with three visible choices, this session's filename, **Copy this log** (the file path), **Show in folder**, and in VR **Copy log text**. A numbered recipe appears while Extra or Full is on. Point a user at the tab and the level, never at the config file.
+
+| Level (UI) | Switches it sets |
+|---|---|
+| Normal | everything below off |
+| Extra | `VerboseLogging`, `LogHubRequests`, `LogVerboseUi` |
+| Full | the above plus `LogStartupDetails`, `LoadProfileScenePhases`, `LogPerfDiagnostics`, `LogPerfTelemetry`, `LogSavePerf` |
+
+The level is derived from the entries rather than stored, so a hand-edited `VPB.cfg` still reads back as the nearest level, and re-selecting one normalises the whole set. Changing the level writes `VPB.cfg` immediately. Settings **Revert** restores the level that was in effect when the window opened. Close keeps the current level.
+
+A footer chip (**Log Extra** / **Log Full**) stays visible on the gallery until Normal. Click it to reopen Troubleshooting.
+
+Every level applies immediately, with one exception the UI handles for you: `LogStartupDetails` only affects a launch that has not happened yet. The panel captures whether it was on when the process started and shows a **Restart VaM to include it** row on Full until that is true. `LoadProfileScenePhases` is likewise read once, into `VamSceneLoadPhaseProfiler`, so applying a level re-runs `VamLoadPerfHooks.ApplySettings()` instead of asking for a restart.
+
+When adding a switch to a level, check which kind it is: read live, read once into a cached flag that some `Apply*` call can refresh, or genuinely startup-only. Only the last deserves a restart hint.
+
+Switches outside these levels — `TextureLogLevel`, `LogImageQueueEvents`, `LogStateMachineApply`, `LoadAttributeSlowFrames`, `IndexDiagUidSubstring`, and the interval and threshold numbers — stay config-file only. They are issue-specific or expensive enough to be worth dictating by hand.
+
 For repeated events in normal mode:
 
 - First 10 identical events pass within a 30-second window.

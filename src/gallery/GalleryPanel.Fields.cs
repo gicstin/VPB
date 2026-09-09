@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -1671,6 +1671,15 @@ namespace VPB
         private Image footerWatchToggleIconImage;
         private Sprite footerWatchToggleOnSprite;
         private Sprite footerWatchToggleOffSprite;
+
+        private GameObject footerPassthroughToggleBtn;
+        private Image footerPassthroughToggleBtnImage;
+        private Image footerPassthroughToggleIconImage;
+        private Sprite footerPassthroughToggleOnSprite;
+        private Sprite footerPassthroughToggleOffSprite;
+
+        private GameObject footerPassthroughLightsBtn;
+        private Image footerPassthroughLightsBtnImage;
 
         private GameObject footerFloatsOnlyBtn;
         private Image footerFloatsOnlyBtnImage;

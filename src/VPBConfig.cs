@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
@@ -500,25 +500,62 @@ namespace VPB
             try { TriggerChange(); } catch { }
         }
 
-        /// <summary>
-        /// Creator Mode Strip Scene keep bitmask (<see cref="CreatorStripKeepKind"/>).
-        /// 0 = use default (Persons | Lights). Persisted across sessions.
-        /// </summary>
+        public bool PassthroughEnabled = false;
+        public float PassthroughKeyColorR = 0f;
+        public float PassthroughKeyColorG = 30f / 255f;
+        public float PassthroughKeyColorB = 60f / 255f;
+        public bool PassthroughLightsEnabled = false;
+        public bool PassthroughLightsOverrideScene = true;
+        public string PassthroughLightsSpec = "";
+        public int PassthroughLightCount = 1;
+        public bool PassthroughLightsMoveAsGroup = false;
+        public string PassthroughLightPresetsJson = "[]";
+        public string PassthroughLightPresetSelected = "";
+        public bool PassthroughNavGrabRepaired = false;
+        public bool PassthroughKeyCustom = false;
+        public bool PassthroughCleanKey = true;
+        public bool PassthroughExactColor = true;
+        public bool PassthroughHardEdges = true;
+        public string PassthroughHideScene = VpbPassthrough.HideAllButPeople;
+
+        public Color GetPassthroughKeyColor()
+        {
+            return new Color(
+                Mathf.Clamp01(PassthroughKeyColorR),
+                Mathf.Clamp01(PassthroughKeyColorG),
+                Mathf.Clamp01(PassthroughKeyColorB),
+                1f);
+        }
+
+        public void SetPassthroughKeyColor(Color c)
+        {
+            PassthroughKeyColorR = Mathf.Clamp01(c.r);
+            PassthroughKeyColorG = Mathf.Clamp01(c.g);
+            PassthroughKeyColorB = Mathf.Clamp01(c.b);
+            try { VpbPassthrough.NotifySettingsChanged(); } catch { }
+            try { TriggerChange(); } catch { }
+        }
+
+        public static string NormalizePassthroughHideScene(string value)
+        {
+            if (string.Equals(value, VpbPassthrough.HideNothing, StringComparison.OrdinalIgnoreCase)) return VpbPassthrough.HideNothing;
+            if (string.Equals(value, VpbPassthrough.HideEnvironment, StringComparison.OrdinalIgnoreCase)) return VpbPassthrough.HideEnvironment;
+            return VpbPassthrough.HideAllButPeople;
+        }
+
+        public static int NormalizePassthroughLightCount(int n)
+        {
+            if (n < 1) return 1;
+            if (n > VpbPassthroughLights.MaxLights) return VpbPassthroughLights.MaxLights;
+            return n;
+        }
+
         public int CreatorStripKeepMask = (int)SceneUtils.CreatorStripKeepDefault;
 
-        /// <summary>
-        /// Named Strip Scene recipes JSON array:
-        /// [{name,mask,expand,renames:{uid:newName}}]. Max 8. Empty = none.
-        /// </summary>
         public string CreatorStripRecipesJson = "[]";
 
-        /// <summary>
-        /// Last successful Strip keep set JSON:
-        /// {mask,expand,uids:[...],renames:{uid:newName}}. Empty = none.
-        /// </summary>
         public string CreatorStripLastRecipeJson = "";
 
-        /// <summary>Strip keep floating panel geometry (canvas-local pos, size at scale 1), per mode.</summary>
         public readonly FloatGeometryPair CreatorStripPanelGeometry =
             new FloatGeometryPair("CreatorStripPanel", 560f, 640f);
         public bool CreatorStripPanelPosSaved
@@ -1811,6 +1848,23 @@ namespace VPB
             GalleryScanWlTempBorderColorG = 0.15f;
             GalleryScanWlTempBorderColorB = 1f;
             GalleryScanWlTempBorderColorA = 1f;
+            PassthroughEnabled = false;
+            PassthroughKeyColorR = 0f;
+            PassthroughKeyColorG = 30f / 255f;
+            PassthroughKeyColorB = 60f / 255f;
+            PassthroughKeyCustom = false;
+            PassthroughLightsEnabled = false;
+            PassthroughLightsOverrideScene = true;
+            PassthroughLightsSpec = "";
+            PassthroughLightCount = 1;
+            PassthroughLightsMoveAsGroup = false;
+            PassthroughLightPresetsJson = "[]";
+            PassthroughLightPresetSelected = "";
+            try { VpbPassthroughLights.InvalidateSlots(); } catch { }
+            PassthroughCleanKey = true;
+            PassthroughExactColor = true;
+            PassthroughHardEdges = true;
+            PassthroughHideScene = VpbPassthrough.HideAllButPeople;
             CreatorStripKeepMask = (int)SceneUtils.CreatorStripKeepDefault;
             CreatorStripRecipesJson = "[]";
             CreatorStripLastRecipeJson = "";
@@ -2130,7 +2184,33 @@ namespace VPB
                         if (node["GalleryScanWlTempBorderColorG"] != null) GalleryScanWlTempBorderColorG = Mathf.Clamp01(node["GalleryScanWlTempBorderColorG"].AsFloat);
                         if (node["GalleryScanWlTempBorderColorB"] != null) GalleryScanWlTempBorderColorB = Mathf.Clamp01(node["GalleryScanWlTempBorderColorB"].AsFloat);
                         if (node["GalleryScanWlTempBorderColorA"] != null) GalleryScanWlTempBorderColorA = Mathf.Clamp01(node["GalleryScanWlTempBorderColorA"].AsFloat);
-                        // One-time: retire full-cell WL rims as default ambient cue (W badge is primary).
+                        if (node["PassthroughEnabled"] != null) PassthroughEnabled = node["PassthroughEnabled"].AsBool;
+                        if (node["PassthroughKeyColorR"] != null) PassthroughKeyColorR = Mathf.Clamp01(node["PassthroughKeyColorR"].AsFloat);
+                        if (node["PassthroughKeyColorG"] != null) PassthroughKeyColorG = Mathf.Clamp01(node["PassthroughKeyColorG"].AsFloat);
+                        if (node["PassthroughKeyColorB"] != null) PassthroughKeyColorB = Mathf.Clamp01(node["PassthroughKeyColorB"].AsFloat);
+                        if (node["PassthroughKeyCustom"] != null) PassthroughKeyCustom = node["PassthroughKeyCustom"].AsBool;
+                        if (node["PassthroughLightsEnabled"] != null) PassthroughLightsEnabled = node["PassthroughLightsEnabled"].AsBool;
+                        if (node["PassthroughLightsOverrideScene"] != null) PassthroughLightsOverrideScene = node["PassthroughLightsOverrideScene"].AsBool;
+                        if (node["PassthroughLightsMoveAsGroup"] != null) PassthroughLightsMoveAsGroup = node["PassthroughLightsMoveAsGroup"].AsBool;
+                        if (node["PassthroughLightPresetsJson"] != null)
+                        {
+                            string presets = node["PassthroughLightPresetsJson"].Value;
+                            PassthroughLightPresetsJson = string.IsNullOrEmpty(presets) ? "[]" : presets;
+                        }
+                        if (node["PassthroughLightPresetSelected"] != null)
+                            PassthroughLightPresetSelected = node["PassthroughLightPresetSelected"].Value ?? "";
+                        if (node["PassthroughNavGrabRepaired"] != null) PassthroughNavGrabRepaired = node["PassthroughNavGrabRepaired"].AsBool;
+                        if (node["PassthroughLightsSpec"] != null)
+                            PassthroughLightsSpec = node["PassthroughLightsSpec"].Value ?? "";
+                        if (node["PassthroughLightCount"] != null)
+                            PassthroughLightCount = NormalizePassthroughLightCount(node["PassthroughLightCount"].AsInt);
+                        else
+                            PassthroughLightCount = 0;
+                        try { VpbPassthroughLights.InvalidateSlots(); } catch { }
+                        if (node["PassthroughCleanKey"] != null) PassthroughCleanKey = node["PassthroughCleanKey"].AsBool;
+                        if (node["PassthroughExactColor"] != null) PassthroughExactColor = node["PassthroughExactColor"].AsBool;
+                        if (node["PassthroughHardEdges"] != null) PassthroughHardEdges = node["PassthroughHardEdges"].AsBool;
+                        if (node["PassthroughHideScene"] != null) PassthroughHideScene = NormalizePassthroughHideScene(node["PassthroughHideScene"].Value);
                         if (node["GalleryScanWlBadgePrimaryV1"] != null && node["GalleryScanWlBadgePrimaryV1"].AsBool)
                             GalleryScanWlBadgePrimaryV1 = true;
                         else
@@ -2665,6 +2745,31 @@ namespace VPB
                 node["GalleryScanWlTempBorderColorB"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorB);
                 node["GalleryScanWlTempBorderColorA"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorA);
                 node["GalleryScanWlBadgePrimaryV1"].AsBool = GalleryScanWlBadgePrimaryV1;
+                node["PassthroughEnabled"].AsBool = PassthroughEnabled;
+                node["PassthroughKeyColorR"].AsFloat = Mathf.Clamp01(PassthroughKeyColorR);
+                node["PassthroughKeyColorG"].AsFloat = Mathf.Clamp01(PassthroughKeyColorG);
+                node["PassthroughKeyColorB"].AsFloat = Mathf.Clamp01(PassthroughKeyColorB);
+                node["PassthroughKeyCustom"].AsBool = PassthroughKeyCustom;
+                node["PassthroughLightsEnabled"].AsBool = PassthroughLightsEnabled;
+                node["PassthroughLightsOverrideScene"].AsBool = PassthroughLightsOverrideScene;
+                node["PassthroughLightsMoveAsGroup"].AsBool = PassthroughLightsMoveAsGroup;
+                node["PassthroughLightPresetsJson"] = string.IsNullOrEmpty(PassthroughLightPresetsJson)
+                    ? "[]"
+                    : PassthroughLightPresetsJson;
+                node["PassthroughLightPresetSelected"] = PassthroughLightPresetSelected ?? "";
+                node["PassthroughNavGrabRepaired"].AsBool = PassthroughNavGrabRepaired;
+                node["PassthroughLightsSpec"].Value = PassthroughLightsSpec ?? "";
+                int lightCount = PassthroughLightCount;
+                if (lightCount < 1)
+                {
+                    try { lightCount = VpbPassthroughLights.GetActiveCount(); }
+                    catch { lightCount = 1; }
+                }
+                node["PassthroughLightCount"].AsInt = NormalizePassthroughLightCount(lightCount);
+                node["PassthroughCleanKey"].AsBool = PassthroughCleanKey;
+                node["PassthroughExactColor"].AsBool = PassthroughExactColor;
+                node["PassthroughHardEdges"].AsBool = PassthroughHardEdges;
+                node["PassthroughHideScene"].Value = NormalizePassthroughHideScene(PassthroughHideScene);
                 node["CreatorStripKeepMask"].AsInt = CreatorStripKeepMask == 0
                     ? (int)SceneUtils.CreatorStripKeepDefault
                     : (CreatorStripKeepMask & (int)SceneUtils.CreatorStripKeepAllUser);
