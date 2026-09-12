@@ -1,13 +1,13 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-12T15:20:08Z",
+    "UpdatedUtc":  "2026-09-12T15:49:16Z",
     "MinRollbackVersion":  "0.32.406",
-    "ExcludedBelowMin":  0,
+    "ExcludedBelowMin":  416,
     "Keep":  60,
     "Releases":  [
                      {
                          "Version":  "0.32.688",
-                         "Tag":  "build-0.32.688",
+                         "Tag":  "build-0.32.688-873828a",
                          "Commit":  "873828a47f281335499491bddef0452e74a522f6",
                          "DateUtc":  "2026-09-12T15:20:01Z",
                          "Notes":  "feat: support tagged releases for version rollback",
@@ -15,7 +15,7 @@
                      },
                      {
                          "Version":  "0.32.686",
-                         "Tag":  "build-0.32.686",
+                         "Tag":  "build-0.32.686-2d10403",
                          "Commit":  "2d10403dafef07b830f7c789c1359d252b532c6b",
                          "DateUtc":  "2026-09-12T14:13:26Z",
                          "Notes":  "chore: refactor patcher [skip discord]",
@@ -23,7 +23,7 @@
                      },
                      {
                          "Version":  "0.32.678",
-                         "Tag":  "build-0.32.678",
+                         "Tag":  "build-0.32.678-6cbd6fa",
                          "Commit":  "6cbd6fa8e474a2d8fe11b04e4f362d7671942b12",
                          "DateUtc":  "2026-09-11T17:50:20Z",
                          "Notes":  "fix: Zstd cache read failure",
@@ -31,7 +31,7 @@
                      },
                      {
                          "Version":  "0.32.668",
-                         "Tag":  "build-0.32.668",
+                         "Tag":  "build-0.32.668-dbb4a30",
                          "Commit":  "dbb4a307bd624241307fe2457b57e4af12d4439f",
                          "DateUtc":  "2026-09-09T18:51:06Z",
                          "Notes":  "fix: in-plugin patcher not able to update",
@@ -39,7 +39,7 @@
                      },
                      {
                          "Version":  "0.32.664",
-                         "Tag":  "build-0.32.664",
+                         "Tag":  "build-0.32.664-bc547a9",
                          "Commit":  "bc547a99ae44170e478d6363942c53df92c87afb",
                          "DateUtc":  "2026-09-09T18:29:56Z",
                          "Notes":  "feat(VR): passtrough chroma key support - HMD relative room lights",
@@ -47,7 +47,7 @@
                      },
                      {
                          "Version":  "0.32.610",
-                         "Tag":  "build-0.32.610",
+                         "Tag":  "build-0.32.610-579b3e3",
                          "Commit":  "579b3e35c677e7a88d2c8643afb932dcdbc35ad8",
                          "DateUtc":  "2026-09-07T20:18:17Z",
                          "Notes":  "chore(build): update binaries to 0.32.610",
@@ -55,7 +55,7 @@
                      },
                      {
                          "Version":  "0.32.609",
-                         "Tag":  "build-0.32.609",
+                         "Tag":  "build-0.32.609-77ee4eb",
                          "Commit":  "77ee4ebe63b3b8c67877f054c7096f3ff3b83edb",
                          "DateUtc":  "2026-09-07T17:52:23Z",
                          "Notes":  "tests: dev testing suite [skip discord]",
@@ -63,7 +63,7 @@
                      },
                      {
                          "Version":  "0.32.593",
-                         "Tag":  "build-0.32.593",
+                         "Tag":  "build-0.32.593-3ec7bb0",
                          "Commit":  "3ec7bb0691d21f4dc06c72b9f0b9ba32bb2e2341",
                          "DateUtc":  "2026-09-06T15:25:07Z",
                          "Notes":  "fix: creator filter regression - hide nameplate while native sub-menu is visible - apply hair materials on first VPB look load",
@@ -71,7 +71,7 @@
                      },
                      {
                          "Version":  "0.32.588",
-                         "Tag":  "build-0.32.588",
+                         "Tag":  "build-0.32.588-1426ad2",
                          "Commit":  "1426ad294fc9b6c8a693ea3eba970f3b90bf9126",
                          "DateUtc":  "2026-09-06T11:14:21Z",
                          "Notes":  "feat: option to set a startup scene",
@@ -79,7 +79,7 @@
                      },
                      {
                          "Version":  "0.32.583",
-                         "Tag":  "build-0.32.583",
+                         "Tag":  "build-0.32.583-03edbc1",
                          "Commit":  "03edbc1818764fd0e9a73334e0adbc8e14d7aff3",
                          "DateUtc":  "2026-09-06T10:38:05Z",
                          "Notes":  "fix: clear sticky warning after switching back from multiplayer branch",
@@ -87,7 +87,7 @@
                      },
                      {
                          "Version":  "0.32.581",
-                         "Tag":  "build-0.32.581",
+                         "Tag":  "build-0.32.581-8c05440",
                          "Commit":  "8c05440a628ff646fa087a3d87c6a290fe4a86df",
                          "DateUtc":  "2026-09-06T09:52:57Z",
                          "Notes":  "fix: stop index refresh loop and preserve first_scanned on uid rebuild",
@@ -95,7 +95,7 @@
                      },
                      {
                          "Version":  "0.32.579",
-                         "Tag":  "build-0.32.579",
+                         "Tag":  "build-0.32.579-5d62f2c",
                          "Commit":  "5d62f2c166736de8a2548ac6a21cb003e1457629",
                          "DateUtc":  "2026-09-06T09:35:12Z",
                          "Notes":  "fix: load plugin AssetBundles",
@@ -103,7 +103,7 @@
                      },
                      {
                          "Version":  "0.32.577",
-                         "Tag":  "build-0.32.577",
+                         "Tag":  "build-0.32.577-24aacc3",
                          "Commit":  "24aacc3bf694b2cd427b14397189a5c6b3c3b149",
                          "DateUtc":  "2026-09-06T09:13:36Z",
                          "Notes":  "fix: treat spaced VAR filenames as present in missing-deps scan",
@@ -111,7 +111,7 @@
                      },
                      {
                          "Version":  "0.32.575",
-                         "Tag":  "build-0.32.575",
+                         "Tag":  "build-0.32.575-2ec0652",
                          "Commit":  "2ec0652c9fd3e9b9c3bec9612d2a6acea62b22da",
                          "DateUtc":  "2026-09-06T08:49:42Z",
                          "Notes":  "fix: restore scene load after whitespace package-row rebuild",
@@ -119,7 +119,7 @@
                      },
                      {
                          "Version":  "0.32.572",
-                         "Tag":  "build-0.32.572",
+                         "Tag":  "build-0.32.572-25eeb6b",
                          "Commit":  "25eeb6bdf9db3c18042e9f89731f8f80ea38aaff",
                          "DateUtc":  "2026-09-06T08:32:23Z",
                          "Notes":  "fix: label clothing/hair remove control instead of scene eraser",
@@ -127,7 +127,7 @@
                      },
                      {
                          "Version":  "0.32.568",
-                         "Tag":  "build-0.32.568",
+                         "Tag":  "build-0.32.568-cb4fc62",
                          "Commit":  "cb4fc620ed1f147dfaf03bc1022686c39265fc79",
                          "DateUtc":  "2026-09-06T08:12:37Z",
                          "Notes":  "fix: better UX for random item picker",
@@ -135,7 +135,7 @@
                      },
                      {
                          "Version":  "0.32.562",
-                         "Tag":  "build-0.32.562",
+                         "Tag":  "build-0.32.562-fa5dc00",
                          "Commit":  "fa5dc00d81d13ddcf438dce78b0ae52c88b642af",
                          "DateUtc":  "2026-09-06T07:24:59Z",
                          "Notes":  "fix: general UX - replace clothing slots without relying on creator tags - keep gallery fixed height when opening VAR context menu - keep person switch usable in try-on and auto-keep on person change - VPB plugin nameplate",
@@ -143,7 +143,7 @@
                      },
                      {
                          "Version":  "0.32.500",
-                         "Tag":  "build-0.32.500",
+                         "Tag":  "build-0.32.500-895ab5e",
                          "Commit":  "895ab5e13820fa06ee63808c0b116982012d8890",
                          "DateUtc":  "2026-09-05T19:43:09Z",
                          "Notes":  "feat: closes #101 - gender icons",
@@ -151,7 +151,7 @@
                      },
                      {
                          "Version":  "0.32.494",
-                         "Tag":  "build-0.32.494",
+                         "Tag":  "build-0.32.494-edcbbdf",
                          "Commit":  "edcbbdf2d83999bfc7a53a6fc65cf56de72e2151",
                          "DateUtc":  "2026-09-05T17:16:00Z",
                          "Notes":  "feat: closing #99 - Hub categories filtering mode",
@@ -159,7 +159,7 @@
                      },
                      {
                          "Version":  "0.32.486",
-                         "Tag":  "build-0.32.486",
+                         "Tag":  "build-0.32.486-b0eab08",
                          "Commit":  "b0eab085165d0618d335ae307b195e88d6bda7b2",
                          "DateUtc":  "2026-09-04T19:02:26Z",
                          "Notes":  "feat: closes #98, closes #100 - Look-a-Pedia tags integration - Hub resources tags integration",
@@ -167,7 +167,7 @@
                      },
                      {
                          "Version":  "0.32.431",
-                         "Tag":  "build-0.32.431",
+                         "Tag":  "build-0.32.431-7f15cd9",
                          "Commit":  "7f15cd99cb7acfd55fc048d4727c7e9782bb60c1",
                          "DateUtc":  "2026-09-03T17:01:59Z",
                          "Notes":  "fix: closes #97 - compressed textures stripped mips for eyelashes/eybrows in zstd cache",
@@ -175,7 +175,7 @@
                      },
                      {
                          "Version":  "0.32.426",
-                         "Tag":  "build-0.32.426",
+                         "Tag":  "build-0.32.426-be70b74",
                          "Commit":  "be70b748796ca6fca7f87e9be9230add7d091c65",
                          "DateUtc":  "2026-09-03T15:53:20Z",
                          "Notes":  "fix: reverse index for filenames using whitespace",
@@ -183,7 +183,7 @@
                      },
                      {
                          "Version":  "0.32.425",
-                         "Tag":  "build-0.32.425",
+                         "Tag":  "build-0.32.425-a1f442e",
                          "Commit":  "a1f442ea24b7588bcaed90b2ee10537e7bc5b131",
                          "DateUtc":  "2026-09-02T20:48:24Z",
                          "Notes":  "fix: whitespace trim regression, shutdown lock",
@@ -191,7 +191,7 @@
                      },
                      {
                          "Version":  "0.32.419",
-                         "Tag":  "build-0.32.419",
+                         "Tag":  "build-0.32.419-2ab69d2",
                          "Commit":  "2ab69d2376e852dcb9934463970813a23752058e",
                          "DateUtc":  "2026-09-02T18:39:49Z",
                          "Notes":  "fix: potential leak caused by #93 fix",
@@ -199,7 +199,7 @@
                      },
                      {
                          "Version":  "0.32.417",
-                         "Tag":  "build-0.32.417",
+                         "Tag":  "build-0.32.417-6e2eb40",
                          "Commit":  "6e2eb40c5e5611f3dd56bbc92a95b76d91ac14fb",
                          "DateUtc":  "2026-09-01T20:15:59Z",
                          "Notes":  "fix: closes #92",
@@ -207,7 +207,7 @@
                      },
                      {
                          "Version":  "0.32.414",
-                         "Tag":  "build-0.32.414",
+                         "Tag":  "build-0.32.414-a397ce0",
                          "Commit":  "a397ce0e8b00ec89bb5d1ba65541980c3c46b877",
                          "DateUtc":  "2026-09-01T19:09:19Z",
                          "Notes":  "fix: closes #93",
@@ -215,7 +215,7 @@
                      },
                      {
                          "Version":  "0.32.412",
-                         "Tag":  "build-0.32.412",
+                         "Tag":  "build-0.32.412-19df077",
                          "Commit":  "19df07773efa613d0b1d05382843e45c1076af23",
                          "DateUtc":  "2026-09-01T18:17:39Z",
                          "Notes":  "fix: closes #94",
@@ -223,7 +223,7 @@
                      },
                      {
                          "Version":  "0.32.409",
-                         "Tag":  "build-0.32.409",
+                         "Tag":  "build-0.32.409-050bec4",
                          "Commit":  "050bec4bbd5007a7bea5fb41c2114a7c5f5f1dd0",
                          "DateUtc":  "2026-09-01T18:11:20Z",
                          "Notes":  "fix: closes #95",
@@ -231,7 +231,7 @@
                      },
                      {
                          "Version":  "0.32.408",
-                         "Tag":  "build-0.32.408",
+                         "Tag":  "build-0.32.408-176e1a4",
                          "Commit":  "176e1a4a7001d7bfae7717fd9252129b58ffa450",
                          "DateUtc":  "2026-08-31T18:29:58Z",
                          "Notes":  "chore: ship VPB 0.32.408 binaries",
@@ -239,7 +239,7 @@
                      },
                      {
                          "Version":  "0.32.407",
-                         "Tag":  "build-0.32.407",
+                         "Tag":  "build-0.32.407-387cd6f",
                          "Commit":  "387cd6fa64537564599eaedda11370da1b71ad2f",
                          "DateUtc":  "2026-08-31T16:47:41Z",
                          "Notes":  "fix: closes #96",
@@ -247,7 +247,7 @@
                      },
                      {
                          "Version":  "0.32.406",
-                         "Tag":  "build-0.32.406",
+                         "Tag":  "build-0.32.406-8613293",
                          "Commit":  "8613293558df8818e0a2c7507ebf0a27715a87ae",
                          "DateUtc":  "2026-08-31T15:59:13Z",
                          "Notes":  "chore: single-folder plugin layout",

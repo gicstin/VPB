@@ -81,9 +81,17 @@ namespace VPB.Tests.Static
             foreach (Release r in ReadReleases(out _))
             {
                 if (r.Version == null || !VersionShape.IsMatch(r.Version))
+                {
                     bad.Add("version '" + r.Version + "' is not n.n.n");
-                else if (r.Tag != "build-" + r.Version)
-                    bad.Add(r.Version + ": tag '" + r.Tag + "' should be 'build-" + r.Version + "'");
+                }
+                else
+                {
+                    bool current = r.Tag != null && Regex.IsMatch(r.Tag, "^build-" + Regex.Escape(r.Version) + "-[0-9a-f]{7,40}$");
+                    bool legacy = r.Tag == "build-" + r.Version;
+                    if (!current && !legacy)
+                        bad.Add(r.Version + ": tag '" + r.Tag + "' is neither 'build-" + r.Version
+                            + "-<sha>' nor the legacy 'build-" + r.Version + "'");
+                }
 
                 if (r.Commit == null || !Sha1Shape.IsMatch(r.Commit))
                     bad.Add((r.Version ?? "?") + ": commit '" + r.Commit + "' is not a full 40-char sha");
@@ -111,6 +119,23 @@ namespace VPB.Tests.Static
                 Environment.NewLine +
                 "updater then refetches all 42 shipped files with no checksum verification at all:" +
                 Environment.NewLine + Repo.Bullets(slashed));
+        }
+
+        [Fact]
+        public void EveryReleaseTagNamesADistinctBuild()
+        {
+            var releases = ReadReleases(out _);
+
+            var shared = releases
+                .GroupBy(r => r.Tag, StringComparer.Ordinal)
+                .Where(g => g.Select(r => r.Commit).Distinct(StringComparer.Ordinal).Count() > 1)
+                .Select(g => g.Key + " -> " + string.Join(", ", g.Select(r => r.Commit.Substring(0, 8))))
+                .ToList();
+
+            Assert.True(shared.Count == 0,
+                "One tag name is claimed by two different commits. The updater resolves a pin by tag, so users would" +
+                Environment.NewLine +
+                "get a build other than the one the picker described:" + Environment.NewLine + Repo.Bullets(shared));
         }
 
         [Fact]
