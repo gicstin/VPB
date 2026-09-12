@@ -12,20 +12,20 @@ and a ref is a branch or a tag — that is the whole mechanism behind both updat
 | build | `PostBuildDeploy.ps1` → `BuildPatchManifest.ps1` | `patch_manifest2.json` regenerated with a git blob SHA1 and size per shipped file |
 | commit touching `VPB.dll` | `post-commit` hook → `PublishRelease.ps1` | release recorded in `releases/index.json`, `build-*` tag created (on the release branch), follow-up commit made |
 | any other commit | nothing | the hook exits immediately |
+| push | `pre-push` hook | publishes this branch's `build-*` rollback tags |
 | push | `tests.yml` → `CheckReleaseIndexFresh.ps1` | fails the build if the index does not name the shipped version |
 
 Hooks install with a Debug build of `VPB.csproj`, or `pwsh -File tests/run.ps1 -InstallHooks`.
 
-The only manual step is publishing the rollback targets, because pushing is not something a hook
-should do behind your back:
-
-```
-git push origin --tags
-```
+Tags publish themselves on `git push`, so there is no manual release step. The `pre-push` hook
+sends the rollback tags with the push you are already making — never `--tags`, only `build-*` tags
+whose commit is an ancestor of what you are pushing. Unrelated tags (`rescue/*`, `v0.x`) stay
+private, and nothing publishes work that is not going public with this push anyway. A tag only
+adds a ref; it never moves a branch or rewrites history. Set `VPB_NO_TAG_PUSH=1` to skip it.
 
 If hooks are not installed, nothing is lost and nothing is silently wrong — CI fails the push and
-tells you to run `tests/run.ps1 -InstallHooks`. To record a build by hand:
-`pwsh -File scripts/PublishRelease.ps1 -CreateTags`.
+tells you to run `tests/run.ps1 -InstallHooks`. To record and publish by hand:
+`pwsh -File scripts/PublishRelease.ps1 -CreateTags` then `git push origin --tags`.
 
 ### Why the index arrives in a second commit
 
@@ -55,6 +55,10 @@ then refetches all 42 shipped files with no checksum verification at all.
 `MinRollbackVersion` is `0.32.406`, the commit that moved the plugin into a single folder
 (`86132935`). The patcher prune and the `VpbLegacyLayout` sweep only migrate forward, so older
 builds are kept out of the index and never tagged — a ref that does not exist cannot be pinned to.
+
+A reset or rebase leaves tags pointing at commits no branch contains. Those are dead rather than
+another branch's, so `PublishRelease.ps1` removes them, and a tag whose version the index still
+lists is re-pointed at the replacement commit instead of being reported as a version collision.
 
 `-Keep` (default 60) bounds the index. Every client fetches it on every check, and at this build
 cadence an unbounded list reaches four figures within a year. Tags follow the index: any `build-*`
@@ -110,8 +114,9 @@ would describe a different build than users receive. Any tag naming a version th
 pointing at a different commit is a **hard error** regardless of which branch that commit is on;
 the fix is to bump the base version on this branch and rebuild.
 
-Tags are only ever created locally. `git push origin --tags` publishes them, and until you do, the
-script warns on every run that the index advertises builds nobody can fetch.
+Tags are created locally and published by the `pre-push` hook with your next `git push`, scoped to
+this branch's `build-*` tags. Until they reach the remote, `PublishRelease.ps1` warns on every run
+that the index advertises builds nobody can fetch.
 
 ### Version numbers are not monotonic
 

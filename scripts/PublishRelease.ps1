@@ -261,6 +261,7 @@ $tagList = Invoke-Git @('tag', '--list', 'build-*')
 if ($null -ne $tagList) { foreach ($t in $tagList) { $existingTags[[string]$t] = $true } }
 
 $mismatched = [System.Collections.Generic.List[string]]::new()
+$repointable = [System.Collections.Generic.List[string]]::new()
 
 foreach ($e in $sorted) {
     $tag = [string]$e.Tag
@@ -270,17 +271,38 @@ foreach ($e in $sorted) {
     $target = ([string]$target).Trim()
     if ($target -eq [string]$e.Commit) { continue }
 
+    $containing = @(Invoke-Git @('branch', '-a', '--contains', $target) | Where-Object { "$_".Trim() -ne '' })
+    if ($containing.Count -eq 0) {
+        $repointable.Add([string]$tag)
+        continue
+    }
+
     $mismatched.Add(("{0} -> {1} but this branch's index names {2}" -f $tag, $target.Substring(0, 8), ([string]$e.Commit).Substring(0, 8)))
 }
 
 if ($mismatched.Count -gt 0) {
     Write-Host "[PublishRelease] TAG/INDEX MISMATCH - the updater resolves by tag, so users would get a different build"
-    Write-Host "[PublishRelease] than the picker describes. Usually two people produced the same version number:"
+    Write-Host "[PublishRelease] than the picker describes:"
     foreach ($m in $mismatched) { Write-Host "    $m" }
-    Write-Host "[PublishRelease] Two builds are claiming one version number - usually two branches or two people"
+    Write-Host "[PublishRelease] Two live builds are claiming one version number - usually two branches or two people"
     Write-Host "[PublishRelease] whose plugin_version.txt counters advanced independently. Bump the base version in"
     Write-Host "[PublishRelease] plugin_version.txt on this branch, rebuild, and re-run."
     exit 1
+}
+
+if ($repointable.Count -gt 0) {
+    if ($CreateTags) {
+        foreach ($t in $repointable) {
+            $null = Invoke-Git @('tag', '-d', [string]$t)
+            $existingTags.Remove([string]$t)
+            Write-Host ("[PublishRelease] Re-pointing {0}; its old commit was reset or rebased away." -f $t)
+        }
+    }
+    else {
+        Write-Host ("[PublishRelease] {0} tag(s) still point at commits that were reset or rebased away." -f $repointable.Count)
+        Write-Host ("[PublishRelease] -CreateTags re-points them at the commits this index names:")
+        foreach ($t in ($repointable | Select-Object -First 5)) { Write-Host "    $t" }
+    }
 }
 
 $candidates = @($sorted)
@@ -318,18 +340,40 @@ $eligible = @{}
 foreach ($e in $sorted) { $eligible[[string]$e.Tag] = $true }
 
 $staleTags = [System.Collections.Generic.List[string]]::new()
+$orphanTags = [System.Collections.Generic.List[string]]::new()
 $otherBranchTags = 0
 foreach ($t in ($existingTags.Keys | Sort-Object)) {
     if ($eligible.ContainsKey([string]$t)) { continue }
     $target = Invoke-Git @('rev-list', '-n', '1', [string]$t)
     if ($null -eq $target) { continue }
-    $null = Invoke-Git @('merge-base', '--is-ancestor', ([string]$target).Trim(), 'HEAD')
-    if ($LASTEXITCODE -eq 0) { $staleTags.Add([string]$t) } else { $otherBranchTags++ }
+    $target = ([string]$target).Trim()
+
+    $null = Invoke-Git @('merge-base', '--is-ancestor', $target, 'HEAD')
+    if ($LASTEXITCODE -eq 0) { $staleTags.Add([string]$t); continue }
+
+    $containing = @(Invoke-Git @('branch', '-a', '--contains', $target) | Where-Object { "$_".Trim() -ne '' })
+    if ($containing.Count -eq 0) { $orphanTags.Add([string]$t) } else { $otherBranchTags++ }
 }
 $staleTags = @($staleTags)
+$orphanTags = @($orphanTags)
 
 if ($otherBranchTags -gt 0) {
     Write-Host ("[PublishRelease] {0} tag(s) belong to other branches and were left untouched." -f $otherBranchTags)
+}
+
+if ($orphanTags.Count -gt 0) {
+    if ($CreateTags) {
+        foreach ($t in $orphanTags) {
+            $null = Invoke-Git @('tag', '-d', [string]$t)
+            Write-Host ("[PublishRelease] Removed orphaned tag {0} (its commit is on no branch - rebased or reset away)" -f $t)
+            $existingTags.Remove([string]$t)
+        }
+    }
+    else {
+        Write-Host ("[PublishRelease] {0} tag(s) point at commits no branch contains (rebased or reset away)." -f $orphanTags.Count)
+        Write-Host ("[PublishRelease] Nobody can fetch these builds. -CreateTags removes them:")
+        foreach ($t in ($orphanTags | Select-Object -First 5)) { Write-Host "    $t" }
+    }
 }
 if ($staleTags.Count -gt 0) {
     if ($CreateTags) {

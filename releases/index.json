@@ -1,6 +1,6 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-12T14:10:23Z",
+    "UpdatedUtc":  "2026-09-12T14:25:20Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  416,
     "Keep":  60,
@@ -8,25 +8,9 @@
                      {
                          "Version":  "0.32.686",
                          "Tag":  "build-0.32.686",
-                         "Commit":  "a165eb1b174e2b1eb849c74160237a7311579492",
-                         "DateUtc":  "2026-09-12T14:02:16Z",
-                         "Notes":  "chore: commit scripts 2 [skip discord]",
-                         "Schema":  13
-                     },
-                     {
-                         "Version":  "0.32.684",
-                         "Tag":  "build-0.32.684",
-                         "Commit":  "96b1393c70288f067f6a99e57a465ce7029a3cb8",
-                         "DateUtc":  "2026-09-12T13:04:13Z",
-                         "Notes":  "chore: patcher test release [skip discord]",
-                         "Schema":  13
-                     },
-                     {
-                         "Version":  "0.32.682",
-                         "Tag":  "build-0.32.682",
-                         "Commit":  "d193771ebb122de34b34b8cea5a9c01468cc4719",
-                         "DateUtc":  "2026-09-12T04:55:48Z",
-                         "Notes":  "chore: refactored patching method [skip discord]",
+                         "Commit":  "2d10403dafef07b830f7c789c1359d252b532c6b",
+                         "DateUtc":  "2026-09-12T14:13:26Z",
+                         "Notes":  "chore: refactor patcher [skip discord]",
                          "Schema":  13
                      },
                      {
