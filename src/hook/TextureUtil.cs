@@ -254,6 +254,8 @@ namespace VPB
             string storage = ClassifyMipStorage(rawLength, w, h, fmt);
             bool createMipMaps = ResolveCreateMipMaps(queueCreateMipMaps, false, storage, rawLength, w, h, fmt);
 
+            if (!IsMipMetaRepairableOnServe(createMipMaps, storage, w, h, fmt)) createMipMaps = false;
+
             meta["createMipMaps"].AsBool = createMipMaps;
             meta["mipCount"].AsInt = CountMipLevels(w, h);
             meta["mipStorage"] = storage;
@@ -682,6 +684,42 @@ namespace VPB
                 try { fmt = (TextureFormat)Enum.Parse(typeof(TextureFormat), mz["format"].Value); } catch { }
 
                 return !IsMipMetaRepairableOnServe(mz["createMipMaps"].AsBool, storage, w, h, fmt);
+            }
+            catch { return false; }
+        }
+
+        public static bool TryRepairStaleMipMetaInPlace(string cachePath)
+        {
+            if (string.IsNullOrEmpty(cachePath)) return false;
+            string metaPath = cachePath + "meta";
+            try
+            {
+                if (!File.Exists(cachePath) || !File.Exists(metaPath)) return false;
+
+                var mz = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
+                if (mz == null) return false;
+
+                string storage = mz["mipStorage"] != null ? mz["mipStorage"].Value : null;
+                if (string.IsNullOrEmpty(storage)) return false;
+
+                int w = mz["width"].AsInt;
+                int h = mz["height"].AsInt;
+                if (w <= 0 || h <= 0) return false;
+
+                TextureFormat fmt = TextureFormat.RGBA32;
+                try { fmt = (TextureFormat)Enum.Parse(typeof(TextureFormat), mz["format"].Value); } catch { }
+
+                if (IsMipMetaRepairableOnServe(mz["createMipMaps"].AsBool, storage, w, h, fmt)) return false;
+
+                mz["createMipMaps"].AsBool = false;
+                mz["mipCount"].AsInt = 1;
+                WriteCacheVersionToMeta(mz);
+
+                string temp = metaPath + ".tmp";
+                File.WriteAllText(temp, VPB.src.util.JsonSerializationUtil.Serialize(mz, 1024));
+                if (File.Exists(metaPath)) File.Delete(metaPath);
+                File.Move(temp, metaPath);
+                return true;
             }
             catch { return false; }
         }

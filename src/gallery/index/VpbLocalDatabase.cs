@@ -128,6 +128,8 @@ namespace VPB
 
         private const int SchemaVersion = 13;
 
+        internal static int CurrentSchemaVersion { get { return SchemaVersion; } }
+
         private static readonly object s_Sync = new object();
         private static volatile bool s_RebuildScheduled;
         private static volatile bool s_SqlRebuildDeferredPostReady;

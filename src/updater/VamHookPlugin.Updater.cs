@@ -21,6 +21,7 @@ namespace VPB
                     _updaterService = new VpbUpdaterService(gameRoot, this);
                     _updaterService.OnStatusChanged = RefreshGallerySettingsRows;
                     _updaterService.FetchBranchesAsync();
+                    _updaterService.FetchReleasesAsync();
                 }
             }
             catch (Exception ex)

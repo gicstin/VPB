@@ -1,0 +1,10 @@
+# Files that live under vam_patch/ but are deliberately NOT listed in patch_manifest.json.
+# The patcher prunes anything under BepInEx/plugins/VPB that the manifest does not list, and the
+# updater only fetches what the manifest names, so an unlisted file never reaches a user install.
+# Add a path here only when that is intended; otherwise fix the manifest.
+#
+# Paths are relative to vam_patch/ and use forward slashes.
+
+BepInEx/config/BepInEx.cfg
+BepInEx/patchers/.gitkeep
+Custom/Scripts/VPB/VPB-SessionPlugin.cs

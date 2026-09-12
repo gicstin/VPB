@@ -33,6 +33,50 @@ status=$?
 if [ $status -ne 0 ]; then
     echo ""
     echo "pre-push: tests failed. Push with --no-verify to bypass."
+    exit $status
 fi
 
-exit $status
+# Publish the rollback tags along with the push that is already happening. Without this the index
+# advertises builds whose tags exist only on this machine, and every one of them 404s for users.
+#
+# Safe to do unattended: a tag only adds a ref - it never moves a branch or rewrites history - and
+# the two ways it could overreach are both closed below. Only build-* tags are considered, so
+# unrelated tags (rescue/*, v0.x) stay private; and only tags whose commit is an ancestor of HEAD
+# are pushed, so nothing publishes work that is not going public with this push anyway.
+#
+# Set VPB_NO_TAG_PUSH=1 to skip.
+if [ -n "$VPB_NO_TAG_PUSH" ] || [ -n "$VPB_TAG_PUSH_ACTIVE" ]; then
+    exit 0
+fi
+
+remote_name="${1:-origin}"
+
+published=$(git ls-remote --tags "$remote_name" "build-*" 2>/dev/null |
+    sed 's|.*refs/tags/||; s|\^{}$||' | sort -u)
+
+to_push=""
+for tag in $(git tag --list "build-*"); do
+    case "$published" in
+        *"$tag"*) continue ;;
+    esac
+    sha=$(git rev-list -n 1 "$tag" 2>/dev/null) || continue
+    git merge-base --is-ancestor "$sha" HEAD 2>/dev/null || continue
+    to_push="$to_push refs/tags/$tag"
+done
+
+if [ -z "$to_push" ]; then
+    exit 0
+fi
+
+count=$(echo $to_push | wc -w)
+echo "pre-push: publishing $count rollback tag(s)..."
+
+VPB_TAG_PUSH_ACTIVE=1 git push "$remote_name" $to_push >/dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo "pre-push: rollback tags published."
+else
+    echo "pre-push: could not publish rollback tags; the branch push continues."
+    echo "pre-push: retry later with:  git push $remote_name $to_push"
+fi
+
+exit 0

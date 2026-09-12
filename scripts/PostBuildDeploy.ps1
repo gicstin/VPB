@@ -209,6 +209,21 @@ foreach ($name in $assetFiles) {
 # Anything left over inside BepInEx/plugins/VPB from an older layout is removed by VPB.Patcher at
 # the next VaM launch, driven by the manifest copied above - nothing to name here.
 
+# Runs last: it hashes what was staged above, so anything copied after it would ship unhashed.
+$buildManifestScript = Join-Path $ProjectDir 'scripts\BuildPatchManifest.ps1'
+if (Test-Path -LiteralPath $buildManifestScript) {
+    try {
+        & $buildManifestScript -ProjectDir $ProjectDir
+        if ($LASTEXITCODE -ne 0) {
+            Emit-Warning $buildManifestScript 'PBD015' "BuildPatchManifest.ps1 exited $LASTEXITCODE; patch_manifest2.json may be stale."
+        }
+    } catch {
+        Emit-Warning $buildManifestScript 'PBD015' ("Could not refresh patch_manifest2.json: " + $_.Exception.Message)
+    }
+} else {
+    Emit-Warning $buildManifestScript 'PBD015' "BuildPatchManifest.ps1 missing; patch_manifest2.json will go stale."
+}
+
 if ($script:WarningCount -gt 0) {
     Write-Host ("[PostBuildDeploy] Completed with {0} warning(s); build successful. Review warnings above." -f $script:WarningCount)
     Write-Host ("[PostBuildDeploy] VaMPath deploy: {0}" -f $(if ($vamPathOk) { 'attempted (see warnings for any failures)' } else { 'skipped (VaMPath not found)' }))

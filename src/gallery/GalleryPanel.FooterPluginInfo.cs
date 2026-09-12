@@ -6,12 +6,8 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Assigned when the footer plugin-info button row is built. That build path is not wired, so
-        // the field stays null and the hover/chrome handlers null-guard and no-op (dormant, not dead).
-#pragma warning disable 0649
         private GameObject footerPluginInfoBtn;
         private Image footerPluginInfoBtnImage;
-#pragma warning restore 0649
         private bool _footerPluginInfoHovering;
         private int _footerPluginInfoTooltipKey = int.MinValue;
         private float _footerPluginInfoLastUpdateCheckUnscaled = -999f;
@@ -41,6 +37,11 @@ namespace VPB
                     else if (updater.IsBusy)
                     {
                         sb.Append(" | ");
+                        if (updater.Status == VpbUpdateStatus.Downloading)
+                        {
+                            sb.Append(VpbUpdaterService.RenderProgressBar(updater.Progress));
+                            sb.Append(' ');
+                        }
                         sb.Append(updater.StatusMessage ?? VPBTranslation.T("settings.updater.checking", "Checking..."));
                     }
                     else if (updater.Status == VpbUpdateStatus.UpToDate)
@@ -152,6 +153,14 @@ namespace VPB
                         sb.Append(" | ");
                         sb.Append(updater.StatusMessage ?? VPBTranslation.T("settings.updater.up_to_date", "Up to date"));
                     }
+
+                    if (updater.IsPinned)
+                    {
+                        sb.Append(" | ");
+                        sb.Append(VPBTranslation.T("gallery.plugininfo.pinned", "Pinned"));
+                        sb.Append(' ');
+                        sb.Append(updater.PinnedVersion ?? "?");
+                    }
                 }
             }
             catch { }
@@ -196,7 +205,10 @@ namespace VPB
             {
                 var u = VamHookPlugin.singleton != null ? VamHookPlugin.singleton.Updater : null;
                 if (u != null)
+                {
                     key = unchecked(key * 31 + (int)u.Status + (u.HasPendingUpdate ? 1 : 0) + (u.IsBusy ? 2 : 0));
+                    key = unchecked(key * 31 + Mathf.RoundToInt(u.Progress * 100f));
+                }
             }
             catch { }
             if (key == _footerPluginInfoTooltipKey) return;
