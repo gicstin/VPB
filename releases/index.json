@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-12T15:49:16Z",
+    "UpdatedUtc":  "2026-09-12T16:35:56Z",
     "MinRollbackVersion":  "0.32.406",
-    "ExcludedBelowMin":  416,
+    "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.791",
+                         "Tag":  "build-0.32.791-448f6f2",
+                         "Commit":  "448f6f2e425e91a1903b1db0ae3491829a8010b1",
+                         "DateUtc":  "2026-09-12T16:35:48Z",
+                         "Notes":  "chore: bring MP branch to feature parity with other branches",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.688",
                          "Tag":  "build-0.32.688-873828a",
