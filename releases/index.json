@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-12T14:25:20Z",
+    "UpdatedUtc":  "2026-09-12T15:20:08Z",
     "MinRollbackVersion":  "0.32.406",
-    "ExcludedBelowMin":  416,
+    "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.688",
+                         "Tag":  "build-0.32.688",
+                         "Commit":  "873828a47f281335499491bddef0452e74a522f6",
+                         "DateUtc":  "2026-09-12T15:20:01Z",
+                         "Notes":  "feat: support tagged releases for version rollback",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.686",
                          "Tag":  "build-0.32.686",
