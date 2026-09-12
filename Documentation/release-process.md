@@ -108,11 +108,18 @@ this branch's index does not list is only deleted if its commit is in this branc
 Anything else belongs to a branch that tags its own builds and is reported and left alone
 ("N tag(s) belong to other branches and were left untouched").
 
-The one genuine conflict is two builds claiming one version — two branches whose
-`plugin_version.txt` counters advanced independently. The tag can only point at one, so the picker
-would describe a different build than users receive. Any tag naming a version this index lists but
-pointing at a different commit is a **hard error** regardless of which branch that commit is on;
-the fix is to bump the base version on this branch and rebuild.
+Tag names identify the **build**, not the version: `build-0.32.500-0ce152b`. That matters because
+`plugin_version.txt` counts per working copy, so two branches can reach `0.32.500` independently —
+a hotfix on `main` can collide with a number `experiments` already used. With the commit appended,
+the two are distinct by construction and both publish normally; with a bare `build-0.32.500` only
+one could exist and the second run had to stop and demand a version bump.
+
+A commit merged between branches keeps **one** shared tag rather than gaining a per-branch name,
+because the tag is derived from the commit both branches now contain.
+
+Tags published before this scheme keep their original names. The index stores `Tag` per entry, so
+a rebuild matches existing entries by commit and reuses the name; recomputing every name would
+orphan tags that are already on the remote.
 
 Tags are created locally and published by the `pre-push` hook with your next `git push`, scoped to
 this branch's `build-*` tags. Until they reach the remote, `PublishRelease.ps1` warns on every run

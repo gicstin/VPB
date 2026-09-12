@@ -38,6 +38,7 @@ param(
     [string] $MinRollbackCommit = '86132935',
     [int] $Keep = 60,
     [string] $ReleaseBranch = 'main',
+    [switch] $RetagAll,
     [switch] $Force
 )
 
@@ -85,10 +86,16 @@ function Get-SchemaAtCommit([string] $sha) {
     return 0
 }
 
+function Get-TagName([string] $version, [string] $sha) {
+    $known = $script:ExistingTagByCommit[$sha]
+    if ($known) { return [string]$known }
+    return "build-$version-" + $sha.Substring(0, 7)
+}
+
 function New-Entry([string] $sha, [string] $version, [string] $dateUtc, [string] $subject, [int] $schema) {
     return [pscustomobject]@{
         Version = $version
-        Tag     = "build-$version"
+        Tag     = Get-TagName $version $sha
         Commit  = $sha
         DateUtc = $dateUtc
         Notes   = $subject
@@ -142,6 +149,18 @@ function Sort-Entries($entries) {
 
 $result = [System.Collections.Generic.List[object]]::new()
 $script:BelowFloor = 0
+
+# -RetagAll drops the preservation map so every entry is renamed to the current scheme. It strands
+# any tag already pushed under the old name, so the caller must publish the new tags before the
+# index that references them and delete the old ones afterwards.
+$script:ExistingTagByCommit = @{}
+if (-not $RetagAll) {
+    foreach ($e in (Read-Index)) {
+        $c = [string]$e.Commit
+        $t = [string]$e.Tag
+        if ($c -ne '' -and $t -ne '') { $script:ExistingTagByCommit[$c] = $t }
+    }
+}
 
 $currentBranch = ([string](Invoke-Git @('rev-parse', '--abbrev-ref', 'HEAD'))).Trim()
 $onReleaseBranch = ($currentBranch -eq '' -or $currentBranch -eq $ReleaseBranch)
@@ -229,10 +248,7 @@ else {
         if ([string]$e.Version -eq $v) {
             $existingCommit = [string]$e.Commit
             if ($existingCommit -ne $sha) {
-                throw ("Version $v is already recorded at commit $($existingCommit.Substring(0,8)) but HEAD is $($sha.Substring(0,8)).`n" +
-                       "The build counter in plugin_version.txt is per working copy, so two people building from the same`n" +
-                       "base both produce $v. Two different binaries cannot share one version: the tag would point at one`n" +
-                       "and the index describe the other. Bump the base version in plugin_version.txt, rebuild, and retry.")
+                Write-Host ("[PublishRelease] Version {0} was recorded at {1}; replacing it with {2}." -f $v, $existingCommit.Substring(0, 8), $sha.Substring(0, 8))
             }
             continue
         }
