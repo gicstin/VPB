@@ -234,7 +234,8 @@ namespace VPB
             new[] { "shortcuts",       "keys_rules", "plugin_hotkeys", "keys_chrome", "keys_browse", "keys_selection", "keys_tools", "keys_world" },
             new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
             new[] { "troubleshooting", "diag_logs" },
-            new[] { "maintenance",     "helpers", "updater", "ba_migration" },
+            new[] { "updater",         "updater" },
+            new[] { "maintenance",     "helpers", "ba_migration" },
         };
 
         private static Dictionary<string, string> _settingsFineToGroup;
@@ -268,6 +269,7 @@ namespace VPB
                 case "shortcuts":       return VPBTranslation.T("settings.group.tab.shortcuts", "Shortcuts");
                 case "performance":     return VPBTranslation.T("settings.group.tab.performance", "Performance");
                 case "troubleshooting": return VPBTranslation.T("settings.group.tab.troubleshooting", "Troubleshooting");
+                case "updater":         return VPBTranslation.T("settings.group.tab.updates", "Updates");
                 case "maintenance":     return VPBTranslation.T("settings.group.tab.maintenance", "Maintenance");
                 default:                return key;
             }
@@ -449,6 +451,7 @@ namespace VPB
                 case "shortcuts":       return "hexagon-letter-k";
                 case "performance":     return "gauge";
                 case "troubleshooting": return "clipboard-list";
+                case "updater":         return "refresh";
                 case "maintenance":     return "tools";
                 default:                return null;
             }
@@ -2347,6 +2350,7 @@ namespace VPB
                     GetString = () => updater.Config.Branch ?? "main",
                     SetString = v => updater.SetBranch(v)
                 });
+                AppendUpdaterApplyRow(defs, updater);
                 AppendUpdaterVersionSettings(defs, updater);
                 if (updater.HasPendingUpdate)
                 {
@@ -2402,7 +2406,12 @@ namespace VPB
         private static string GetUpdaterCheckLabel(VpbUpdaterService updater)
         {
             if (updater.IsBusy)
-                return updater.StatusMessage ?? VPBTranslation.T("settings.updater.checking", "Checking...");
+            {
+                string busy = updater.StatusMessage ?? VPBTranslation.T("settings.updater.checking", "Checking...");
+                if (updater.Status == VpbUpdateStatus.Downloading)
+                    busy = VpbUpdaterService.RenderProgressBar(updater.Progress) + "  " + busy;
+                return busy;
+            }
             if (updater.HasPendingUpdate)
             {
                 string av = updater.AvailableVersion ?? "?";

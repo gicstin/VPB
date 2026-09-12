@@ -1038,6 +1038,16 @@ namespace VPB
             footerCommandPaletteBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             { var s = UI.LoadIconSprite("list-search", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerCommandPaletteBtnGO, s); }
 
+            footerPluginInfoBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,
+                VPBTranslation.T("gallery.footer.info_abbrev", "i"), 14, 0, 0, AnchorPresets.middleCenter, FooterPluginInfoOpenSettings);
+            footerPluginInfoBtn.name = "FooterPluginInfoBtn";
+            footerPluginInfoBtnImage = footerPluginInfoBtn.GetComponent<Image>();
+            footerPluginInfoBtnImage.color = GalleryUiColorTokens.ChromeIconWell;
+            { var s = UI.LoadIconSprite("info-square", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerPluginInfoBtn, s); }
+            AddRightClickDelegate(footerPluginInfoBtn, FooterPluginInfoCheckUpdateOnRightClick);
+            RegisterFooterPluginInfoHover(footerPluginInfoBtn);
+            FooterPluginInfoRefreshChrome();
+
             footerHubBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
                 VamHookPlugin.singleton?.OpenHubBrowse();
                 Hide();

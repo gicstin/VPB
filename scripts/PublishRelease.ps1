@@ -405,7 +405,7 @@ if ($toTag.Count -eq 0) {
 }
 elseif ($CreateTags) {
     foreach ($e in $toTag) {
-        $null = Invoke-Git @('tag', '-a', [string]$e.Tag, [string]$e.Commit, '-m', ("VPB " + $e.Version))
+        $null = Invoke-Git @('tag', [string]$e.Tag, [string]$e.Commit)
         Write-Host ("[PublishRelease] Tagged {0} -> {1}" -f $e.Tag, ([string]$e.Commit).Substring(0, 8))
     }
     Write-Host ("[PublishRelease] Created {0} tag(s); {1} older release(s) left untagged." -f $toTag.Count, $olderUntagged)

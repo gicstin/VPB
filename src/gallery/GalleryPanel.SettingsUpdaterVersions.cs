@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace VPB
 {
@@ -127,6 +128,50 @@ namespace VPB
                     _updaterVersionShowAll = !_updaterVersionShowAll;
                     InvalidateInternalSettingsDefsCache();
                     RefreshInternalSettingsListRows(true);
+                }
+            });
+        }
+
+        private bool _updaterQuitArmed;
+
+        private void AppendUpdaterApplyRow(List<InternalSettingDefinition> defs, VpbUpdaterService updater)
+        {
+            if (!updater.HasPendingUpdate && updater.Status != VpbUpdateStatus.Staged) return;
+
+            defs.Add(new InternalSettingDefinition
+            {
+                Key = "updater.apply",
+                GroupKey = "updater",
+                Label = _updaterQuitArmed
+                    ? VPBTranslation.T("settings.updater.quit_confirm", "Click again to quit - unsaved scene work is lost")
+                    : VPBTranslation.T("settings.updater.quit", "Quit VaM to apply the update"),
+                Tooltip = VPBTranslation.T("settings.tip.updater.quit",
+                    "The staged files are applied while VaM starts, so the update needs a restart. This quits VaM; relaunch it and the update is in place. Save your scene first - quitting discards unsaved work."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () =>
+                {
+                    if (!_updaterQuitArmed)
+                    {
+                        _updaterQuitArmed = true;
+                        ShowTemporaryStatus(VPBTranslation.T("settings.updater.quit_arm",
+                            "Save your scene first. Click again to quit VaM and apply the update."), 8f);
+                        InvalidateInternalSettingsDefsCache();
+                        RefreshInternalSettingsListRows(true);
+                        return;
+                    }
+
+                    _updaterQuitArmed = false;
+                    try
+                    {
+                        if (SuperController.singleton != null) SuperController.singleton.Quit();
+                        else Application.Quit();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Quit for update failed: " + ex.Message);
+                        ShowTemporaryStatus(VPBTranslation.T("settings.updater.quit_failed",
+                            "Could not quit VaM automatically - close it yourself to apply the update."), 6f);
+                    }
                 }
             });
         }

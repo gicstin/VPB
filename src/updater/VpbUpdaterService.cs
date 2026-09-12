@@ -150,6 +150,29 @@ namespace VPB
             try { OnStatusChanged?.Invoke(); } catch { }
         }
 
+        public static string RenderProgressBar(float fraction, int cells = 10)
+        {
+            int filled = Mathf.Clamp(Mathf.RoundToInt(fraction * cells), 0, cells);
+            var sb = new StringBuilder(cells + 2);
+            sb.Append('[');
+            for (int i = 0; i < cells; i++) sb.Append(i < filled ? '=' : ' ');
+            sb.Append(']');
+            return sb.ToString();
+        }
+
+        public static string FormatPercent(float fraction)
+        {
+            int pct = Mathf.Clamp(Mathf.RoundToInt(fraction * 100f), 0, 100);
+            return pct + "%";
+        }
+
+        public static string FormatBytes(long bytes)
+        {
+            if (bytes <= 0) return "0 MB";
+            if (bytes < 1024L * 1024L) return Mathf.CeilToInt(bytes / 1024f) + " KB";
+            return (bytes / (1024f * 1024f)).ToString("0.#") + " MB";
+        }
+
         public static string DescribeSchemaRisk(int releaseSchema)
         {
             if (releaseSchema <= 0) return "database schema unknown for this build";
@@ -352,11 +375,18 @@ namespace VPB
 
             var pendingEntries = new List<PendingStagedFile>();
 
+            long totalBytes = 0;
+            for (int i = 0; i < filesToUpdate.Count; i++) totalBytes += filesToUpdate[i].Size;
+            long doneBytes = 0;
+
             for (int i = 0; i < filesToUpdate.Count; i++)
             {
                 var item = filesToUpdate[i];
-                Progress = (float)i / filesToUpdate.Count;
-                StatusMessage = "Downloading " + (i + 1) + "/" + filesToUpdate.Count + ": " + item.RelativePath;
+                Progress = totalBytes > 0
+                    ? (float)((double)doneBytes / totalBytes)
+                    : (float)i / filesToUpdate.Count;
+                StatusMessage = "Downloading " + FormatPercent(Progress) + "  (" + (i + 1) + "/" + filesToUpdate.Count
+                    + (totalBytes > 0 ? ", " + FormatBytes(totalBytes - doneBytes) + " left" : "") + ")";
 
                 string rawUrl = RawUrl(branch, PatchRoot + VpbUpdateManifest.EncodeGitHubRawPath(item.RelativePath));
                 string stagedName = Guid.NewGuid().ToString("N") + ".tmp";
@@ -403,6 +433,8 @@ namespace VPB
                     StagedFileName = stagedName,
                     Sha = expectedSha ?? ""
                 });
+
+                doneBytes += item.Size;
             }
 
             // 7. Write pending.json (and mirror for pre-subfolder VPB.Patcher.dll)
@@ -601,7 +633,12 @@ namespace VPB
                     if (string.IsNullOrEmpty(rel)) continue;
 
                     bool isDir = node["IsDirectory"].AsBool;
-                    parsedItems.Add(new ManifestItem { RelativePath = rel, IsDirectory = isDir });
+                    parsedItems.Add(new ManifestItem
+                    {
+                        RelativePath = rel,
+                        IsDirectory = isDir,
+                        Size = isDir ? 0L : node["Size"].AsInt
+                    });
                     if (isDir) continue;
 
                     string sha = node["Sha1"].Value;
@@ -898,6 +935,7 @@ namespace VPB
         {
             public string RelativePath;
             public bool IsDirectory;
+            public long Size;
         }
 
         private class PendingStagedFile

@@ -237,6 +237,44 @@ namespace VPB.Tests
                 "With no index there is no floor to enforce, so nothing may be rejected as below it.");
         }
 
+        [Theory]
+        [InlineData(0f, "[          ]", "0%")]
+        [InlineData(0.5f, "[=====     ]", "50%")]
+        [InlineData(1f, "[==========]", "100%")]
+        public void ProgressRendersAcrossItsWholeRange(float fraction, string bar, string percent)
+        {
+            Assert.Equal(bar, VpbUpdaterService.RenderProgressBar(fraction));
+            Assert.Equal(percent, VpbUpdaterService.FormatPercent(fraction));
+        }
+
+        [Theory]
+        [InlineData(-0.5f)]
+        [InlineData(2f)]
+        [InlineData(float.NaN)]
+        public void ProgressOutsideZeroToOneStillRenders(float fraction)
+        {
+            string bar = VpbUpdaterService.RenderProgressBar(fraction);
+
+            Assert.Equal(12, bar.Length);
+            Assert.StartsWith("[", bar);
+            Assert.EndsWith("]", bar);
+
+            string pct = VpbUpdaterService.FormatPercent(fraction);
+            Assert.EndsWith("%", pct);
+            int value = int.Parse(pct.TrimEnd('%'));
+            Assert.InRange(value, 0, 100);
+        }
+
+        [Fact]
+        public void ByteSizesReadAsHumanUnits()
+        {
+            Assert.Equal("0 MB", VpbUpdaterService.FormatBytes(0));
+            Assert.Equal("0 MB", VpbUpdaterService.FormatBytes(-1));
+            Assert.Equal("1 KB", VpbUpdaterService.FormatBytes(1024));
+            Assert.Equal("6.1 MB", VpbUpdaterService.FormatBytes(6417408));
+            Assert.Equal("16.9 MB", VpbUpdaterService.FormatBytes(17773248));
+        }
+
         [Fact]
         public void ReleaseAgeIsReportedInWholeDays()
         {
