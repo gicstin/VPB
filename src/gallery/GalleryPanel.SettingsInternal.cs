@@ -2347,6 +2347,7 @@ namespace VPB
                     GetString = () => updater.Config.Branch ?? "main",
                     SetString = v => updater.SetBranch(v)
                 });
+                AppendUpdaterVersionSettings(defs, updater);
                 if (updater.HasPendingUpdate)
                 {
                     defs.Add(new InternalSettingDefinition
@@ -2405,10 +2406,17 @@ namespace VPB
             if (updater.HasPendingUpdate)
             {
                 string av = updater.AvailableVersion ?? "?";
+                bool back = VpbReleaseCatalog.IsOlderThan(updater.ReleaseCatalog, av, PluginVersionInfo.Version);
                 return string.Format(
-                    VPBTranslation.T("settings.updater.updating", "Updating {0} → {1}  (restart VaM)"),
+                    back
+                        ? VPBTranslation.T("settings.updater.rolling_back", "Rolling back {0} → {1}  (restart VaM)")
+                        : VPBTranslation.T("settings.updater.updating", "Updating {0} → {1}  (restart VaM)"),
                     PluginVersionInfo.Version, av);
             }
+            if (updater.IsPinned && updater.Status == VpbUpdateStatus.Idle)
+                return string.Format(
+                    VPBTranslation.T("settings.updater.pinned", "Pinned to {0} (check to apply)"),
+                    updater.PinnedVersion ?? "?");
             if (updater.Status == VpbUpdateStatus.UpToDate)
                 return updater.StatusMessage ?? VPBTranslation.T("settings.updater.up_to_date", "Up to date");
             if (updater.Status == VpbUpdateStatus.Error)

@@ -1,0 +1,314 @@
+{
+    "ManifestVersion":  2,
+    "Version":  "0.32.686",
+    "BuiltUtc":  "2026-09-12T13:49:45Z",
+    "Schema":  13,
+    "Files":  [
+                  {
+                      "RelativePath":  "BepInEx/core/HarmonyXInterop.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "39c642c9e467b3c58555ebf32de83b0240f293fa",
+                      "Size":  23552
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/0Harmony.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "99daef723fd1dd2189780b60d5a2f12c2a3e4e34",
+                      "Size":  204800
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/MonoMod.RuntimeDetour.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "5709bbbd2176c38724015ec68def39ad615a04de",
+                      "Size":  105984
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/MonoMod.Utils.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "1d9fb357158ab6f5b76be0d85795fd3e93a954bf",
+                      "Size":  187904
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/Mono.Cecil.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "18735f93b243c4f3960f64b964366339fcc60ea2",
+                      "Size":  339456
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/Mono.Cecil.Mdb.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "bddf5cbdb5e0fa67f1a50ffce4173d540c2fe346",
+                      "Size":  43008
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/Mono.Cecil.Pdb.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "9227f6db0bf46d7494d3c675c5d2b6e007d9995e",
+                      "Size":  86528
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/Mono.Cecil.Rocks.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "a77ac871e5e6cd346c7c2d9a24bdda7d046a1a04",
+                      "Size":  27648
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/BepInEx.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "918ea7a7452451ae46d7754360d4d4af324c7cd2",
+                      "Size":  128000
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/BepInEx.Preloader.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "5b78c7a7595cafe7f8e0211cad1afc947bdf30b5",
+                      "Size":  43008
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/0Harmony20.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "805384397078ec53a849637dcc87f70a3b17e757",
+                      "Size":  112640
+                  },
+                  {
+                      "RelativePath":  "BepInEx/core/BepInEx.Harmony.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "07b79f9183bfab3b5f765265750be8e406e4feca",
+                      "Size":  6656
+                  },
+                  {
+                      "RelativePath":  ".doorstop_version",
+                      "IsDirectory":  false,
+                      "Sha1":  "4f3470c1664f9dcec8919a53867000672b2761a7",
+                      "Size":  5
+                  },
+                  {
+                      "RelativePath":  "doorstop_config.ini",
+                      "IsDirectory":  false,
+                      "Sha1":  "97f55df365d81c1d58d3a36c5edb376dcb5457fb",
+                      "Size":  1422
+                  },
+                  {
+                      "RelativePath":  "changelog.txt",
+                      "IsDirectory":  false,
+                      "Sha1":  "a14ec63f893577f1cad3d58759b552e6ae287f55",
+                      "Size":  107
+                  },
+                  {
+                      "RelativePath":  "winhttp.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "2a73584fb18c5eb00a252702882b621ca94c3041",
+                      "Size":  26112
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/I18N.West.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "b9769feaa2cb1233acc9f1b1b677bfb26676f0c4",
+                      "Size":  65536
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/I18N.CJK.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "4bc11a56d133d16aaebde10e2e894ff028e8b766",
+                      "Size":  680960
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/I18N.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "ed40f0546bf90899a776bc859bdf4aaca85fa72b",
+                      "Size":  32256
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/I18N.MidEast.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "bf0e475a3cc3c18a8a8e502c50b9a75b137698d9",
+                      "Size":  29184
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/I18N.Other.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "23c378301b10cf0b314eef7dfeec6dbf16db3a44",
+                      "Size":  32256
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/I18N.Rare.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "0cc2446466168b357e4de040a676b3eac5b22e33",
+                      "Size":  171008
+                  },
+                  {
+                      "RelativePath":  "VaM (Log Mode).bat",
+                      "IsDirectory":  false,
+                      "Sha1":  "18e9a2869e6eedd47d105364916efeb36e15c730",
+                      "Size":  37
+                  },
+                  {
+                      "RelativePath":  "BepInEx/patchers",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/patchers/VPB.Patcher.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "08c3674fde575e416cb951834ccc3fdbce997213",
+                      "Size":  26624
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/patch_manifest.json",
+                      "IsDirectory":  false,
+                      "Sha1":  "aed5ae9ab8b0c27e1b6864d02102df4b96f464cf",
+                      "Size":  5336
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/VPB.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "39967f7e1c04203f0ab13bcf76681601cca89487",
+                      "Size":  6440448
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/datapacks",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/datapacks/hubtags.tsv",
+                      "IsDirectory":  false,
+                      "Sha1":  "fac62581bbcc810efd94165252b742fa4e7d5577",
+                      "Size":  14011501
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/datapacks/lookapedia.tsv",
+                      "IsDirectory":  false,
+                      "Sha1":  "56f82136a9fadf069205ad4ef1020b948e8c200f",
+                      "Size":  1366992
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/fonts",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/fonts/NotoSansSC-VariableFont_wght.ttf",
+                      "IsDirectory":  false,
+                      "Sha1":  "6043afcf4cbfd001fa3895e8a29a489dd2ef5ed5",
+                      "Size":  17773248
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/fonts/OFL.txt",
+                      "IsDirectory":  false,
+                      "Sha1":  "7f31694121f32bfcd9de0f3f57a824d154251f73",
+                      "Size":  4494
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/fonts/README_FONT.txt",
+                      "IsDirectory":  false,
+                      "Sha1":  "1cca4fe249e9b6839b06f6d7fbc5d02ae55ba77f",
+                      "Size":  698
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/help",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/help/en.md",
+                      "IsDirectory":  false,
+                      "Sha1":  "bd62f695ad8c8d77673849106d39a736bf1c8b4c",
+                      "Size":  32830
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/translations",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/translations/ja.json",
+                      "IsDirectory":  false,
+                      "Sha1":  "e8d361c92b83a6f1ca406f5e63129bceba29e180",
+                      "Size":  135908
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/translations/ko.json",
+                      "IsDirectory":  false,
+                      "Sha1":  "0e0155d6519d8085cec8f72994a951c6ddbec765",
+                      "Size":  124901
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/translations/zh_cn.json",
+                      "IsDirectory":  false,
+                      "Sha1":  "bbe2bacf0ddfd4a4f0a4a4439d3817eefac0e246",
+                      "Size":  113549
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/translations/zh_tw.json",
+                      "IsDirectory":  false,
+                      "Sha1":  "31dfe018ada11715a048b32eb1ecc9e9597e2e09",
+                      "Size":  113397
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/assets/icons.pack",
+                      "IsDirectory":  false,
+                      "Sha1":  "890b575d75bd473cf3f8b61aa9576b34708cde8a",
+                      "Size":  246499
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/VPB_THIRD_PARTY_NOTICES.txt",
+                      "IsDirectory":  false,
+                      "Sha1":  "41e19031b43f147fae9430d4de8da1dbb0982f9e",
+                      "Size":  1693
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/native",
+                      "IsDirectory":  true,
+                      "Sha1":  "",
+                      "Size":  0
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/native/libzstd.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "d89b1a490ffdc5f0ee8879868db64e457cd164da",
+                      "Size":  1277302
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/native/sqlite3.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "e8c59551e8a16a9b74338b1f56bc31f51296ea71",
+                      "Size":  3181056
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/native/turbojpeg.dll",
+                      "IsDirectory":  false,
+                      "Sha1":  "5e3bda8a75ecea600bb9054b1670ff6e5968479f",
+                      "Size":  1252864
+                  },
+                  {
+                      "RelativePath":  "BepInEx/plugins/VPB/native/zstd.exe",
+                      "IsDirectory":  false,
+                      "Sha1":  "b00e8fb646860a2e3ee5ebfd52e6dc8b8f93006b",
+                      "Size":  1601409
+                  }
+              ]
+}

@@ -22,6 +22,14 @@ namespace VPB
         Error
     }
 
+    public enum VpbCatalogState
+    {
+        Unknown,
+        Fetching,
+        Ready,
+        Unavailable
+    }
+
     public class VpbUpdaterService
     {
         private const string RepoOwner = "gicstin";
@@ -33,7 +41,11 @@ namespace VPB
         private readonly MonoBehaviour _host;
         private VpbUpdateConfig _config;
         private volatile string[] _cachedBranches;
+        private volatile VpbReleaseCatalog _catalog;
+        private volatile VpbCatalogState _catalogState = VpbCatalogState.Unknown;
+        private volatile string _catalogBranch = "";
         private Coroutine _activeCoroutine;
+        private bool _lastCheckUsedApi;
 
         public VpbUpdateStatus Status { get; private set; } = VpbUpdateStatus.Idle;
         public string StatusMessage { get; private set; } = "";
@@ -55,8 +67,96 @@ namespace VPB
 
         public void SetBranch(string branch)
         {
-            _config.Branch = branch ?? "main";
+            string next = branch ?? VpbUpdateConfig.DefaultBranch;
+            bool changed = !string.Equals(next, _config.Branch, StringComparison.Ordinal);
+
+            _config.Branch = next;
+            _config.Pinned = false;
+            _config.PinnedTag = "";
+            _config.PinnedVersion = "";
+            _config.PinnedSchema = 0;
             _config.Save();
+            PinnedRefMissing = false;
+
+            // Each branch publishes its own releases/index.json, so the list belongs to the branch
+            // that was selected when it was fetched. Dropping it first means the picker hides
+            // rather than offering builds that do not exist on the newly chosen branch.
+            if (changed)
+            {
+                _catalog = null;
+                _catalogState = VpbCatalogState.Unknown;
+                FetchReleasesAsync();
+            }
+        }
+
+        public bool IsPinned { get { return _config.Pinned; } }
+
+        public string PinnedVersion { get { return _config.PinnedVersion; } }
+
+        public bool PinnedRefMissing { get; private set; }
+
+        public bool PinnedReleaseIsListed()
+        {
+            if (!_config.Pinned) return true;
+            var catalog = _catalog;
+            if (catalog == null || catalog.IsEmpty) return true;
+            return catalog.Find(_config.PinnedVersion) != null;
+        }
+
+        public VpbReleaseCatalog ReleaseCatalog { get { return _catalog; } }
+
+        public VpbCatalogState ReleaseCatalogState { get { return _catalogState; } }
+
+        public string ReleaseCatalogBranch { get { return _catalogBranch; } }
+
+        public bool LastCheckUsedGitHubApi { get { return _lastCheckUsedApi; } }
+
+        public string PinToRelease(VpbRelease release)
+        {
+            if (release == null) return "No release selected.";
+
+            var catalog = _catalog;
+            if (catalog != null && catalog.IsBelowFloor(release.Version))
+            {
+                return "VPB " + release.Version + " predates the single-folder plugin layout ("
+                    + catalog.MinRollbackVersion + "). Rolling back across it is not supported.";
+            }
+
+            _config.Pinned = true;
+            _config.PinnedTag = release.Tag;
+            _config.PinnedVersion = release.Version;
+            _config.PinnedSchema = release.Schema;
+            _config.Save();
+            PinnedRefMissing = false;
+
+            string warning = DescribeSchemaRisk(release.Schema);
+            Status = VpbUpdateStatus.Idle;
+            StatusMessage = "Pinned to " + release.Version + (warning == null ? "" : "  -  " + warning);
+            try { OnStatusChanged?.Invoke(); } catch { }
+            return null;
+        }
+
+        public void UnpinToLatest()
+        {
+            _config.Pinned = false;
+            _config.PinnedTag = "";
+            _config.PinnedVersion = "";
+            _config.PinnedSchema = 0;
+            _config.Save();
+
+            PinnedRefMissing = false;
+            Status = VpbUpdateStatus.Idle;
+            StatusMessage = "Following " + _config.Branch + " again.";
+            try { OnStatusChanged?.Invoke(); } catch { }
+        }
+
+        public static string DescribeSchemaRisk(int releaseSchema)
+        {
+            if (releaseSchema <= 0) return "database schema unknown for this build";
+            int local = VpbLocalDatabase.CurrentSchemaVersion;
+            if (releaseSchema >= local) return null;
+            return "that build expects database schema " + releaseSchema + ", yours is " + local
+                + "; it may rebuild the index";
         }
 
         public void CheckForUpdateAsync()
@@ -111,34 +211,60 @@ namespace VPB
 
         private IEnumerator CheckAndStageCoroutine()
         {
-            string branch = _config.Branch ?? "main";
+            string branch = _config.EffectiveRef;
 
-            // 1. Fetch remote version
-            string versionUrl = "https://raw.githubusercontent.com/" + RepoOwner + "/" + RepoName + "/" + branch + "/plugin_version.txt";
-            string versionText = null;
-            yield return DownloadText(versionUrl, false, r => versionText = r);
+            List<ManifestItem> manifestItems = null;
+            Dictionary<string, string> remoteShas = null;
+            string remoteVersion = null;
+            int remoteSchema = 0;
+            _lastCheckUsedApi = false;
 
-            if (string.IsNullOrEmpty(versionText))
+            string manifest2Url = RawUrl(branch, PatchRoot + "patch_manifest2.json");
+            string manifest2Json = null;
+            yield return DownloadText(manifest2Url, false, r => manifest2Json = r, true);
+
+            bool fastPath = !string.IsNullOrEmpty(manifest2Json)
+                && TryParseManifest2(manifest2Json, out manifestItems, out remoteShas, out remoteVersion, out remoteSchema);
+
+            if (!fastPath)
             {
-                SetError("Could not fetch remote version");
-                yield break;
+                string versionUrl = RawUrl(branch, "plugin_version.txt");
+                string versionText = null;
+                yield return DownloadText(versionUrl, false, r => versionText = r);
+
+                if (string.IsNullOrEmpty(versionText))
+                {
+                    if (_config.Pinned)
+                    {
+                        PinnedRefMissing = true;
+                        SetError("Pinned build " + (_config.PinnedVersion ?? _config.PinnedTag)
+                            + " is not available on GitHub (tag '" + _config.PinnedTag
+                            + "' is missing). Return to latest to resume updates.");
+                    }
+                    else
+                    {
+                        SetError("Could not fetch remote version");
+                    }
+                    yield break;
+                }
+
+                string[] versionLines = versionText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                if (versionLines.Length < 2)
+                {
+                    SetError("Invalid remote version format");
+                    yield break;
+                }
+
+                remoteVersion = versionLines[0].Trim() + "." + versionLines[1].Trim();
             }
 
-            string[] versionLines = versionText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            if (versionLines.Length < 2)
-            {
-                SetError("Invalid remote version format");
-                yield break;
-            }
-
-            string remoteVersion = versionLines[0].Trim() + "." + versionLines[1].Trim();
-
-            // 2. Compare with local
             string localVersion = PluginVersionInfo.Version;
             if (remoteVersion == localVersion)
             {
                 Status = VpbUpdateStatus.UpToDate;
-                StatusMessage = "Up to date (" + localVersion + ")";
+                StatusMessage = _config.Pinned
+                    ? "Pinned to " + localVersion
+                    : "Up to date (" + localVersion + ")";
                 AvailableVersion = null;
                 _config.LastCheckUtc = DateTime.UtcNow.ToString("o");
                 _config.Save();
@@ -147,32 +273,48 @@ namespace VPB
             }
 
             AvailableVersion = remoteVersion;
-            StatusMessage = "Update available: " + remoteVersion;
+            bool goingBack = VpbReleaseCatalog.IsOlderThan(_catalog, remoteVersion, localVersion);
+            StatusMessage = (goingBack ? "Rolling back to " : "Update available: ") + remoteVersion;
 
-            // 3. Fetch manifest
-            string manifestUrl = "https://raw.githubusercontent.com/" + RepoOwner + "/" + RepoName + "/" + branch + "/" + PatchRoot + "patch_manifest.json";
-            string manifestJson = null;
-            yield return DownloadText(manifestUrl, false, r => manifestJson = r);
-
-            if (string.IsNullOrEmpty(manifestJson))
+            if (!fastPath)
             {
-                SetError("Could not fetch patch manifest");
-                yield break;
+                string manifestUrl = RawUrl(branch, PatchRoot + "patch_manifest.json");
+                string manifestJson = null;
+                yield return DownloadText(manifestUrl, false, r => manifestJson = r);
+
+                if (string.IsNullOrEmpty(manifestJson))
+                {
+                    SetError("Could not fetch patch manifest");
+                    yield break;
+                }
+
+                manifestItems = ParseManifest(manifestJson);
+                if (manifestItems == null || manifestItems.Count == 0)
+                {
+                    SetError("Empty or invalid manifest");
+                    yield break;
+                }
+
+                string treeUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/git/trees/" + branch + "?recursive=1";
+                string treeJson = null;
+                _lastCheckUsedApi = true;
+                yield return DownloadText(treeUrl, true, r => treeJson = r);
+
+                remoteShas = ParseTreeShas(treeJson);
+                if (remoteShas == null || remoteShas.Count == 0)
+                {
+                    SetError("Could not verify files for '" + branch + "' (GitHub rate limit or outage). "
+                        + "Nothing was changed - try again later.");
+                    yield break;
+                }
             }
 
-            var manifestItems = ParseManifest(manifestJson);
-            if (manifestItems == null || manifestItems.Count == 0)
+            if (goingBack)
             {
-                SetError("Empty or invalid manifest");
-                yield break;
+                string risk = DescribeSchemaRisk(remoteSchema);
+                if (risk != null)
+                    LogUtil.LogWarning("[VpbUpdater] Rolling back to " + remoteVersion + ": " + risk + ".");
             }
-
-            // 4. Fetch tree for SHA comparison
-            string treeUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/git/trees/" + branch + "?recursive=1";
-            string treeJson = null;
-            yield return DownloadText(treeUrl, true, r => treeJson = r);
-
-            Dictionary<string, string> remoteShas = ParseTreeShas(treeJson);
 
             // 5. Diff against local files (offload SHA computation to threadpool)
             StatusMessage = "Comparing files...";
@@ -216,8 +358,7 @@ namespace VPB
                 Progress = (float)i / filesToUpdate.Count;
                 StatusMessage = "Downloading " + (i + 1) + "/" + filesToUpdate.Count + ": " + item.RelativePath;
 
-                string rawUrl = "https://raw.githubusercontent.com/" + RepoOwner + "/" + RepoName + "/" + branch + "/" + PatchRoot
-                    + VpbUpdateManifest.EncodeGitHubRawPath(item.RelativePath);
+                string rawUrl = RawUrl(branch, PatchRoot + VpbUpdateManifest.EncodeGitHubRawPath(item.RelativePath));
                 string stagedName = Guid.NewGuid().ToString("N") + ".tmp";
                 string stagedPath = Path.Combine(filesDir, stagedName);
 
@@ -297,7 +438,7 @@ namespace VPB
 
         // ── UnityWebRequest helpers ──
 
-        private IEnumerator DownloadText(string url, bool githubApi, Action<string> callback)
+        private IEnumerator DownloadText(string url, bool githubApi, Action<string> callback, bool expectMissing = false)
         {
             using (var req = UnityWebRequest.Get(url))
             {
@@ -310,7 +451,13 @@ namespace VPB
 
                 if (req.isNetworkError || req.isHttpError)
                 {
-                    LogUtil.LogError("[VpbUpdater] GET " + url + " failed: " + req.error);
+                    // Some of these are ordinary: a branch need not publish a release index, and
+                    // patch_manifest2.json is absent from every ref older than it. Logging those
+                    // as errors trains people to ignore the log.
+                    if (expectMissing)
+                        LogUtil.LogWarning("[VpbUpdater] GET " + url + " unavailable: " + req.error);
+                    else
+                        LogUtil.LogError("[VpbUpdater] GET " + url + " failed: " + req.error);
                     callback(null);
                 }
                 else
@@ -412,6 +559,114 @@ namespace VPB
 
             string path = VpbUpdateManifest.PendingPath(stagingDir);
             File.WriteAllText(path, VPB.src.util.JsonSerializationUtil.Serialize(root, 1024));
+        }
+
+        private static string RawUrl(string gitRef, string repoRelativePath)
+        {
+            return "https://raw.githubusercontent.com/" + RepoOwner + "/" + RepoName + "/" + gitRef + "/" + repoRelativePath;
+        }
+
+        private static bool TryParseManifest2(
+            string json,
+            out List<ManifestItem> items,
+            out Dictionary<string, string> shas,
+            out string version,
+            out int schema)
+        {
+            items = null;
+            shas = null;
+            version = null;
+            schema = 0;
+
+            try
+            {
+                var root = JSON.Parse(json);
+                if (root == null) return false;
+                if (root["ManifestVersion"].AsInt != 2) return false;
+
+                version = root["Version"].Value;
+                if (string.IsNullOrEmpty(version)) return false;
+                schema = root["Schema"].AsInt;
+
+                var arr = root["Files"] as JSONArray;
+                if (arr == null || arr.Count == 0) return false;
+
+                var parsedItems = new List<ManifestItem>(arr.Count);
+                var parsedShas = new Dictionary<string, string>(arr.Count, StringComparer.OrdinalIgnoreCase);
+
+                for (int i = 0; i < arr.Count; i++)
+                {
+                    var node = arr[i];
+                    string rel = node["RelativePath"].Value;
+                    if (string.IsNullOrEmpty(rel)) continue;
+
+                    bool isDir = node["IsDirectory"].AsBool;
+                    parsedItems.Add(new ManifestItem { RelativePath = rel, IsDirectory = isDir });
+                    if (isDir) continue;
+
+                    string sha = node["Sha1"].Value;
+                    if (string.IsNullOrEmpty(sha))
+                    {
+                        LogUtil.LogWarning("[VpbUpdater] patch_manifest2.json has no Sha1 for '" + rel
+                            + "'; refusing the fast path rather than fetching it unverified.");
+                        return false;
+                    }
+                    parsedShas[(PatchRoot + rel).Replace('\\', '/')] = sha;
+                }
+
+                if (parsedItems.Count == 0) return false;
+
+                items = parsedItems;
+                shas = parsedShas;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VpbUpdater] Could not parse patch_manifest2.json: " + ex.Message);
+                return false;
+            }
+        }
+
+        public void FetchReleasesAsync()
+        {
+            if (_catalogState == VpbCatalogState.Fetching) return;
+            _catalogState = VpbCatalogState.Fetching;
+            _catalogBranch = string.IsNullOrEmpty(_config.Branch) ? VpbUpdateConfig.DefaultBranch : _config.Branch;
+            try { OnStatusChanged?.Invoke(); } catch { }
+            _host.StartCoroutine(FetchReleasesCoroutine(_catalogBranch));
+        }
+
+        private IEnumerator FetchReleasesCoroutine(string channel)
+        {
+            string url = RawUrl(channel, "releases/index.json");
+            string json = null;
+            yield return DownloadText(url, false, r => json = r, true);
+
+            // A branch that has never published a release index is a normal state, not an error:
+            // every branch looked like this before the index existed, and side branches may never
+            // carry one. Updating still works there - only the rollback list is missing.
+            if (string.IsNullOrEmpty(json))
+            {
+                FinishCatalogFetch(channel, null);
+                yield break;
+            }
+
+            var catalog = VpbReleaseCatalog.Parse(json);
+            FinishCatalogFetch(channel, catalog.IsEmpty ? null : catalog);
+        }
+
+        private void FinishCatalogFetch(string channel, VpbReleaseCatalog catalog)
+        {
+            // A branch switch during the request wins; this result describes the old branch.
+            string current = string.IsNullOrEmpty(_config.Branch) ? VpbUpdateConfig.DefaultBranch : _config.Branch;
+            if (!string.Equals(channel, current, StringComparison.Ordinal)) return;
+
+            _catalog = catalog;
+            _catalogState = catalog == null ? VpbCatalogState.Unavailable : VpbCatalogState.Ready;
+            if (catalog == null)
+                LogUtil.LogWarning("[VpbUpdater] No release index published on '" + channel
+                    + "'; version rollback is unavailable there. Updates are unaffected.");
+            try { OnStatusChanged?.Invoke(); } catch { }
         }
 
         private static List<ManifestItem> ParseManifest(string json)

@@ -3251,6 +3251,11 @@ namespace VPB
             }
 
             isFixedLocally = fixedMode;
+            if (VPBConfig.Instance != null)
+            {
+                try { VPBConfig.Instance.DesktopFixedMode = GalleryDockLayout.OccupiedCount() > 0; }
+                catch { }
+            }
             if (!fixedMode) SetCollapsed(false);
             UpdateDockAnchorButton();
             try { UpdateSpringScrollButtonToggleUI(); } catch { }

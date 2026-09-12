@@ -477,6 +477,7 @@
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsDiagnostics.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsUpdaterVersions.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPassthrough.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsMaintenance.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsFloat.cs" />
@@ -702,6 +703,7 @@
     <Compile Include="src\VamHookPlugin_Interface.cs" />
     <Compile Include="src\updater\VpbUpdaterService.cs" />
     <Compile Include="src\updater\VpbUpdateConfig.cs" />
+    <Compile Include="src\updater\VpbReleaseCatalog.cs" />
     <Compile Include="src\updater\VamHookPlugin.Updater.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -1372,6 +1372,7 @@ namespace VPB
                 StringComparison.OrdinalIgnoreCase);
         }
         public bool DesktopFixedMode = false;
+        public bool DesktopAutoDockSeeded = false;
         /// <summary>Seconds pointer must be outside fixed pane before auto-collapse (when auto-hide is on).</summary>
         public float DesktopFixedAutoHideSeconds = 1.0f;
         /// <summary>Desktop fixed gallery dock edge: Right (default), Left, or Top.</summary>
@@ -1774,6 +1775,7 @@ namespace VPB
             SceneImportCacheLimitMb = SceneImportCacheLimitMbDefault;
             InitialGalleryCategory = "Scenes";
             DesktopFixedMode = false;
+            DesktopAutoDockSeeded = true;
             DesktopFixedAutoHideSeconds = 1.0f;
             DesktopFixedDockSide = "Right";
             DesktopFixedDefaultDockSide = "Right";
@@ -2108,6 +2110,7 @@ namespace VPB
                             GalleryConsolidateCreatorNames = node["GalleryConsolidateCreatorNames"].AsBool;
                         if (node["DesktopFixedDockSide"] != null) DesktopFixedDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedDockSide"].Value);
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
+                        if (node["DesktopAutoDockSeeded"] != null) DesktopAutoDockSeeded = node["DesktopAutoDockSeeded"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedAutoHideSeconds"] != null) DesktopFixedAutoHideSeconds = node["DesktopFixedAutoHideSeconds"].AsFloat;
                         if (node["DesktopFixedDefaultDockSide"] != null) DesktopFixedDefaultDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedDefaultDockSide"].Value);
@@ -2550,9 +2553,19 @@ namespace VPB
                 VPBLogger.Config.LogError("Error loading config: " + ex.Message);
             }
 
+            try { SeedDesktopAutoDockOnce(); } catch { }
+
             // First-run pane scale (deferred if Screen.height still 0). Existing cfgs grandfather.
             try { TryEnsureGalleryUiScaleAutoSeeded(); } catch { }
             try { VpbShortcutMap.LoadFromConfig(this); } catch { }
+        }
+
+        private void SeedDesktopAutoDockOnce()
+        {
+            if (DesktopAutoDockSeeded) return;
+            DesktopAutoDockSeeded = true;
+            if (EnableAutoFixedGallery) DesktopFixedMode = true;
+            try { Save(false, true); } catch { }
         }
 
         public void Save()
@@ -2674,6 +2687,7 @@ namespace VPB
                 node["GalleryShowCategoryIcons"].AsBool = GalleryShowCategoryIcons;
                 node["GalleryConsolidateCreatorNames"].AsBool = GalleryConsolidateCreatorNames;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
+                node["DesktopAutoDockSeeded"].AsBool = DesktopAutoDockSeeded;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 node["DesktopFixedAutoHideSeconds"].AsFloat = Mathf.Clamp(DesktopFixedAutoHideSeconds, 0.1f, 10f);
                 node["DesktopFixedDockSide"] = NormalizeDesktopFixedDockSide(DesktopFixedDockSide);

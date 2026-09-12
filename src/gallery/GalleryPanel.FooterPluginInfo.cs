@@ -152,6 +152,14 @@ namespace VPB
                         sb.Append(" | ");
                         sb.Append(updater.StatusMessage ?? VPBTranslation.T("settings.updater.up_to_date", "Up to date"));
                     }
+
+                    if (updater.IsPinned)
+                    {
+                        sb.Append(" | ");
+                        sb.Append(VPBTranslation.T("gallery.plugininfo.pinned", "Pinned"));
+                        sb.Append(' ');
+                        sb.Append(updater.PinnedVersion ?? "?");
+                    }
                 }
             }
             catch { }
