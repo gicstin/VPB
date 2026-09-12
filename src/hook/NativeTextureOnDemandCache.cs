@@ -3349,13 +3349,15 @@ namespace VPB
                         zstdPathOnDisk = null;
                         zstdWritePath = null;
                     }
-                    if (zstdExists && TextureUtil.CacheEntryNeedsSourceRebuild(zstdPathOnDisk))
+                    if (zstdExists && TextureUtil.CacheEntryNeedsSourceRebuild(zstdPathOnDisk)
+                        && !TextureUtil.TryRepairStaleMipMetaInPlace(zstdPathOnDisk))
                     {
                         TextureUtil.TryDeleteZstdCacheFile(zstdPathOnDisk);
                         zstdExists = false;
                         zstdPathOnDisk = null;
                     }
-                    if (nativeExists && TextureUtil.CacheEntryNeedsSourceRebuild(cachePath))
+                    if (nativeExists && TextureUtil.CacheEntryNeedsSourceRebuild(cachePath)
+                        && !TextureUtil.TryRepairStaleMipMetaInPlace(cachePath))
                     {
                         TryDeleteFileAndMeta(cachePath, ref s_NativeDeletes);
                         nativeExists = false;

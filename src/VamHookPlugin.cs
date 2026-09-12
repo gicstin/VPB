@@ -659,6 +659,7 @@ namespace VPB
         }
         void OnDestroy()
         {
+            try { VpbPassthrough.Shutdown(); } catch { }
             try { VpbProgressService.ShutdownForQuit(); } catch { }
             try { VpbNetPresence.Stop("plugin unload"); } catch { }
             try { VpbNetSessionUi.Destroy(); } catch { }
@@ -714,6 +715,7 @@ namespace VPB
 
         void OnApplicationQuit()
         {
+            try { VpbPassthroughLights.FlushToDisk(); } catch { }
             LogUtil.LogPerfSummary("quit");
             VPBLogger.Flush();
             // Runs before OnDestroy during player quit — kill Win32 pump, companion pipe, zstd writers early.
@@ -967,6 +969,7 @@ namespace VPB
             VPBLogger.Poll();
             EnsureAtomAddedSubscription();
             VpbFrameRate.Tick();
+            try { VpbPassthrough.Tick(); } catch { }
             VpbPerfDiag.RefreshCache();
             VamStartupProfiler.RefreshCache();
             VamOnDemandLoader.DrainMainThreadQueue();
@@ -1664,6 +1667,8 @@ namespace VPB
                 m_QmIconAutoHideOn  = UI.LoadIconSprite("layout-sidebar-right-collapse",  tint);
                 m_QmIconShowHiddenOff = UI.LoadIconSprite("ghost-off", tint);
                 m_QmIconShowHiddenOn  = UI.LoadIconSprite("ghost",     tint);
+                m_QmIconPassthroughOff = UI.LoadIconSprite("eye-off", tint);
+                m_QmIconPassthroughOn  = UI.LoadIconSprite("eye",     tint);
                 m_QmIconOpenCategory = UI.LoadIconSprite("category-2", tint);
                 m_QmIconCategoryScenes = UI.LoadIconSprite("chair-director", tint) ?? m_QmIconOpenCategory;
                 m_QmIconCategorySubScenes = UI.LoadIconSprite("lamp-2", tint) ?? m_QmIconOpenCategory;

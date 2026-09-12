@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Import Project="VPB.local.props" Condition="Exists('VPB.local.props')" />
@@ -282,7 +282,12 @@
     <Compile Include="src\util\VPBLogger.cs" />
     <Compile Include="src\util\VpbLogRepeatGovernor.cs" />
     <Compile Include="src\util\VpbSessionLog.cs" />
+    <Compile Include="src\util\VpbDiagnosticLogLevel.cs" />
     <Compile Include="src\util\VpbLegacyLayout.cs" />
+    <Compile Include="src\util\VpbUpdateManifest.cs" />
+    <Compile Include="src\util\VpbPassthrough.cs" />
+    <Compile Include="src\util\VpbPassthroughLights.cs" />
+    <Compile Include="src\util\VpbPassthroughLightAtoms.cs" />
     <Compile Include="src\util\VpbPaths.cs" />
     <Compile Include="src\util\VpbStartupScene.cs" />
     <Compile Include="src\util\XrUtils.cs" />
@@ -562,6 +567,9 @@
     <Compile Include="src\gallery\GalleryPanel.AppearanceAutoSpawn.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsDiagnostics.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsUpdaterVersions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsPassthrough.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsMaintenance.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsFloat.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsNav.cs" />
@@ -788,6 +796,7 @@
     <Compile Include="src\VamHookPlugin_Interface.cs" />
     <Compile Include="src\updater\VpbUpdaterService.cs" />
     <Compile Include="src\updater\VpbUpdateConfig.cs" />
+    <Compile Include="src\updater\VpbReleaseCatalog.cs" />
     <Compile Include="src\updater\VamHookPlugin.Updater.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -134,6 +134,7 @@ namespace VPB
             OpenCategorySkin,
             PerfStepUp,
             PerfStepDown,
+            PassthroughToggle,
         }
 
         private const int QuickMenuGridCols = 4;
@@ -207,6 +208,8 @@ namespace VPB
         private Sprite m_QmIconAutoHideOff;
         private Sprite m_QmIconShowHiddenOn;
         private Sprite m_QmIconShowHiddenOff;
+        private Sprite m_QmIconPassthroughOn;
+        private Sprite m_QmIconPassthroughOff;
         private Sprite m_QmIconOpenCategory;
         private Sprite m_QmIconCategoryScenes;
         private Sprite m_QmIconCategorySubScenes;
@@ -465,6 +468,7 @@ namespace VPB
                 case QuickMenuAssignableAction.LayoutPresets: return VPBTranslation.T("hook.qmbutton.layout_presets", "Layouts");
                 case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.qmbutton.show_hidden", "Show Hidden");
                 case QuickMenuAssignableAction.FpsCounter: return VPBTranslation.T("hook.qmbutton.fps", "FPS Counter");
+                case QuickMenuAssignableAction.PassthroughToggle: return VPBTranslation.T("hook.qmbutton.passthrough", "Passthrough");
                 case QuickMenuAssignableAction.OpenCategoryScenes: return VPBTranslation.T("hook.qmbutton.open_category_scenes", "Open Category: Scenes");
                 case QuickMenuAssignableAction.OpenCategorySubScenes: return VPBTranslation.T("hook.qmbutton.open_category_subscenes", "Open Category: SubScenes");
                 case QuickMenuAssignableAction.OpenCategoryClothing: return VPBTranslation.T("hook.qmbutton.open_category_clothing", "Open Category: Clothing");
@@ -612,6 +616,7 @@ namespace VPB
                 case QuickMenuAssignableAction.LayoutPresets: return "layout_presets";
                 case QuickMenuAssignableAction.ShowHiddenPackages: return "show_hidden_packages";
                 case QuickMenuAssignableAction.FpsCounter: return "fps_counter";
+                case QuickMenuAssignableAction.PassthroughToggle: return "passthrough_toggle";
                 case QuickMenuAssignableAction.OpenCategoryScenes: return "open_category_scenes";
                 case QuickMenuAssignableAction.OpenCategorySubScenes: return "open_category_subscenes";
                 case QuickMenuAssignableAction.OpenCategoryClothing: return "open_category_clothing";
@@ -672,6 +677,7 @@ namespace VPB
                 case "layout_presets": return QuickMenuAssignableAction.LayoutPresets;
                 case "show_hidden_packages": return QuickMenuAssignableAction.ShowHiddenPackages;
                 case "fps_counter": return QuickMenuAssignableAction.FpsCounter;
+                case "passthrough_toggle": return QuickMenuAssignableAction.PassthroughToggle;
                 case "open_category_scenes": return QuickMenuAssignableAction.OpenCategoryScenes;
                 case "open_category_subscenes": return QuickMenuAssignableAction.OpenCategorySubScenes;
                 case "open_category_clothing": return QuickMenuAssignableAction.OpenCategoryClothing;
@@ -1412,6 +1418,13 @@ namespace VPB
                     icon = on ? m_QmIconShowHiddenOn : m_QmIconShowHiddenOff;
                     break;
                 }
+                case QuickMenuAssignableAction.PassthroughToggle:
+                {
+                    bool on = false;
+                    try { on = VPBConfig.Instance != null && VPBConfig.Instance.PassthroughEnabled; } catch { }
+                    icon = on ? m_QmIconPassthroughOn : m_QmIconPassthroughOff;
+                    break;
+                }
                 case QuickMenuAssignableAction.FpsCounter:
                     // No icon by request; label will be used (live FPS text).
                     icon = null;
@@ -1698,6 +1711,15 @@ namespace VPB
                 {
                     var p = QuickMenuGetTargetPanel();
                     if (p != null) p.QuickMenu_ToggleFpsCounter();
+                    break;
+                }
+                case QuickMenuAssignableAction.PassthroughToggle:
+                {
+                    var p = QuickMenuGetTargetPanel();
+                    if (p != null) p.TogglePassthroughMode();
+                    for (int i = 0; i < QuickMenuGridSlotCount; i++)
+                        if (QuickMenuGetSlotAction(i) == QuickMenuAssignableAction.PassthroughToggle)
+                            QuickMenuRefreshSlotVisual(i);
                     break;
                 }
                 case QuickMenuAssignableAction.OpenCategoryScenes: QuickMenuOpenGalleryCategory("Scenes"); break;
@@ -2061,6 +2083,7 @@ namespace VPB
                 case QuickMenuAssignableAction.LayoutPresets: return m_QmIconLayoutPresets;
                 case QuickMenuAssignableAction.ShowHiddenPackages: return m_QmIconShowHiddenOff ?? m_QmIconShowHiddenOn;
                 case QuickMenuAssignableAction.FpsCounter: return m_QmIconPages != null && m_QmIconPages.Length > 0 ? m_QmIconPages[0] : m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.PassthroughToggle: return m_QmIconPassthroughOff ?? m_QmIconPassthroughOn;
                 case QuickMenuAssignableAction.OpenCategoryScenes: return m_QmIconCategoryScenes ?? m_QmIconOpenCategory;
                 case QuickMenuAssignableAction.OpenCategorySubScenes: return m_QmIconCategorySubScenes ?? m_QmIconOpenCategory;
                 case QuickMenuAssignableAction.OpenCategoryClothing: return m_QmIconCategoryClothing ?? m_QmIconOpenCategory;

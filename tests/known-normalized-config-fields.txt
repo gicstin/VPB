@@ -10,6 +10,11 @@
 ClothingReplaceStrictnessUpgraded
 GalleryScanWlBadgePrimaryV1
 
+# One-shot latch, not a setting. False means "auto-dock has not been seeded yet", so
+# SeedDesktopAutoDockOnce() runs on the next load and latches it back to true - which is the
+# whole point of the flag. It is never set back to false by anything.
+DesktopAutoDockSeeded
+
 # Re-stamped from VpbPerfController.PerfStepScaleVersion on every Save().
 PerfStepScaleVersion
 

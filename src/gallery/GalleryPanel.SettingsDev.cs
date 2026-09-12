@@ -159,7 +159,7 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.dev.lan_room",
                     "Selected host room, 12 characters. Joining someone else does not overwrite this. Case does not matter, hyphens and spaces are ignored. Also accepts a pasted invite in the session panel's join field, not here."),
                 ControlType = InternalSettingControlType.TextArea,
-                SingleLineText = true,
+                SingleLine = true,
                 GetString = () =>
                 {
                     string code = VpbNetRoomBookStore.SelectedHostCode;
@@ -240,7 +240,7 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.dev.steam_appid",
                     "The app the session identifies itself to Steam as. 480 is Spacewar, Valve's public sample app: any signed-in account can use it without owning or buying anything, which is why it is the default - and why VPB is not, and will not be, distributed on Steam. Both sides must match this exactly or they cannot see each other at all. Change it only if you and the other player both own the same Steam game and would rather use its id."),
                 ControlType = InternalSettingControlType.TextArea,
-                SingleLineText = true,
+                SingleLine = true,
                 GetString = () =>
                 {
                     try { return s.NetSteamAppId.Value.ToString(CultureInfo.InvariantCulture); }
@@ -531,7 +531,7 @@ namespace VPB
                 Label = label,
                 Tooltip = tooltip,
                 ControlType = InternalSettingControlType.TextArea,
-                SingleLineText = true,
+                SingleLine = true,
                 GetString = () => DevReadString(entry, ""),
                 SetString = v => DevWriteString(entry, v),
                 RowVisible = rowVisible

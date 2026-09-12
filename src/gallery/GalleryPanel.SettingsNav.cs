@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -56,6 +56,10 @@ namespace VPB
                 case "net_rules": return VPBTranslation.T("settings.section.net_rules", "Session");
                 case "dev_net": return VPBTranslation.T("settings.section.dev_net", "Multiplayer link");
                 case "dev_clip": return VPBTranslation.T("settings.section.dev_clip", "Pose record & replay");
+                case "pt_chroma": return VPBTranslation.T("settings.section.pt_chroma", "Key colour");
+                case "pt_cutout": return VPBTranslation.T("settings.section.pt_cutout", "Cut-out");
+                case "pt_scene": return VPBTranslation.T("settings.section.pt_scene", "Scene");
+                case "pt_lights": return VPBTranslation.T("settings.section.pt_lights", "Real-world lights");
                 default: return "";
             }
         }
@@ -80,6 +84,15 @@ namespace VPB
                 return true;
             if (!string.IsNullOrEmpty(def.Key) && def.Key.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
+            if (def.Options != null)
+            {
+                for (int i = 0; i < def.Options.Length; i++)
+                {
+                    string opt = def.Options[i];
+                    if (!string.IsNullOrEmpty(opt) && opt.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+            }
             if (def.ControlType == InternalSettingControlType.Hotkey && def.GetString != null)
             {
                 try

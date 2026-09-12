@@ -73,6 +73,20 @@
     <Message Importance="normal" Text="VPB.Tests.Vam: imported @(_VpbCompileRaw->Count()) source entries from VPB.csproj" />
   </Target>
 
+  <Target Name="VpbImportPatcherSources" BeforeTargets="CoreCompile" DependsOnTargets="VpbImportSources" Condition="'$(VpbHasVaM)' == 'true'">
+    <XmlPeek XmlInputPath="$(VpbRoot)VPBPatcher.csproj"
+             Query="//msb:Compile/@Include"
+             Namespaces="&lt;Namespace Prefix='msb' Uri='http://schemas.microsoft.com/developer/msbuild/2003' /&gt;">
+      <Output TaskParameter="Result" ItemName="_VpbPatcherCompileRaw" />
+    </XmlPeek>
+    <ItemGroup>
+      <Compile Include="@(_VpbPatcherCompileRaw->'$(VpbRoot)%(Identity)')"
+               Exclude="@(Compile)"
+               Condition="!$([System.String]::Copy('%(Identity)').StartsWith('$'))" />
+    </ItemGroup>
+    <Message Importance="normal" Text="VPB.Tests.Vam: imported @(_VpbPatcherCompileRaw->Count()) source entries from VPBPatcher.csproj" />
+  </Target>
+
   <Target Name="VpbAddVaMReferences" BeforeTargets="ResolveAssemblyReferences" Condition="'$(VpbHasVaM)' == 'true'">
     <ItemGroup>
       <_VpbVaMDll Include="$(VaMPath)\VaM_Data\Managed\*.dll"
@@ -83,6 +97,7 @@
       <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\HarmonyXInterop.dll" />
       <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\MonoMod.Utils.dll" />
       <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\MonoMod.RuntimeDetour.dll" />
+      <_VpbVaMDll Include="$(VaMPath)\BepInEx\core\Mono.Cecil.dll" />
       <Reference Include="@(_VpbVaMDll->'%(Filename)')">
         <HintPath>%(_VpbVaMDll.FullPath)</HintPath>
         <Private>true</Private>

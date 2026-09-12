@@ -29,7 +29,7 @@ namespace VPB
                 bool isVR = XrUtils.IsVrActive();
 
                 // First pane may auto-dock; later panes only when the user already docks and an edge is free.
-                bool wantDock = !isVR && (VPBConfig.Instance.DesktopFixedMode || VPBConfig.Instance.EnableAutoFixedGallery);
+                bool wantDock = !isVR && VPBConfig.Instance.DesktopFixedMode;
                 bool firstPane = Gallery.singleton == null || Gallery.singleton.PanelCount == 0;
                 isFixedLocally = wantDock && firstPane;
 

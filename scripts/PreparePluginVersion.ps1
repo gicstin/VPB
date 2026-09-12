@@ -122,8 +122,11 @@ $branch = Get-BuildBranch $ProjectDir
 $outCs = Join-Path $IntermediateDir 'PluginVersion.g.cs'
 Write-PluginVersionCs $outCs $baseSemVer $n $fullVersion $branch
 
+$stampFile = Join-Path $objDir 'VPB_built_version.txt'
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($stampFile, $fullVersion, $utf8NoBom)
+
 $nNext = $n + 1
 Write-TwoLineVersionFile $VersionFile $baseLine $nNext
 
-$utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($cacheFile, $baseSemVer, $utf8NoBom)

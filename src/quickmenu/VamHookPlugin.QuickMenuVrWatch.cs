@@ -125,6 +125,7 @@ namespace VPB
             QuickMenuAssignableAction.AutoHideGallery,
             QuickMenuAssignableAction.ShowHiddenPackages,
             QuickMenuAssignableAction.FpsCounter,
+            QuickMenuAssignableAction.PassthroughToggle,
             QuickMenuAssignableAction.History,
             QuickMenuAssignableAction.PerfMode,
             QuickMenuAssignableAction.ToggleImportSidebar,
@@ -2365,6 +2366,7 @@ namespace VPB
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.watch.lbl.autohide", "AutoHide");
                 case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.watch.lbl.hidden", "Hidden");
                 case QuickMenuAssignableAction.FpsCounter: return VPBTranslation.T("hook.watch.lbl.fps", "FPS");
+                case QuickMenuAssignableAction.PassthroughToggle: return VPBTranslation.T("hook.watch.lbl.passthrough", "Pass");
                 case QuickMenuAssignableAction.History: return VPBTranslation.T("hook.watch.lbl.history", "History");
                 case QuickMenuAssignableAction.PerfMode: return VPBTranslation.T("hook.watch.lbl.perf", "Perf");
                 case QuickMenuAssignableAction.ToggleImportSidebar: return VPBTranslation.T("hook.watch.lbl.import", "Import");

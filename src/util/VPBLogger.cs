@@ -58,6 +58,42 @@ namespace VPB.src.util
 
         private static VPBInGameLogListener _inGameLogger = new VPBInGameLogListener();
 
+        private static string _sessionDirectory;
+
+        public static string SessionDirectory
+        {
+            get
+            {
+                if (_sessionDirectory == null)
+                {
+                    try { _sessionDirectory = Path.Combine(BepInEx.Paths.BepInExRootPath, "VPB/logs"); }
+                    catch { _sessionDirectory = ""; }
+                }
+                return _sessionDirectory;
+            }
+        }
+
+        public static string SessionFileName
+        {
+            get
+            {
+                string path = SessionFilePath;
+                if (string.IsNullOrEmpty(path)) return "";
+                try { return Path.GetFileName(path); }
+                catch { return ""; }
+            }
+        }
+
+        public static string SessionFilePath
+        {
+            get
+            {
+                var session = _session;
+                if (session == null || string.IsNullOrEmpty(session.FilePath)) return "";
+                return session.FilePath;
+            }
+        }
+
         private static bool _IsInit = false;
         private static readonly VpbLogRepeatGovernor Repeats = new VpbLogRepeatGovernor();
         private static readonly Stopwatch Clock = Stopwatch.StartNew();
@@ -135,7 +171,7 @@ namespace VPB.src.util
         {
             if (_IsInit) return;
             _IsInit = true;
-            _session = new VpbSessionLog(Path.Combine(BepInEx.Paths.BepInExRootPath, "VPB/logs"), SessionName);
+            _session = new VpbSessionLog(SessionDirectory, SessionName);
             foreach (var logger in _instances.Values)
                 if (!Logger.Sources.Contains(logger)) Logger.Sources.Add(logger);
             Main.LogInfo("Setting up VPB loggers");

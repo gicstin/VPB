@@ -101,6 +101,7 @@ namespace VPB
             ColorRgb,
             Hotkey,
             ReadOnlyText,
+            Choice,
         }
 
         private sealed class InternalSettingDefinition
@@ -141,7 +142,6 @@ namespace VPB
 
             /// <summary>TextArea only: render a one-line field at normal row height instead of the
             /// tall multi-line box. For short values — a path, an address, an atom uid.</summary>
-            public bool SingleLineText;
 
             /// <summary>TextArea only: when non-null and returns true, the field is shown but cannot be
             /// typed into. Text stays selectable so the value can still be read and copied.</summary>
@@ -149,6 +149,8 @@ namespace VPB
 
             /// <summary>When non-null and returns false, row omitted from settings list (e.g. slider hidden until parent toggle on).</summary>
             public Func<bool> RowVisible;
+            public bool WrapValue;
+            public bool SingleLine;
 
             /// <summary>Fired when a Button-type row is clicked (primary or secondary click).</summary>
             public Action OnAction;
@@ -204,6 +206,7 @@ namespace VPB
                         if (SetFloat != null) SetFloat(DefaultFloat);
                         break;
                     case InternalSettingControlType.Cycle:
+                    case InternalSettingControlType.Choice:
                     case InternalSettingControlType.TextArea:
                     case InternalSettingControlType.Hotkey:
                         if (SetString != null) SetString(DefaultString ?? "");
@@ -236,12 +239,15 @@ namespace VPB
             new[] { "grid_highlights", "grid", "scan_wl_border" },
             new[] { "layout",          "follow", "desktop" },
             new[] { "vr",              "vr" },
+            new[] { "passthrough",     "passthrough", "pt_chroma", "pt_cutout", "pt_lights" },
             new[] { "browsing",        "lists", "cat_general", "tags", "search", "plugin_datapacks" },
             new[] { "cat_visibility",  "cat_visibility" },
             new[] { "interaction",     "interaction", "plugin_quickmenu" },
             new[] { "shortcuts",       "keys_rules", "plugin_hotkeys", "keys_chrome", "keys_browse", "keys_selection", "keys_tools", "keys_world" },
             new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
-            new[] { "maintenance",     "helpers", "updater", "ba_migration" },
+            new[] { "troubleshooting", "diag_logs" },
+            new[] { "updater",         "updater" },
+            new[] { "maintenance",     "helpers", "ba_migration" },
             new[] { "multiplayer",     "net_rules" },
             new[] { "development",     "dev_net", "dev_clip" },
         };
@@ -270,11 +276,14 @@ namespace VPB
                 case "grid_highlights": return VPBTranslation.T("settings.group.tab.grid_highlights", "Grid & Highlights");
                 case "layout":          return VPBTranslation.T("settings.group.tab.layout", "Layout & Position");
                 case "vr":              return VPBTranslation.T("settings.group.tab.vr", "VR");
+                case "passthrough":     return VPBTranslation.T("settings.group.tab.passthrough", "Passthrough");
                 case "browsing":        return VPBTranslation.T("settings.group.tab.browsing", "Browsing");
                 case "cat_visibility":  return VPBTranslation.T("settings.group.category_visibility", "Category visibility");
                 case "interaction":     return VPBTranslation.T("settings.group.tab.interaction", "Interaction");
                 case "shortcuts":       return VPBTranslation.T("settings.group.tab.shortcuts", "Shortcuts");
                 case "performance":     return VPBTranslation.T("settings.group.tab.performance", "Performance");
+                case "troubleshooting": return VPBTranslation.T("settings.group.tab.troubleshooting", "Troubleshooting");
+                case "updater":         return VPBTranslation.T("settings.group.tab.updates", "Updates");
                 case "maintenance":     return VPBTranslation.T("settings.group.tab.maintenance", "Maintenance");
                 case "multiplayer":     return VPBTranslation.T("settings.group.tab.multiplayer", "Multiplayer");
                 case "development":     return VPBTranslation.T("settings.group.tab.development", "Development");
@@ -306,6 +315,14 @@ namespace VPB
             if (string.IsNullOrEmpty(value)) return "";
             if (string.Equals(value, "Off", StringComparison.OrdinalIgnoreCase))
                 return VPBTranslation.T("settings.follow.off", "Off");
+            if (string.Equals(value, "Normal", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.diag_level.normal", "Normal");
+            if (string.Equals(value, "Detailed", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Extra", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.diag_level.extra", "Extra");
+            if (string.Equals(value, "Everything", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Full", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.diag_level.full", "Full");
             if (string.Equals(value, "Both", StringComparison.OrdinalIgnoreCase))
                 return VPBTranslation.T("settings.follow.both", "Both");
             if (string.Equals(value, "Desktop", StringComparison.OrdinalIgnoreCase))
@@ -400,6 +417,36 @@ namespace VPB
                 return VPBTranslation.T("settings.opt.menu", "Menu");
             if (string.Equals(value, "Always", StringComparison.OrdinalIgnoreCase))
                 return VPBTranslation.T("settings.opt.always", "Always");
+            if (string.Equals(value, "Recommended", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_recommended", "Recommended");
+            if (string.Equals(value, "Custom", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_custom", "Custom");
+            if (string.Equals(value, "Blue", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_blue", "Blue");
+            if (string.Equals(value, "Green", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_green", "Green");
+            if (string.Equals(value, "Black", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_black", "Black");
+            if (string.Equals(value, "White", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_white", "White");
+            if (string.Equals(value, VpbPassthrough.HideEnvironment, StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_hide_rooms", "Rooms");
+            if (string.Equals(value, VpbPassthrough.HideAllButPeople, StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_hide_people", "People");
+            if (string.Equals(value, VpbPassthrough.HideNothing, StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_hide_keep", "Keep");
+            if (string.Equals(value, "Front lamp", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Light 1", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_light1", "Front lamp");
+            if (string.Equals(value, "Right lamp", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Light 2", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_light2", "Right lamp");
+            if (string.Equals(value, "Left lamp", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Light 3", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_light3", "Left lamp");
+            if (string.Equals(value, "Back lamp", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Light 4", StringComparison.OrdinalIgnoreCase))
+                return VPBTranslation.T("settings.opt.pt_light4", "Back lamp");
             return value;
         }
 
@@ -413,11 +460,14 @@ namespace VPB
                 case "grid_highlights": return "grid-scan";
                 case "layout":          return "layout-sidebar";
                 case "vr":              return "device-watch";
+                case "passthrough":     return "eye-off";
                 case "browsing":        return "list-search";
                 case "cat_visibility":  return "eye";
                 case "interaction":     return "hand-finger";
                 case "shortcuts":       return "hexagon-letter-k";
                 case "performance":     return "gauge";
+                case "troubleshooting": return "clipboard-list";
+                case "updater":         return "refresh";
                 case "maintenance":     return "tools";
                 case "multiplayer":     return "users-group";
                 case "development":     return "robot";
@@ -434,7 +484,9 @@ namespace VPB
             foreach (var row in SettingsGroupStructure)
             {
                 if (row == null || row.Length == 0) continue;
-                if (string.Equals(row[0], "vr", StringComparison.OrdinalIgnoreCase) && !isVr)
+                if (!isVr
+                    && (string.Equals(row[0], "vr", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(row[0], "passthrough", StringComparison.OrdinalIgnoreCase)))
                     continue;
                 list.Add(new SettingsGroupTab { Key = row[0], Label = SettingsGroupLabel(row[0]), Icon = SettingsGroupIcon(row[0]) });
             }
@@ -603,6 +655,20 @@ namespace VPB
 
         private sealed class InternalSettingsSnapshot
         {
+            public bool PassthroughEnabled;
+            public float PassthroughKeyColorR;
+            public float PassthroughKeyColorG;
+            public float PassthroughKeyColorB;
+            public bool PassthroughKeyCustom;
+            public bool PassthroughLightsEnabled;
+            public bool PassthroughLightsOverrideScene;
+            public bool PassthroughLightsMoveAsGroup;
+            public int PassthroughLightCount;
+            public bool PassthroughCleanKey;
+            public bool PassthroughExactColor;
+            public bool PassthroughHardEdges;
+            public string PassthroughHideScene;
+            public string DiagnosticLogLevel;
             public float LayoutPresetRevertBarSeconds;
             public bool LayoutPresetSuggestOnModeSwitch;
             public bool DisableGalleryTransparency;
@@ -2302,6 +2368,8 @@ namespace VPB
                     GetString = () => updater.Config.Branch ?? "main",
                     SetString = v => updater.SetBranch(v)
                 });
+                AppendUpdaterApplyRow(defs, updater);
+                AppendUpdaterVersionSettings(defs, updater);
                 if (updater.HasPendingUpdate)
                 {
                     defs.Add(new InternalSettingDefinition
@@ -2325,6 +2393,8 @@ namespace VPB
             AppendPluginInternalSettingDefinitions(defs);
             AppendNetRuleSettings(defs);
             AppendDevSettingDefinitions(defs);
+            AppendPassthroughInternalSettingDefinitions(defs);
+            AppendDiagnosticsInternalSettingDefinitions(defs);
             defs.Add(new InternalSettingDefinition {
                 Key = "performance.sceneAtomCacheLimit", GroupKey = "performance",
                 Label = VPBTranslation.T("settings.scene_atom_cache_limit", "Scene Import Cache Limit (GB)"),
@@ -2356,14 +2426,26 @@ namespace VPB
         private static string GetUpdaterCheckLabel(VpbUpdaterService updater)
         {
             if (updater.IsBusy)
-                return updater.StatusMessage ?? VPBTranslation.T("settings.updater.checking", "Checking...");
+            {
+                string busy = updater.StatusMessage ?? VPBTranslation.T("settings.updater.checking", "Checking...");
+                if (updater.Status == VpbUpdateStatus.Downloading)
+                    busy = VpbUpdaterService.RenderProgressBar(updater.Progress) + "  " + busy;
+                return busy;
+            }
             if (updater.HasPendingUpdate)
             {
                 string av = updater.AvailableVersion ?? "?";
+                bool back = VpbReleaseCatalog.IsOlderThan(updater.ReleaseCatalog, av, PluginVersionInfo.Version);
                 return string.Format(
-                    VPBTranslation.T("settings.updater.updating", "Updating {0} → {1}  (restart VaM)"),
+                    back
+                        ? VPBTranslation.T("settings.updater.rolling_back", "Rolling back {0} → {1}  (restart VaM)")
+                        : VPBTranslation.T("settings.updater.updating", "Updating {0} → {1}  (restart VaM)"),
                     PluginVersionInfo.Version, av);
             }
+            if (updater.IsPinned && updater.Status == VpbUpdateStatus.Idle)
+                return string.Format(
+                    VPBTranslation.T("settings.updater.pinned", "Pinned to {0} (check to apply)"),
+                    updater.PinnedVersion ?? "?");
             if (updater.Status == VpbUpdateStatus.UpToDate)
                 return updater.StatusMessage ?? VPBTranslation.T("settings.updater.up_to_date", "Up to date");
             if (updater.Status == VpbUpdateStatus.Error)
@@ -2504,6 +2586,8 @@ namespace VPB
                 ClearInGameLogsOnSceneLaunch = VPBConfig.Instance.ClearInGameLogsOnSceneLaunch
             };
             CapturePluginSettingsIntoSnapshot(snap);
+            CapturePassthroughSettingsIntoSnapshot(snap);
+            CaptureDiagnosticLogLevelIntoSnapshot(snap);
             return snap;
         }
 
@@ -2852,6 +2936,7 @@ namespace VPB
             if (def == null) return false;
             if (def.ControlType == InternalSettingControlType.TextArea) return false;
             if (def.ControlType == InternalSettingControlType.ReadOnlyText) return false;
+            if (def.ControlType == InternalSettingControlType.Choice) return false;
             if (def.ControlType == InternalSettingControlType.ColorRgb) return false;
             if (def.ControlType == InternalSettingControlType.Hotkey) return false;
             ApplyInternalSettingDefinition(def, secondary);
@@ -3054,9 +3139,9 @@ namespace VPB
                 Text valueText = valueGO.AddComponent<Text>();
                 string valueStr = def.GetString() ?? "";
                 valueText.text = valueStr;
-                valueText.alignment = TextAnchor.MiddleRight;
+                valueText.alignment = def.WrapValue ? TextAnchor.UpperLeft : TextAnchor.MiddleRight;
                 valueText.horizontalOverflow = HorizontalWrapMode.Wrap;
-                valueText.verticalOverflow = VerticalWrapMode.Truncate;
+                valueText.verticalOverflow = def.WrapValue ? VerticalWrapMode.Overflow : VerticalWrapMode.Truncate;
                 valueText.color = GalleryUiColorTokens.TextMuted;
                 valueText.raycastTarget = true;
                 Font rowFont = null;
@@ -3073,10 +3158,37 @@ namespace VPB
                 }
                 valueText.font = rowFont;
                 GalleryUiMetrics.ApplyFont(valueText, GalleryUiDesignTokens.FontBodyRef, uiS, GalleryUiDesignTokens.FontMinRef);
-                UI.AddLE(valueGO, minHeight: chipH, flexibleWidth: 1f);
-                var ell = valueGO.AddComponent<SettingsValueEllipsis>();
-                ell.SetFullText(valueStr);
+                float valueH = def.WrapValue
+                    ? Mathf.Max(chipH, GalleryUiDesignTokens.SettingsFloatWrapRowHeightRef * uiS - 8f * uiS)
+                    : chipH;
+                UI.AddLE(valueGO, minHeight: valueH, preferredHeight: valueH, flexibleWidth: 1f);
+                if (!def.WrapValue)
+                {
+                    var ell = valueGO.AddComponent<SettingsValueEllipsis>();
+                    ell.SetFullText(valueStr);
+                }
                 AddDynamicTooltip(valueGO, () => def.GetString() ?? "");
+                SettleSettingsRowLayout(detailsTr, listRowTr, settleLayout);
+                return;
+            }
+
+            if (def.ControlType == InternalSettingControlType.Choice && def.GetString != null && def.SetString != null && def.Options != null)
+            {
+                string cur = def.GetString() ?? "";
+                for (int i = 0; i < def.Options.Length; i++)
+                {
+                    string opt = def.Options[i];
+                    if (string.IsNullOrEmpty(opt)) continue;
+                    bool on = string.Equals(cur, opt, StringComparison.OrdinalIgnoreCase);
+                    Color bg = on ? UI.AccentGreen : UI.ChromePanel;
+                    CreateMiniButton(controls.transform, FormatSettingsCycleOption(opt), 74f, bg, () =>
+                    {
+                        string curNow = def.GetString() ?? "";
+                        if (string.Equals(curNow, opt, StringComparison.OrdinalIgnoreCase)) return;
+                        def.SetString(opt);
+                        RefreshInternalSettingsListRows(true);
+                    });
+                }
                 SettleSettingsRowLayout(detailsTr, listRowTr, settleLayout);
                 return;
             }
@@ -3337,19 +3449,26 @@ namespace VPB
                     return;
                 }
 
-                bool oneLine = def.SingleLineText;
-                float taH = oneLine ? chipH : 72f * uiS;
-                cle.minHeight = oneLine ? chipH : 96f * uiS;
+                bool single = def.SingleLine;
+                float hostH = single ? chipH : 72f * uiS;
+                cle.minHeight = single ? chipH : 96f * uiS;
+                if (single)
+                {
+                    cle.preferredHeight = chipH;
+                    cle.flexibleHeight = 0f;
+                }
                 GameObject taHost = new GameObject("SettingsTextAreaHost");
                 taHost.transform.SetParent(controls.transform, false);
-                LayoutElement tle = UI.AddLE(taHost, minWidth: 120f * uiS, minHeight: taH, preferredWidth: 320f * uiS, preferredHeight: taH, flexibleWidth: 1f);
+                LayoutElement tle = UI.AddLE(taHost, minWidth: 120f * uiS, minHeight: hostH, preferredWidth: 320f * uiS, preferredHeight: hostH, flexibleWidth: 1f);
+                if (single) tle.flexibleHeight = 0f;
 
                 Image taBg = AddSettingsControlRoundedBg(taHost, new Color(0.16f, 0.16f, 0.18f, 1f));
                 InputField inf = taHost.AddComponent<InputField>();
-                inf.lineType = oneLine ? InputField.LineType.SingleLine : InputField.LineType.MultiLineNewline;
+                inf.lineType = single ? InputField.LineType.SingleLine : InputField.LineType.MultiLineNewline;
                 inf.targetGraphic = taBg;
                 inf.interactable = true;
                 inf.navigation = new Navigation { mode = Navigation.Mode.None };
+                if (single) inf.characterLimit = 40;
                 ColorBlock cb = inf.colors;
                 cb.normalColor = Color.white;
                 cb.highlightedColor = new Color(0.96f, 0.96f, 0.98f, 1f);
@@ -3359,11 +3478,17 @@ namespace VPB
                 cb.fadeDuration = 0f;
                 inf.colors = cb;
 
-                Text taTxt = UI.CreateLabel(taHost, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(0.95f, 0.95f, 0.97f, 1f), oneLine ? TextAnchor.MiddleLeft : TextAnchor.UpperLeft, richText: false, name: "Text");
+                TextAnchor taAlign = single ? TextAnchor.MiddleLeft : TextAnchor.UpperLeft;
+                Text taTxt = UI.CreateLabel(
+                    taHost, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(0.95f, 0.95f, 0.97f, 1f), taAlign,
+                    single ? HorizontalWrapMode.Overflow : HorizontalWrapMode.Wrap,
+                    single ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow,
+                    richText: false, name: "Text");
                 GalleryUiMetrics.ApplyFont(taTxt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
                 RectTransform taTxtRt = taTxt.GetComponent<RectTransform>();
-                taTxtRt.offsetMin = new Vector2(6f * uiS, 6f * uiS);
-                taTxtRt.offsetMax = new Vector2(-6f * uiS, -6f * uiS);
+                float pad = (single ? 4f : 6f) * uiS;
+                taTxtRt.offsetMin = new Vector2(pad, single ? 0f : pad);
+                taTxtRt.offsetMax = new Vector2(-pad, single ? 0f : -pad);
                 inf.textComponent = taTxt;
                 inf.text = def.GetString() ?? "";
 
@@ -3381,6 +3506,7 @@ namespace VPB
                     if (VPBConfig.Instance != null)
                         VPBConfig.Instance.TriggerChange();
                 });
+                SettleSettingsRowLayout(detailsTr, listRowTr, settleLayout);
                 return;
             }
 
@@ -3415,8 +3541,8 @@ namespace VPB
                     {
                         try
                         {
-                            string dyn = def.ActionLabel();
-                            if (!string.IsNullOrEmpty(dyn)) btnLabel = dyn;
+                            string dynamic = def.ActionLabel();
+                            if (!string.IsNullOrEmpty(dynamic)) btnLabel = dynamic;
                         }
                         catch { }
                     }
@@ -3630,6 +3756,8 @@ namespace VPB
             VPBConfig.Instance.ClearInGameLogsOnSceneLaunch = b.ClearInGameLogsOnSceneLaunch;
 
             RestorePluginSettingsFromSnapshot(b);
+            RestorePassthroughSettingsFromSnapshot(b);
+            RestoreDiagnosticLogLevelFromSnapshot(b);
 
             if (this != null)
             {

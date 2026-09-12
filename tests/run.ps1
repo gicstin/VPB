@@ -55,7 +55,7 @@ function Install-GitHooks {
         Write-Host "No .git\hooks directory at $hooksDst - is this a git checkout?" -ForegroundColor Red
         return $false
     }
-    foreach ($hook in @('pre-commit', 'pre-push')) {
+    foreach ($hook in @('pre-commit', 'pre-push', 'post-commit')) {
         $src = Join-Path $hooksSrc $hook
         if (-not (Test-Path $src)) { continue }
         $dst = Join-Path $hooksDst $hook

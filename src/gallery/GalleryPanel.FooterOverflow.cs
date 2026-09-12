@@ -99,6 +99,11 @@ namespace VPB
             if (footerHoldToLaunchToggleBtn != null) into.Add(footerHoldToLaunchToggleBtn);
             if (footerApplyModeBtn != null) into.Add(footerApplyModeBtn);
             if (isVR && footerWatchToggleBtn != null) into.Add(footerWatchToggleBtn);
+            if (isVR && footerPassthroughToggleBtn != null) into.Add(footerPassthroughToggleBtn);
+            bool passthroughOn = VPBConfig.Instance != null && VPBConfig.Instance.PassthroughEnabled;
+            if (isVR && passthroughOn && footerPassthroughLightsBtn != null) into.Add(footerPassthroughLightsBtn);
+            if (footerLogLevelBtn != null && VpbDiagnosticLogLevel.IsElevated(CurrentDiagnosticLevel()))
+                into.Add(footerLogLevelBtn);
             if (footerMenuGateBtn != null) into.Add(footerMenuGateBtn);
             if (footerFloatsOnlyBtn != null) into.Add(footerFloatsOnlyBtn);
             if (!fixedMode)
@@ -134,6 +139,8 @@ namespace VPB
             if (IsFixedTopDockMode() && !isCollapsed) sig ^= 1 << 9;
             if (isFixedLocally) sig ^= 1 << 10;
             if (isCollapsed) sig ^= 1 << 11;
+            if (footerLogLevelBtn != null && footerLogLevelBtn.activeSelf) sig ^= 1 << 12;
+            if (VPBConfig.Instance != null && VPBConfig.Instance.PassthroughEnabled) sig ^= 1 << 13;
             return sig;
         }
 
@@ -297,6 +304,29 @@ namespace VPB
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_vr_watch", "VR wrist watch"),
                     () => { CloseFooterOverflowMenu(); ToggleVrWatchVisible(); }, on, icon: icon,
                     tipKey: "gallery.tooltip.vr_watch_toggle", tipDefault: "Show/hide VR wrist watch (look at inner wrist)");
+            }
+            else if (go == footerPassthroughToggleBtn)
+            {
+                bool on = VPBConfig.Instance != null && VPBConfig.Instance.PassthroughEnabled;
+                AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_passthrough", "Passthrough mode"),
+                    () => { CloseFooterOverflowMenu(); TogglePassthroughMode(); }, on, icon: icon,
+                    tipKey: "gallery.tooltip.passthrough_toggle",
+                    tipDefault: "Passthrough mode on/off (chroma key for your headset streamer)");
+            }
+            else if (go == footerPassthroughLightsBtn)
+            {
+                if (VPBConfig.Instance == null || !VPBConfig.Instance.PassthroughEnabled) return;
+                bool on = VPBConfig.Instance.PassthroughLightsEnabled;
+                AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_passthrough_lights", "Real-world lights"),
+                    () => { CloseFooterOverflowMenu(); TogglePassthroughLights(); }, on, icon: icon,
+                    tipKey: "gallery.tooltip.passthrough_lights",
+                    tipDefault: "Real-world lights on/off (lights pinned to your room, not the scene)");
+            }
+            else if (go == footerLogLevelBtn)
+            {
+                AddFooterOverflowMenuRow(panel, FooterLogLevelChipLabel(),
+                    () => { OpenFooterLogLevelSettings(); }, true, icon: icon,
+                    tipDefault: FooterLogLevelChipTooltip());
             }
             else if (go == footerHoldToLaunchToggleBtn)
             {

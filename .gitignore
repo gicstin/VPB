@@ -39,7 +39,18 @@ tests/**/TestResults/
 VPB.code-workspace
 .aider*
 /.vscode
-/scripts
+# scripts/ is ignored wholesale (it holds caches, contact sheets and scratch reports), but the
+# build/release pipeline lives here too. Excluding the directory itself makes a "!" negation
+# impossible, so exclude its CONTENTS and re-include the files the pipeline needs by name -
+# otherwise they stay invisible to git status and get left out of commits without a warning.
+/scripts/*
+!/scripts/BuildPatchManifest.ps1
+!/scripts/CheckReleaseIndexFresh.ps1
+!/scripts/PublishRelease.ps1
+!/scripts/FetchCjkUiFont.ps1
+!/scripts/PostBuildDeploy.ps1
+!/scripts/PreparePluginVersion.ps1
+!/scripts/SyncPatchManifestVpbIcons.ps1
 /docs
 
 # Icon tooling output

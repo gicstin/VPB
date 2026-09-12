@@ -1,0 +1,74 @@
+#!/bin/sh
+# VPB post-commit hook: records a shipped build in releases/index.json automatically.
+# Installed automatically by a Debug build of VPB.csproj; tests/run.ps1 -InstallHooks also works.
+#
+# Runs only when the commit just made changed the shipped VPB.dll, so every other commit pays
+# nothing. The index has to be written here rather than in pre-commit because it stores the
+# commit sha of the build, and that sha does not exist until the commit does.
+#
+# The index lands in a follow-up commit. That is deliberate: amending would change the sha the
+# index just recorded. Clients read the index from the branch tip, never from a tag, so the
+# one-commit lag inside history is invisible to them.
+
+[ -n "$VPB_RELEASE_HOOK" ] && exit 0
+export VPB_RELEASE_HOOK=1
+
+repo_root=$(git rev-parse --show-toplevel)
+
+dll_new="vam_patch/BepInEx/plugins/VPB/VPB.dll"
+dll_old="vam_patch/BepInEx/plugins/VPB.dll"
+
+changed=$(git diff-tree --no-commit-id --name-only -r HEAD -- "$dll_new" "$dll_old" 2>/dev/null)
+[ -z "$changed" ] && exit 0
+
+for candidate in pwsh powershell; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        shell="$candidate"
+        break
+    fi
+done
+
+if [ -z "$shell" ]; then
+    echo "post-commit: no powershell on PATH; releases/index.json was NOT updated for this build."
+    echo "post-commit: run scripts/PublishRelease.ps1 -CreateTags by hand."
+    exit 0
+fi
+
+"$shell" -NoProfile -ExecutionPolicy Bypass -File "$repo_root/scripts/PublishRelease.ps1" -CreateTags
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "post-commit: could not record this build. The commit itself is fine."
+    echo "post-commit: fix the cause above, then run scripts/PublishRelease.ps1 -CreateTags."
+    exit 0
+fi
+
+if [ -z "$(git status --porcelain -- releases/index.json)" ]; then
+    exit 0
+fi
+
+version=$(git show HEAD:vam_patch/patch_manifest2.json 2>/dev/null | sed -n 's/.*"Version": *"\([^"]*\)".*/\1/p' | head -n 1)
+[ -z "$version" ] && version="build"
+
+# This commit becomes the head of the push, and the Discord workflow reads its message to decide
+# whether to announce. Carrying the author's flags across keeps that decision theirs: dropping
+# [skip discord] would announce a push they silenced, and adding it unasked would silence one
+# they wanted.
+subject=$(git log -1 --format=%s HEAD)
+flags=""
+case "$subject" in
+    *'[skip discord]'*|*'[Skip Discord]'*|*'[SKIP DISCORD]'*) flags="$flags [skip discord]" ;;
+esac
+case "$subject" in
+    *'[skip ci]'*|*'[Skip CI]'*|*'[SKIP CI]'*) flags="$flags [skip ci]" ;;
+esac
+
+git add releases/index.json
+git commit --no-verify -m "chore(release): record VPB $version$flags" >/dev/null 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "post-commit: recorded VPB $version in releases/index.json."
+else
+    echo "post-commit: releases/index.json is updated but not committed; commit it with your next change."
+fi
+
+exit 0

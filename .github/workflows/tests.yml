@@ -23,6 +23,10 @@ jobs:
       - name: Test
         run: dotnet test tests/VPB.Tests.Static/VPB.Tests.Static.csproj --nologo -c Release --no-restore --logger "trx;LogFileName=static.trx"
 
+      - name: Release index is current
+        shell: pwsh
+        run: pwsh -File scripts/CheckReleaseIndexFresh.ps1
+
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4

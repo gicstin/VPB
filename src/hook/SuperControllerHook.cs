@@ -1321,6 +1321,20 @@ namespace VPB
             LogUiStateChange("HideMainHUD");
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SuperController), "HideMainHUD")]
+        public static void PostHideMainHUD()
+        {
+            try { VpbPassthroughLightAtoms.DismissNativeLightUiOnHudHide(); }
+            catch { }
+            try
+            {
+                if (VpbPassthroughLights.HandlesVisible)
+                    VpbPassthroughLightAtoms.ApplyPlacement();
+            }
+            catch { }
+        }
+
         static bool s_ReturnToSceneViewOnStartupApplied;
 
         static bool IsReturnToSceneViewOnStartupEnabled()
@@ -1381,11 +1395,18 @@ namespace VPB
         [HarmonyPatch(typeof(SuperController), "GetFreeNavigateVector")]
         public static void PostGetFreeNavigateVector(ref Vector4 __result)
         {
-            if (!GalleryVrThumbstickScroll.ShouldSuppressFreeNavigate) return;
-            __result.x = 0f;
-            __result.y = 0f;
-            __result.z = 0f;
-            __result.w = 0f;
+            try
+            {
+                bool suppress = GalleryVrThumbstickScroll.ShouldSuppressFreeNavigate;
+                if (!suppress)
+                    suppress = VpbPassthroughLights.SuppressNavigate;
+                if (!suppress) return;
+                __result.x = 0f;
+                __result.y = 0f;
+                __result.z = 0f;
+                __result.w = 0f;
+            }
+            catch { }
         }
 
         [HarmonyPrefix]
@@ -2048,15 +2069,13 @@ namespace VPB
             return true;
         }
 
-        internal static void RequeueVaMImageLoad(ImageLoaderThreaded.QueuedImage qi)
+        internal static void RequeueVaMImageLoad(ImageLoaderThreaded.QueuedImage qi, bool bypassCache = false)
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
             try
             {
                 qi.tex = null;
-                // Skip cache on requeue: if cache invalidation failed (file locked / permissions),
-                // VaM's loader would re-read the same corrupt cache, fail again, and bounce back here.
-                try { qi.skipCache = true; } catch { }
+                if (bypassCache) { try { qi.skipCache = true; } catch { } }
                 if (qi.cancel) return;
                 var loader = ImageLoaderThreaded.singleton;
                 if (loader == null)

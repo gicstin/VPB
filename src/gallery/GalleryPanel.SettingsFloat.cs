@@ -826,11 +826,13 @@ namespace VPB
                 return GalleryUiDesignTokens.SettingsFloatSectionHeaderHeightRef * s;
             if (def != null
                 && def.ControlType == InternalSettingControlType.TextArea
-                && !def.SingleLineText
+                && !def.SingleLine
                 && !string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
             {
                 return GalleryUiDesignTokens.SettingsFloatTextAreaRowHeightRef * s;
             }
+            if (def != null && def.WrapValue)
+                return GalleryUiDesignTokens.SettingsFloatWrapRowHeightRef * s;
             return rowH;
         }
 
