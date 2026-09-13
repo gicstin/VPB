@@ -521,6 +521,7 @@
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.Active.cs" />
+    <Compile Include="src\gallery\GalleryPanel.QuickFilter.Default.cs" />
     <Compile Include="src\gallery\GalleryPanel.FilterRandomizer.cs" />
     <Compile Include="src\gallery\GalleryPanel.CreatorFilter.Multi.cs" />
     <Compile Include="src\gallery\GalleryPanel.CreatorConsolidation.cs" />

@@ -469,12 +469,15 @@ namespace VPB
         /// </summary>
         private void ToggleRatingSort()
         {
+            RatingPresenceFilterMode next;
             if (_ratingPresenceFilterMode == RatingPresenceFilterMode.Off)
-                _ratingPresenceFilterMode = RatingPresenceFilterMode.RatedOnly;
+                next = RatingPresenceFilterMode.RatedOnly;
             else if (_ratingPresenceFilterMode == RatingPresenceFilterMode.RatedOnly)
-                _ratingPresenceFilterMode = RatingPresenceFilterMode.UnratedOnly;
+                next = RatingPresenceFilterMode.UnratedOnly;
             else
-                _ratingPresenceFilterMode = RatingPresenceFilterMode.Off;
+                next = RatingPresenceFilterMode.Off;
+            _ratingPresenceFilterMode = next;
+            PersistRatingPresenceFilterMode();
             ApplyRatingSortFilterChange(showStatus: true);
         }
 
@@ -483,7 +486,36 @@ namespace VPB
         {
             if (_ratingPresenceFilterMode == RatingPresenceFilterMode.Off) return;
             _ratingPresenceFilterMode = RatingPresenceFilterMode.Off;
+            PersistRatingPresenceFilterMode();
             ApplyRatingSortFilterChange(showStatus: true);
+        }
+
+        private void PersistRatingPresenceFilterMode()
+        {
+            try
+            {
+                VPBConfig cfg = VPBConfig.Instance;
+                if (cfg == null || !cfg.GalleryRememberRatingFilter) return;
+                int mode = (int)_ratingPresenceFilterMode;
+                if (cfg.GalleryLastRatingPresenceFilterMode == mode) return;
+                cfg.GalleryLastRatingPresenceFilterMode = mode;
+                cfg.Save(false);
+            }
+            catch { }
+        }
+
+        private void SeedRatingPresenceFilterFromConfig()
+        {
+            try
+            {
+                VPBConfig cfg = VPBConfig.Instance;
+                if (cfg == null || !cfg.GalleryRememberRatingFilter) return;
+                int mode = VPBConfig.ClampRatingPresenceFilterMode(cfg.GalleryLastRatingPresenceFilterMode);
+                if (mode == 0) return;
+                _ratingPresenceFilterMode = (RatingPresenceFilterMode)mode;
+                SyncRatingSortToggleState();
+            }
+            catch { }
         }
 
         private void SetRatingPresenceFilterMode(RatingPresenceFilterMode mode, bool refresh, bool showStatus)
@@ -494,6 +526,7 @@ namespace VPB
                 return;
             }
             _ratingPresenceFilterMode = mode;
+            PersistRatingPresenceFilterMode();
             if (refresh) ApplyRatingSortFilterChange(showStatus);
             else
             {

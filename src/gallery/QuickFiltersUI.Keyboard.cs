@@ -194,6 +194,7 @@ namespace VPB
         {
             if (entry == null) return;
             int idx = QuickFilterSettings.Instance.IndexOfFilter(entry);
+            softDeleteWasDefault = GalleryPanel.IsDefaultQuickFilter(entry);
             QuickFilterSettings.Instance.RemoveFilter(entry);
             if (panel != null) panel.NotifyQuickFilterRemoved(entry);
 
@@ -224,9 +225,12 @@ namespace VPB
             if (softDeleteEntry == null) return;
             QuickFilterEntry e = softDeleteEntry;
             int idx = softDeleteIndex;
+            bool wasDefault = softDeleteWasDefault;
             softDeleteEntry = null;
             softDeleteIndex = -1;
+            softDeleteWasDefault = false;
             QuickFilterSettings.Instance.InsertFilterAt(e, idx);
+            if (wasDefault && panel != null) panel.ToggleDefaultQuickFilter(e);
             SyncSoftDeleteUndoButton();
             flashEntry = e;
             Refresh();

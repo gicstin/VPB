@@ -252,6 +252,7 @@ namespace VPB
                      this.isResizing = isResizing;
                      if (!isResizing && VPBConfig.Instance != null) {
                          VPBConfig.Instance.Save();
+                         MarkSessionArrangementDirty();
                      }
                 };
 
@@ -307,6 +308,7 @@ namespace VPB
                      this.isResizing = isResizing;
                      if (!isResizing && VPBConfig.Instance != null) {
                          VPBConfig.Instance.Save();
+                         MarkSessionArrangementDirty();
                      }
                 };
 

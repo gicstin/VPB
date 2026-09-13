@@ -39,7 +39,8 @@ namespace VPB
                 return;
             }
 
-            if (s_sessionArrangementDirty && !s_sessionArrangementRestoring && !s_layoutApplyRunning)
+            if (s_sessionArrangementDirty && !s_sessionArrangementRestoring && !s_layoutApplyRunning
+                && !AnyPaneResizing())
                 WriteSessionArrangementSnapshot();
 
             if (mode == _layoutModeWatchLast) return;
@@ -113,6 +114,18 @@ namespace VPB
             if (s_sessionArrangementRestoring || s_layoutApplyRunning) return;
             s_sessionArrangementDirty = true;
             if (writeNow) SaveSessionArrangementSnapshotNow();
+        }
+
+        private static bool AnyPaneResizing()
+        {
+            List<GalleryPanel> panels = Gallery.singleton != null ? Gallery.singleton.Panels : null;
+            if (panels == null) return false;
+            for (int i = 0; i < panels.Count; i++)
+            {
+                GalleryPanel p = panels[i];
+                if (p != null && p.isResizing) return true;
+            }
+            return false;
         }
 
         private static bool AllPanesBuilt()

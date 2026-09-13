@@ -90,6 +90,7 @@ namespace VPB
                 if (s == null || s.HeightMode == value) return;
                 s.HeightMode = value;
                 GalleryDockLayout.BumpVersion();
+                MarkSessionArrangementDirty(false);
             }
         }
 
@@ -106,6 +107,7 @@ namespace VPB
                 if (s == null || s.AutoHide == value) return;
                 s.AutoHide = value;
                 GalleryDockLayout.BumpVersion();
+                MarkSessionArrangementDirty(false);
             }
         }
 
@@ -119,9 +121,10 @@ namespace VPB
             set
             {
                 GalleryDockSlot s = EffectiveDockSlot;
-                if (s == null) return;
+                if (s == null || Mathf.Abs(s.WidthFree - value) < 0.0001f) return;
                 s.WidthFree = value;
                 GalleryDockLayout.BumpVersion();
+                MarkSessionArrangementDirty(false);
             }
         }
 
@@ -135,9 +138,10 @@ namespace VPB
             set
             {
                 GalleryDockSlot s = EffectiveDockSlot;
-                if (s == null) return;
+                if (s == null || Mathf.Abs(s.CustomHeight - value) < 0.0001f) return;
                 s.CustomHeight = value;
                 GalleryDockLayout.BumpVersion();
+                MarkSessionArrangementDirty(false);
             }
         }
 

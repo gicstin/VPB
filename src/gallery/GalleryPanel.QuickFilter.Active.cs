@@ -62,6 +62,7 @@ namespace VPB
         internal void NotifyQuickFilterRemoved(QuickFilterEntry entry)
         {
             if (entry == null) return;
+            ClearDefaultQuickFilterIfMatches(entry);
             if (ReferenceEquals(_activeQuickFilter, entry))
                 _activeQuickFilter = null;
             for (int i = _recentQuickFilters.Count - 1; i >= 0; i--)

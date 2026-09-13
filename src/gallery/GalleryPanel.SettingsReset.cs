@@ -66,6 +66,9 @@ namespace VPB
                     case "follow.moveThreshold": d.SetDefault(fd.MovementThreshold); break;
                     case "follow.bringFront": d.SetDefault(fd.BringToFrontDistance); break;
 
+                    case "search.rememberRatingFilter": d.SetDefault(fd.GalleryRememberRatingFilter); break;
+                    case "search.defaultFilterPreset": d.SetDefault(fd.GalleryApplyDefaultFilterPresetOnStart); break;
+
                     case "interaction.dragDrop": d.SetDefault(fd.EnableDragDrop); break;
                     case "interaction.autoGenderFilter": d.SetDefault(fd.GalleryAutoGenderFilter); break;
                     case "interaction.collapseOnSceneLaunch": d.SetDefault(fd.GalleryCollapseOnSceneLaunch); break;

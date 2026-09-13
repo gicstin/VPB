@@ -456,6 +456,7 @@ namespace VPB
             ratingSortToggleButton.onClick.AddListener(ToggleRatingSort);
             AddRightClickDelegate(ratingSortToggleBtn, DisableRatingSortFilterIfEnabled);
             AddDynamicTooltip(ratingSortToggleBtn, BuildRatingPresenceFilterTooltip);
+            SeedRatingPresenceFilterFromConfig();
             SyncRatingSortToggleState();
 
             // Refresh Button (to the right of Star) — square icon button

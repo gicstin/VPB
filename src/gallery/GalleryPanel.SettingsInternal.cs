@@ -683,6 +683,9 @@ namespace VPB
             public bool EnableDragDrop;
             public bool GalleryAutoGenderFilter;
             public bool GalleryCollapseOnSceneLaunch;
+            public bool GalleryRememberRatingFilter;
+            public int GalleryLastRatingPresenceFilterMode;
+            public bool GalleryApplyDefaultFilterPresetOnStart;
             public bool ClothingReplaceUseGeometry;
             public int ClothingReplaceStrictness;
             public bool VerticalMoveKeysEnabled;
@@ -1710,6 +1713,48 @@ namespace VPB
                     VPBConfig.Instance.TriggerChange();
                 }
             });
+            defs.Add(new InternalSettingDefinition {
+                Key = "search.rememberRatingFilter", GroupKey = "search",
+                Label = VPBTranslation.T("settings.gallery_remember_rating_filter", "Remember star filter"),
+                Tooltip = VPBTranslation.T(
+                    "settings.tip.gallery_remember_rating_filter",
+                    "On (default): the title-bar ★ filter comes back the way you left it — Rated only, Not rated, or off — instead of resetting to All every time VaM starts. Right-click the ★ still clears it, and that is remembered too. Off: every VaM start opens with the ★ filter off."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryRememberRatingFilter,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryRememberRatingFilter = v;
+                    if (!v) VPBConfig.Instance.GalleryLastRatingPresenceFilterMode = 0;
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "search.defaultFilterPreset", GroupKey = "search",
+                Label = VPBTranslation.T("settings.gallery_default_filter_preset", "Open default filter preset"),
+                Tooltip = VPBTranslation.T(
+                    "settings.tip.gallery_default_filter_preset",
+                    "On (default): the filter preset you marked as default is applied once, when the gallery first opens after VaM starts — your category, search, tags and sort are already in place. Mark one in Filter Presets: edit a preset row and press the rocket. Only one preset can be the default; pressing the rocket again clears it. With no preset marked, nothing happens."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryApplyDefaultFilterPresetOnStart,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryApplyDefaultFilterPresetOnStart = v;
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "search.defaultFilterPresetName", GroupKey = "search",
+                Label = VPBTranslation.T("settings.gallery_default_filter_preset_name", "Default filter preset"),
+                Tooltip = VPBTranslation.T(
+                    "settings.tip.gallery_default_filter_preset_name",
+                    "Which preset opens with the gallery. Set it from Filter Presets: edit a preset row and press the rocket. None = the gallery opens on your usual category with no preset applied."),
+                ControlType = InternalSettingControlType.ReadOnlyText,
+                GetString = () => {
+                    string n = DefaultQuickFilterDisplayName();
+                    return string.IsNullOrEmpty(n)
+                        ? VPBTranslation.T("settings.gallery_default_filter_preset_none", "None")
+                        : n;
+                },
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryApplyDefaultFilterPresetOnStart
+            });
 
             defs.Add(new InternalSettingDefinition {
                 Key = "hover.mode", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_mode", "Hover preview"),
@@ -2478,6 +2523,9 @@ namespace VPB
                 EnableDragDrop = VPBConfig.Instance.EnableDragDrop,
                 GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 GalleryCollapseOnSceneLaunch = VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
+                GalleryRememberRatingFilter = VPBConfig.Instance.GalleryRememberRatingFilter,
+                GalleryLastRatingPresenceFilterMode = VPBConfig.Instance.GalleryLastRatingPresenceFilterMode,
+                GalleryApplyDefaultFilterPresetOnStart = VPBConfig.Instance.GalleryApplyDefaultFilterPresetOnStart,
                 ClothingReplaceUseGeometry = VPBConfig.Instance.ClothingReplaceUseGeometry,
                 ClothingReplaceStrictness = VPBConfig.Instance.ClothingReplaceStrictness,
                 VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
@@ -3635,6 +3683,9 @@ namespace VPB
             VPBConfig.Instance.EnableDragDrop = b.EnableDragDrop;
             VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.GalleryCollapseOnSceneLaunch = b.GalleryCollapseOnSceneLaunch;
+            VPBConfig.Instance.GalleryRememberRatingFilter = b.GalleryRememberRatingFilter;
+            VPBConfig.Instance.GalleryLastRatingPresenceFilterMode = b.GalleryLastRatingPresenceFilterMode;
+            VPBConfig.Instance.GalleryApplyDefaultFilterPresetOnStart = b.GalleryApplyDefaultFilterPresetOnStart;
             VPBConfig.Instance.ClothingReplaceUseGeometry = b.ClothingReplaceUseGeometry;
             VPBConfig.Instance.ClothingReplaceStrictness = b.ClothingReplaceStrictness;
             VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;

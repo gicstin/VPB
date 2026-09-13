@@ -909,11 +909,16 @@ namespace VPB
 
                 if (showAfterCreate)
                 {
+                    bool coldStart = !SessionBrowseMemoryActive;
                     if (createTiming != null)
                         p.BeginPaneLoadTiming(createTiming, "create");
                     p.Show(initial.name, initial.extension, initial.path);
                     // Startup auto-pane / Create Pane consumed Initial for this process.
                     MarkSessionInitialCategoryApplied();
+                    if (coldStart)
+                    {
+                        try { p.ApplyDefaultQuickFilterOnColdStart(); } catch { }
+                    }
                 }
             }
             else if (createTiming != null)

@@ -33,6 +33,18 @@ namespace VPB
         /// <summary>Public clamp for gallery UI scale helpers (auto-detect, settings).</summary>
         public static float ClampUiScalePublic(float v) => ClampUiScale(v);
 
+        public static int ClampRatingPresenceFilterMode(int v)
+        {
+            if (v < 0) return 0;
+            if (v > 2) return 0;
+            return v;
+        }
+
+        public bool HasDefaultFilterPreset
+        {
+            get { return GalleryDefaultFilterPresetId > 0 || !string.IsNullOrEmpty(GalleryDefaultFilterPresetName); }
+        }
+
         public static float ClampGalleryElementCornerRadiusFraction(float v)
         {
             if (float.IsNaN(v) || float.IsInfinity(v)) v = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
@@ -220,6 +232,11 @@ namespace VPB
         public bool GalleryAutoGenderFilter = true;
         /// <summary>When true (default), visible gallery panes collapse (fixed dock) or hide (floating) when a scene is launched.</summary>
         public bool GalleryCollapseOnSceneLaunch = true;
+        public bool GalleryRememberRatingFilter = true;
+        public int GalleryLastRatingPresenceFilterMode = 0;
+        public bool GalleryApplyDefaultFilterPresetOnStart = true;
+        public int GalleryDefaultFilterPresetId = 0;
+        public string GalleryDefaultFilterPresetName = "";
         /// <summary>Effective drag-and-drop at runtime; off while <see cref="HoldToLaunchEnabled"/> (hold-to-launch owns the same press).</summary>
         public bool EffectiveEnableDragDrop
         {
@@ -1750,6 +1767,11 @@ namespace VPB
             EnableDragDrop = false;
             GalleryAutoGenderFilter = true;
             GalleryCollapseOnSceneLaunch = true;
+            GalleryRememberRatingFilter = true;
+            GalleryLastRatingPresenceFilterMode = 0;
+            GalleryApplyDefaultFilterPresetOnStart = true;
+            GalleryDefaultFilterPresetId = 0;
+            GalleryDefaultFilterPresetName = "";
             RequireDragHoldBeforeMove = false;
             DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
@@ -2022,6 +2044,12 @@ namespace VPB
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
                         if (node["GalleryCollapseOnSceneLaunch"] != null) GalleryCollapseOnSceneLaunch = node["GalleryCollapseOnSceneLaunch"].AsBool;
+                        if (node["GalleryRememberRatingFilter"] != null) GalleryRememberRatingFilter = node["GalleryRememberRatingFilter"].AsBool;
+                        if (node["GalleryLastRatingPresenceFilterMode"] != null)
+                            GalleryLastRatingPresenceFilterMode = ClampRatingPresenceFilterMode(node["GalleryLastRatingPresenceFilterMode"].AsInt);
+                        if (node["GalleryApplyDefaultFilterPresetOnStart"] != null) GalleryApplyDefaultFilterPresetOnStart = node["GalleryApplyDefaultFilterPresetOnStart"].AsBool;
+                        if (node["GalleryDefaultFilterPresetId"] != null) GalleryDefaultFilterPresetId = node["GalleryDefaultFilterPresetId"].AsInt;
+                        if (node["GalleryDefaultFilterPresetName"] != null) GalleryDefaultFilterPresetName = node["GalleryDefaultFilterPresetName"].Value ?? "";
                         if (node["DragHoldThreshold"] != null)
                             DragHoldThreshold = ClampDragHoldThreshold(node["DragHoldThreshold"].AsFloat);
                         if (node["RequireDragHoldBeforeMove"] != null)
@@ -2640,6 +2668,11 @@ namespace VPB
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["GalleryAutoGenderFilter"].AsBool = GalleryAutoGenderFilter;
                 node["GalleryCollapseOnSceneLaunch"].AsBool = GalleryCollapseOnSceneLaunch;
+                node["GalleryRememberRatingFilter"].AsBool = GalleryRememberRatingFilter;
+                node["GalleryLastRatingPresenceFilterMode"].AsInt = ClampRatingPresenceFilterMode(GalleryLastRatingPresenceFilterMode);
+                node["GalleryApplyDefaultFilterPresetOnStart"].AsBool = GalleryApplyDefaultFilterPresetOnStart;
+                node["GalleryDefaultFilterPresetId"].AsInt = GalleryDefaultFilterPresetId;
+                node["GalleryDefaultFilterPresetName"] = GalleryDefaultFilterPresetName ?? "";
                 NormalizeDragDropHoldSettings();
                 node["RequireDragHoldBeforeMove"].AsBool = RequireDragHoldBeforeMove;
                 node["DragHoldThreshold"].AsFloat = DragHoldThreshold;

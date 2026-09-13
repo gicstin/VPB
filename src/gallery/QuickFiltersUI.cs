@@ -88,6 +88,7 @@ namespace VPB
         private QuickFilterEntry softDeleteEntry;
         private int softDeleteIndex = -1;
         private float softDeleteExpireTime;
+        private bool softDeleteWasDefault;
         private readonly List<QuickFilterEntry> mergeSelection = new List<QuickFilterEntry>();
         private static readonly Color RemoveModeRailBackdrop = new Color(0.62f, 0.16f, 0.16f, 1f);
         private static readonly Color RemoveModeOutlineIdle = Color.white;
@@ -1785,6 +1786,8 @@ namespace VPB
                             int n = entry.MergeMembers != null ? entry.MergeMembers.Count : 0;
                             label = string.Format("{0} · {1}", label, n);
                         }
+                        if (GalleryPanel.IsDefaultQuickFilter(entry))
+                            label = "» " + label;
                         if (isActive)
                             label = (dirtyActive ? "●* " : "● ") + label;
                         if (selectedForMerge)
@@ -1798,11 +1801,11 @@ namespace VPB
                 }
             }
 
-            // Browse: dice+more. Expanded: 4 chips. Rename/delete: confirm pair.
+            // Browse: dice+more. Expanded: 5 chips. Rename/delete: confirm pair.
             float iconReserve;
             if (mergeMode) iconReserve = 8f;
             else if (pendingDelete || renaming) iconReserve = 80f;
-            else if (moreExpanded) iconReserve = 140f;
+            else if (moreExpanded) iconReserve = 176f;
             else iconReserve = 80f;
             ApplyPopupRowTextInsets(btn.transform, RowTextPadLeftRef, RowTextPadRightRef, iconReserve);
 
@@ -1829,6 +1832,8 @@ namespace VPB
             Sprite sprRename = UI.LoadIconSprite("pencil-check", Color.white);
             Sprite sprDelete = UI.LoadIconSprite("trash", Color.white);
             Sprite sprCancel = UI.LoadIconSprite("x", Color.white);
+            Sprite sprDefaultOn = UI.LoadIconSprite("rocket", Color.white);
+            Sprite sprDefaultOff = UI.LoadIconSprite("rocket-off", Color.white);
             Sprite sprConfirm = UI.LoadIconSprite("clipboard-check", Color.white)
                 ?? UI.LoadIconSprite("player-play", Color.white);
 
@@ -2042,7 +2047,10 @@ namespace VPB
             }
             else if (moreExpanded)
             {
-                // Inline overflow: pin · rename · delete · close (no color/star).
+                // Inline overflow: default · pin · rename · delete · close (no color/star).
+                bool isDefault = GalleryPanel.IsDefaultQuickFilter(entry);
+                GameObject defaultBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
+                if (defaultBtn != null) defaultBtn.name = "DefaultBtn";
                 GameObject pinBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 GameObject renameBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 GameObject deleteBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
@@ -2064,6 +2072,10 @@ namespace VPB
                 setupSquare(renameBtn, sprRename, Color.white, -(padR + 2f * (sq + gap)), renameBackdrop);
                 // Affordance: show action you can take — pinned → unpin (pin_off); unpinned → pin (pin_on).
                 setupSquare(pinBtn, entry.Pinned ? sprPinOff : sprPinOn, Color.white, -(padR + 3f * (sq + gap)), pinBackdrop);
+                Color defaultBackdrop = isDefault
+                    ? GalleryUiColorTokens.ActiveOn
+                    : GalleryUiColorTokens.SurfaceMid;
+                setupSquare(defaultBtn, isDefault ? sprDefaultOff : sprDefaultOn, Color.white, -(padR + 4f * (sq + gap)), defaultBackdrop);
 
                 wireChipClick(closeBtn, () =>
                 {
@@ -2079,6 +2091,12 @@ namespace VPB
                 wireChipClick(pinBtn, () =>
                 {
                     QuickFilterSettings.Instance.TogglePinned(entry);
+                    expandedMoreEntry = null;
+                    Refresh();
+                });
+                wireChipClick(defaultBtn, () =>
+                {
+                    if (panel != null) panel.ToggleDefaultQuickFilter(entry);
                     expandedMoreEntry = null;
                     Refresh();
                 });
@@ -2100,6 +2118,9 @@ namespace VPB
                 tip(pinBtn, entry.Pinned
                     ? string.Format(VPBTranslation.T("quickfilters.tip.unpin", "Unpin '{0}' from overflow quick-random"), entry.Name)
                     : string.Format(VPBTranslation.T("quickfilters.tip.pin", "Pin '{0}' to overflow as quick-random"), entry.Name));
+                tip(defaultBtn, isDefault
+                    ? string.Format(VPBTranslation.T("quickfilters.tip.default_clear", "'{0}' opens on VaM start — click to stop. Only one preset can be the default."), entry.Name)
+                    : string.Format(VPBTranslation.T("quickfilters.tip.default_set", "Set '{0}' as default: applied once when the gallery first opens after VaM starts. Replaces any other default."), entry.Name));
             }
             else
             {
@@ -2303,7 +2324,10 @@ namespace VPB
 
             string trimmed = val != null ? val.Trim() : "";
             if (!string.IsNullOrEmpty(trimmed))
+            {
                 QuickFilterSettings.Instance.RenameFilter(entry, trimmed);
+                GalleryPanel.SyncDefaultQuickFilterName(entry);
+            }
 
             Refresh();
         }
