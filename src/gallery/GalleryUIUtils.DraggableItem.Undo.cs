@@ -36,6 +36,46 @@ namespace VPB
             }
         }
 
+        private void PushUndoSnapshotForCua(Atom target)
+        {
+            if (Panel == null || target == null) return;
+            try
+            {
+                string atomUid = target.uid;
+                JSONStorableUrl urlParam = ResolveCuaAssetUrlParam(target);
+                JSONStorableStringChooser nameParam = ResolveCuaAssetNameParam(target);
+                if (urlParam == null && nameParam == null) return;
+
+                string prevUrl = urlParam != null ? urlParam.val : null;
+                string prevName = nameParam != null ? nameParam.val : null;
+                GalleryPanel panel = Panel;
+
+                Panel.PushUndo(() =>
+                {
+                    if (panel == null) return;
+                    panel.StartCoroutine(RestoreCuaAssetCoroutine(atomUid, prevUrl, prevName));
+                }, "CUA asset");
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] PushUndoSnapshotForCua exception: " + ex);
+            }
+        }
+
+        private static IEnumerator RestoreCuaAssetCoroutine(string atomUid, string prevUrl, string prevName)
+        {
+            Atom atom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null;
+            if (atom == null) yield break;
+
+            JSONStorableUrl urlParam = ResolveCuaAssetUrlParam(atom);
+            if (urlParam != null) urlParam.val = prevUrl ?? "";
+
+            if (string.IsNullOrEmpty(prevUrl) || string.IsNullOrEmpty(prevName)
+                || string.Equals(prevName, "None", StringComparison.Ordinal)) yield break;
+
+            yield return SelectCuaAssetCoroutine(atomUid, prevName);
+        }
+
         private JSONClass ExtractAtomFromScene(JSONClass sceneJSON, string atomType)
         {
             if (sceneJSON == null || sceneJSON["atoms"] == null) return null;

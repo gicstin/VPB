@@ -102,8 +102,6 @@ namespace VPB
             if (isVR && footerPassthroughToggleBtn != null) into.Add(footerPassthroughToggleBtn);
             bool passthroughOn = VPBConfig.Instance != null && VPBConfig.Instance.PassthroughEnabled;
             if (isVR && passthroughOn && footerPassthroughLightsBtn != null) into.Add(footerPassthroughLightsBtn);
-            if (footerLogLevelBtn != null && VpbDiagnosticLogLevel.IsElevated(CurrentDiagnosticLevel()))
-                into.Add(footerLogLevelBtn);
             if (footerMenuGateBtn != null) into.Add(footerMenuGateBtn);
             if (footerFloatsOnlyBtn != null) into.Add(footerFloatsOnlyBtn);
             if (!fixedMode)
@@ -138,7 +136,6 @@ namespace VPB
             if (IsFixedTopDockMode() && !isCollapsed) sig ^= 1 << 9;
             if (isFixedLocally) sig ^= 1 << 10;
             if (isCollapsed) sig ^= 1 << 11;
-            if (footerLogLevelBtn != null && footerLogLevelBtn.activeSelf) sig ^= 1 << 12;
             if (VPBConfig.Instance != null && VPBConfig.Instance.PassthroughEnabled) sig ^= 1 << 13;
             return sig;
         }
@@ -320,12 +317,6 @@ namespace VPB
                     () => { CloseFooterOverflowMenu(); TogglePassthroughLights(); }, on, icon: icon,
                     tipKey: "gallery.tooltip.passthrough_lights",
                     tipDefault: "Real-world lights on/off (lights pinned to your room, not the scene)");
-            }
-            else if (go == footerLogLevelBtn)
-            {
-                AddFooterOverflowMenuRow(panel, FooterLogLevelChipLabel(),
-                    () => { OpenFooterLogLevelSettings(); }, true, icon: icon,
-                    tipDefault: FooterLogLevelChipTooltip());
             }
             else if (go == footerHoldToLaunchToggleBtn)
             {

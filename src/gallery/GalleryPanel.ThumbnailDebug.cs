@@ -33,46 +33,6 @@ namespace VPB
             catch { return false; }
         }
 
-        // Toolbar handler: dumps the first selected file's thumbnail pipeline. The row's RawImage is
-        // located by walking active UIFileEntryLeftReleaseSelect components — recycled grid items still
-        // carry the bound FileEntry. If the row isn't currently visible, dump proceeds without displayed.png.
-        private void TboxDumpThumbnailDebugForSelection()
-        {
-            FileEntry target = null;
-            try
-            {
-                if (selectedFiles != null && selectedFiles.Count > 0) target = selectedFiles[0];
-            }
-            catch { target = null; }
-            if (target == null)
-            {
-                try { ShowTemporaryStatus("Thumb debug: select a file first", 2.5f); } catch { }
-                return;
-            }
-
-            GameObject rowRoot = FindActiveRowGameObjectForFile(target);
-            if (rowRoot == null)
-                LogUtil.LogWarning("[VPB ThumbDbg] tbox click: row for selected file is not currently rendered; proceeding without displayed.png. file=" + target.Name);
-            DebugDumpThumbnailForRow(target, rowRoot);
-        }
-
-        private static GameObject FindActiveRowGameObjectForFile(FileEntry target)
-        {
-            if (target == null) return null;
-            UIFileEntryLeftReleaseSelect[] all = UnityEngine.Object.FindObjectsOfType<UIFileEntryLeftReleaseSelect>();
-            if (all == null) return null;
-            for (int i = 0; i < all.Length; i++)
-            {
-                UIFileEntryLeftReleaseSelect r = all[i];
-                if (r == null || r.File == null) continue;
-                if (ReferenceEquals(r.File, target)) return r.gameObject;
-                if (!string.IsNullOrEmpty(r.File.Path) && !string.IsNullOrEmpty(target.Path)
-                    && string.Equals(r.File.Path, target.Path, StringComparison.OrdinalIgnoreCase))
-                    return r.gameObject;
-            }
-            return null;
-        }
-
         private IEnumerator DebugDumpThumbnailCo(FileEntry file, GameObject rowRoot)
         {
             string outDir;

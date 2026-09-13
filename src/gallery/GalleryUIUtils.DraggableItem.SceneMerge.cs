@@ -1296,6 +1296,7 @@ namespace VPB
              ghostImg = null;
              ghostText = null;
              ghostBorder = null;
+             _cuaGhostKey = null;
 
              // 8b — resolve thumbnail texture; fall back to memory cache if async load is still pending
              Texture ghostTex = GetGhostTexture();
@@ -1504,6 +1505,41 @@ namespace VPB
                  {
                      ghostText.text = $"Release to launch scene\n{FileEntry.Name}";
                      ghostText.color = new Color(0.6f, 0.9f, 1f);
+                 }
+                 return;
+             }
+
+             if (itemType == ItemType.CUA)
+             {
+                 bool cuaFromPointer;
+                 Atom cuaTarget = ResolveCuaDropTarget(atom, out cuaFromPointer);
+                 string cuaKey = cuaTarget != null
+                     ? (cuaFromPointer ? "p:" : "t:") + cuaTarget.uid
+                     : "+";
+                 bool cuaChanged = !string.Equals(cuaKey, _cuaGhostKey, StringComparison.Ordinal);
+                 _cuaGhostKey = cuaKey;
+
+                 if (cuaTarget != null)
+                 {
+                     if (ghostBorder != null) ghostBorder.color = new Color(1f, 0.4f, 0.4f, 0.45f);
+                     if (ghostText != null)
+                     {
+                         if (cuaChanged)
+                             ghostText.text = cuaFromPointer
+                                 ? "Replacing asset on\n" + cuaTarget.name
+                                 : "Replacing asset on\n" + cuaTarget.name + " (Target)";
+                         ghostText.color = new Color(1f, 0.5f, 0.5f);
+                     }
+                 }
+                 else
+                 {
+                     if (ghostBorder != null) ghostBorder.color = new Color(0.35f, 0.95f, 0.55f, 0.45f);
+                     if (ghostText != null)
+                     {
+                         if (cuaChanged)
+                             ghostText.text = "Adding new CUA\n" + (FileEntry != null ? FileEntry.Name : "asset");
+                         ghostText.color = new Color(0.5f, 1f, 0.5f);
+                     }
                  }
                  return;
              }

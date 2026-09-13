@@ -1201,19 +1201,6 @@ namespace VPB
             { Sprite init = footerFloatsOnlyOffSprite ?? footerFloatsOnlyOnSprite; if (init != null) { UI.AddIconToButton(footerFloatsOnlyBtn, init); footerFloatsOnlyIconImage = footerFloatsOnlyBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerFloatsOnlyBtn, "gallery.tooltip.floats_only", "Hide this pane and keep its floating windows (open the gallery to bring it back)");
 
-            footerLogLevelBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef * 2.4f, GalleryUiDesignTokens.ButtonSizeRef, "Log Extra", 14, 0, 0, AnchorPresets.middleCenter, OpenFooterLogLevelSettings);
-            footerLogLevelBtn.name = "Footer_LogLevel";
-            footerLogLevelBtnImage = footerLogLevelBtn.GetComponent<Image>();
-            footerLogLevelBtnText = footerLogLevelBtn.GetComponentInChildren<Text>();
-            if (footerLogLevelBtnText != null)
-            {
-                footerLogLevelBtnText.resizeTextForBestFit = true;
-                footerLogLevelBtnText.resizeTextMinSize = 8;
-                footerLogLevelBtnText.resizeTextMaxSize = 16;
-            }
-            AddDynamicTooltip(footerLogLevelBtn, FooterLogLevelChipTooltip);
-            footerLogLevelBtn.SetActive(false);
-
             // Sidebar toggle lives on the side-rail Scene Import button (above Tags); no footer button.
 
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
@@ -1378,15 +1365,6 @@ namespace VPB
                     if (t) GalleryUiMetrics.ApplyGlyphFont(t, GalleryUiDesignTokens.ButtonSizeRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
-            {
-                var logRt = footerLogLevelBtn != null ? footerLogLevelBtn.GetComponent<RectTransform>() : null;
-                var logT = footerLogLevelBtnText;
-                innerPaneScaleActions.Add(s =>
-                {
-                    if (logRt) logRt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * 2.4f * s, GalleryUiDesignTokens.ButtonSizeRef * s);
-                    GalleryUiMetrics.ApplyFont(logT, GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
-                });
-            }
 
             // Top-dock footer row: same scale path as footer buttons (outer chrome + group layout).
             innerPaneScaleActions.Add(s =>
@@ -1491,7 +1469,6 @@ namespace VPB
             UpdateFooterVamMenuGateState();
             UpdateFooterVrWatchState();
             UpdateFooterPassthroughState();
-            UpdateFooterLogLevelChip();
             try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
             try { ApplyFooterModeButtonVisibility(); } catch { }
             UpdatePaginationText();
@@ -2899,7 +2876,6 @@ namespace VPB
             UpdateFooterAutoHideState();
             try { UpdateFooterVrWatchState(); } catch { }
             try { UpdateFooterPassthroughState(); } catch { }
-            try { UpdateFooterLogLevelChip(); } catch { }
         }
 
         private void ApplyDockAnchorButtonVisual(

@@ -336,9 +336,7 @@ namespace VPB
 
                     if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle") || pathLower.EndsWith(".unity3d"))
                     {
-                        // Gallery Target first (CUA category lists CustomUnityAsset atoms), then whatever is
-                        // selected in VaM, and only spawn a fresh CUA when neither names one.
-                        Atom target = ResolveCuaTargetAtom();
+                        Atom target = DragDropReplaceMode ? ResolveCuaTargetAtom() : null;
                         if (target != null) dragger.LoadCUAIntoAtom(target, file.Uid);
                         else dragger.LoadCUA(file.Uid);
                         return true;

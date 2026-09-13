@@ -39,6 +39,7 @@ namespace VPB
         private Text ghostText; // Added text component
         private Renderer ghostRenderer;
         private RawImage ghostImg; // 8b — cached reference to ghost's RawImage for late texture update
+        private string _cuaGhostKey;
         private GameObject groundIndicator;
         private Vector3 lastGroundPoint;
         private bool hasGroundPoint;
@@ -430,19 +431,28 @@ namespace VPB
                 else if (itemType == ItemType.CUA && FileEntry != null)
                 {
                     string msg;
-                    Atom atom = DetectAtom(eventData, out msg);
-                    if (atom != null && atom.type == "CustomUnityAsset")
+                    float dist;
+                    Atom atom = DetectAtom(eventData, out msg, out dist);
+                    bool fromPointer;
+                    Atom cuaTarget = ResolveCuaDropTarget(atom, out fromPointer);
+                    if (cuaTarget != null)
                     {
-                        LoadCUAIntoAtom(atom, FileEntry.Uid);
+                        LoadCUAIntoAtom(cuaTarget, FileEntry.Uid);
                     }
                     else
                     {
-                        // Dropped on empty space: fall back to the panel's CUA Target before spawning a new atom,
-                        // so repeat picks keep replacing the same CUA instead of stacking duplicates.
-                        Atom fallback = null;
-                        try { if (Panel != null) fallback = Panel.ResolveCuaTargetAtom(); } catch { }
-                        if (fallback != null) LoadCUAIntoAtom(fallback, FileEntry.Uid);
-                        else LoadCUA(FileEntry.Uid);
+                        Vector3? spawnPos = null;
+                        Camera cam = dragCam;
+                        if (cam == null) cam = Camera.main;
+                        if (cam != null)
+                        {
+                            Ray ray = cam.ScreenPointToRay(eventData.position);
+                            Vector3 floorPoint;
+                            spawnPos = SpawnAtomElement.TryRaycastFloor(ray, out floorPoint)
+                                ? floorPoint
+                                : ray.GetPoint(dist);
+                        }
+                        LoadCUA(FileEntry.Uid, spawnPos);
                     }
                 }
                 else
@@ -579,18 +589,14 @@ namespace VPB
             }
             else if (itemType == ItemType.CUA)
             {
-                 if (atom != null && atom.type == "CustomUnityAsset")
-                 {
-                     statusMsg = $"Drop to load into {atom.name}";
-                 }
+                 bool cuaFromPointer;
+                 Atom cuaTarget = ResolveCuaDropTarget(atom, out cuaFromPointer);
+                 if (cuaTarget != null)
+                     statusMsg = cuaFromPointer
+                         ? $"Replacing asset on {cuaTarget.name}"
+                         : $"Replacing asset on {cuaTarget.name} (Target) — undo restores it";
                  else
-                 {
-                     Atom cuaTarget = null;
-                     try { if (Panel != null) cuaTarget = Panel.ResolveCuaTargetAtom(); } catch { }
-                     statusMsg = cuaTarget != null
-                         ? $"Drop to load into {cuaTarget.name}"
-                         : $"Drop to create new Custom Unity Asset";
-                 }
+                     statusMsg = "Adding new Custom Unity Asset";
             }
             else if (itemType == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry))
             {
@@ -627,23 +633,135 @@ namespace VPB
             return DetectAtom(eventData, out statusMsg, out dummy);
         }
 
+        private Atom ResolveCuaDropTarget(Atom pointerAtom, out bool fromPointer)
+        {
+            fromPointer = false;
+            if (Panel == null || !Panel.DragDropReplaceMode) return null;
+
+            if (pointerAtom != null && pointerAtom.type == "CustomUnityAsset")
+            {
+                fromPointer = true;
+                return pointerAtom;
+            }
+            Atom fallback = null;
+            try { fallback = Panel.ResolveCuaTargetAtom(); } catch { }
+            return fallback;
+        }
+
+        internal static JSONStorableUrl ResolveCuaAssetUrlParam(Atom atom)
+        {
+            if (atom == null) return null;
+            JSONStorableUrl p = atom.GetUrlJSONParam("assetUrl");
+            if (p != null) return p;
+            JSONStorable assetStorable = atom.GetStorableByID("asset");
+            return assetStorable != null ? assetStorable.GetUrlJSONParam("assetUrl") : null;
+        }
+
+        internal static JSONStorableStringChooser ResolveCuaAssetNameParam(Atom atom)
+        {
+            if (atom == null) return null;
+            JSONStorableStringChooser p = atom.GetStringChooserJSONParam("assetName");
+            if (p != null) return p;
+            JSONStorable assetStorable = atom.GetStorableByID("asset");
+            return assetStorable != null ? assetStorable.GetStringChooserJSONParam("assetName") : null;
+        }
+
+        internal static System.Collections.IEnumerator SelectCuaAssetCoroutine(string atomUid, string preferredName)
+        {
+            float deadline = Time.realtimeSinceStartup + 60f;
+            JSONStorableStringChooser chooser = null;
+
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                Atom atom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null;
+                if (atom == null) yield break;
+
+                JSONStorableStringChooser candidate = ResolveCuaAssetNameParam(atom);
+                if (candidate != null && candidate.choices != null && candidate.choices.Count > 1)
+                {
+                    chooser = candidate;
+                    break;
+                }
+                yield return null;
+            }
+
+            if (chooser == null)
+            {
+                LogUtil.LogWarning("[VPB] CUA " + atomUid + ": bundle produced no selectable asset (no prefab or scene) — atom stays empty.");
+                yield break;
+            }
+
+            List<string> choices = chooser.choices;
+            string pick = null;
+            if (!string.IsNullOrEmpty(preferredName) && choices.Contains(preferredName))
+            {
+                pick = preferredName;
+            }
+            else
+            {
+                for (int i = 0; i < choices.Count; i++)
+                {
+                    if (!string.Equals(choices[i], "None", StringComparison.Ordinal)) { pick = choices[i]; break; }
+                }
+            }
+
+            if (pick == null)
+            {
+                LogUtil.LogWarning("[VPB] CUA " + atomUid + ": asset list held only \"None\".");
+                yield break;
+            }
+
+            LogUtil.LogVerbose("[DragDropDebug] Auto-setting assetName to: " + pick);
+            chooser.val = pick;
+        }
+
         public void LoadCUA(string path)
+        {
+            LoadCUA(path, null);
+        }
+
+        public void LoadCUA(string path, Vector3? spawnPos)
         {
             // Usage recorded in LoadCUAIntoAtom when the asset is actually applied (avoid double-count).
             string normalizedPath = UI.NormalizePath(path);
             LogUtil.LogVerbose($"[DragDropDebug] Loading CUA: {normalizedPath}");
-            if (Panel != null) Panel.StartCoroutine(LoadCUACoroutine(normalizedPath));
-            else StartCoroutine(LoadCUACoroutine(normalizedPath));
+            if (Panel != null) Panel.StartCoroutine(LoadCUACoroutine(normalizedPath, spawnPos));
+            else StartCoroutine(LoadCUACoroutine(normalizedPath, spawnPos));
         }
 
-        private System.Collections.IEnumerator LoadCUACoroutine(string path)
+        private System.Collections.IEnumerator LoadCUACoroutine(string path, Vector3? spawnPos)
         {
+            HashSet<string> before = new HashSet<string>();
+            foreach (Atom a in SuperController.singleton.GetAtoms())
+                if (a != null && a.uid != null) before.Add(a.uid);
+
             yield return SuperController.singleton.AddAtomByType("CustomUnityAsset", Path.GetFileNameWithoutExtension(path), true, true, true);
-            
-            Atom newAtom = SuperController.singleton.GetSelectedAtom();
-            if (newAtom != null && newAtom.type == "CustomUnityAsset")
+            yield return new WaitForEndOfFrame();
+
+            Atom newAtom = null;
+            foreach (Atom a in SuperController.singleton.GetAtoms())
             {
-                LoadCUAIntoAtom(newAtom, path);
+                if (a == null || a.type != "CustomUnityAsset") continue;
+                if (a.uid != null && !before.Contains(a.uid)) { newAtom = a; break; }
+            }
+
+            if (newAtom == null)
+            {
+                LogUtil.LogError("[VPB] Could not find newly created CustomUnityAsset atom");
+                yield break;
+            }
+
+            if (spawnPos.HasValue && newAtom.mainController != null)
+            {
+                try { newAtom.mainController.transform.position = spawnPos.Value; }
+                catch { }
+            }
+
+            LoadCUAIntoAtom(newAtom, path);
+
+            if (Panel != null)
+            {
+                try { Panel.RefreshTargetDropdown(); } catch { }
             }
         }
 
@@ -673,54 +791,16 @@ namespace VPB
             }
 
             string normalizedPath = UI.NormalizePath(path);
-            JSONStorableUrl urlParam = targetAtom.GetUrlJSONParam("assetUrl");
-            if (urlParam == null)
-            {
-                // Try getting from "asset" storable explicitly
-                JSONStorable assetStorable = targetAtom.GetStorableByID("asset");
-                if (assetStorable != null)
-                {
-                    urlParam = assetStorable.GetUrlJSONParam("assetUrl");
-                }
-            }
+            JSONStorableUrl urlParam = ResolveCuaAssetUrlParam(targetAtom);
 
             if (urlParam != null)
             {
+                PushUndoSnapshotForCua(targetAtom);
+
                 LogUtil.LogVerbose("[DragDropDebug] Setting assetUrl to " + normalizedPath);
                 urlParam.val = normalizedPath;
-                
-                // Automatically set assetName if possible
-                bool done = false;
-                List<string> assetNames = null;
-                yield return CustomAssetLoader.GetAssetBundleContent(path, (names) => {
-                     assetNames = names;
-                     done = true;
-                });
-                
-                while (!done) yield return null;
-                
-                if (assetNames != null && assetNames.Count > 0)
-                {
-                     LogUtil.LogVerbose($"[DragDropDebug] Found {assetNames.Count} assets in bundle.");
-                     JSONStorableString nameParam = targetAtom.GetStringJSONParam("assetName");
-                     if (nameParam == null)
-                     {
-                          JSONStorable assetStorable = targetAtom.GetStorableByID("asset");
-                          if (assetStorable != null) nameParam = assetStorable.GetStringJSONParam("assetName");
-                     }
-                     
-                     if (nameParam != null)
-                     {
-                          // Sort assets alphabetically to match VaM UI
-                          assetNames.Sort();
-                          
-                          // Default to the first asset (Position 1)
-                          string match = assetNames[0];
-                          
-                          LogUtil.LogVerbose($"[DragDropDebug] Auto-setting assetName to: {match}");
-                          nameParam.val = match;
-                     }
-                }
+
+                yield return SelectCuaAssetCoroutine(atomUid, null);
             }
             else
             {

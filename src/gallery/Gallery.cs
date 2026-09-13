@@ -790,26 +790,11 @@ namespace VPB
             }
             else
             {
-                // Show ALL panes: if visible, update with caller's category; if hidden, restore session
-                foreach(var p in panels)
+                for (int i = 0; i < panels.Count; i++)
                 {
-                    if (p.IsVisible)
-                    {
-                        // Panel is already visible: update it with the caller's category
-                        p.Show(title, extension, path);
-                    }
-                    else
-                    {
-                        // Panel is hidden: restore previous state unless it has never loaded content
-                        if (!p.HasLoadedContent || string.IsNullOrEmpty(p.GetCurrentPath()))
-                        {
-                             p.Show(title, extension, path);
-                        }
-                        else
-                        {
-                             p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
-                        }
-                    }
+                    GalleryPanel p = panels[i];
+                    if (p == null) continue;
+                    p.Show(title, extension, path);
                 }
             }
             // Any intentional Show (toggle, hotkey, CreatePane) consumes Initial for this process.

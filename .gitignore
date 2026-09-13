@@ -46,6 +46,8 @@ VPB.code-workspace
 !/scripts/PostBuildDeploy.ps1
 !/scripts/PreparePluginVersion.ps1
 !/scripts/SyncPatchManifestVpbIcons.ps1
+!/scripts/build_icon_atlas.py
+!/scripts/verify_icon_atlas.py
 /docs
 
 # Icon tooling output

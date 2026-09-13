@@ -15,10 +15,6 @@ namespace VPB
         private static int _diagStartupCaptureState;
         private static bool _diagStartupWasOnAtLaunch;
 
-        private GameObject footerLogLevelBtn;
-        private Image footerLogLevelBtnImage;
-        private Text footerLogLevelBtnText;
-
         private void AppendDiagnosticsInternalSettingDefinitions(List<InternalSettingDefinition> defs)
         {
             if (defs == null) return;
@@ -235,7 +231,6 @@ namespace VPB
                 {
                     GalleryPanel p = panels[i];
                     if (p == null) continue;
-                    try { p.UpdateFooterLogLevelChip(); } catch { }
                     try
                     {
                         p.InvalidateFooterOverflowLayout();
@@ -252,50 +247,6 @@ namespace VPB
                 }
             }
             catch { }
-        }
-
-        private void OpenFooterLogLevelSettings()
-        {
-            try { CloseFooterOverflowMenu(); } catch { }
-            OpenSettingsGroup("troubleshooting");
-        }
-
-        private string FooterLogLevelChipLabel()
-        {
-            string level = CurrentDiagnosticLevel();
-            if (string.Equals(level, VpbDiagnosticLogLevel.Full, StringComparison.OrdinalIgnoreCase))
-                return VPBTranslation.T("gallery.footer.log_full", "Log Full");
-            return VPBTranslation.T("gallery.footer.log_extra", "Log Extra");
-        }
-
-        private string FooterLogLevelChipTooltip()
-        {
-            string level = CurrentDiagnosticLevel();
-            if (string.Equals(level, VpbDiagnosticLogLevel.Full, StringComparison.OrdinalIgnoreCase))
-                return VPBTranslation.T("gallery.tooltip.log_level_full",
-                    "Full logging is on (larger file, VaM a little slower). Click to open Troubleshooting — switch back to Normal when the log is sent.");
-            return VPBTranslation.T("gallery.tooltip.log_level_extra",
-                "Extra logging is on. Click to open Troubleshooting — switch back to Normal when the log is sent.");
-        }
-
-        private void UpdateFooterLogLevelChip()
-        {
-            if (footerLogLevelBtn == null) return;
-            bool elevated = VpbDiagnosticLogLevel.IsElevated(CurrentDiagnosticLevel());
-            bool collapsed = false;
-            try { collapsed = _footerOverflowCollapsed != null && _footerOverflowCollapsed.Contains(footerLogLevelBtn); } catch { }
-            bool show = elevated && !collapsed;
-            if (footerLogLevelBtn.activeSelf != show)
-                footerLogLevelBtn.SetActive(show);
-            if (!elevated) return;
-
-            if (footerLogLevelBtnText != null)
-                footerLogLevelBtnText.text = FooterLogLevelChipLabel();
-            if (footerLogLevelBtnImage != null)
-            {
-                bool full = string.Equals(CurrentDiagnosticLevel(), VpbDiagnosticLogLevel.Full, StringComparison.OrdinalIgnoreCase);
-                footerLogLevelBtnImage.color = full ? UI.AccentRed : UI.AccentBlue;
-            }
         }
 
         private void OpenDiagnosticsLogFolder()

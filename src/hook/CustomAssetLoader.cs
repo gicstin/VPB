@@ -21,6 +21,8 @@ namespace VPB
 
 		protected List<MeshVR.AssetLoader.SceneLoadIntoTransformRequest> sceneLoadIntoTransformQueue;
 
+		protected HashSet<string> inFlightBundlePaths;
+
 		protected IEnumerator LoadBundleFileAsync(MeshVR.AssetLoader.AssetBundleFromFileRequest abffr)
 		{
 			if (assetBundleReferenceCounts == null)
@@ -31,7 +33,12 @@ namespace VPB
 			{
 				pathToAssetBundle = new Dictionary<string, AssetBundle>();
 			}
+			if (inFlightBundlePaths == null)
+			{
+				inFlightBundlePaths = new HashSet<string>();
+			}
 			string path = abffr.path;
+			inFlightBundlePaths.Add(path);
 			int cnt2;
 			if (assetBundleReferenceCounts.TryGetValue(path, out cnt2))
 			{
@@ -77,6 +84,7 @@ namespace VPB
 					}
 				}
 			}
+			inFlightBundlePaths.Remove(path);
 			abffr.assetBundle = ab;
 			if (abffr.callback != null)
 			{
@@ -280,6 +288,14 @@ namespace VPB
                 shouldUnload = false;
             }
 
+            if (ab == null && IsBundleLoadPending(path))
+            {
+                float deadline = Time.realtimeSinceStartup + 60f;
+                while (IsBundleLoadPending(path) && Time.realtimeSinceStartup < deadline) yield return null;
+                if (singleton != null && singleton.pathToAssetBundle != null)
+                    singleton.pathToAssetBundle.TryGetValue(path, out ab);
+            }
+
             // 2. Not in our cache yet, but VaM/another CUA may already hold it. Callers hit this right after
             // setting assetUrl, so the queued LoadBundleFileAsync for the same file is often still in flight —
             // loading a second copy here races it and leaves us owning a bundle the live atom is using.
@@ -338,6 +354,21 @@ namespace VPB
             {
                 callback?.Invoke(null);
             }
+        }
+
+        internal static bool IsBundleLoadPending(string path)
+        {
+            if (singleton == null || string.IsNullOrEmpty(path)) return false;
+            if (singleton.inFlightBundlePaths != null && singleton.inFlightBundlePaths.Contains(path)) return true;
+            List<MeshVR.AssetLoader.AssetBundleFromFileRequest> q = singleton.assetBundleFromFileQueue;
+            if (q != null)
+            {
+                for (int i = 0; i < q.Count; i++)
+                {
+                    if (q[i] != null && string.Equals(q[i].path, path, StringComparison.Ordinal)) return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>Find an already-loaded bundle for <paramref name="path"/> by its file name (bundle names

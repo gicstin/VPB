@@ -270,7 +270,6 @@ namespace VPB
             show(tboxUnloadBtn, false);
             show(tboxLoadDepsBtn, false);
             show(tboxCacheTexturesBtn, false);
-            show(tboxThumbDebugBtn, false);
             show(tboxOpenHubBtn, false);
             show(tboxCopyPkgNamesBtn, false);
             show(tboxOverwriteSceneBtn, false);
@@ -384,7 +383,6 @@ namespace VPB
             show(tboxUnloadBtn, false);
             show(tboxLoadDepsBtn, false);
             show(tboxCacheTexturesBtn, false);
-            show(tboxThumbDebugBtn, false);
             show(tboxOpenHubBtn, false);
             show(tboxCopyPkgNamesBtn, false);
             show(tboxDeleteBtn, false);

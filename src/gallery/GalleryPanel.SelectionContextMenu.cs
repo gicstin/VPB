@@ -35,8 +35,6 @@ namespace VPB
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
-        // Debug-only: dumps the selected row's thumbnail pipeline to Cache/VPB/_thumbdebug/. Visible when TextureLogLevel >= 2.
-        private GameObject tboxThumbDebugBtn;
         private GameObject tboxOpenHubBtn;
         private GameObject tboxOverwriteSceneBtn;
         private GameObject tboxSuppressScaleBtn;
@@ -1089,25 +1087,6 @@ namespace VPB
             }
             catch { }
 
-            tboxThumbDebugBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                "DBG", tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxDumpThumbnailDebugForSelection
-            );
-            tboxThumbDebugBtn.name = "Tbox_ThumbDebug";
-            TboxConfigureActionButtonFlex(tboxThumbDebugBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxThumbDebugBtn, "gallery.tooltip.tbox_thumb_debug", "Debug: dump thumbnail pipeline for the first selected file to Cache/VPB/_thumbdebug/ (cache bytes, source bytes, Unity + TurboJPEG decodes, displayed texture).");
-            try
-            {
-                Text t = tboxThumbDebugBtn.GetComponentInChildren<Text>(true);
-                if (t != null) { t.text = "DBG"; t.color = new Color(1f, 0.6f, 0.2f, 1f); }
-                Image bg = tboxThumbDebugBtn.GetComponent<Image>();
-                if (bg != null) bg.color = new Color(0.25f, 0.15f, 0.10f, 1f);
-            }
-            catch { }
-            tboxThumbDebugBtn.SetActive(false); // gated by IsTextureLogVerbose() in RefreshTboxConditionalActionButtons
-
             tboxOpenHubBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -1707,19 +1686,14 @@ namespace VPB
             if (atom == null) return uid ?? "Unknown";
             try
             {
-                JSONStorable asset = atom.GetStorableByID("asset");
-                if (asset != null)
+                JSONStorableStringChooser nameParam = UIDraggableItem.ResolveCuaAssetNameParam(atom);
+                string val = nameParam != null ? nameParam.val : null;
+                if (!string.IsNullOrEmpty(val) && !string.Equals(val, "None", StringComparison.OrdinalIgnoreCase))
                 {
-                    JSONStorableString nameParam = null;
-                    try { nameParam = asset.GetStringJSONParam("assetName"); } catch { }
-                    string val = nameParam != null ? nameParam.val : null;
-                    if (!string.IsNullOrEmpty(val) && !string.Equals(val, "None", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // assetName is a bundle-internal path ("assets/skyboxes/cloudy 1.unity").
-                        string name = MVR.FileManagementSecure.FileManagerSecure.GetFileName(val);
-                        if (!string.IsNullOrEmpty(name))
-                            return $"{name} ({uid})";
-                    }
+                    // assetName is a bundle-internal path ("assets/skyboxes/cloudy 1.unity").
+                    string name = MVR.FileManagementSecure.FileManagerSecure.GetFileName(val);
+                    if (!string.IsNullOrEmpty(name))
+                        return $"{name} ({uid})";
                 }
             }
             catch { }
@@ -2404,7 +2378,6 @@ namespace VPB
                 show(tboxUnloadBtn, false);
                 show(tboxLoadDepsBtn, false);
                 show(tboxCacheTexturesBtn, false);
-                show(tboxThumbDebugBtn, false);
                 show(tboxOpenHubBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
                 show(tboxOverwriteSceneBtn, false);
@@ -2460,7 +2433,6 @@ namespace VPB
             show(tboxUnloadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadDepsBtn, !isCleanup);
             show(tboxCacheTexturesBtn, !isCleanup);
-            show(tboxThumbDebugBtn, !isCleanup && IsTextureLogVerbose());
             show(tboxOpenHubBtn, !isCleanup);
             // Non-settings mode must explicitly re-show buttons hidden by Settings mode.
             // Otherwise, once Settings hides them, they stay inactive forever.
