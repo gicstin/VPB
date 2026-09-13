@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-13T12:00:59Z",
+    "UpdatedUtc":  "2026-09-13T12:11:35Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.697",
+                         "Tag":  "build-0.32.697-1dca5ba",
+                         "Commit":  "1dca5ba97963bfacffa8b401befda4ebff0be2fb",
+                         "DateUtc":  "2026-09-13T12:11:27Z",
+                         "Notes":  "fix: let Hide Hub tags collapse the bucket while tag filter is active",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.696",
                          "Tag":  "build-0.32.696-5ad6775",
