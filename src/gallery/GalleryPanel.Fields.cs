@@ -818,6 +818,9 @@ namespace VPB
         /// <summary>User Tags Available list: expand collapsed Looks like bucket (Look-A-Pedia, read-only).</summary>
         private bool _userTagShowLooksBucket;
         private bool _userTagShowHubCatBucket;
+        private bool _userTagHubBucketCollapsedOverride;
+        private bool _userTagLooksBucketCollapsedOverride;
+        private bool _userTagHubCatBucketCollapsedOverride;
         private readonly List<CreatorCacheEntry> _hubCatFacetRows = new List<CreatorCacheEntry>(24);
         private string _hubCatFacetCollectSig;
         private bool _categoryShowHubTypeBucket;

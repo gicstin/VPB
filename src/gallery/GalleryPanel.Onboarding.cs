@@ -78,6 +78,7 @@ namespace VPB
             _userTagShowHubBucket = false;
             _userTagShowLooksBucket = false;
             _userTagShowHubCatBucket = false;
+            ClearPackBucketCollapseOverrides();
             // Not tagged owned by title-bar Filter (ClearTitleBarBrowseFilters).
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
         }

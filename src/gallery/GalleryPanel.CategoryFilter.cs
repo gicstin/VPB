@@ -299,6 +299,7 @@ namespace VPB
             _userTagShowHubBucket = false;
             _userTagShowLooksBucket = false;
             _userTagShowHubCatBucket = false;
+            ClearPackBucketCollapseOverrides();
             if (_userTagAvailMode != UserTagAvailMode.FilterUntagged
                 && _userTagAvailMode != UserTagAvailMode.FilterTaggedOnly)
                 try { ClearUntaggedTaggedPinKeys(); } catch { }
@@ -361,6 +362,7 @@ namespace VPB
             _userTagShowHubBucket = false;
             _userTagShowLooksBucket = false;
             _userTagShowHubCatBucket = false;
+            ClearPackBucketCollapseOverrides();
             _userTagAvailMode = ResolveDefaultUserTagAvailMode();
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
                 _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;

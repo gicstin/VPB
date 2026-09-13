@@ -527,9 +527,9 @@ namespace VPB
                 + "|" + (int)_userTagAvailMode
                 + "|" + (VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode ? 1 : 0)
                 + "|" + (_userTagShowUnusedBucket ? 1 : 0)
-                + "|" + (_userTagShowHubBucket ? 1 : 0)
-                + "|" + (_userTagShowLooksBucket ? 1 : 0)
-                + "|" + (_userTagShowHubCatBucket ? 1 : 0)
+                + "|" + (PackBucketExpanded(PackAvailBucketKind.HubTag) ? 1 : 0)
+                + "|" + (PackBucketExpanded(PackAvailBucketKind.LooksLike) ? 1 : 0)
+                + "|" + (PackBucketExpanded(PackAvailBucketKind.HubCategory) ? 1 : 0)
                 + "|" + (userTagsCached ? 1 : 0)
                 + "|sel:" + BuildUserTagSelectionVirtSignature()
                 + "|hub:" + (LookFacetHubModeAvailable() ? 1 : 0)
@@ -549,6 +549,49 @@ namespace VPB
             LooksLike = 0,
             HubTag = 1,
             HubCategory = 2,
+        }
+
+        private bool PackBucketExpanded(PackAvailBucketKind kind)
+        {
+            bool filterOn = !string.IsNullOrEmpty(userTagFilter);
+            switch (kind)
+            {
+                case PackAvailBucketKind.HubTag:
+                    return _userTagShowHubBucket || (filterOn && !_userTagHubBucketCollapsedOverride);
+                case PackAvailBucketKind.HubCategory:
+                    return _userTagShowHubCatBucket || (filterOn && !_userTagHubCatBucketCollapsedOverride);
+                default:
+                    return _userTagShowLooksBucket || (filterOn && !_userTagLooksBucketCollapsedOverride);
+            }
+        }
+
+        private void TogglePackBucketExpanded(PackAvailBucketKind kind)
+        {
+            bool filterOn = !string.IsNullOrEmpty(userTagFilter);
+            bool expand = !PackBucketExpanded(kind);
+            bool suppress = !expand && filterOn;
+            switch (kind)
+            {
+                case PackAvailBucketKind.HubTag:
+                    _userTagShowHubBucket = expand;
+                    _userTagHubBucketCollapsedOverride = suppress;
+                    break;
+                case PackAvailBucketKind.HubCategory:
+                    _userTagShowHubCatBucket = expand;
+                    _userTagHubCatBucketCollapsedOverride = suppress;
+                    break;
+                default:
+                    _userTagShowLooksBucket = expand;
+                    _userTagLooksBucketCollapsedOverride = suppress;
+                    break;
+            }
+        }
+
+        private void ClearPackBucketCollapseOverrides()
+        {
+            _userTagHubBucketCollapsedOverride = false;
+            _userTagLooksBucketCollapsedOverride = false;
+            _userTagHubCatBucketCollapsedOverride = false;
         }
 
         private void RebuildUserTagVirtViewList(bool isLeft, bool resetScrollToTop)
@@ -578,6 +621,7 @@ namespace VPB
                     rowsUt.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
             }
             string filterUt = userTagFilter ?? "";
+            if (string.IsNullOrEmpty(filterUt)) ClearPackBucketCollapseOverrides();
 
             // "Create Tag" synthetic top row when user typed text in search box.
             // Uses Count sentinel so BindUserTagVirtButton can render different UI/behavior.
@@ -842,7 +886,8 @@ namespace VPB
             if (!VpbLocalDatabase.DataPackIndexReady) return;
 
             bool filterOn = !string.IsNullOrEmpty(filterUt);
-            if (!_userTagShowHubCatBucket && !filterOn)
+            bool expand = PackBucketExpanded(PackAvailBucketKind.HubCategory);
+            if (!expand && !filterOn)
             {
                 _userTagStickyRows.Add(new UserTagSideTabEntry
                 {
@@ -875,11 +920,14 @@ namespace VPB
             _userTagStickyRows.Add(new UserTagSideTabEntry
             {
                 Name = string.Format(
-                    VPBTranslation.T("gallery.usertags.hubcat_bucket_hide", "Hide Hub type ({0})"),
+                    expand
+                        ? VPBTranslation.T("gallery.usertags.hubcat_bucket_hide", "Hide Hub type ({0})")
+                        : VPBTranslation.T("gallery.usertags.hubcat_bucket", "Hub type ({0})"),
                     matchCount),
                 Count = UserTagHubCatBucketHeaderSentinel,
                 IsHubCategory = true
             });
+            if (!expand) return;
 
             var tmp = new List<UserTagSideTabEntry>(matchCount);
             for (int i = 0; i < src.Count; i++)
@@ -954,7 +1002,7 @@ namespace VPB
             else
                 matchCount = src.Count;
 
-            bool expand = (hub ? _userTagShowHubBucket : _userTagShowLooksBucket) || filterOn;
+            bool expand = PackBucketExpanded(hub ? PackAvailBucketKind.HubTag : PackAvailBucketKind.LooksLike);
             int headerSentinel = hub ? UserTagHubBucketHeaderSentinel : UserTagLooksBucketHeaderSentinel;
             string hideKey = hub
                 ? "gallery.usertags.hub_bucket_hide"
@@ -1292,9 +1340,7 @@ namespace VPB
                         if (dragSrc != null && dragSrc.ConsumedByDrag) return;
                         if (headerSnap)
                         {
-                            if (kindSnap == PackAvailBucketKind.HubTag) _userTagShowHubBucket = !_userTagShowHubBucket;
-                            else if (kindSnap == PackAvailBucketKind.HubCategory) _userTagShowHubCatBucket = !_userTagShowHubCatBucket;
-                            else _userTagShowLooksBucket = !_userTagShowLooksBucket;
+                            TogglePackBucketExpanded(kindSnap);
                             _userTagVirtViewSig = null;
                             try { RefreshUserTagsAvailPaneInPlace(sideLeft); } catch { }
                             return;
