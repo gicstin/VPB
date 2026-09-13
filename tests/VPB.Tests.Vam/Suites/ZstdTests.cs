@@ -170,6 +170,56 @@ namespace VPB.Tests
                 "garbage instead of being rebuilt.");
         }
 
+        [Fact]
+        public void ACorruptCacheEntryIsDeletedSoTheNextRequestRebuildsIt()
+        {
+            using (var install = new TempInstall("zstd_corrupt_sweep"))
+            {
+                string path = install.PathTo("Cache", "VPB", "rotten.zvamcache");
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllBytes(path, Encoding.ASCII.GetBytes("not a zstd frame"));
+                File.WriteAllText(path + "meta", "{}");
+
+                Exception thrown = Record.Exception(() => ZstdCompressor.LoadCache(path));
+                Assert.NotNull(thrown);
+
+                Assert.True(ImageLoadingMgr.TryHandleCorruptZstdRead(path, thrown),
+                    "A ZstdException on a cache read must drop the entry: " + HeadlessVam.DescribeUnwrapped(thrown));
+                Assert.False(File.Exists(path), "The corrupt payload survived the sweep.");
+                Assert.False(File.Exists(path + "meta"), "The corrupt entry's meta survived the sweep.");
+            }
+        }
+
+        [Fact]
+        public void AnUndersizedCapIsNotMistakenForCorruption()
+        {
+            byte[] packed = ZstdCompressor.Compress(Compressible(64 * 1024), 3);
+
+            Exception thrown = Record.Exception(() => ZstdCompressor.Decompress(packed, 1024));
+
+            Assert.NotNull(thrown);
+            Assert.False(ImageLoadingMgr.IsCorruptZstdPayload(thrown),
+                "A healthy frame that outgrew the caller's cap must never be deleted; only the bytes being " +
+                "unreadable counts as corruption.");
+        }
+
+        [Fact]
+        public void AnEntryOwnedByAWritePathIsNeverDeleted()
+        {
+            using (var install = new TempInstall("zstd_corrupt_busy"))
+            {
+                string path = install.PathTo("Cache", "VPB", "inflight.zvamcache");
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllBytes(path, Encoding.ASCII.GetBytes("not a zstd frame"));
+                File.WriteAllText(path + "meta", "{}");
+                File.WriteAllText(path + ".tmp", "");
+
+                Assert.False(ImageLoadingMgr.TryDeleteCorruptZstdEntry(path),
+                    "A path a write is still assembling must be left alone.");
+                Assert.True(File.Exists(path), "The sweep deleted a file a write path owns.");
+            }
+        }
+
         private static byte[] Trim(byte[] source, int length)
         {
             var trimmed = new byte[length];

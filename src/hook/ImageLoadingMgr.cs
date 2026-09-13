@@ -177,6 +177,8 @@ namespace VPB
                 catch (Exception ex) { LogUtil.LogError("Texture main-thread completion failed: " + ex); }
             }
 
+            FlushCorruptZstdCleanupSummary(false);
+
             if (mainThreadTextureCreatePump != null) return;
             lock (pendingMainThreadLock)
             {
@@ -288,7 +290,111 @@ namespace VPB
             lock (quarantineLock)
                 return quarantinedZstdPaths.Add(cachePath);
         }
-        
+
+        // --- Corrupt .zvamcache cleanup ---
+
+        private const int MaxCorruptZstdDeletionsPerSession = 512;
+        private const int CorruptZstdSummaryQuietMs = 3000;
+
+        private static int corruptZstdDeletions;
+        private static int corruptZstdDeletionsReported;
+        private static int corruptZstdLastDeleteTick;
+
+        internal static bool IsCorruptZstdPayload(Exception ex)
+        {
+            var ze = ex as ZstdException;
+            if (ze == null) return false;
+            return ze.Code != ZSTD_ErrorCode.ZSTD_error_dstSize_tooSmall;
+        }
+
+        internal static bool TryDeleteCorruptZstdEntry(string cachePath)
+        {
+            if (string.IsNullOrEmpty(cachePath)) return false;
+            if (IsZstdWritePathBusy(cachePath)) return false;
+
+            while (true)
+            {
+                int current = corruptZstdDeletions;
+                if (current >= MaxCorruptZstdDeletionsPerSession) return false;
+                if (Interlocked.CompareExchange(ref corruptZstdDeletions, current + 1, current) == current) break;
+            }
+
+            var mgr = singleton;
+            if (mgr != null) mgr.DropCachedZstdEntry(cachePath);
+
+            bool removed = false;
+            try { if (File.Exists(cachePath)) { File.Delete(cachePath); removed = true; } }
+            catch { }
+            try
+            {
+                string metaPath = cachePath + "meta";
+                if (File.Exists(metaPath)) { File.Delete(metaPath); removed = true; }
+            }
+            catch { }
+
+            Interlocked.Exchange(ref corruptZstdLastDeleteTick, Environment.TickCount);
+            return removed;
+        }
+
+        internal static bool TryHandleCorruptZstdRead(string cachePath, Exception ex)
+        {
+            if (!IsCorruptZstdPayload(ex)) return false;
+
+            var mgr = singleton;
+            if (mgr != null) mgr.QuarantineZstdPath(cachePath);
+            return TryDeleteCorruptZstdEntry(cachePath);
+        }
+
+        internal static void FlushCorruptZstdCleanupSummary(bool force)
+        {
+            int total = Thread.VolatileRead(ref corruptZstdDeletions);
+            int reported = Thread.VolatileRead(ref corruptZstdDeletionsReported);
+            if (total == reported) return;
+            if (!force && unchecked(Environment.TickCount - Thread.VolatileRead(ref corruptZstdLastDeleteTick)) < CorruptZstdSummaryQuietMs) return;
+            if (Interlocked.CompareExchange(ref corruptZstdDeletionsReported, total, reported) != reported) return;
+
+            LogUtil.Log("[VPB] Removed " + total + " corrupt Zstd cache entries");
+            if (total >= MaxCorruptZstdDeletionsPerSession)
+                LogUtil.LogWarning("[VPB] Corrupt Zstd cleanup hit its per-session limit of "
+                    + MaxCorruptZstdDeletionsPerSession + "; restart VaM to continue, or check the drive.");
+        }
+
+        private void DropCachedZstdEntry(string cachePath)
+        {
+            lock (metadataCacheLock)
+            {
+                metadataCache.Remove(cachePath);
+            }
+
+            lock (decompressedCacheLock)
+            {
+                CachedDecompressed entry;
+                if (decompressedCache.TryGetValue(cachePath, out entry))
+                {
+                    currentMemoryUsage -= entry.Data != null ? entry.Data.Length : 0;
+                    if (currentMemoryUsage < 0) currentMemoryUsage = 0;
+                    if (entry.LRUNode != null) lruOrder.Remove(entry.LRUNode);
+                    decompressedCache.Remove(cachePath);
+                }
+            }
+
+            lock (cachePathMapLock)
+            {
+                List<string> stale = null;
+                foreach (var kv in cachePathMap)
+                {
+                    if (string.Equals(kv.Value, cachePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (stale == null) stale = new List<string>(2);
+                        stale.Add(kv.Key);
+                    }
+                }
+                if (stale != null)
+                    for (int i = 0; i < stale.Count; i++) cachePathMap.Remove(stale[i]);
+            }
+        }
+
+
         private class DecompressedData
         {
             public string CacheKey;
@@ -1550,6 +1656,8 @@ namespace VPB
             }
             catch (Exception ex)
             {
+                if (TryHandleCorruptZstdRead(cachePath, ex))
+                    return null;
                 LogUtil.LogError("FastGetDecompressed failed: " + ex.Message);
                 return null;
             }
@@ -2685,7 +2793,7 @@ namespace VPB
             byte[] raw = ZstdCompressor.Decompress(compressed);
             if (raw == null || raw.Length == 0)
             {
-                throw new InvalidOperationException("decompress returned empty");
+                throw new ZstdException(ZSTD_ErrorCode.ZSTD_error_GENERIC, "decompress returned empty");
             }
 
             ZstdCompressor.SaveCache(zstdPath, raw, compressionLevel);
@@ -2818,6 +2926,8 @@ namespace VPB
             catch (Exception ex)
             {
                 BulkZstdNoteProgress(null, 0, 0, true, false, true);
+                if (item.Kind == BulkZstdWorkKind.RecompressZstd && TryHandleCorruptZstdRead(item.SourcePath, ex))
+                    return;
                 LogUtil.LogError("Bulk compression: Failed " + item.SourcePath + ": " + ex.Message);
             }
         }
@@ -3134,6 +3244,7 @@ namespace VPB
             LogUtil.Log(string.Format(
                 "Bulk compression completed: {0} compressed, {1} already up to date, {2} failed, {3} entries in zstd cache",
                 CurrentZstdStats.ProcessedFiles, CurrentZstdStats.SkippedCount, CurrentZstdStats.FailedCount, existingZstdEntries));
+            FlushCorruptZstdCleanupSummary(true);
         }
 
         public void StartBulkZstdDecompression()
@@ -3281,7 +3392,10 @@ namespace VPB
                 catch (Exception ex)
                 {
                     CurrentZstdStats.FailedCount++;
-                    LogUtil.LogError("Bulk decompression: Failed to revert " + file + ": " + ex.Message);
+                    if (TryHandleCorruptZstdRead(file, ex))
+                        LogUtil.LogWarning("Bulk decompression: dropped corrupt " + Path.GetFileName(file));
+                    else
+                        LogUtil.LogError("Bulk decompression: Failed to revert " + file + ": " + ex.Message);
                     CurrentZstdStats.ProcessedFiles++;
                 }
             }
@@ -3291,6 +3405,7 @@ namespace VPB
             CurrentZstdStats.Completed = true;
             CurrentZstdStats.CurrentFile = "Restored";
             LogUtil.Log(string.Format("Bulk decompression completed: {0} processed, {1} failed", CurrentZstdStats.ProcessedFiles, CurrentZstdStats.FailedCount));
+            FlushCorruptZstdCleanupSummary(true);
         }
 
         public static void WriteAlphaTextureToZstdCache(ImageLoaderThreaded.QueuedImage qi)

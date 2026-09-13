@@ -559,7 +559,10 @@ namespace VPB
                             }
                             catch (Exception ex)
                             {
-                                LogUtil.LogError("Exception during VPB cache file read " + ex);
+                                if (!ImageLoadingMgr.TryHandleCorruptZstdRead(vpbCachePath, ex))
+                                    LogUtil.LogError("Exception during VPB cache file read " + ex);
+                                preprocessed = false;
+                                loadedFromCache = false;
                             }
                         }
 
