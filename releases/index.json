@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-12T15:52:47Z",
+    "UpdatedUtc":  "2026-09-13T12:00:59Z",
     "MinRollbackVersion":  "0.32.406",
-    "ExcludedBelowMin":  416,
+    "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.696",
+                         "Tag":  "build-0.32.696-5ad6775",
+                         "Commit":  "5ad6775b713786e1e757aa544bf0243f32a003bd",
+                         "DateUtc":  "2026-09-13T12:00:52Z",
+                         "Notes":  "fix: multi-edge dock layouts and no-dock survive a VaM restart",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.688",
                          "Tag":  "build-0.32.688-873828a",
