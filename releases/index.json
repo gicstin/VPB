@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-13T12:30:39Z",
+    "UpdatedUtc":  "2026-09-13T12:56:24Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.700",
+                         "Tag":  "build-0.32.700-727e1a2",
+                         "Commit":  "727e1a21a98b2292ae4b046b820cc5dcbd2449cc",
+                         "DateUtc":  "2026-09-13T12:56:17Z",
+                         "Notes":  "fix: remember the star filter and open a default filter preset",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.698",
                          "Tag":  "build-0.32.698-31e041f",
