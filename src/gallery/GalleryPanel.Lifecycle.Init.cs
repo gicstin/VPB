@@ -29,7 +29,8 @@ namespace VPB
                 bool isVR = XrUtils.IsVrActive();
 
                 // First pane may auto-dock; later panes only when the user already docks and an edge is free.
-                bool wantDock = !isVR && VPBConfig.Instance.DesktopFixedMode;
+                bool wantDock = !isVR
+                    && (VPBConfig.Instance.DesktopFixedMode || GalleryDockLayout.AnySideWanted());
                 bool firstPane = Gallery.singleton == null || Gallery.singleton.PanelCount == 0;
                 isFixedLocally = wantDock && firstPane;
 
@@ -223,8 +224,9 @@ namespace VPB
                 {
                     canvasGO.SetActive(false);
                     canvasGO.SetActive(true);
-                    
+
                 }
+                MarkSessionArrangementDirty();
             };
 
             quickFiltersUI = new QuickFiltersUI(this, backgroundBoxGO);
@@ -241,8 +243,13 @@ namespace VPB
                 GalleryDockLayout.SelfHeal();
                 if (isFixedLocally && VPBConfig.Instance != null)
                 {
-                    GalleryDockSide side = ClaimDockSide(
-                        GalleryDockLayout.Parse(VPBConfig.Instance.DesktopFixedDockSide));
+                    GalleryDockSide preferred = GalleryDockLayout.WantedSideForPanel(PanelId);
+                    if (preferred == GalleryDockSide.None)
+                        preferred = GalleryDockLayout.FirstUnclaimedWantedSide();
+                    if (preferred == GalleryDockSide.None)
+                        preferred = GalleryDockLayout.Parse(VPBConfig.Instance.DesktopFixedDockSide);
+
+                    GalleryDockSide side = ClaimDockSide(preferred);
                     if (side == GalleryDockSide.None) isFixedLocally = false;
                     else ApplyDockAnchorsImmediate();
                 }

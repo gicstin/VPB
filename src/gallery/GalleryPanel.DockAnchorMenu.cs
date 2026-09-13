@@ -33,18 +33,17 @@ namespace VPB
         private Sprite _dockMenuRightIcon;
         private Sprite _dockMenuCloneIcon;
         private Sprite _dockMenuFloatIcon;
+        private Sprite _dockMenuCollapseIcon;
+        private Sprite _dockMenuExpandIcon;
+        private Sprite _dockMenuAutoHideOnIcon;
+        private Sprite _dockMenuAutoHideOffIcon;
+        private Sprite _dockMenuLayoutsIcon;
+        private Sprite _dockMenuCloseIcon;
 
-        /// <summary>Edge the "other side" entry targets: the far side from this pane, preferring a free one.</summary>
-        internal GalleryDockSide OppositeDockSideChoice()
+        private static readonly GalleryDockSide[] DockMenuSideOrder =
         {
-            GalleryDockSide cur = DockSide;
-            if (cur == GalleryDockSide.Left) return GalleryDockSide.Right;
-            if (cur == GalleryDockSide.Right) return GalleryDockSide.Left;
-
-            if (GalleryDockLayout.IsFreeFor(GalleryDockSide.Right, PanelId)) return GalleryDockSide.Right;
-            if (GalleryDockLayout.IsFreeFor(GalleryDockSide.Left, PanelId)) return GalleryDockSide.Left;
-            return GalleryDockSide.Right;
-        }
+            GalleryDockSide.Left, GalleryDockSide.Top, GalleryDockSide.Right
+        };
 
         private void EnsureDockAnchorMenuChrome()
         {
@@ -56,6 +55,12 @@ namespace VPB
             _dockMenuRightIcon = UI.LoadIconSprite("box-align-right", UI.BarIconGlyphTint);
             _dockMenuCloneIcon = UI.LoadIconSprite("copy-plus", UI.BarIconGlyphTint);
             _dockMenuFloatIcon = UI.LoadIconSprite("float-center", UI.BarIconGlyphTint);
+            _dockMenuCollapseIcon = UI.LoadIconSprite("layout-sidebar-right-collapse", UI.BarIconGlyphTint);
+            _dockMenuExpandIcon = UI.LoadIconSprite("layout-sidebar-right-expand", UI.BarIconGlyphTint);
+            _dockMenuAutoHideOnIcon = UI.LoadIconSprite("eye-off", UI.BarIconGlyphTint);
+            _dockMenuAutoHideOffIcon = UI.LoadIconSprite("eye", UI.BarIconGlyphTint);
+            _dockMenuLayoutsIcon = UI.LoadIconSprite("layout-board-split", UI.BarIconGlyphTint);
+            _dockMenuCloseIcon = UI.LoadIconSprite("square-x", UI.BarIconGlyphTint);
 
             _dockAnchorMenuGO = UI.CreatePopupMenuRoot(backgroundBoxGO, "DockAnchorMenu", CloseDockAnchorMenu);
             _dockAnchorMenuGO.SetActive(false);
@@ -85,41 +90,73 @@ namespace VPB
             if (panel == null) return;
             UI.DestroyAllChildren(panel);
 
-            GalleryDockSide other = OppositeDockSideChoice();
-            string otherName = GalleryDockLayout.ToConfigString(other);
-
-            bool topFree = GalleryDockLayout.IsFreeFor(GalleryDockSide.Top, PanelId);
-            bool otherFree = GalleryDockLayout.IsFreeFor(other, PanelId);
-            // A clone needs an edge nobody holds — "free for this pane" is not enough.
-            bool topFreeForClone = GalleryDockLayout.IsFreeFor(GalleryDockSide.Top, null);
-            bool otherFreeForClone = GalleryDockLayout.IsFreeFor(other, null);
             bool canClone = Gallery.singleton != null && Gallery.singleton.PanelCount < Gallery.MaxPanels;
 
-            UI.AddStretchPopupMenuRow(panel,
-                VPBTranslation.T("gallery.dock_anchor.to_top", "Dock to Top"),
-                () => { CloseDockAnchorMenu(); DockPaneToSide(GalleryDockSide.Top); },
-                isActive: DockSide == GalleryDockSide.Top, enabled: topFree, icon: _dockMenuTopIcon);
+            for (int i = 0; i < DockMenuSideOrder.Length; i++)
+            {
+                GalleryDockSide side = DockMenuSideOrder[i];
+                string name = GalleryDockLayout.ToConfigString(side);
+                UI.AddStretchPopupMenuRow(panel,
+                    string.Format(VPBTranslation.T("gallery.dock_anchor.to_side", "Dock to {0}"), name),
+                    () => { CloseDockAnchorMenu(); DockPaneToSide(side); },
+                    isActive: DockSide == side,
+                    enabled: GalleryDockLayout.IsFreeFor(side, PanelId),
+                    icon: DockMenuSideIcon(side));
+            }
 
-            UI.AddStretchPopupMenuRow(panel,
-                string.Format(VPBTranslation.T("gallery.dock_anchor.to_side", "Dock to {0}"), otherName),
-                () => { CloseDockAnchorMenu(); DockPaneToSide(other); },
-                isActive: DockSide == other, enabled: otherFree, icon: DockMenuSideIcon(other));
-
-            UI.AddStretchPopupMenuRow(panel,
-                VPBTranslation.T("gallery.dock_anchor.clone_top", "Clone → dock to Top"),
-                () => { CloseDockAnchorMenu(); CloneAndDockPane(GalleryDockSide.Top); },
-                isActive: false, enabled: canClone && topFreeForClone, icon: _dockMenuCloneIcon);
-
-            UI.AddStretchPopupMenuRow(panel,
-                string.Format(VPBTranslation.T("gallery.dock_anchor.clone_side", "Clone → dock to {0}"), otherName),
-                () => { CloseDockAnchorMenu(); CloneAndDockPane(other); },
-                isActive: false, enabled: canClone && otherFreeForClone, icon: _dockMenuCloneIcon);
-
-            // The only way back out of a dock now that the float/fixed rail toggle is gone.
             UI.AddStretchPopupMenuRow(panel,
                 VPBTranslation.T("gallery.dock_anchor.float", "Float this pane"),
                 () => { CloseDockAnchorMenu(); FloatPaneFromDock(); },
                 isActive: false, enabled: isFixedLocally, icon: _dockMenuFloatIcon);
+
+            if (isFixedLocally)
+            {
+                UI.AddStretchPopupMenuRow(panel,
+                    isCollapsed
+                        ? VPBTranslation.T("gallery.dock_anchor.expand", "Expand this dock")
+                        : VPBTranslation.T("gallery.dock_anchor.collapse", "Collapse this dock"),
+                    () => { CloseDockAnchorMenu(); SetCollapsed(!isCollapsed); },
+                    isActive: false, enabled: true,
+                    icon: isCollapsed ? _dockMenuExpandIcon : _dockMenuCollapseIcon);
+
+                bool autoHide = DockAutoHide;
+                UI.AddStretchPopupMenuRow(panel,
+                    autoHide
+                        ? VPBTranslation.T("gallery.dock_anchor.autohide_on", "Auto-hide this dock (on)")
+                        : VPBTranslation.T("gallery.dock_anchor.autohide_off", "Auto-hide this dock (off)"),
+                    () => { CloseDockAnchorMenu(); ToggleAutoHideMode(); },
+                    isActive: autoHide, enabled: true,
+                    icon: autoHide ? _dockMenuAutoHideOnIcon : _dockMenuAutoHideOffIcon);
+            }
+
+            UI.AddStretchPopupMenuRow(panel,
+                VPBTranslation.T("gallery.dock_anchor.clone_float", "Clone → floating pane"),
+                () => { CloseDockAnchorMenu(); CloneFloatingPane(); },
+                isActive: false, enabled: canClone, icon: _dockMenuCloneIcon);
+
+            for (int i = 0; i < DockMenuSideOrder.Length; i++)
+            {
+                GalleryDockSide side = DockMenuSideOrder[i];
+                // A clone needs an edge nobody holds - "free for this pane" is not enough.
+                if (!GalleryDockLayout.IsFreeFor(side, null)) continue;
+                string name = GalleryDockLayout.ToConfigString(side);
+                UI.AddStretchPopupMenuRow(panel,
+                    string.Format(VPBTranslation.T("gallery.dock_anchor.clone_side", "Clone → dock to {0}"), name),
+                    () => { CloseDockAnchorMenu(); CloneAndDockPane(side); },
+                    isActive: false, enabled: canClone, icon: _dockMenuCloneIcon);
+            }
+
+            UI.AddStretchPopupMenuRow(panel,
+                VPBTranslation.T("gallery.dock_anchor.layouts", "Layouts…"),
+                () => { CloseDockAnchorMenu(); ToggleLayoutPresetsFloat(); },
+                isActive: false, enabled: true, icon: _dockMenuLayoutsIcon);
+
+            UI.AddStretchPopupMenuRow(panel,
+                VPBTranslation.T("gallery.dock_anchor.close_pane", "Close this pane"),
+                () => { CloseDockAnchorMenu(); Close(); },
+                isActive: false,
+                enabled: Gallery.singleton != null && Gallery.singleton.PanelCount > 1,
+                icon: _dockMenuCloseIcon);
         }
 
         /// <summary>
@@ -198,6 +235,7 @@ namespace VPB
                 panelRT.pivot = new Vector2(0.5f, 0f);
                 panelRT.anchoredPosition = new Vector2(local.x, local.y + anchorRT.rect.height * 0.5f + gap);
                 UI.ClampPopupMenuPanelX(panelRT, overlayRT, 8f * s);
+                UI.ClampPopupMenuPanelY(panelRT, overlayRT, 8f * s);
                 return;
             }
 
@@ -208,6 +246,7 @@ namespace VPB
                 toRight ? local.x + halfBtn + gap : local.x - halfBtn - gap,
                 local.y);
             UI.ClampPopupMenuPanelX(panelRT, overlayRT, 8f * s);
+            UI.ClampPopupMenuPanelY(panelRT, overlayRT, 8f * s);
         }
 
         /// <summary>Live UI-scale change while the menu is open — rows and panel width must both follow.</summary>
@@ -228,6 +267,12 @@ namespace VPB
             _dockAnchorMenuOpen = false;
             _dockAnchorMenuAnchorGO = null;
             if (_dockAnchorMenuGO != null) _dockAnchorMenuGO.SetActive(false);
+        }
+
+        private void CloneFloatingPane()
+        {
+            if (Gallery.singleton == null) return;
+            Gallery.singleton.ClonePanel(this, true);
         }
 
         /// <summary>

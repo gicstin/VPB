@@ -3228,7 +3228,7 @@ namespace VPB
             if (!isFixedLocally) return;
 
             isFixedLocally = false;
-            try { ReleaseDockSide(); } catch { }
+            try { ReleaseDockSideByUser(); } catch { }
             VPBConfig.Instance.DesktopFixedMode = GalleryDockLayout.OccupiedCount() > 0;
             VPBConfig.Instance.Save();
             UpdateDockAnchorButton();
@@ -3257,7 +3257,7 @@ namespace VPB
             }
             else
             {
-                try { ReleaseDockSide(); } catch { }
+                try { ReleaseDockSideByUser(); } catch { }
             }
 
             isFixedLocally = fixedMode;

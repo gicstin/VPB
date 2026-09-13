@@ -13,6 +13,16 @@ namespace VPB
         public void Close()
         {
             VpbPerfDiag.LogTransition("GalleryPanel.Close", null);
+            LogUtil.Log("[VPB][Layout] pane closing: id=" + PanelId
+                + " dock=" + GalleryDockLayout.ToConfigString(DockSide)
+                + " docked=" + isFixedLocally
+                + " closingAll=" + Gallery.ClosingAllPanes
+                + " layoutApply=" + IsLayoutApplyRunning);
+
+            if (isFixedLocally && !Gallery.ClosingAllPanes && !IsLayoutApplyRunning)
+            {
+                try { ReleaseDockSideByUser(); } catch { }
+            }
             try { PersistCurrentBrowsePlace(); } catch { }
             ReleaseVamMenuAnchor();
             if (Gallery.singleton != null)

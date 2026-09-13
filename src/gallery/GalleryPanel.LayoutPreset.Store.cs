@@ -189,6 +189,40 @@ namespace VPB
             return true;
         }
 
+        internal static bool IsStartupLayoutPreset(GalleryLayoutPreset preset)
+        {
+            VPBConfig cfg = VPBConfig.Instance;
+            if (preset == null || cfg == null || preset.Id <= 0) return false;
+            int id = preset.IsVrPreset ? cfg.LayoutPresetStartupIdVR : cfg.LayoutPresetStartupIdDesktop;
+            return id == preset.Id;
+        }
+
+        internal bool ToggleStartupLayoutPreset(GalleryLayoutPreset preset)
+        {
+            VPBConfig cfg = VPBConfig.Instance;
+            if (preset == null || cfg == null) return false;
+            if (preset.Id <= 0)
+            {
+                ShowTemporaryStatus(VPBTranslation.T(
+                    "gallery.status.layout_startup_unsaved",
+                    "Save the layout first — an unsaved one cannot be the startup layout."), 2.5f);
+                return false;
+            }
+
+            bool on = !IsStartupLayoutPreset(preset);
+            int id = on ? preset.Id : 0;
+            if (preset.IsVrPreset) cfg.LayoutPresetStartupIdVR = id;
+            else cfg.LayoutPresetStartupIdDesktop = id;
+            cfg.Save(false, true);
+
+            ShowTemporaryStatus(on
+                ? string.Format(VPBTranslation.T(
+                    "gallery.status.layout_startup_set", "Opens with: {0}"), preset.Name ?? "")
+                : VPBTranslation.T(
+                    "gallery.status.layout_startup_cleared", "Opens with the last session's layout again."), 2.5f);
+            return on;
+        }
+
         internal bool ToggleLayoutPresetPinned(GalleryLayoutPreset preset)
         {
             if (preset == null || preset.IsBuiltIn) return false;

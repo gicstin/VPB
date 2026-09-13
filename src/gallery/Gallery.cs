@@ -535,7 +535,6 @@ namespace VPB
 
         void OnDestroy()
         {
-            // Panels clean themselves up usually, but we can ensure destruction
             foreach (var p in panels.ToList())
             {
                 if (p != null && p.gameObject != null) Destroy(p.gameObject);
@@ -551,11 +550,14 @@ namespace VPB
         {
             if (p == null || panels.Contains(p)) return;
             // Empty list → primary slot (durable). Extra panes get monotonic ids (not recycled) so concurrent panes keep distinct filter rows.
+            if (panels.Count == 0) GalleryPanel.ResetLayoutApplyLatches();
+
             string id = panels.Count == 0
                 ? GalleryPanel.PrimaryPanelId
                 : ("panel_" + (_nextExtraPanelSlot++));
             try { p.AssignStablePanelId(id); } catch { }
             panels.Add(p);
+            GalleryPanel.MarkSessionArrangementDirty(false);
         }
 
         public void RemovePanel(GalleryPanel p)
@@ -565,6 +567,7 @@ namespace VPB
                 try { GalleryDockLayout.Release(p.PanelId); } catch { }
             }
             if (panels.Contains(p)) panels.Remove(p);
+            GalleryPanel.MarkSessionArrangementDirty();
             // All panes gone → next create is primary again (browse memory restores).
             if (panels.Count == 0)
                 _nextExtraPanelSlot = 1;
@@ -948,20 +951,28 @@ namespace VPB
         public void Hide()
         {
             VpbPerfDiag.LogTransition("Gallery.Hide", "panels=" + panels.Count);
+            try { GalleryPanel.SaveSessionArrangementSnapshotNow(); } catch { }
             foreach(var p in panels)
             {
                 p.Hide();
             }
         }
 
+        internal static bool ClosingAllPanes;
+
         public void CloseAll()
         {
             VpbPerfDiag.LogTransition("Gallery.CloseAll", "panels=" + panels.Count);
-            foreach (var p in panels.ToList())
+            ClosingAllPanes = true;
+            try
             {
-                if (p == null) continue;
-                p.Close();
+                foreach (var p in panels.ToList())
+                {
+                    if (p == null) continue;
+                    p.Close();
+                }
             }
+            finally { ClosingAllPanes = false; }
         }
 
         public void BringAllToFront()

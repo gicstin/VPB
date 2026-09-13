@@ -231,6 +231,12 @@ namespace VPB
             InvalidateDockSideCache();
         }
 
+        internal void ReleaseDockSideByUser()
+        {
+            GalleryDockLayout.ReleaseByUser(PanelId);
+            InvalidateDockSideCache();
+        }
+
         /// <summary>Resolves the edge a dock request should target, honouring enforcement then the caller's hint.</summary>
         internal GalleryDockSide ResolvePreferredDockSide(string hintOrNull)
         {

@@ -729,6 +729,13 @@ namespace VPB
                     () => { CloseLayoutPresetRowMenu(); ToggleLayoutPresetPinned(target); RefreshLayoutPresetsList(true); },
                     target.Pinned);
             }
+            bool startup = IsStartupLayoutPreset(target);
+            AddLayoutPresetMenuRow(panel,
+                startup
+                    ? VPBTranslation.T("gallery.layout_preset.menu_startup_off", "Stop opening with this layout")
+                    : VPBTranslation.T("gallery.layout_preset.menu_startup_on", "Open with this layout"),
+                () => { CloseLayoutPresetRowMenu(); ToggleStartupLayoutPreset(target); RefreshLayoutPresetsList(false); },
+                startup);
             AddLayoutPresetMenuRow(panel,
                 target.IsVrPreset
                     ? VPBTranslation.T("gallery.layout_preset.menu_to_desktop", "Convert to Desktop")

@@ -145,7 +145,12 @@ namespace VPB
                     if (this == null || canvas == null) yield break;
 
                     int after = Gallery.singleton != null ? Gallery.singleton.PanelCount : 0;
-                    if (after <= before) break;
+                    if (after <= before)
+                    {
+                        LogUtil.LogWarning("[VPB][Layout] pane creation failed at " + before
+                            + " of " + want + " panes");
+                        break;
+                    }
 
                     GalleryPanel added = Gallery.singleton.Panels[after - 1];
                     if (added == null) break;
@@ -161,6 +166,8 @@ namespace VPB
 
                     if (LayoutApplyShouldAbort(false))
                     {
+                        LogUtil.LogWarning("[VPB][Layout] apply stopped at pane " + (i + 1) + " of " + applied
+                            + " - scene load or drag in progress");
                         ShowTemporaryStatus(VPBTranslation.T(
                             "gallery.status.layout_aborted", "Layout apply stopped — undo is still available."), 2.5f);
                         yield break;
@@ -237,6 +244,9 @@ namespace VPB
                     catch { }
                 }
 
+                try { ReconcileDesktopDockStateAfterApply(preset); }
+                catch (Exception ex) { LogUtil.LogError("[VPB][Layout] dock reconcile: " + ex.Message); }
+
                 try
                 {
                     if (VPBConfig.Instance != null) VPBConfig.Instance.Save(false, true);
@@ -255,7 +265,16 @@ namespace VPB
                 s_layoutApplyRunning = false;
                 _layoutApplyCo = null;
                 _layoutApplyOrder.Clear();
+                bool wasRestore = s_sessionArrangementRestoring;
+                ClearSessionArrangementRestoring();
+                if (!wasRestore) MarkSessionArrangementDirty();
             }
+        }
+
+        private static void ReconcileDesktopDockStateAfterApply(GalleryLayoutPreset preset)
+        {
+            if (preset != null && preset.IsVrPreset) return;
+            GalleryDockLayout.ReconcileDesktopStateFromClaims(!s_sessionArrangementRestoring);
         }
 
         /// <summary>This pane first — it hosts the coroutine and must outlive the reconcile.</summary>

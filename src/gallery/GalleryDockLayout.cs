@@ -19,6 +19,8 @@ namespace VPB
     public sealed class GalleryDockSlot
     {
         public bool Occupied;
+
+        public bool Wanted;
         public string PanelId = "";
         public float WidthFree = GalleryUiDesignTokens.GoldenRatioMajor;
         public float CustomHeight = 0.5f;
@@ -27,6 +29,7 @@ namespace VPB
         public bool AutoHide = true;
 
         private readonly string _kOccupied;
+        private readonly string _kWanted;
         private readonly string _kPanelId;
         private readonly string _kWidthFree;
         private readonly string _kCustomHeight;
@@ -37,6 +40,7 @@ namespace VPB
         internal GalleryDockSlot(string keyPrefix)
         {
             _kOccupied = keyPrefix + "Occupied";
+            _kWanted = keyPrefix + "Wanted";
             _kPanelId = keyPrefix + "PanelId";
             _kWidthFree = keyPrefix + "WidthFree";
             _kCustomHeight = keyPrefix + "CustomHeight";
@@ -48,6 +52,7 @@ namespace VPB
         public void Reset()
         {
             Occupied = false;
+            Wanted = false;
             PanelId = "";
             WidthFree = GalleryUiDesignTokens.GoldenRatioMajor;
             CustomHeight = 0.5f;
@@ -75,6 +80,7 @@ namespace VPB
         {
             if (node == null) return;
             if (node[_kOccupied] != null) Occupied = node[_kOccupied].AsBool;
+            Wanted = node[_kWanted] != null ? node[_kWanted].AsBool : Occupied;
             if (node[_kPanelId] != null) PanelId = node[_kPanelId].Value ?? "";
             if (node[_kWidthFree] != null) WidthFree = node[_kWidthFree].AsFloat;
             if (node[_kCustomHeight] != null) CustomHeight = node[_kCustomHeight].AsFloat;
@@ -87,6 +93,7 @@ namespace VPB
         {
             if (node == null) return;
             node[_kOccupied].AsBool = Occupied;
+            node[_kWanted].AsBool = Wanted;
             node[_kPanelId] = PanelId ?? "";
             node[_kWidthFree].AsFloat = WidthFree;
             node[_kCustomHeight].AsFloat = CustomHeight;
@@ -183,6 +190,83 @@ namespace VPB
             if (cfg.DockTop.Occupied) n++;
             if (cfg.DockRight.Occupied) n++;
             return n;
+        }
+
+        public static bool WantsSide(GalleryDockSide side)
+        {
+            GalleryDockSlot slot = Slot(side);
+            return slot != null && slot.Wanted;
+        }
+
+        public static int WantedSideCount()
+        {
+            int n = 0;
+            if (WantsSide(GalleryDockSide.Left)) n++;
+            if (WantsSide(GalleryDockSide.Top)) n++;
+            if (WantsSide(GalleryDockSide.Right)) n++;
+            return n;
+        }
+
+        public static bool AnySideWanted()
+        {
+            return WantsSide(GalleryDockSide.Left)
+                || WantsSide(GalleryDockSide.Top)
+                || WantsSide(GalleryDockSide.Right);
+        }
+
+        public static void SyncWantedToOccupied()
+        {
+            VPBConfig cfg = VPBConfig.Instance;
+            if (cfg == null) return;
+            cfg.DockLeft.Wanted = cfg.DockLeft.Occupied;
+            cfg.DockTop.Wanted = cfg.DockTop.Occupied;
+            cfg.DockRight.Wanted = cfg.DockRight.Occupied;
+        }
+
+        public static GalleryDockSide WantedSideForPanel(string panelId)
+        {
+            VPBConfig cfg = VPBConfig.Instance;
+            if (cfg == null || string.IsNullOrEmpty(panelId)) return GalleryDockSide.None;
+
+            if (cfg.DockLeft.Wanted && string.Equals(cfg.DockLeft.PanelId, panelId, StringComparison.Ordinal))
+                return GalleryDockSide.Left;
+            if (cfg.DockTop.Wanted && string.Equals(cfg.DockTop.PanelId, panelId, StringComparison.Ordinal))
+                return GalleryDockSide.Top;
+            if (cfg.DockRight.Wanted && string.Equals(cfg.DockRight.PanelId, panelId, StringComparison.Ordinal))
+                return GalleryDockSide.Right;
+            return GalleryDockSide.None;
+        }
+
+        public static void ReconcileDesktopStateFromClaims(bool syncWanted)
+        {
+            VPBConfig cfg = VPBConfig.Instance;
+            if (cfg == null) return;
+
+            cfg.DesktopFixedMode = OccupiedCount() > 0;
+            if (syncWanted) SyncWantedToOccupied();
+
+            GalleryDockSide primary = SideOf(GalleryPanel.PrimaryPanelId);
+            if (primary == GalleryDockSide.None) primary = FirstOccupiedSide();
+            if (primary != GalleryDockSide.None)
+                cfg.DesktopFixedDockSide = ToConfigString(primary);
+        }
+
+        public static GalleryDockSide FirstOccupiedSide()
+        {
+            VPBConfig cfg = VPBConfig.Instance;
+            if (cfg == null) return GalleryDockSide.None;
+            if (cfg.DockLeft.Occupied) return GalleryDockSide.Left;
+            if (cfg.DockTop.Occupied) return GalleryDockSide.Top;
+            if (cfg.DockRight.Occupied) return GalleryDockSide.Right;
+            return GalleryDockSide.None;
+        }
+
+        public static GalleryDockSide FirstUnclaimedWantedSide()
+        {
+            if (WantsSide(GalleryDockSide.Left) && !Slot(GalleryDockSide.Left).Occupied) return GalleryDockSide.Left;
+            if (WantsSide(GalleryDockSide.Top) && !Slot(GalleryDockSide.Top).Occupied) return GalleryDockSide.Top;
+            if (WantsSide(GalleryDockSide.Right) && !Slot(GalleryDockSide.Right).Occupied) return GalleryDockSide.Right;
+            return GalleryDockSide.None;
         }
 
         private static bool AnySideOccupied()
@@ -360,8 +444,10 @@ namespace VPB
 
             ReleaseInternal(panelId, side);
             slot.Occupied = true;
+            slot.Wanted = true;
             slot.PanelId = panelId;
             BumpVersion();
+            GalleryPanel.MarkSessionArrangementDirty();
             return true;
         }
 
@@ -369,6 +455,20 @@ namespace VPB
         {
             if (ReleaseInternal(panelId, GalleryDockSide.None))
                 BumpVersion();
+        }
+
+        public static void ReleaseByUser(string panelId)
+        {
+            if (string.IsNullOrEmpty(panelId)) return;
+            VPBConfig cfg = VPBConfig.Instance;
+            if (cfg != null)
+            {
+                if (string.Equals(cfg.DockLeft.PanelId, panelId, StringComparison.Ordinal)) cfg.DockLeft.Wanted = false;
+                if (string.Equals(cfg.DockTop.PanelId, panelId, StringComparison.Ordinal)) cfg.DockTop.Wanted = false;
+                if (string.Equals(cfg.DockRight.PanelId, panelId, StringComparison.Ordinal)) cfg.DockRight.Wanted = false;
+            }
+            Release(panelId);
+            GalleryPanel.MarkSessionArrangementDirty();
         }
 
         private static bool ReleaseInternal(string panelId, GalleryDockSide keep)
@@ -389,7 +489,7 @@ namespace VPB
             if (slot == null || keep || !slot.Occupied) return false;
             if (!string.Equals(slot.PanelId, panelId, StringComparison.Ordinal)) return false;
             slot.Occupied = false;
-            slot.PanelId = "";
+            if (!slot.Wanted) slot.PanelId = "";
             return true;
         }
 
@@ -405,16 +505,21 @@ namespace VPB
             if (from == to) return true;
 
             GalleryDockSlot src = Slot(from);
-            if (src != null) dest.CopyGeometryFrom(src);
+            if (src != null)
+            {
+                dest.CopyGeometryFrom(src);
+                src.Wanted = false;
+            }
 
             ReleaseInternal(panelId, to);
             dest.Occupied = true;
+            dest.Wanted = true;
             dest.PanelId = panelId;
             BumpVersion();
+            GalleryPanel.MarkSessionArrangementDirty();
             return true;
         }
 
-        /// <summary>Drops claims whose owning pane is gone, so a stale id can never hold an edge hostage.</summary>
         public static void SelfHeal()
         {
             VPBConfig cfg = VPBConfig.Instance;
@@ -431,7 +536,7 @@ namespace VPB
             if (slot == null || !slot.Occupied) return false;
             if (!string.IsNullOrEmpty(slot.PanelId) && Gallery.HasPanelWithId(slot.PanelId)) return false;
             slot.Occupied = false;
-            slot.PanelId = "";
+            if (!slot.Wanted) slot.PanelId = "";
             return true;
         }
 
@@ -455,6 +560,7 @@ namespace VPB
                 if (active != null)
                 {
                     active.Occupied = cfg.DesktopFixedMode;
+                    active.Wanted = cfg.DesktopFixedMode;
                     active.PanelId = active.Occupied ? GalleryPanel.PrimaryPanelId : "";
                 }
             }
