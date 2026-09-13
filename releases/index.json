@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-13T12:11:35Z",
+    "UpdatedUtc":  "2026-09-13T12:30:39Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.698",
+                         "Tag":  "build-0.32.698-31e041f",
+                         "Commit":  "31e041fae2c9dde1a6cd5a1136418bedd08fb68f",
+                         "DateUtc":  "2026-09-13T12:30:31Z",
+                         "Notes":  "fix: delete corrupt Zstd cache entries",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.697",
                          "Tag":  "build-0.32.697-1dca5ba",
