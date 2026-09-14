@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-14T16:00:30Z",
+    "UpdatedUtc":  "2026-09-14T16:18:03Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.721",
+                         "Tag":  "build-0.32.721-36525fd",
+                         "Commit":  "36525fd55cb9d34b43e4ff6432e1ed64a8c03fa9",
+                         "DateUtc":  "2026-09-14T16:17:55Z",
+                         "Notes":  "feat: undo history, roll back several steps at once",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.720",
                          "Tag":  "build-0.32.720-6289850",
