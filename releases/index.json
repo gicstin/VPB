@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-13T15:52:58Z",
+    "UpdatedUtc":  "2026-09-14T16:00:30Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.720",
+                         "Tag":  "build-0.32.720-6289850",
+                         "Commit":  "6289850bf444a23b49f469718f15ffe79569b7d7",
+                         "DateUtc":  "2026-09-14T16:00:24Z",
+                         "Notes":  "fix: rescan picks up VARs replaced in place",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.706",
                          "Tag":  "build-0.32.706-73ec86a",
