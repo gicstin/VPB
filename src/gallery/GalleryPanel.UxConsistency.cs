@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace VPB
@@ -26,6 +27,7 @@ namespace VPB
         private const float GridCtxAccelColRef = 28f;
         /// <summary>Inset from row right edge to accelerator column right edge.</summary>
         private const float GridCtxAccelPadRef = GalleryUiDesignTokens.RegionGapRef;
+        private readonly List<RaycastResult> _gridCtxRaycastResults = new List<RaycastResult>(16);
 
         private struct GridCtxHotkey
         {
@@ -136,6 +138,37 @@ namespace VPB
             return _gridCtxMenuGO != null;
         }
 
+        private void ForwardGridContextMenuRightClick(PointerEventData eventData)
+        {
+            if (eventData == null || _gridCtxMenuGO == null) return;
+
+            Transform backdrop = _gridCtxMenuGO.transform.Find("Backdrop");
+            Graphic backdropGraphic = backdrop != null ? backdrop.GetComponent<Graphic>() : null;
+            if (backdropGraphic == null) return;
+
+            bool raycastTarget = backdropGraphic.raycastTarget;
+            backdropGraphic.raycastTarget = false;
+            _gridCtxRaycastResults.Clear();
+            try
+            {
+                EventSystem eventSystem = EventSystem.current;
+                if (eventSystem != null)
+                    eventSystem.RaycastAll(eventData, _gridCtxRaycastResults);
+            }
+            finally
+            {
+                backdropGraphic.raycastTarget = raycastTarget;
+            }
+
+            for (int i = 0; i < _gridCtxRaycastResults.Count; i++)
+            {
+                UIFileEntryLeftReleaseSelect target = _gridCtxRaycastResults[i].gameObject.GetComponentInParent<UIFileEntryLeftReleaseSelect>();
+                if (target == null) continue;
+                target.OnAlternatePointerClick(eventData);
+                return;
+            }
+        }
+
         /// <summary>
         /// Context-menu keyboard: Esc/Backspace/← back or dismiss; single-letter/digit accelerators
         /// (Galitz menu accelerators; power-user dual path). No modifiers — avoids Ctrl/Alt chords.
@@ -199,6 +232,16 @@ namespace VPB
 
             GameObject root = UI.CreatePopupMenuRoot(backgroundBoxGO, "VPB_GridCtxMenu", CloseGridContextMenu);
             _gridCtxMenuGO = root;
+
+            Transform backdrop = root.transform.Find("Backdrop");
+            if (backdrop != null)
+            {
+                Button backdropButton = backdrop.GetComponent<Button>();
+                if (backdropButton != null) Destroy(backdropButton);
+                UIAlternateClickBackdrop input = backdrop.gameObject.AddComponent<UIAlternateClickBackdrop>();
+                input.OnLeftClick = CloseGridContextMenu;
+                input.OnRightClick = ForwardGridContextMenuRightClick;
+            }
 
             _gridCtxMenuPanelGO = UI.CreatePopupMenuPanel(
                 root,
@@ -345,6 +388,20 @@ namespace VPB
                     CloseGridContextMenu();
                     try { CopySelectedPackageNamesToClipboard(forceFullPaths: true); } catch { }
                 });
+            if (file != null)
+            {
+                GridCtxAddAction(
+                    VPBTranslation.T("gallery.gridctx.fetch_missing_deps", "Fetch Missing Deps"),
+                    KeyCode.F, "F",
+                    GridCtxIcon("package-import"),
+                    () =>
+                    {
+                        FileEntry f = _gridCtxMenuFile;
+                        CloseGridContextMenu();
+                        if (f != null) try { FetchMissingDependencies(f); } catch { }
+                    },
+                    enabled: !VpbHubDependencyFetcher.Busy);
+            }
             if (file != null)
             {
                 GridCtxAddAction(

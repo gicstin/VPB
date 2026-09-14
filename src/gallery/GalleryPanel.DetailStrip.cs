@@ -2438,10 +2438,18 @@ namespace VPB
         {
             int count = currentFilteredFiles != null ? currentFilteredFiles.Count : 0;
             int idx = _detailStripScrubIndex;
-            if (idx < 0 || (count > 0 && idx >= count))
+            bool historyBrowse = activeContentType == ContentType.History;
+            string navKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
+            bool cachedIndexMatchesSelection = idx >= 0
+                && idx < count
+                && !string.IsNullOrEmpty(navKey)
+                && currentFilteredFiles != null
+                && string.Equals(
+                    GetSelectionIdentityKey(currentFilteredFiles[idx], historyBrowse),
+                    navKey,
+                    StringComparison.OrdinalIgnoreCase);
+            if (!cachedIndexMatchesSelection)
             {
-                bool historyBrowse = activeContentType == ContentType.History;
-                string navKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
                 if (string.IsNullOrEmpty(navKey) && selectedFiles != null && selectedFiles.Count > 0)
                     navKey = GetSelectionIdentityKey(selectedFiles[0], historyBrowse);
                 if (!string.IsNullOrEmpty(navKey) && currentFilteredFiles != null)
@@ -6147,9 +6155,16 @@ namespace VPB
             bool historyBrowse = activeContentType == ContentType.History;
             int count = currentFilteredFiles.Count;
             int currentIndex = _detailStripScrubIndex;
-            if (currentIndex < 0 || currentIndex >= count)
+            string navKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
+            bool cachedIndexMatchesSelection = currentIndex >= 0
+                && currentIndex < count
+                && !string.IsNullOrEmpty(navKey)
+                && string.Equals(
+                    GetSelectionIdentityKey(currentFilteredFiles[currentIndex], historyBrowse),
+                    navKey,
+                    StringComparison.OrdinalIgnoreCase);
+            if (!cachedIndexMatchesSelection)
             {
-                string navKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
                 if (string.IsNullOrEmpty(navKey) && selectedFiles != null && selectedFiles.Count > 0)
                     navKey = GetSelectionIdentityKey(selectedFiles[0], historyBrowse);
                 if (!string.IsNullOrEmpty(navKey))

@@ -145,6 +145,7 @@ namespace VPB
             try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
             try { DataPackStatusRowTick(); } catch { }
             try { RemoveModeUpdate(); } catch { }
+            CloseHubFetchConfirmModalIfAbandoned();
 
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;
 

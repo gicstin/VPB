@@ -428,6 +428,7 @@ namespace VPB
 
         void OnDestroy()
         {
+            try { CloseHubFetchConfirmModal(false); } catch { }
             ReleaseVamMenuAnchor();
             StopCo(ref _categoryQuickApplyCoroutine);
             try { _filterRandomizeGen++; } catch { }

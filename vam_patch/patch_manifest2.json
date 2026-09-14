@@ -1,7 +1,7 @@
 {
     "ManifestVersion":  2,
-    "Version":  "0.32.721",
-    "BuiltUtc":  "2026-09-14T16:13:58Z",
+    "Version":  "0.32.727",
+    "BuiltUtc":  "2026-09-14T17:36:02Z",
     "Schema":  13,
     "Files":  [
                   {
@@ -175,8 +175,8 @@
                   {
                       "RelativePath":  "BepInEx/plugins/VPB/VPB.dll",
                       "IsDirectory":  false,
-                      "Sha1":  "8d25915969647ed544d38af92c058a52c1b56040",
-                      "Size":  6491136
+                      "Sha1":  "76debbc56b8bc895c95693356487a8474f1ab58d",
+                      "Size":  6533632
                   },
                   {
                       "RelativePath":  "BepInEx/plugins/VPB/assets",
@@ -235,8 +235,8 @@
                   {
                       "RelativePath":  "BepInEx/plugins/VPB/assets/help/en.md",
                       "IsDirectory":  false,
-                      "Sha1":  "bd62f695ad8c8d77673849106d39a736bf1c8b4c",
-                      "Size":  32830
+                      "Sha1":  "d2f9e2ba36a89e2e7da8d62f3b22ef7f0a1b2e2d",
+                      "Size":  33978
                   },
                   {
                       "RelativePath":  "BepInEx/plugins/VPB/assets/translations",

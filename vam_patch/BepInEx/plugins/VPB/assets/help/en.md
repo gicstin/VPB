@@ -187,6 +187,19 @@ The side column lists cleanup views: all, duplicates, old versions, damaged, sta
 
 Select rows, then use the **toolbox** at the bottom for cleanup actions: filter tabs, select visible/duplicates/old/damaged, add or remove exclude list, delete, and more. Normal toolbox buttons are replaced while Cleanup is active.
 
+## Missing packages
+
+Items that reference packages you do not have show a missing-dependency badge. VPB can fetch those from the VaM Hub instead of sending you to a browser.
+
+- **On launch** — when a scene or preset needs packages you do not have, VPB asks first, listing each package and the total download, then fetches them before the scene loads. Set this to **Always** (no prompt) or **Off** in Settings → Maintenance → *Fetch missing packages from the Hub*.
+- **On demand** — right-click any item and choose **Fetch Missing Deps**.
+- Downloads resolve further dependencies of whatever arrives, so one fetch usually completes the whole chain.
+- The progress banner has a **Cancel** button; packages already downloaded are kept.
+- *Hub download limit (MB; 0 = no limit)* caps a single fetch. Over the limit, the prompt still lets you accept; **Always** skips the fetch and loads without the missing packages. **Always** also skips packages whose sizes the Hub does not report.
+- Paid or removed packages are not on the Hub — those are listed and the item loads without them.
+
+Requires the Hub to be enabled and signed in inside VaM.
+
 ## Selection
 
 ### Select items in the grid

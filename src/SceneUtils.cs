@@ -35,6 +35,7 @@ namespace VPB
             public bool DepsChanged;
             public int ReferencedCount;
             public int MissingCount;
+            public List<string> MissingKeys;
 
             public bool IsDegraded
             {
@@ -789,6 +790,7 @@ namespace VPB
                                             LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}: {list}");
                                         }
                                         result.MissingCount = missing;
+                                        result.MissingKeys = missingKeys;
                                     }
                                     catch { }
 
@@ -938,6 +940,7 @@ namespace VPB
                     LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}: {list}");
                 }
                 result.MissingCount = missing;
+                result.MissingKeys = missingKeys;
             }
             catch { }
         }

@@ -691,6 +691,8 @@ namespace VPB
             public bool VerticalMoveKeysEnabled;
             public bool DataPackLookapediaEnabled;
             public bool DataPackHubTagsEnabled;
+            public string HubFetchMissingMode;
+            public int HubFetchMissingMaxMB;
             public bool RequireDragHoldBeforeMove;
             public float DragHoldThreshold;
             public float HoldToLaunchHoldSeconds;
@@ -1477,6 +1479,35 @@ namespace VPB
                     VPBConfig.Instance.TriggerChange();
                     try { UpdateTabs(); } catch { }
                 }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.hubFetchMissingMode", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.hub_fetch_missing_mode", "Fetch missing packages from the Hub"),
+                Tooltip = VPBTranslation.T("settings.tip.hub_fetch_missing_mode", "Before launching an item, download the packages it needs but you do not have. Ask = show what would be downloaded first. Always = download without asking. Dependencies of the downloads are resolved too. Needs the Hub enabled in VaM."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Off", "Ask", "Always" },
+                GetString = () => VpbHubDependencyFetcher.NormalizeMode(VPBConfig.Instance.HubFetchMissingMode),
+                SetString = v => {
+                    VPBConfig.Instance.HubFetchMissingMode = VpbHubDependencyFetcher.NormalizeMode(v);
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                },
+                DefaultString = "Ask", HasDefault = true
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.hubFetchMissingMaxMB", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.hub_fetch_missing_max_mb", "Hub download limit (MB; 0 = no limit)"),
+                Tooltip = VPBTranslation.T("settings.tip.hub_fetch_missing_max_mb", "Largest total download the automatic fetch may start. Set 0 for no limit. Over the limit, Ask still lets you accept; Always skips the fetch and loads without the missing packages. Always also skips packages whose sizes the Hub does not report."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.HubFetchMissingMaxMB,
+                SetFloat = v => {
+                    VPBConfig.Instance.HubFetchMissingMaxMB = Mathf.Clamp(Mathf.RoundToInt(v), 0, 20000);
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                },
+                Min = 0f, Max = 10000f, Step = 50f, Decimals = 0,
+                DefaultFloat = 1500f, HasDefault = true,
+                RowVisible = () => VpbHubDependencyFetcher.AutoFetchEnabled
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "helpers.consolidateCreatorNames", GroupKey = "helpers",
@@ -2531,6 +2562,8 @@ namespace VPB
                 VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
                 DataPackLookapediaEnabled = VPBConfig.Instance.DataPackLookapediaEnabled,
                 DataPackHubTagsEnabled = VPBConfig.Instance.DataPackHubTagsEnabled,
+                HubFetchMissingMode = VPBConfig.Instance.HubFetchMissingMode,
+                HubFetchMissingMaxMB = VPBConfig.Instance.HubFetchMissingMaxMB,
                 ShortcutsRequireWindowFocus = VPBConfig.Instance.ShortcutsRequireWindowFocus,
                 ShortcutsNeedVisiblePane = VPBConfig.Instance.ShortcutsNeedVisiblePane,
                 CategoryNumberKeysEnabled = VPBConfig.Instance.CategoryNumberKeysEnabled,
@@ -3688,6 +3721,8 @@ namespace VPB
             {
                 VPBConfig.Instance.DataPackLookapediaEnabled = b.DataPackLookapediaEnabled;
                 VPBConfig.Instance.DataPackHubTagsEnabled = b.DataPackHubTagsEnabled;
+                VPBConfig.Instance.HubFetchMissingMode = b.HubFetchMissingMode;
+                VPBConfig.Instance.HubFetchMissingMaxMB = b.HubFetchMissingMaxMB;
                 RequestDataPackSync();
             }
             VPBConfig.Instance.ShortcutsRequireWindowFocus = b.ShortcutsRequireWindowFocus;

@@ -65,6 +65,11 @@ namespace VPB
         private static volatile int s_SceneLoadDepDone;
         private static volatile int s_SceneLoadDepTotal;
 
+        private static volatile bool s_HubFetchActive;
+        private static volatile string s_HubFetchTitle;
+        private static volatile string s_HubFetchSubtitle;
+        private static float s_HubFetchProgress01 = -1f;
+
         private static volatile bool s_BrowseRefreshActive;
         private static volatile int s_BrowseRefreshDone;
         private static volatile int s_BrowseRefreshTotal;
@@ -113,6 +118,11 @@ namespace VPB
 
         internal static bool TryGetActiveDisplaySnapshot(out DisplaySnapshot snapshot)
         {
+            if (TryGetHubFetchDisplaySnapshot(out snapshot))
+            {
+                ApplyBlockingOverlay(ref snapshot);
+                return true;
+            }
             if (TryGetSceneLoadDisplaySnapshot(out snapshot))
             {
                 ApplyBlockingOverlay(ref snapshot);
@@ -198,6 +208,55 @@ namespace VPB
         /// Tier B: main thread may stall. Start OS heartbeat. Unity strip stays enabled when frames pump.
         /// Nestable — pair with <see cref="ExitBlocking"/>.
         /// </summary>
+        internal static bool IsHubFetchActive => s_HubFetchActive;
+
+        internal static void BeginHubFetch(string title)
+        {
+            s_HubFetchActive = true;
+            s_HubFetchTitle = string.IsNullOrEmpty(title)
+                ? VPBTranslation.T("gallery.hubfetch.banner", "Fetching missing packages")
+                : title;
+            s_HubFetchSubtitle = VPBTranslation.T("gallery.hubfetch.phase.checking", "Asking the Hub what is available…");
+            s_HubFetchProgress01 = -1f;
+            EnsureOverlay();
+        }
+
+        internal static void ReportHubFetchPhase(string subtitle)
+        {
+            if (!s_HubFetchActive) return;
+            if (!string.IsNullOrEmpty(subtitle)) s_HubFetchSubtitle = subtitle;
+            s_HubFetchProgress01 = -1f;
+        }
+
+        internal static void ReportHubFetch(float progress01, string subtitle)
+        {
+            if (!s_HubFetchActive) return;
+            if (!string.IsNullOrEmpty(subtitle)) s_HubFetchSubtitle = subtitle;
+            s_HubFetchProgress01 = progress01;
+        }
+
+        internal static void EndHubFetch()
+        {
+            s_HubFetchActive = false;
+            s_HubFetchTitle = null;
+            s_HubFetchSubtitle = null;
+            s_HubFetchProgress01 = -1f;
+        }
+
+        internal static bool TryGetHubFetchDisplaySnapshot(out DisplaySnapshot snapshot)
+        {
+            snapshot = default(DisplaySnapshot);
+            if (!s_HubFetchActive) return false;
+
+            snapshot.Visible = true;
+            snapshot.Cancellable = true;
+            snapshot.Title = s_HubFetchTitle ?? VPBTranslation.T("gallery.hubfetch.banner", "Fetching missing packages");
+            snapshot.Subtitle = s_HubFetchSubtitle ?? string.Empty;
+            snapshot.Progress01 = s_HubFetchProgress01;
+            snapshot.ShowMovingStrip = true;
+            return true;
+        }
+
         internal static void EnterBlocking(string title, string subtitle = null)
         {
             bool first;
@@ -393,6 +452,11 @@ namespace VPB
 
         internal static void RequestCancelActiveJob()
         {
+            if (s_HubFetchActive)
+            {
+                try { VpbHubDependencyFetcher.Cancel(); } catch { }
+                return;
+            }
             if (s_BulkZstdActive)
             {
                 try { ImageLoadingMgr.singleton?.CancelBulkOperation(); } catch { }

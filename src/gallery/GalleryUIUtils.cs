@@ -1,4 +1,4 @@
-using VPB.src.util;
+﻿using VPB.src.util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -532,6 +532,16 @@ namespace VPB
             outcome.DepsChanged = outcome.EnsureResult.DepsChanged;
             yield return null;
 
+            if (outcome.EnsureResult.MissingCount > 0
+                && outcome.EnsureResult.MissingKeys != null
+                && outcome.EnsureResult.MissingKeys.Count > 0
+                && VpbHubDependencyFetcher.AutoFetchEnabled
+                && !VpbHubDependencyFetcher.Busy)
+            {
+                yield return FetchMissingFromHubCoroutine(entry, panel, outcome);
+                yield return null;
+            }
+
             List<string> temporaryUidOverrides = ApplyTemporarySceneLoadWhitelist(entry, outcome.MovedUids);
             if (outcome.CleanupState != null)
                 outcome.CleanupState.TemporaryUidOverrides = temporaryUidOverrides;
@@ -849,6 +859,92 @@ namespace VPB
         {
             if (panel == null || string.IsNullOrEmpty(msg)) return;
             try { panel.ShowTemporaryStatus(msg, 2.5f); } catch { }
+        }
+
+        private static GalleryPanel ResolveHubFetchConfirmHost(GalleryPanel panel)
+        {
+            try
+            {
+                if (panel != null && panel.CanHostHubFetchModal) return panel;
+                Gallery g = Gallery.singleton;
+                if (g == null) return null;
+                List<GalleryPanel> panels = g.Panels;
+                if (panels == null) return null;
+                for (int i = 0; i < panels.Count; i++)
+                {
+                    GalleryPanel p = panels[i];
+                    if (p != null && p.CanHostHubFetchModal) return p;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static IEnumerator FetchMissingFromHubCoroutine(
+            FileEntry entry, GalleryPanel panel, SceneLoadPrepOutcome outcome)
+        {
+            string unavailable;
+            if (!VpbHubDependencyFetcher.HubAvailable(out unavailable))
+            {
+                LogUtil.Log("[VPB.HubFetch] skipping auto-fetch: " + unavailable);
+                yield break;
+            }
+
+            bool ask = string.Equals(
+                VpbHubDependencyFetcher.Mode,
+                VpbHubDependencyFetcher.ModeAsk,
+                StringComparison.OrdinalIgnoreCase);
+
+            GalleryPanel host = ResolveHubFetchConfirmHost(panel);
+            if (ask && host == null)
+            {
+                LogUtil.Log("[VPB.HubFetch] skipping auto-fetch: no gallery panel is open to ask in");
+                yield break;
+            }
+
+            VpbHubDependencyFetcher.ConfirmRequest confirm = ask
+                ? new VpbHubDependencyFetcher.ConfirmRequest(host.RequestHubFetchConfirm)
+                : null;
+
+            string title = string.Format(
+                VPBTranslation.T("gallery.hubfetch.banner_for", "Fetching packages for {0}"),
+                entry != null ? (entry.Name ?? "scene") : "scene");
+
+            VpbHubDependencyFetcher.FetchResult result = null;
+            yield return VpbHubDependencyFetcher.Fetch(
+                outcome.EnsureResult.MissingKeys, title, confirm, r => result = r);
+
+            if (result == null) yield break;
+
+            LogUtil.Log("[VPB.HubFetch] outcome=" + result.Outcome
+                + " installed=" + result.Installed
+                + " notOnHub=" + result.NotOnHub.Count
+                + " unresolved=" + result.Unresolved.Count
+                + " bytes=" + result.Bytes);
+
+            if (result.Outcome == VpbHubDependencyFetcher.Outcome.Failed
+                && !string.IsNullOrEmpty(result.FailReason))
+                StatusBrief(panel ?? host, result.FailReason);
+
+            if (!result.InstalledAny) yield break;
+
+            try { VpbProgressService.ReportSceneLoadPrepPhase("Re-checking dependencies"); }
+            catch { }
+            yield return null;
+
+            yield return SceneLoadingUtils.EnsureInstalledDetailedCoroutine(
+                entry, outcome.MovedUids, r => outcome.EnsureResult = r);
+
+            outcome.DepsChanged = true;
+
+            if (result.Outcome == VpbHubDependencyFetcher.Outcome.Partial
+                && outcome.EnsureResult.MissingCount > 0)
+            {
+                StatusBrief(panel ?? host, string.Format(
+                    VPBTranslation.T("gallery.hubfetch.status.still_missing",
+                        "{0} package(s) still missing — loading anyway."),
+                    outcome.EnsureResult.MissingCount));
+            }
         }
 
         private static string ResolveSceneHostUid(FileEntry entry)

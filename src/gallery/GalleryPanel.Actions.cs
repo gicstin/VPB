@@ -2322,8 +2322,8 @@ namespace VPB
 
         private string GetCurrentSelectionAnchorIdentityKey(bool historyBrowse)
         {
-            if (!string.IsNullOrEmpty(selectionAnchorIdentityKey)) return selectionAnchorIdentityKey;
             if (!string.IsNullOrEmpty(selectionAnchorPath)) return selectionAnchorPath;
+            if (!string.IsNullOrEmpty(selectionAnchorIdentityKey)) return selectionAnchorIdentityKey;
             if (selectedFiles != null && selectedFiles.Count > 0)
                 return GetSelectionIdentityKey(selectedFiles[0], historyBrowse);
             if (!string.IsNullOrEmpty(selectedPath)) return selectedPath;

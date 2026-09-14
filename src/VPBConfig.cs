@@ -1160,6 +1160,8 @@ namespace VPB
         public bool VerticalMoveKeysEnabled = true;
         public bool DataPackLookapediaEnabled = true;
         public bool DataPackHubTagsEnabled = true;
+        public string HubFetchMissingMode = "Ask";
+        public int HubFetchMissingMaxMB = 1500;
         public JSONClass ShortcutBindings = new JSONClass();
         public bool ShortcutsRequireWindowFocus = true;
         public bool ShortcutsNeedVisiblePane = true;
@@ -1924,6 +1926,8 @@ namespace VPB
             VerticalMoveKeysEnabled = true;
             DataPackLookapediaEnabled = true;
             DataPackHubTagsEnabled = true;
+            HubFetchMissingMode = "Ask";
+            HubFetchMissingMaxMB = 1500;
             ShortcutBindings = new JSONClass();
             ShortcutsRequireWindowFocus = true;
             ShortcutsNeedVisiblePane = true;
@@ -2436,6 +2440,10 @@ namespace VPB
                         if (node["VerticalMoveKeysEnabled"] != null) VerticalMoveKeysEnabled = node["VerticalMoveKeysEnabled"].AsBool;
                         if (node["DataPackLookapediaEnabled"] != null) DataPackLookapediaEnabled = node["DataPackLookapediaEnabled"].AsBool;
                         if (node["DataPackHubTagsEnabled"] != null) DataPackHubTagsEnabled = node["DataPackHubTagsEnabled"].AsBool;
+                        if (node["HubFetchMissingMode"] != null)
+                            HubFetchMissingMode = VpbHubDependencyFetcher.NormalizeMode(node["HubFetchMissingMode"].Value);
+                        if (node["HubFetchMissingMaxMB"] != null)
+                            HubFetchMissingMaxMB = Mathf.Clamp(node["HubFetchMissingMaxMB"].AsInt, 0, 20000);
                         if (node["ShortcutBindings"] != null) ShortcutBindings = node["ShortcutBindings"].AsObject;
                         if (node["ShortcutsRequireWindowFocus"] != null) ShortcutsRequireWindowFocus = node["ShortcutsRequireWindowFocus"].AsBool;
                         if (node["ShortcutsNeedVisiblePane"] != null) ShortcutsNeedVisiblePane = node["ShortcutsNeedVisiblePane"].AsBool;
@@ -2933,6 +2941,8 @@ namespace VPB
                 node["VerticalMoveKeysEnabled"].AsBool = VerticalMoveKeysEnabled;
                 node["DataPackLookapediaEnabled"].AsBool = DataPackLookapediaEnabled;
                 node["DataPackHubTagsEnabled"].AsBool = DataPackHubTagsEnabled;
+                node["HubFetchMissingMode"] = VpbHubDependencyFetcher.NormalizeMode(HubFetchMissingMode);
+                node["HubFetchMissingMaxMB"].AsInt = HubFetchMissingMaxMB;
                 try { VpbShortcutMap.SaveToConfig(); } catch { }
                 if (ShortcutBindings != null) node["ShortcutBindings"] = ShortcutBindings;
                 node["ShortcutsRequireWindowFocus"].AsBool = ShortcutsRequireWindowFocus;

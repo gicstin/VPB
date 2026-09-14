@@ -106,6 +106,21 @@ namespace VPB
         }
     }
 
+    public sealed class UIAlternateClickBackdrop : MonoBehaviour, IPointerClickHandler
+    {
+        public Action OnLeftClick;
+        public Action<PointerEventData> OnRightClick;
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (eventData == null) return;
+            if (eventData.button == PointerEventData.InputButton.Left)
+                OnLeftClick?.Invoke();
+            else if (eventData.button == PointerEventData.InputButton.Right)
+                OnRightClick?.Invoke(eventData);
+        }
+    }
+
     /// <summary>
     /// Left-click on this graphic. Skips when the raycast hit is under a named child
     /// (nested action chips) so parent rows do not steal chip clicks.

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using SimpleJSON;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using VPB.src.util;
 
 namespace VPB.Tests.Runtime
@@ -71,6 +72,41 @@ namespace VPB.Tests.Runtime
                 rect.sizeDelta = new Vector2(320f, 240f);
                 RuntimeAssert.Approximately(320f, rect.sizeDelta.x, 0.001f, "sizeDelta.x did not stick.");
                 RuntimeAssert.Approximately(240f, rect.sizeDelta.y, 0.001f, "sizeDelta.y did not stick.");
+            }
+            finally
+            {
+                if (go != null) UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [VpbRuntimeTest]
+        public static void ContextMenuBackdropRoutesRightClickWithoutDismissing()
+        {
+            GameObject go = null;
+            try
+            {
+                go = new GameObject("VpbRuntimeContextMenuBackdrop");
+                UIAlternateClickBackdrop backdrop = go.AddComponent<UIAlternateClickBackdrop>();
+                bool leftClicked = false;
+                bool rightClicked = false;
+                backdrop.OnLeftClick = () => leftClicked = true;
+                backdrop.OnRightClick = data => rightClicked = data != null;
+
+                PointerEventData right = new PointerEventData(EventSystem.current);
+                right.button = PointerEventData.InputButton.Right;
+                backdrop.OnPointerClick(right);
+
+                RuntimeAssert.True(rightClicked,
+                    "A right-click on the context-menu backdrop did not reach the gallery item behind it.");
+                RuntimeAssert.False(leftClicked,
+                    "A right-click on the context-menu backdrop dismissed the current menu before the next item could open.");
+
+                PointerEventData left = new PointerEventData(EventSystem.current);
+                left.button = PointerEventData.InputButton.Left;
+                backdrop.OnPointerClick(left);
+
+                RuntimeAssert.True(leftClicked,
+                    "A left-click outside the context menu no longer dismisses it.");
             }
             finally
             {
