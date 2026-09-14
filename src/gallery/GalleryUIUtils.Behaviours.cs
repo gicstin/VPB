@@ -1143,6 +1143,9 @@ namespace VPB
         /// </summary>
         public int CachedCenterItemIndex { get; private set; }
 
+        public int VisibleStartIndex { get { return _lastVisibleStartIndex; } }
+        public int VisibleEndIndex { get { return _lastVisibleEndIndex; } }
+
         /// <summary>Visible recycled cells — prefer over Transform foreach (no enumerator alloc).</summary>
         public int ActiveItemCount { get { return activeItems != null ? activeItems.Count : 0; } }
 
@@ -1634,6 +1637,8 @@ namespace VPB
             // Cache center index once for the entire bind pass so onBindItem callbacks
             // don't recompute it (and access viewport.rect) for every single item.
             CachedCenterItemIndex = GetCenterItemIndex();
+            _lastVisibleStartIndex = startIndex;
+            _lastVisibleEndIndex = endIndex;
 
             // Recycle items out of range, updating the index set in sync.
             for (int i = activeItems.Count - 1; i >= 0; i--)
@@ -1689,9 +1694,6 @@ namespace VPB
 
             bool setMismatch = _activeIndexSet.Count != activeItems.Count;
             bool outOfBand = activeItems.Count > 0 && (idxMin < startIndex || idxMax > endIndex);
-
-            _lastVisibleStartIndex = startIndex;
-            _lastVisibleEndIndex = endIndex;
 
             if (setMismatch || outOfBand)
             {

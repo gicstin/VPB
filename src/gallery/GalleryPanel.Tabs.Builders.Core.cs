@@ -31,7 +31,7 @@ namespace VPB
                 // Keep selected row visible so accordion facets have a parent (current location).
                 if (!isActive && !string.IsNullOrEmpty(categoryFilter) && cat.name.IndexOf(categoryFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
 
-                Color btnColor = isActive ? ColorCategory : ColorInactiveRow;
+                Color btnColor = isActive ? GalleryUiColorTokens.ActiveSelected : ColorInactiveRow;
 
                 int count = 0;
                 if (categoryCounts.ContainsKey(c.name)) count = categoryCounts[c.name];

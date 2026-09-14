@@ -1331,6 +1331,24 @@ namespace VPB
 		public void SyncJSONCache()
 		{
 		}
+		List<string> SnapshotRegisteredInternalPaths()
+		{
+			lock (cachedEntriesLock)
+			{
+				if (cachedFileEntryNames != null)
+					return new List<string>(cachedFileEntryNames);
+				if (fileEntries == null) return null;
+				var paths = new List<string>(fileEntries.Count);
+				for (int i = 0; i < fileEntries.Count; i++)
+				{
+					VarFileEntry entry = fileEntries[i];
+					if (entry != null && !string.IsNullOrEmpty(entry.InternalPath))
+						paths.Add(entry.InternalPath);
+				}
+				return paths;
+			}
+		}
+
 		void InvalidateScanState()
 		{
 			Scaned = false;
@@ -1642,6 +1660,7 @@ namespace VPB
 					}
 				}
 				catch { }
+				try { FileManager.NotifyPackageContentReplaced(this, SnapshotRegisteredInternalPaths()); } catch { }
 				InvalidateScanState();
 			}
 

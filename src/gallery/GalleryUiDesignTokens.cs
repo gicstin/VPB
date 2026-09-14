@@ -288,11 +288,14 @@ namespace VPB
         /// </summary>
         public const float GridLabelPrimaryHeightFrac = 0.40f;
         /// <summary>Hide creator on primary row when caption inner width is below this (px, chrome-scaled).</summary>
-        public const float GridLabelCreatorMinInnerW = 96f;
+        public const float GridLabelCreatorMinInnerW = 128f;
         /// <summary>Max fraction of inner width reserved for creator before leaf truncation.</summary>
-        public const float GridLabelCreatorMaxFrac = 0.42f;
+        public const float GridLabelCreatorMaxFrac = 0.30f;
         /// <summary>If leaf would keep less than this fraction of inner width with creator, hide creator.</summary>
-        public const float GridLabelLeafMinFracWithCreator = 0.45f;
+        public const float GridLabelLeafMinFracWithCreator = 0.58f;
+        public const float GridLabelCreatorDominanceFrac = 0.80f;
+        public const float GridLabelCreatorDominanceReleaseFrac = 0.60f;
+        public const int GridLabelCreatorDominanceMinSample = 6;
         public const int GridBadgeFontRef = FontRef;
         public const int GridLabelFontRef = FontRef;
         public const int GridLabelSecondaryFontRef = FontCaptionRef;

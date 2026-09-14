@@ -3256,6 +3256,7 @@ namespace VPB
         {
             if (!VamStartupOptimizations.SkipGallerySqlRebuildIfValid) return false;
             if (s_RebuildRunning) return false;
+            if (HasPendingContentChangedPackages()) return false;
 
             if (s_SkipDeferredGallerySqlRebuild)
             {
@@ -3844,38 +3845,83 @@ namespace VPB
                 return TryComputeInventoryDiffVsDatabase(out added, out removedUidsOnly);
             }
 
-            if (scanDelta > 0) return true;
+            if (scanDelta > 0)
+            {
+                AppendContentChangedPackagesVsDatabase(added);
+                return true;
+            }
 
             return TryComputeInventoryDiffVsDatabase(out added, out removedUidsOnly);
         }
 
-        static bool TryComputeInventoryDiffVsDatabase(out List<VarPackage> added, out List<string> removedUids)
+        struct PkgContentStamp
         {
-            added = new List<VarPackage>();
-            removedUids = new List<string>();
-            if (!VpbSqlite3.IsAvailable) return false;
+            public long Wtime;
+            public long Psize;
+        }
 
-            var dbUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        static readonly HashSet<string> s_PendingContentChangedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static bool HasPendingContentChangedPackages()
+        {
+            lock (s_Sync) { return s_PendingContentChangedUids.Count > 0; }
+        }
+
+        static void ReplacePendingContentChangedUids(List<VarPackage> changed)
+        {
+            lock (s_Sync)
+            {
+                s_PendingContentChangedUids.Clear();
+                if (changed == null) return;
+                for (int i = 0; i < changed.Count; i++)
+                {
+                    VarPackage pkg = changed[i];
+                    if (pkg == null) continue;
+                    string uid = pkg.Uid;
+                    if (!string.IsNullOrEmpty(uid)) s_PendingContentChangedUids.Add(uid);
+                }
+            }
+        }
+
+        static void ClearPendingContentChangedUids()
+        {
+            lock (s_Sync) { s_PendingContentChangedUids.Clear(); }
+        }
+
+        static bool IsUsableContentStampTime(long binary)
+        {
+            return binary != 0L && binary != long.MinValue;
+        }
+
+        static bool TryLoadPkgContentStamps(Dictionary<string, PkgContentStamp> stamps)
+        {
+            if (stamps == null || !VpbSqlite3.IsAvailable) return false;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    using (var st = conn.Prepare("SELECT uid FROM pkg"))
+                    using (var st = conn.Prepare("SELECT uid, wtime, psize FROM pkg"))
                     {
                         while (st.Step() == VpbSqlite3.SqliteRow)
                         {
                             string uid = st.ColumnText(0);
-                            if (!string.IsNullOrEmpty(uid)) dbUids.Add(uid);
+                            if (string.IsNullOrEmpty(uid)) continue;
+                            PkgContentStamp stamp;
+                            stamp.Wtime = st.ColumnInt64(1);
+                            stamp.Psize = st.ColumnInt64(2);
+                            stamps[uid] = stamp;
                         }
                     }
                 }
+                return true;
             }
             catch { return false; }
+        }
 
-            if (dbUids.Count == 0) return false;
-
-            var liveByUid = new Dictionary<string, VarPackage>(StringComparer.OrdinalIgnoreCase);
+        static bool TrySnapshotLivePackagesByUid(Dictionary<string, VarPackage> liveByUid)
+        {
+            if (liveByUid == null) return false;
             lock (FileManager.packagesLock)
             {
                 if (FileManager.PackagesByUid == null) return false;
@@ -3886,16 +3932,119 @@ namespace VPB
                     if (!string.IsNullOrEmpty(u)) liveByUid[u] = kv.Value;
                 }
             }
+            return true;
+        }
+
+        static bool IsIndexedStampStale(PkgContentStamp stored, VarPackage live)
+        {
+            if (live == null) return false;
+
+            long liveWtime;
+            try { liveWtime = live.LastWriteTime.ToBinary(); } catch { return false; }
+            if (!IsUsableContentStampTime(stored.Wtime) || !IsUsableContentStampTime(liveWtime))
+                return false;
+            if (stored.Wtime != liveWtime) return true;
+
+            long liveSize;
+            try { liveSize = live.Size; } catch { return false; }
+            return stored.Psize > 0 && liveSize > 0 && stored.Psize != liveSize;
+        }
+
+        static void LogContentChangedPackages(List<VarPackage> changed)
+        {
+            if (changed == null || changed.Count == 0) return;
+            try
+            {
+                var sb = new StringBuilder(160);
+                sb.Append("[VPB.Gallery] re-indexing ").Append(changed.Count)
+                  .Append(" package(s) replaced on disk (same uid, new mtime/size):");
+                int show = changed.Count < 5 ? changed.Count : 5;
+                for (int i = 0; i < show; i++)
+                {
+                    VarPackage pkg = changed[i];
+                    if (pkg != null) sb.Append(' ').Append(pkg.Uid ?? "");
+                }
+                if (changed.Count > show) sb.Append(" (+").Append(changed.Count - show).Append(" more)");
+                LogUtil.Log(sb.ToString());
+            }
+            catch { }
+        }
+
+        static int AppendContentChangedPackages(
+            Dictionary<string, PkgContentStamp> dbStamps,
+            Dictionary<string, VarPackage> liveByUid,
+            List<VarPackage> added)
+        {
+            if (dbStamps == null || liveByUid == null || added == null) return 0;
+
+            HashSet<string> alreadyQueued = null;
+            if (added.Count > 0)
+            {
+                alreadyQueued = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < added.Count; i++)
+                {
+                    VarPackage pkg = added[i];
+                    if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) alreadyQueued.Add(pkg.Uid);
+                }
+            }
+
+            List<VarPackage> changed = null;
+            foreach (KeyValuePair<string, VarPackage> kv in liveByUid)
+            {
+                PkgContentStamp stored;
+                if (!dbStamps.TryGetValue(kv.Key, out stored)) continue;
+                if (alreadyQueued != null && alreadyQueued.Contains(kv.Key)) continue;
+                if (!IsIndexedStampStale(stored, kv.Value)) continue;
+                if (changed == null) changed = new List<VarPackage>();
+                changed.Add(kv.Value);
+            }
+
+            ReplacePendingContentChangedUids(changed);
+            if (changed == null) return 0;
+
+            added.AddRange(changed);
+            LogContentChangedPackages(changed);
+            try { VpbVarThumbnailInvalidator.NotifyPackagesReplaced(changed); } catch { }
+            return changed.Count;
+        }
+
+        static void AppendContentChangedPackagesVsDatabase(List<VarPackage> added)
+        {
+            if (added == null || !VpbSqlite3.IsAvailable) return;
+
+            var dbStamps = new Dictionary<string, PkgContentStamp>(StringComparer.OrdinalIgnoreCase);
+            if (!TryLoadPkgContentStamps(dbStamps) || dbStamps.Count == 0) return;
+
+            var liveByUid = new Dictionary<string, VarPackage>(StringComparer.OrdinalIgnoreCase);
+            if (!TrySnapshotLivePackagesByUid(liveByUid)) return;
+
+            AppendContentChangedPackages(dbStamps, liveByUid, added);
+        }
+
+        static bool TryComputeInventoryDiffVsDatabase(out List<VarPackage> added, out List<string> removedUids)
+        {
+            added = new List<VarPackage>();
+            removedUids = new List<string>();
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            var dbStamps = new Dictionary<string, PkgContentStamp>(StringComparer.OrdinalIgnoreCase);
+            if (!TryLoadPkgContentStamps(dbStamps)) return false;
+            if (dbStamps.Count == 0) return false;
+
+            var liveByUid = new Dictionary<string, VarPackage>(StringComparer.OrdinalIgnoreCase);
+            if (!TrySnapshotLivePackagesByUid(liveByUid)) return false;
 
             foreach (KeyValuePair<string, VarPackage> kv in liveByUid)
             {
-                if (!dbUids.Contains(kv.Key)) added.Add(kv.Value);
+                if (!dbStamps.ContainsKey(kv.Key)) added.Add(kv.Value);
             }
-            foreach (string uid in dbUids)
+            foreach (KeyValuePair<string, PkgContentStamp> kv in dbStamps)
             {
-                if (!liveByUid.ContainsKey(uid))
-                    removedUids.Add(uid);
+                if (!liveByUid.ContainsKey(kv.Key))
+                    removedUids.Add(kv.Key);
             }
+
+            AppendContentChangedPackages(dbStamps, liveByUid, added);
             return added.Count > 0 || removedUids.Count > 0;
         }
 
@@ -4690,6 +4839,7 @@ namespace VPB
                         }
                         else
                         {
+                            ClearPendingContentChangedUids();
                             try { Gallery.NotifyGalleryIndexUpdateCompleted(); } catch { }
                         }
                     }
@@ -4827,6 +4977,7 @@ namespace VPB
             bool rebuildCompleted = readyAfter != long.MinValue && readyAfter != readyBefore;
             if (rebuildCompleted)
             {
+                ClearPendingContentChangedUids();
                 try { Gallery.NotifyGalleryIndexUpdateCompleted(); } catch { }
                 NoteFullRebuildOutcome(RebuildOutcomeOk);
             }

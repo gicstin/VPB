@@ -1398,7 +1398,7 @@ namespace VPB
 
                 // User-defined tags (SQLite) — above Category
                 {
-                    Color colorUserTagRail = new Color(0.14f, 0.42f, 0.48f, 1f);
+                    Color colorUserTagRail = ColorUserTagFilter;
                     float utW = sideIconBtn;
                     float utH = sideIconBtn;
                     Sprite utSpr = null;
@@ -1525,7 +1525,7 @@ namespace VPB
                             LogUtil.LogError("[VPB] Save (Right) exception: " + ex);
                         }
                     });
-                    Color saveCol = new Color(0.2f, 0.4f, 0.2f, 1f);
+                    Color saveCol = GalleryUiColorTokens.AccentConfirm;
                     if (gallerySaveSprite != null)
                     {
                         UI.AddIconToButton(rightSaveBtnGO, gallerySaveSprite, sideIconPad, saveCol);
@@ -1691,7 +1691,7 @@ namespace VPB
 
                 // User-defined tags (SQLite) — above Category
                 {
-                    Color colorUserTagRailL = new Color(0.14f, 0.42f, 0.48f, 1f);
+                    Color colorUserTagRailL = ColorUserTagFilter;
                     float utW = sideIconBtn;
                     float utH = sideIconBtn;
                     Sprite utSprL = null;
@@ -1812,7 +1812,7 @@ namespace VPB
                             LogUtil.LogError("[VPB] Save (Left) exception: " + ex);
                         }
                     });
-                    Color saveCol = new Color(0.2f, 0.4f, 0.2f, 1f);
+                    Color saveCol = GalleryUiColorTokens.AccentConfirm;
                     if (gallerySaveSprite != null)
                     {
                         UI.AddIconToButton(leftSaveBtnGO, gallerySaveSprite, sideIconPad, saveCol);

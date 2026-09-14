@@ -29,6 +29,96 @@ namespace VPB
             return _currentCreatorSet.Count > 0;
         }
 
+        private bool GridCreatorLabelIsRedundant()
+        {
+            EnsureCurrentCreatorSet();
+            if (_currentCreatorSet.Count == 1) return true;
+            return GridCreatorIsDominatedOnThisPage();
+        }
+
+        private bool GridCreatorIsDominatedOnThisPage()
+        {
+            List<FileEntry> list = currentFilteredFiles;
+            int count = list != null ? list.Count : 0;
+            if (count == 0) return false;
+
+            int first = 0;
+            int last = count - 1;
+            if (recyclingGrid != null)
+            {
+                int s = recyclingGrid.VisibleStartIndex;
+                int e = recyclingGrid.VisibleEndIndex;
+                if (s >= 0 && e >= s)
+                {
+                    first = Mathf.Clamp(s, 0, count - 1);
+                    last = Mathf.Clamp(e, first, count - 1);
+                }
+            }
+
+            if (_gridCreatorRedundantValid
+                && ReferenceEquals(_gridCreatorStatsList, list)
+                && _gridCreatorStatsFirst == first
+                && _gridCreatorStatsLast == last)
+                return _gridCreatorRedundantCached;
+
+            bool previous = _gridCreatorRedundantValid && _gridCreatorRedundantCached;
+
+            string candidate = null;
+            int votes = 0;
+            for (int i = first; i <= last; i++)
+            {
+                string c = GridLabelCreatorAt(list[i]);
+                if (c.Length == 0) continue;
+                if (votes == 0)
+                {
+                    candidate = c;
+                    votes = 1;
+                }
+                else if (string.Equals(candidate, c, StringComparison.OrdinalIgnoreCase))
+                    votes++;
+                else
+                    votes--;
+            }
+
+            bool verdict = false;
+            if (candidate != null)
+            {
+                int named = 0;
+                int hits = 0;
+                for (int i = first; i <= last; i++)
+                {
+                    string c = GridLabelCreatorAt(list[i]);
+                    if (c.Length == 0) continue;
+                    named++;
+                    if (string.Equals(candidate, c, StringComparison.OrdinalIgnoreCase)) hits++;
+                }
+                if (named >= GalleryUiDesignTokens.GridLabelCreatorDominanceMinSample)
+                {
+                    float share = (float)hits / named;
+                    verdict = previous
+                        ? share >= GalleryUiDesignTokens.GridLabelCreatorDominanceReleaseFrac
+                        : share >= GalleryUiDesignTokens.GridLabelCreatorDominanceFrac;
+                }
+            }
+
+            _gridCreatorStatsList = list;
+            _gridCreatorStatsFirst = first;
+            _gridCreatorStatsLast = last;
+            _gridCreatorRedundantCached = verdict;
+            _gridCreatorRedundantValid = true;
+            return verdict;
+        }
+
+        private string GridLabelCreatorAt(FileEntry file)
+        {
+            if (file == null) return "";
+            string primary;
+            string secondary;
+            string creator;
+            GetGridItemLabelLines(file, out primary, out secondary, out creator);
+            return creator ?? "";
+        }
+
         private bool CreatorNameMatchesActiveFilter(string creator)
         {
             EnsureCurrentCreatorSet();

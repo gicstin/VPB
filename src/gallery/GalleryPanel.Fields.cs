@@ -1335,6 +1335,11 @@ namespace VPB
         /// <summary>Cached: filtered set needs two-line strip (any dual package/leaf). Invalidated on layout apply.</summary>
         private bool _gridLabelDualBandCached;
         private bool _gridLabelDualBandValid;
+        private bool _gridCreatorRedundantCached;
+        private bool _gridCreatorRedundantValid;
+        private List<FileEntry> _gridCreatorStatsList;
+        private int _gridCreatorStatsFirst = -1;
+        private int _gridCreatorStatsLast = -1;
         // Hover preview overlay (canvas-local X/Y offset + size; drag placeholder in settings)
         private GameObject hoverPreviewGO;
         private RectTransform hoverPreviewRT;

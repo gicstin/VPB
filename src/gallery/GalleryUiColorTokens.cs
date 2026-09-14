@@ -9,6 +9,49 @@ namespace VPB
     /// </summary>
     public static class GalleryUiColorTokens
     {
+        // ── Identity families ───────────────────────────────────────────────
+        public static readonly Color FamilySlate = new Color(0.34f, 0.36f, 0.42f, 1f);
+        public static readonly Color FamilySlateAccent = new Color(0.44f, 0.46f, 0.52f, 1f);
+        public static readonly Color FamilySlateText = new Color(0.76f, 0.80f, 0.86f, 1f);
+        public static readonly Color FamilyBlue = new Color(0.22f, 0.38f, 0.58f, 1f);
+        public static readonly Color FamilyBlueAccent = new Color(0.30f, 0.48f, 0.68f, 1f);
+        public static readonly Color FamilyBlueText = new Color(0.58f, 0.76f, 0.96f, 1f);
+        public static readonly Color FamilyTeal = new Color(0.16f, 0.48f, 0.50f, 1f);
+        public static readonly Color FamilyTealAccent = new Color(0.24f, 0.58f, 0.60f, 1f);
+        public static readonly Color FamilyTealText = new Color(0.45f, 0.82f, 0.78f, 1f);
+        public static readonly Color FamilyGreen = new Color(0.24f, 0.48f, 0.32f, 1f);
+        public static readonly Color FamilyGreenAccent = new Color(0.32f, 0.58f, 0.40f, 1f);
+        public static readonly Color FamilyGreenText = new Color(0.58f, 0.88f, 0.68f, 1f);
+        public static readonly Color FamilyAmber = new Color(0.64f, 0.48f, 0.18f, 1f);
+        public static readonly Color FamilyAmberAccent = new Color(0.74f, 0.58f, 0.26f, 1f);
+        public static readonly Color FamilyAmberText = new Color(0.94f, 0.80f, 0.46f, 1f);
+        public static readonly Color FamilyPurple = new Color(0.50f, 0.26f, 0.58f, 1f);
+        public static readonly Color FamilyPurpleAccent = new Color(0.60f, 0.36f, 0.68f, 1f);
+        public static readonly Color FamilyPurpleText = new Color(0.84f, 0.66f, 0.92f, 1f);
+
+        // ── Facet -> family map ─────────────────────────────────────────────
+        public static readonly Color FacetCategory = FamilyTeal;
+        public static readonly Color FacetUserTagsSide = FamilyPurple;
+        public static readonly Color CategoryText = FamilyTealText;
+        public static readonly Color FacetCreator = FamilyAmber;
+        public static readonly Color FacetLooksLike = FamilyAmber;
+        public static readonly Color FacetRating = FamilyAmberAccent;
+        public static readonly Color FacetLicense = FamilyAmber;
+        public static readonly Color FacetSceneImport = FamilyAmber;
+        public static readonly Color FacetTag = FamilyPurple;
+        public static readonly Color FacetUserTag = FamilyPurple;
+        public static readonly Color FacetHistory = FamilyPurple;
+        public static readonly Color FacetHistoryAccent = FamilyPurpleAccent;
+        public static readonly Color FacetSource = FamilyBlue;
+        public static readonly Color FacetPath = FamilyBlue;
+        public static readonly Color FacetHubType = FamilyBlueAccent;
+        public static readonly Color FacetHub = FamilyGreen;
+        public static readonly Color FacetUnrated = FamilySlate;
+        public static readonly Color FacetSubfilter = FamilySlate;
+        public static readonly Color FacetTitleSearchActive = FamilySlate;
+        public static readonly Color FacetUnratedLabel = FamilySlateText;
+        public static readonly Color FacetUnratedIcon = FamilySlateText;
+
         // ── Surfaces (quiet ladder; neutral grey — no cool/blue bias) ────────
         /// <summary>Deepest fill — modal / title search idle / strip footers.</summary>
         public static readonly Color SurfaceDeep = new Color(0.07f, 0.07f, 0.07f, 1f);
@@ -40,8 +83,8 @@ namespace VPB
         public static readonly Color TextMuted = new Color(0.78f, 0.78f, 0.78f, 1f);
         /// <summary>Secondary chrome — was ~0.55; too weak on SurfaceDark.</summary>
         public static readonly Color TextDim = new Color(0.68f, 0.68f, 0.68f, 1f);
-        public static readonly Color TextZeroCount = new Color(0.62f, 0.62f, 0.62f, 1f);
         public static readonly Color TextPlaceholder = new Color(0.62f, 0.62f, 0.62f, 1f);
+        public static readonly Color TextZeroCount = TextPlaceholder;
         public static readonly Color TextOnAccent = Color.white;
         public static readonly Color TextShadow = new Color(0f, 0f, 0f, 0.75f);
 
@@ -63,7 +106,7 @@ namespace VPB
         /// <summary>Detach / Float chip.</summary>
         public static readonly Color ActiveFloatChip = new Color(0.26f, 0.26f, 0.26f, 1f);
         /// <summary>Sort / utility icon-button backdrop.</summary>
-        public static readonly Color ActiveUtility = new Color(0.30f, 0.30f, 0.30f, 1f);
+        public static readonly Color ActiveUtility = ActiveSecondary;
         /// <summary>Title-bar collapse/close well.</summary>
         public static readonly Color ChromeIconWell = new Color(0f, 0f, 0f, 0.5f);
         /// <summary>Search-field clear (X) glyph — shared by all float filters.</summary>
@@ -96,7 +139,7 @@ namespace VPB
         public static readonly Color AccentDanger = new Color(0.62f, 0.28f, 0.28f, 1f);
         public static readonly Color AccentDangerStrong = new Color(0.72f, 0.26f, 0.24f, 1f);
         public static readonly Color AccentNew = new Color(0.26f, 0.40f, 0.34f, 1f);
-        public static readonly Color AccentFacetGeneric = new Color(0.36f, 0.36f, 0.40f, 1f);
+        public static readonly Color AccentFacetGeneric = FamilySlate;
 
         // ── Random / dice affordance (idle gold lift, not hover-only) ────────
         public static readonly Color RandomWell = new Color(0.34f, 0.26f, 0.08f, 1f);
@@ -111,31 +154,6 @@ namespace VPB
         public static readonly Color ModeStatusTextTool = new Color(0.78f, 0.84f, 0.88f, 1f);
         public static readonly Color ModeStatusTextApply = new Color(0.92f, 0.82f, 0.55f, 1f);
 
-        // ── Content-type / filter facet fills (idle accents on dark shell) ───
-        // Slightly higher luminance than legacy so peers separate under squint test.
-        public static readonly Color FacetCategory = new Color(0.62f, 0.28f, 0.28f, 1f);
-        public static readonly Color FacetCreator = new Color(0.64f, 0.50f, 0.22f, 1f);
-        /// <summary>Look-A-Pedia identity facet (warmer than Creator so rails separate under squint).</summary>
-        public static readonly Color FacetLooksLike = new Color(0.70f, 0.46f, 0.24f, 1f);
-        /// <summary>Hub listing type (Looks / Scenes / Clothing) — cooler than Hub tags green.</summary>
-        public static readonly Color FacetHubType = new Color(0.26f, 0.38f, 0.52f, 1f);
-        public static readonly Color FacetTag = new Color(0.52f, 0.30f, 0.54f, 1f);
-        public static readonly Color FacetRating = new Color(0.68f, 0.58f, 0.26f, 1f);
-        public static readonly Color FacetUnrated = new Color(0.34f, 0.40f, 0.46f, 1f);
-        public static readonly Color FacetUnratedLabel = new Color(0.72f, 0.78f, 0.84f, 1f);
-        public static readonly Color FacetUnratedIcon = new Color(0.74f, 0.80f, 0.86f, 1f);
-        public static readonly Color FacetSource = new Color(0.30f, 0.40f, 0.52f, 1f);
-        public static readonly Color FacetSubfilter = new Color(0.36f, 0.36f, 0.42f, 1f);
-        public static readonly Color FacetUserTag = new Color(0.54f, 0.32f, 0.54f, 1f);
-        public static readonly Color FacetTitleSearchActive = new Color(0.32f, 0.36f, 0.40f, 1f);
-        public static readonly Color FacetPath = new Color(0.28f, 0.30f, 0.40f, 1f);
-        public static readonly Color FacetHistory = new Color(0.48f, 0.28f, 0.48f, 1f);
-        public static readonly Color FacetHistoryAccent = new Color(0.54f, 0.34f, 0.54f, 1f);
-        public static readonly Color FacetSceneImport = new Color(0.64f, 0.52f, 0.24f, 1f);
-        public static readonly Color FacetHub = new Color(0.28f, 0.46f, 0.36f, 1f);
-        public static readonly Color FacetLicense = new Color(0.46f, 0.46f, 0.28f, 1f);
-        public static readonly Color FacetUserTagsSide = new Color(0.24f, 0.40f, 0.42f, 1f);
-
         // ── Pack-supplied (read-only) tags ──────────────────────────────────
         public static readonly Color PackTagRow = new Color(0.15f, 0.25f, 0.20f, 1f);
         public static readonly Color PackTagText = new Color(0.62f, 0.86f, 0.73f, 1f);
@@ -146,11 +164,11 @@ namespace VPB
         public static readonly Color HubTypeRow = new Color(0.14f, 0.20f, 0.28f, 1f);
 
         // ── User-tag editor state ───────────────────────────────────────────
-        public static readonly Color UserTagOn = new Color(0.24f, 0.40f, 0.42f, 1f);
+        public static readonly Color UserTagOn = ActiveOn;
         public static readonly Color UserTagMixed = new Color(0.38f, 0.38f, 0.28f, 1f);
-        public static readonly Color UserTagPulse = new Color(0.30f, 0.48f, 0.50f, 1f);
+        public static readonly Color UserTagPulse = FamilyPurpleAccent;
         public static readonly Color UserTagFilterOn = FacetTitleSearchActive;
-        public static readonly Color UserTagFilterExclude = new Color(0.62f, 0.28f, 0.28f, 1f);
+        public static readonly Color UserTagFilterExclude = AccentDanger;
         public static readonly Color UserTagDropGlow = new Color(0.40f, 0.72f, 0.50f, 1f);
 
         // ── Person gender badge (atom pickers) ──────────────────────────────
@@ -175,6 +193,6 @@ namespace VPB
         /// <summary>Idle control edge — quiet luminance, not a white halo (Johnson contrast).</summary>
         public static readonly Color RimIdle = new Color(0.48f, 0.48f, 0.48f, 0.32f);
         /// <summary>Armed/selected edge — muted cool, not white-on-grey.</summary>
-        public static readonly Color RimSelected = new Color(0.58f, 0.60f, 0.64f, 0.85f);
+        public static readonly Color RimSelected = new Color(0.82f, 0.85f, 0.90f, 0.95f);
     }
 }

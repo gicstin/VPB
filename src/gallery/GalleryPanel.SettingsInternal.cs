@@ -2631,12 +2631,6 @@ namespace VPB
         public void NotifyUpdaterStatusChanged()
         {
             InvalidateInternalSettingsDefsCache();
-            try { FooterPluginInfoRefreshChrome(); } catch { }
-            if (_footerPluginInfoHovering)
-            {
-                _footerPluginInfoTooltipKey = int.MinValue;
-                try { FooterPluginInfoPollHoverTooltip(); } catch { }
-            }
             if (IsSettingsPanelOpen())
                 RefreshInternalSettingsListRows(true);
         }

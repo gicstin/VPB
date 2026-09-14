@@ -1398,6 +1398,42 @@ namespace VPB
             }
         }
 
+        internal static void NotifyPackageContentReplaced(VarPackage vp, List<string> previousInternalPaths)
+        {
+            if (vp == null) return;
+
+            string uid = vp.Uid;
+            if (previousInternalPaths != null && previousInternalPaths.Count > 0 && !string.IsNullOrEmpty(uid))
+            {
+                lock (packagesLock)
+                {
+                    if (uidToVarFileEntry != null)
+                    {
+                        for (int i = 0; i < previousInternalPaths.Count; i++)
+                        {
+                            string internalPath = previousInternalPaths[i];
+                            if (string.IsNullOrEmpty(internalPath)) continue;
+
+                            VarFileEntry stale;
+                            string entryUid = uid + ":/" + internalPath;
+                            if (!uidToVarFileEntry.TryGetValue(entryUid, out stale)) continue;
+
+                            uidToVarFileEntry.Remove(entryUid);
+                            if (stale == null) continue;
+                            if (pathToVarFileEntry != null && !string.IsNullOrEmpty(stale.Path))
+                                pathToVarFileEntry.Remove(stale.Path);
+                            if (allVarFileEntries != null)
+                                allVarFileEntries.Remove(stale);
+                        }
+                    }
+                }
+            }
+
+            InvalidateInternalPathIndex();
+            OnMorphPackageRegistryChanged();
+            if (VPBLogger.Verbose) LogUtil.Log("[VPB] package content replaced in place: " + (uid ?? ""));
+        }
+
         public static void RegisterRefreshHandler(OnRefresh refreshHandler)
         {
             onRefreshHandlers = (OnRefresh)Delegate.Combine(onRefreshHandlers, refreshHandler);

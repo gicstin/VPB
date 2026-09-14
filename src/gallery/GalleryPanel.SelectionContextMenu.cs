@@ -629,6 +629,7 @@ namespace VPB
         // Updated by layout code (UI.Layout.cs) and innerPaneScaleActions.
         private float tboxInfoRowHeight = GalleryUiDesignTokens.FooterInfoRowHeightRef;   // single row height (= collapsed bar height)
         private float tboxTopOffsetBase = 120f;   // bar's top offset (offsetMax.y) when fully collapsed
+        private float tboxLastAppliedTop = float.NaN;
 
         private RectTransform tboxLabelLayerRT;   // reference for scale updates
         private RectTransform tboxButtonsLayerRT; // reference for scale updates
@@ -2149,6 +2150,12 @@ namespace VPB
             try { detailH = DetailStripReservedHeight(); } catch { detailH = 0f; }
             float targetTop = tboxTopOffsetBase + detailH + btnBand * tboxExpandT;
             tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
+
+            if (float.IsNaN(tboxLastAppliedTop) || Mathf.Abs(targetTop - tboxLastAppliedTop) > 0.5f)
+            {
+                tboxLastAppliedTop = targetTop;
+                try { SyncGalleryMainAreaBottomEdgeFromCurrentLayout(); } catch { }
+            }
         }
 
         private void UpdateSelectionContextMenu()

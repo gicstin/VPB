@@ -197,7 +197,7 @@ namespace VPB
 
         // Rail button look: red backdrop always; outline + icon glyph go white when idle and magenta
         // when the mode is active.
-        private static readonly Color RemoveModeRailBackdrop = new Color(0.62f, 0.16f, 0.16f, 1f);
+        private static readonly Color RemoveModeRailBackdrop = GalleryUiColorTokens.AccentDanger;
         private static readonly Color RemoveModeOutlineIdle = Color.white;
         private static readonly Color RemoveModeOutlineActive = new Color(1f, 0.2f, 0.9f, 1f);
 

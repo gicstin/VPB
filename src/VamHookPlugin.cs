@@ -962,6 +962,7 @@ namespace VPB
             VamOnDemandLoader.TickRefreshSimHold();
             VamLoadPerfHooks.Tick();
             Gallery.DrainPendingSqlIndexUpdate();
+            VpbVarThumbnailInvalidator.DrainMainThread();
             LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();
             UpdateUpdater();

@@ -49,7 +49,7 @@ namespace VPB
 
         // Semantic value colors (status / role — not one generic blue).
         private static readonly Color DetailStripColorAuthor = new Color(0.95f, 0.78f, 0.42f, 1f);      // amber identity
-        private static readonly Color DetailStripColorCategory = new Color(0.45f, 0.82f, 0.78f, 1f);    // teal taxonomy
+        private static readonly Color DetailStripColorCategory = GalleryUiColorTokens.CategoryText;
         private static readonly Color DetailStripColorHubType = new Color(0.55f, 0.72f, 0.92f, 1f);     // Hub listing type
         private static readonly Color DetailStripColorFact = new Color(0.72f, 0.78f, 0.88f, 1f);        // cool fact
         private static readonly Color DetailStripColorDeps = new Color(0.55f, 0.78f, 1f, 1f);           // info blue
@@ -58,10 +58,12 @@ namespace VPB
         private static readonly Color DetailStripColorDependents = new Color(0.72f, 0.62f, 0.95f, 1f);  // violet
         private static readonly Color DetailStripColorFlags = new Color(0.92f, 0.62f, 0.38f, 1f);       // orange
         private static readonly Color DetailStripColorTag = new Color(0.70f, 0.72f, 0.98f, 1f);         // lavender
-        // Action-link weights (hierarchy): Load = launch primary; manage peers quiet; Delete danger on hover.
+        // Action-link weights (hierarchy): Load = launch primary; manage peers quiet; destructive
+        // verbs carry danger at rest (hover-only danger arrives after the click is committed).
         // Meta/status colors above stay semantic — do not rainbow the action row.
         private static readonly Color DetailStripActionPrimary = new Color(0.42f, 0.90f, 0.48f, 1f);   // Load (launch)
         private static readonly Color DetailStripActionSecondary = new Color(0.68f, 0.72f, 0.78f, 1f); // quiet peers
+        private static readonly Color DetailStripActionDangerRest = new Color(0.86f, 0.55f, 0.52f, 1f); // Delete idle
         private static readonly Color DetailStripActionDanger = new Color(0.95f, 0.45f, 0.45f, 1f);     // Delete hover
         private static readonly Color DetailStripColorVersionLatest = new Color(0.50f, 0.85f, 0.58f, 1f);
         private static readonly Color DetailStripColorVersionOlder = new Color(0.95f, 0.70f, 0.40f, 1f);
@@ -982,11 +984,11 @@ namespace VPB
             _detailStripCopyLink = DetailStripCreateActionLink(act0, "Copy", "Copy", s,
                 DetailStripOnCopyClick, "gallery.detail.tip.copy", "Click: copy path(s) to clipboard (one per line)",
                 DetailStripActionSecondary);
-            DetailStripAddLinkSep(act0, s);
+            DetailStripAddLinkSep(act0, s, hard: true);
             _detailStripDeleteLink = DetailStripCreateActionLink(act0, "Delete", "Delete", s,
                 DetailStripOnDeleteClick, "gallery.detail.tip.delete", "Click: move selection to DeletedPackages / DeletedScenes",
-                DetailStripActionSecondary, DetailStripActionDanger);
-            DetailStripAddLinkSep(act0, s);
+                DetailStripActionDangerRest, DetailStripActionDanger);
+            DetailStripAddLinkSep(act0, s, hard: true);
             _detailStripCacheLink = DetailStripCreateActionLink(act0, "Cache", "Cache", s,
                 DetailStripOnCacheClick, "gallery.detail.tip.cache", "Click: build zstd texture cache for selection (Ctrl=rewrite, Ctrl+Shift=purge)",
                 DetailStripActionSecondary);
@@ -1013,7 +1015,7 @@ namespace VPB
             _detailStripBeforeOldVersSepGO = DetailStripAddLinkSepGO(act1, s);
             _detailStripOldVersLink = DetailStripCreateActionLink(act1, "OldVers", "Older versions", s,
                 DetailStripOnCleanupOldVersionsClick, "gallery.detail.tip.old_vers", "Click: move older package versions to DeletedPackages/OldVersions",
-                DetailStripActionSecondary);
+                DetailStripActionDangerRest, DetailStripActionDanger);
 
             // User tags + path first (actionable). Desc + package tags last (read-only meta).
             // Set Tags: opens editor; individual chips filter gallery (author-style).
@@ -3921,10 +3923,18 @@ namespace VPB
             }
             for (int i = 1; i < links.Count; i++)
             {
-                bool hard = links[i - 1] != null && links[i - 1].name == "Link_Load";
+                bool hard = DetailStripIsSepBoundary(links[i - 1]) || DetailStripIsSepBoundary(links[i]);
                 GameObject sep = DetailStripAddLinkSepGO(row, s, hard);
                 if (sep != null) sep.transform.SetSiblingIndex(links[i].GetSiblingIndex());
             }
+        }
+
+        private static bool DetailStripIsSepBoundary(Transform link)
+        {
+            if (link == null || link.name == null) return false;
+            return link.name == "Link_Load"
+                || link.name == "Link_Delete"
+                || link.name == "Link_OldVers";
         }
 
         private static GameObject DetailStripFindSepBetween(GameObject row, Text a, Text b)
@@ -4378,7 +4388,7 @@ namespace VPB
                 _detailStripDeleteLink,
                 VPBTranslation.T("gallery.detail.chip_delete", "Delete"),
                 canDelete,
-                DetailStripActionSecondary,
+                DetailStripActionDangerRest,
                 DetailStripActionDanger);
             if (_detailStripDeleteLink != null)
                 _detailStripDeleteLink.gameObject.SetActive(enabled);
@@ -4470,7 +4480,8 @@ namespace VPB
             string label = olderN > 0
                 ? string.Format(VPBTranslation.T("gallery.detail.chip_old_vers_n", "Older versions ({0})"), olderN)
                 : VPBTranslation.T("gallery.detail.chip_old_vers", "Older versions");
-            DetailStripSetLink(_detailStripOldVersLink, label, show, DetailStripActionSecondary);
+            DetailStripSetLink(_detailStripOldVersLink, label, show,
+                DetailStripActionDangerRest, DetailStripActionDanger);
             if (_detailStripOldVersLink != null)
                 _detailStripOldVersLink.gameObject.SetActive(show);
             if (_detailStripBeforeOldVersSepGO != null)

@@ -267,25 +267,29 @@ namespace VPB
                 if (!string.IsNullOrEmpty(creatorText)
                     && string.Equals(creatorText, primaryText, StringComparison.OrdinalIgnoreCase))
                     creatorText = null;
+                if (creator != null) creator.text = creatorText ?? "";
             }
             else
             {
                 dual = secondary != null && secondary.gameObject.activeSelf;
-                creatorText = creator != null && creator.gameObject.activeSelf ? creator.text : null;
+                creatorText = creator != null ? creator.text : null;
             }
 
-            // Dual-band strip may be one-line globally when filtered set has no duals — still expand primary.
-            float primaryBandMinY = dual ? GalleryUiDesignTokens.GridLabelPrimaryHeightFrac : 0f;
+            bool dualBandStrip = dual || GridLabelsNeedDualBand();
+            float primaryBandMinY = dualBandStrip ? GalleryUiDesignTokens.GridLabelPrimaryHeightFrac : 0f;
 
-            // Creator: hide under width budget so leaf keeps discriminator (Hick / chunking).
             float creatorMinW = GalleryUiDesignTokens.GridLabelCreatorMinInnerW * chromeS;
             bool showCreator = !string.IsNullOrEmpty(creatorText) && creator != null && innerW >= creatorMinW;
+            if (showCreator)
+            {
+                try { if (GridCreatorLabelIsRedundant()) showCreator = false; } catch { }
+            }
 
             // Creator first (right): reserve width so leaf truncation keeps discriminator.
             float creatorUsed = 0f;
+            float creatorMax = innerW * GalleryUiDesignTokens.GridLabelCreatorMaxFrac;
             if (showCreator)
             {
-                float creatorMax = innerW * GalleryUiDesignTokens.GridLabelCreatorMaxFrac;
                 float leafMin = innerW * GalleryUiDesignTokens.GridLabelLeafMinFracWithCreator;
                 if (innerW - creatorMax - gap < leafMin)
                     showCreator = false;
@@ -294,11 +298,6 @@ namespace VPB
             if (showCreator)
             {
                 if (!creator.gameObject.activeSelf) creator.gameObject.SetActive(true);
-                RectTransform creatorRT = creator.rectTransform;
-                creatorRT.anchorMin = new Vector2(0.35f, primaryBandMinY);
-                creatorRT.anchorMax = Vector2.one;
-                creatorRT.offsetMin = new Vector2(gap, 0f);
-                creatorRT.offsetMax = new Vector2(-padX, 0f);
                 creator.alignment = TextAnchor.MiddleRight;
                 creator.color = GalleryGridLabelSecondaryColor;
                 GalleryUiMetrics.ApplyFont(
@@ -307,21 +306,25 @@ namespace VPB
                     chromeS,
                     GalleryUiDesignTokens.FontMinRef);
 
-                if (file != null)
+                creatorUsed = MeasureGridLabelTextWidth(creator, creatorText);
+                if (creatorUsed > creatorMax)
                 {
-                    float creatorMax = innerW * GalleryUiDesignTokens.GridLabelCreatorMaxFrac;
-                    string truncatedCreator = TruncateGridLabelTextByWidth(creator, creatorText, creatorMax + padX * 2f);
-                    creator.text = truncatedCreator;
-                    creatorUsed = MeasureGridLabelTextWidth(creator, truncatedCreator);
-                    if (creatorUsed > creatorMax) creatorUsed = creatorMax;
+                    showCreator = false;
+                    creatorUsed = 0f;
                 }
-                else
-                    creatorUsed = MeasureGridLabelTextWidth(creator, creator.text ?? "");
             }
-            else if (creator != null && file != null)
+
+            if (showCreator)
+            {
+                RectTransform creatorRT = creator.rectTransform;
+                creatorRT.anchorMin = new Vector2(0.35f, primaryBandMinY);
+                creatorRT.anchorMax = Vector2.one;
+                creatorRT.offsetMin = new Vector2(gap, 0f);
+                creatorRT.offsetMax = new Vector2(-padX, 0f);
+            }
+            else if (creator != null)
             {
                 if (creator.gameObject.activeSelf) creator.gameObject.SetActive(false);
-                creator.text = "";
             }
 
             RectTransform primaryRT = primary.rectTransform;

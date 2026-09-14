@@ -90,7 +90,7 @@ namespace VPB
         private float softDeleteExpireTime;
         private bool softDeleteWasDefault;
         private readonly List<QuickFilterEntry> mergeSelection = new List<QuickFilterEntry>();
-        private static readonly Color RemoveModeRailBackdrop = new Color(0.62f, 0.16f, 0.16f, 1f);
+        private static readonly Color RemoveModeRailBackdrop = GalleryUiColorTokens.AccentDanger;
         private static readonly Color RemoveModeOutlineIdle = Color.white;
         private static readonly Color RemoveModeOutlineActive = new Color(1f, 0.2f, 0.9f, 1f);
         private string listFilter = "";

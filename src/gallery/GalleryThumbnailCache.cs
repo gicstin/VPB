@@ -12,6 +12,7 @@ namespace VPB
         private const int CACHE_VERSION = 2;
         private const string CACHE_MAGIC = "VPBCACHE";
         private const int CACHE_HEADER_SIZE = 20;
+        private const string VarCacheKeyPrefix = "VAR:/";
 
         /// <summary>If <c>gallery_thumbnails.bin</c> exceeds this on open, file is deleted and rebuilt empty (full scan + huge dict OOM/hang).</summary>
         private const long MaxThumbnailCacheFileBytes = 6L * 1024 * 1024 * 1024;
@@ -547,6 +548,49 @@ namespace VPB
             }
         }
 
+        public void InvalidateThumbnailsForPackageFiles(HashSet<string> varFileNames)
+        {
+            if (varFileNames == null || varFileNames.Count == 0) return;
+
+            List<string> remove = null;
+            cacheLock.EnterWriteLock();
+            try
+            {
+                foreach (KeyValuePair<string, CacheEntry> kv in index)
+                {
+                    string k = kv.Key;
+                    if (string.IsNullOrEmpty(k) || !k.StartsWith(VarCacheKeyPrefix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    int nameStart = VarCacheKeyPrefix.Length;
+                    int nameEnd = k.IndexOf(":/", nameStart, StringComparison.Ordinal);
+                    string pkgName;
+                    if (nameEnd >= 0)
+                    {
+                        pkgName = k.Substring(nameStart, nameEnd - nameStart);
+                    }
+                    else
+                    {
+                        int tier = k.IndexOf("|tj", nameStart, StringComparison.Ordinal);
+                        pkgName = tier >= 0 ? k.Substring(nameStart, tier - nameStart) : k.Substring(nameStart);
+                    }
+
+                    if (!varFileNames.Contains(pkgName)) continue;
+                    if (remove == null) remove = new List<string>(64);
+                    remove.Add(k);
+                }
+                if (remove != null)
+                {
+                    for (int i = 0; i < remove.Count; i++)
+                        index.Remove(remove[i]);
+                }
+            }
+            finally
+            {
+                cacheLock.ExitWriteLock();
+            }
+        }
+
         public bool TryGetThumbnail(string path, long fileLastWriteTime, out byte[] data, out int width, out int height, out TextureFormat format, int turboJpegScaleDenom = 1)
         {
             if (IsPackagePath(path)) fileLastWriteTime = 0;
@@ -991,6 +1035,167 @@ namespace VPB
             {
                 try { cacheLock.Dispose(); } catch { }
             }
+        }
+    }
+
+    internal static class VpbVarThumbnailInvalidator
+    {
+        private const int MaxQueuedImagePaths = 20000;
+        private const int MaxDrainPerFrame = 64;
+        private static readonly int[] ThumbnailScaleDenoms = { 1, 2, 4, 8 };
+
+        private static readonly object s_Lock = new object();
+        private static readonly Dictionary<string, long> s_InvalidatedStampByUid = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Queue<string> s_PendingImagePaths = new Queue<string>();
+        private static readonly HashSet<string> s_PendingVarFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static volatile bool s_PendingWork;
+
+        internal static void NotifyPackagesReplaced(IList<VarPackage> changed)
+        {
+            if (changed == null || changed.Count == 0) return;
+
+            HashSet<string> varFileNames = null;
+            List<VarPackage> fresh = null;
+            lock (s_Lock)
+            {
+                for (int i = 0; i < changed.Count; i++)
+                {
+                    VarPackage pkg = changed[i];
+                    if (pkg == null) continue;
+                    string uid = pkg.Uid;
+                    if (string.IsNullOrEmpty(uid)) continue;
+
+                    long stamp;
+                    try { stamp = pkg.LastWriteTime.ToBinary() ^ pkg.Size; }
+                    catch { continue; }
+
+                    long prev;
+                    if (s_InvalidatedStampByUid.TryGetValue(uid, out prev) && prev == stamp) continue;
+                    s_InvalidatedStampByUid[uid] = stamp;
+
+                    string varFile = null;
+                    try { varFile = Path.GetFileName(pkg.Path ?? ""); } catch { }
+                    if (!string.IsNullOrEmpty(varFile))
+                    {
+                        if (varFileNames == null) varFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        varFileNames.Add(varFile);
+                    }
+
+                    if (fresh == null) fresh = new List<VarPackage>();
+                    fresh.Add(pkg);
+                }
+            }
+
+            if (varFileNames != null)
+            {
+                lock (s_Lock)
+                {
+                    foreach (string varFile in varFileNames)
+                        s_PendingVarFileNames.Add(varFile);
+                    s_PendingWork = true;
+                }
+            }
+
+            if (fresh != null) QueueImagePaths(fresh);
+        }
+
+        private static void QueueImagePaths(List<VarPackage> packages)
+        {
+            for (int i = 0; i < packages.Count; i++)
+            {
+                VarPackage pkg = packages[i];
+                string varPath = pkg.Path;
+                if (string.IsNullOrEmpty(varPath)) continue;
+
+                List<string> names;
+                List<long> ticks;
+                List<long> sizes;
+                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) continue;
+
+                for (int n = 0; n < names.Count; n++)
+                {
+                    string internalPath = names[n];
+                    if (!IsImagePath(internalPath)) continue;
+                    lock (s_Lock)
+                    {
+                        if (s_PendingImagePaths.Count >= MaxQueuedImagePaths) return;
+                        s_PendingImagePaths.Enqueue(varPath + ":/" + internalPath);
+                        s_PendingWork = true;
+                    }
+                }
+            }
+        }
+
+        private static bool IsImagePath(string internalPath)
+        {
+            if (string.IsNullOrEmpty(internalPath)) return false;
+            return internalPath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                || internalPath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+                || internalPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static void DrainMainThread()
+        {
+            if (!s_PendingWork) return;
+
+            HashSet<string> varFileNames = null;
+            lock (s_Lock)
+            {
+                if (s_PendingVarFileNames.Count > 0)
+                {
+                    varFileNames = new HashSet<string>(s_PendingVarFileNames, StringComparer.OrdinalIgnoreCase);
+                    s_PendingVarFileNames.Clear();
+                }
+            }
+
+            if (varFileNames != null)
+            {
+                try
+                {
+                    GalleryThumbnailCache inst = GalleryThumbnailCache.Instance;
+                    if (inst != null) inst.InvalidateThumbnailsForPackageFiles(varFileNames);
+                }
+                catch { }
+            }
+
+            for (int i = 0; i < MaxDrainPerFrame; i++)
+            {
+                string imgPath;
+                lock (s_Lock)
+                {
+                    if (s_PendingImagePaths.Count == 0)
+                    {
+                        s_PendingWork = s_PendingVarFileNames.Count > 0;
+                        return;
+                    }
+                    imgPath = s_PendingImagePaths.Dequeue();
+                }
+                ClearInMemoryThumbnail(imgPath);
+            }
+        }
+
+        private static void ClearInMemoryThumbnail(string imgPath)
+        {
+            try
+            {
+                if (CustomImageLoaderThreaded.singleton != null)
+                {
+                    for (int i = 0; i < ThumbnailScaleDenoms.Length; i++)
+                    {
+                        int d = ThumbnailScaleDenoms[i];
+                        CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath, d, false);
+                        CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath, d, true);
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (ImageLoaderThreaded.singleton != null)
+                    ImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath);
+            }
+            catch { }
         }
     }
 }

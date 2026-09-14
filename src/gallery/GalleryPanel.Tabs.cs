@@ -2375,6 +2375,7 @@ namespace VPB
         internal void InvalidateGridLabelDualBandCache()
         {
             _gridLabelDualBandValid = false;
+            _gridCreatorRedundantValid = false;
         }
 
         /// <summary>
@@ -3413,7 +3414,7 @@ namespace VPB
         private static readonly Color GalleryItemLabelBarBackdrop = new Color(0f, 0f, 0f, 0.6f);
 
         /// <summary>Opaque grid caption bar — no text on busy thumbnail pixels (Johnson reading; Galitz imagery).</summary>
-        private static readonly Color GalleryGridLabelBarOpaque = new Color(0.05f, 0.05f, 0.07f, 1f);
+        private static readonly Color GalleryGridLabelBarOpaque = GalleryUiColorTokens.SurfaceDark;
 
         /// <summary>Secondary package line on grid caption (dimmer than primary leaf).</summary>
         private static readonly Color GalleryGridLabelSecondaryColor = new Color(0.78f, 0.78f, 0.82f, 0.95f);
