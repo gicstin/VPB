@@ -3880,11 +3880,25 @@ namespace VPB
             return redoLabelStack.Peek();
         }
 
+        internal static string DescribeUndoTargetAtom(string label, Atom atom)
+        {
+            if (atom == null) return label;
+            string who = null;
+            try { who = !string.IsNullOrEmpty(atom.name) ? atom.name : atom.uid; }
+            catch { who = null; }
+            if (string.IsNullOrEmpty(who)) return label;
+            return label + " — " + who;
+        }
+
         private string BuildUndoTooltip()
         {
             int n = undoStack != null ? undoStack.Count : 0;
             if (n <= 0)
                 return VPBTranslation.T("gallery.tooltip.undo_empty", "Nothing to undo{hint:undo}");
+            if (n > 1)
+                return string.Format(
+                    VPBTranslation.T("gallery.tooltip.undo_next_history", "Undo: {0}{hint:undo}\nRight-click for the last {1} steps"),
+                    PeekUndoLabel(), n);
             return string.Format(
                 VPBTranslation.T("gallery.tooltip.undo_next", "Undo: {0}{hint:undo}"),
                 PeekUndoLabel());
@@ -3953,10 +3967,18 @@ namespace VPB
         /// </summary>
         public void PushUndoAtomSnapshot(Atom atom)
         {
+            PushUndoAtomSnapshot(atom, null);
+        }
+
+        public void PushUndoAtomSnapshot(Atom atom, string label)
+        {
             try
             {
                 Action undoAction = CaptureAtomSnapshotAction(atom);
-                if (undoAction != null) PushUndo(undoAction);
+                if (undoAction == null) return;
+                if (string.IsNullOrEmpty(label))
+                    label = VPBTranslation.T("gallery.undo.look_change", "Look change");
+                PushUndo(undoAction, DescribeUndoTargetAtom(label, atom));
             }
             catch (Exception ex)
             {

@@ -28,7 +28,8 @@ namespace VPB
                     Atom undoAtom = SuperController.singleton.GetAtomByUid(atomUid);
                     if (undoAtom == null) return;
                     ClothingLoadingUtils.RestoreClothingHairUndoState(undoAtom, snapshot);
-                });
+                }, GalleryPanel.DescribeUndoTargetAtom(
+                    VPBTranslation.T("gallery.undo.clothing_hair", "Clothing & hair"), target));
             }
             catch (Exception ex)
             {
@@ -54,7 +55,8 @@ namespace VPB
                 {
                     if (panel == null) return;
                     panel.StartCoroutine(RestoreCuaAssetCoroutine(atomUid, prevUrl, prevName));
-                }, "CUA asset");
+                }, GalleryPanel.DescribeUndoTargetAtom(
+                    VPBTranslation.T("gallery.undo.cua_asset", "CUA asset"), target));
             }
             catch (Exception ex)
             {

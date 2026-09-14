@@ -512,6 +512,7 @@
     <Compile Include="src\gallery\GalleryPanel.ModeAmbient.cs" />
     <Compile Include="src\gallery\GalleryPanel.TaskChrome.cs" />
     <Compile Include="src\gallery\GalleryPanel.RiskPolicy.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UndoHistory.cs" />
     <Compile Include="src\gallery\GalleryPanel.UxConsistency.cs" />
     <Compile Include="src\gallery\GalleryPanel.StartupScene.cs" />
     <Compile Include="src\gallery\GalleryPanel.KeyboardFocus.cs" />

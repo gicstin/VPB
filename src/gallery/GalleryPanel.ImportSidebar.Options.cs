@@ -2128,7 +2128,10 @@ namespace VPB
                 try
                 {
                     Action undoAction = CaptureAtomSnapshotAction(importSidebarTargetAtom);
-                    if (undoAction != null) PushUndo(undoAction);
+                    if (undoAction != null)
+                        PushUndo(undoAction, DescribeUndoTargetAtom(
+                            VPBTranslation.T("gallery.undo.scene_import", "Scene import"),
+                            importSidebarTargetAtom));
                 }
                 catch { }
             }

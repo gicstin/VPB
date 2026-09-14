@@ -400,7 +400,7 @@ namespace VPB
                         || itemType == ItemType.Morphs;
                     if (needsAppearanceUndo)
                     {
-                        Panel.PushUndoAtomSnapshot(atom);
+                        Panel.PushUndoAtomSnapshot(atom, VPBTranslation.T("gallery.undo.apply_item", "Apply") + " " + itemType);
                     }
                     else
                     {
@@ -419,7 +419,8 @@ namespace VPB
 
                             ClothingLoadingUtils.RestoreClothingHairUndoState(targetAtom, clothingHairSnapshot);
                             LogUtil.Log($"[Gallery] Undo performed on {atomUid} (Clothing/Hair)");
-                        });
+                        }, GalleryPanel.DescribeUndoTargetAtom(
+                            VPBTranslation.T("gallery.undo.clothing_hair", "Clothing & hair"), atom));
                     }
                 }
                 catch (Exception ex)

@@ -173,6 +173,9 @@ namespace VPB
             AddCommandPaletteEntry("undo", "gallery.cmd.undo", "Undo", ScHint(VpbShortcut.Undo), GEdit, "revert back",
                 () => { try { Undo(); } catch { } },
                 CmdPaletteHasUndo);
+            AddCommandPaletteEntry("undo_history", "gallery.cmd.undo_history", "Undo history…", "", GEdit, "revert back steps rollback timeline",
+                () => { try { CloseCommandPalette(); ToggleUndoHistoryMenu(); } catch { } },
+                CmdPaletteHasUndo);
             AddCommandPaletteEntry("redo", "gallery.cmd.redo", "Redo", ScHint(VpbShortcut.Redo), GEdit, "forward",
                 () => { try { Redo(); } catch { } },
                 CmdPaletteHasRedo);

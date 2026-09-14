@@ -505,6 +505,7 @@ namespace VPB
             try { RescaleTitleBarOverflowMenuInternal(s); } catch { }
             try { RescaleFooterOverflowMenuInternal(s); } catch { }
             try { RescaleSideRailOverflowMenuInternal(s); } catch { }
+            try { RescaleUndoHistoryMenuInternal(s); } catch { }
             try { RescaleLanguageMenuInternal(s); } catch { }
             try { RescaleGridContextMenuInternal(s); } catch { }
             try { RescaleGlobalSourceFilterMenuInternal(s); } catch { }

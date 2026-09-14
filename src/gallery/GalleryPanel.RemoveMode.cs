@@ -1572,7 +1572,8 @@ namespace VPB
                     Atom undoAtom = SuperController.singleton.GetAtomByUid(atomUid);
                     if (undoAtom == null) return;
                     ClothingLoadingUtils.RestoreClothingHairUndoState(undoAtom, snapshot);
-                });
+                }, DescribeUndoTargetAtom(
+                    VPBTranslation.T("gallery.undo.remove_worn_item", "Remove worn item"), atom));
             }
             catch (Exception ex)
             {

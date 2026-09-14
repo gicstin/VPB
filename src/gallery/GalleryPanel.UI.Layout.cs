@@ -1582,7 +1582,8 @@ namespace VPB
                     {
                         try { if (File.Exists(undoTempPath)) File.Delete(undoTempPath); } catch { }
                     }
-                });
+                }, DescribeUndoTargetAtom(
+                    VPBTranslation.T("gallery.undo.remove_atom", "Remove atom"), atom));
             }
             catch { }
         }

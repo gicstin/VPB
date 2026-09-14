@@ -1478,7 +1478,8 @@ namespace VPB
                     {
                         LogUtil.LogWarning("[VPB] LoadPlugins undo failed: " + ex.Message);
                     }
-                });
+                }, VPBTranslation.T("gallery.undo.add_plugin", "Add plugin")
+                    + (entry != null && !string.IsNullOrEmpty(entry.Name) ? " — " + entry.Name : ""));
             }
             catch { }
         }

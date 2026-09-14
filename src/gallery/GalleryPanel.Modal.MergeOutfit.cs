@@ -526,7 +526,7 @@ namespace VPB
                     if (a == null) return;
                     ClothingLoadingUtils.RestoreClothingHairUndoState(a, snap);
                     LogUtil.Log("[Gallery] Undo performed on " + atomUid + " (Merge Outfit)");
-                });
+                }, VPBTranslation.T("gallery.undo.merge_outfit", "Merge outfit"));
             }
             catch (Exception ex)
             {

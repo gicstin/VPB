@@ -235,7 +235,7 @@ namespace VPB
                                 if (panelRef != null) panelRef.RefreshTargetDropdown();
                             }
                             catch { }
-                        });
+                        }, VPBTranslation.T("gallery.undo.auto_spawn", "Auto-spawn Person"));
                     }
                 }
                 catch { }

@@ -1300,6 +1300,7 @@ namespace VPB
             AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear all filters");
             AddHoverDelegate(footerUndoBtnGO);
             AddDynamicTooltip(footerUndoBtnGO, BuildUndoTooltip);
+            AddRightClickDelegate(footerUndoBtnGO, ToggleUndoHistoryMenu);
             AddHoverDelegate(footerRedoBtnGO);
             AddDynamicTooltip(footerRedoBtnGO, BuildRedoTooltip);
             AddHoverDelegate(footerCommandPaletteBtnGO);
