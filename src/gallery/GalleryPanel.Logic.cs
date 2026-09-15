@@ -703,6 +703,21 @@ namespace VPB
                 try { w = ScanWhitelistManager.IsScanExcludedBadgeVisible(file); } catch { w = false; }
                 if (!w) return false;
             }
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.MissingDeps)
+                || br.HasFlag(GallerySearchQuery.StatusFlags.CompleteDeps))
+            {
+                byte depStatus = GalleryDepStatus.Unknown;
+                int depMissing = 0;
+                try
+                {
+                    depStatus = GalleryDepStatus.Resolve(GetSelectionIdentityKey(file, false), file, out depMissing);
+                }
+                catch { depStatus = GalleryDepStatus.Unknown; }
+
+                bool incomplete = depStatus == GalleryDepStatus.Missing || depStatus == GalleryDepStatus.Broken;
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.MissingDeps) && !incomplete) return false;
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.CompleteDeps) && incomplete) return false;
+            }
 
             string creatorHint = TryGetFileEntryCreatorHint(file) ?? "";
             string uidHint = "";

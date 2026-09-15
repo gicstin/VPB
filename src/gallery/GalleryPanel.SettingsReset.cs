@@ -112,6 +112,7 @@ namespace VPB
                     case "grid.prettyPresetNames": d.SetDefault(fd.GalleryPrettyPresetNames); break;
                     case "grid.enabled": d.SetDefault(fd.GalleryGridLabelsEnabled); break;
                     case "grid.hoverBadges": d.SetDefault(fd.GalleryGridHoverBadgesEnabled); break;
+                    case "grid.depStatusBadge": d.SetDefault(fd.GalleryDepStatusBadgeEnabled); break;
                     case "grid.autoHideHighDensity": d.SetDefault(fd.GalleryGridLabelsAutoHideAtHighDensity); break;
                     case "grid.font": d.SetDefault(fd.GalleryGridLabelFontSize); break;
                     case "grid.thumbPlaceholder": d.SetDefault(fd.GalleryThumbPlaceholderLabelsEnabled); break;

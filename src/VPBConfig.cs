@@ -407,6 +407,7 @@ namespace VPB
         public bool GalleryGridLabelsAutoHideAtHighDensity = true;
         /// <summary>Grid hover: show top-right rating star for quick rate. Other status badges stay on detail strip.</summary>
         public bool GalleryGridHoverBadgesEnabled = true;
+        public bool GalleryDepStatusBadgeEnabled = true;
         /// <summary>Grid: horizontal spacing between thumbnail cells (pixels).</summary>
         public float GalleryGridSpacingX = 0f;
         /// <summary>Grid: vertical spacing between thumbnail cells (pixels).</summary>
@@ -1838,6 +1839,7 @@ namespace VPB
             GalleryGridLabelFontSize = 18f;
             GalleryGridLabelsAutoHideAtHighDensity = true;
             GalleryGridHoverBadgesEnabled = true;
+            GalleryDepStatusBadgeEnabled = true;
             GalleryThumbPlaceholderLabelsEnabled = true;
             GalleryThumbPlaceholderSizeScale = 0.7f;
             PluginGalleryCategoryLabelsOnly = false;
@@ -2187,6 +2189,7 @@ namespace VPB
                         if (node["GalleryGridLabelFontSize"] != null) GalleryGridLabelFontSize = Mathf.Clamp(node["GalleryGridLabelFontSize"].AsFloat, 8f, 40f);
                         if (node["GalleryGridLabelsAutoHideAtHighDensity"] != null) GalleryGridLabelsAutoHideAtHighDensity = node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool;
                         if (node["GalleryGridHoverBadgesEnabled"] != null) GalleryGridHoverBadgesEnabled = node["GalleryGridHoverBadgesEnabled"].AsBool;
+                        if (node["GalleryDepStatusBadgeEnabled"] != null) GalleryDepStatusBadgeEnabled = node["GalleryDepStatusBadgeEnabled"].AsBool;
                         if (node["GalleryGridSpacingX"] != null) GalleryGridSpacingX = Mathf.Clamp(node["GalleryGridSpacingX"].AsFloat, 0f, 80f);
                         if (node["GalleryGridSpacingY"] != null) GalleryGridSpacingY = Mathf.Clamp(node["GalleryGridSpacingY"].AsFloat, 0f, 80f);
                         if (node["GalleryGridThumbnailPadding"] != null) GalleryGridThumbnailPadding = Mathf.Clamp(node["GalleryGridThumbnailPadding"].AsFloat, 0f, 40f);
@@ -2767,6 +2770,7 @@ namespace VPB
                 node["GalleryGridLabelFontSize"].AsFloat = GalleryGridLabelFontSize;
                 node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool = GalleryGridLabelsAutoHideAtHighDensity;
                 node["GalleryGridHoverBadgesEnabled"].AsBool = GalleryGridHoverBadgesEnabled;
+                node["GalleryDepStatusBadgeEnabled"].AsBool = GalleryDepStatusBadgeEnabled;
                 node["GalleryGridSpacingX"].AsFloat = Mathf.Clamp(GalleryGridSpacingX, 0f, 80f);
                 node["GalleryGridSpacingY"].AsFloat = Mathf.Clamp(GalleryGridSpacingY, 0f, 80f);
                 node["GalleryGridThumbnailPadding"].AsFloat = Mathf.Clamp(GalleryGridThumbnailPadding, 0f, 40f);

@@ -358,6 +358,8 @@ namespace VPB
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.AutoInstall, "autoinstall", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.Hidden, "hidden", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.ScanExcluded, "whitelist", branchIndex);
+            TryStatus(dest, status, GallerySearchQuery.StatusFlags.MissingDeps, "missing", branchIndex);
+            TryStatus(dest, status, GallerySearchQuery.StatusFlags.CompleteDeps, "complete", branchIndex);
         }
 
         private static void TryStatus(

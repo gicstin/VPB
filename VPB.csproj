@@ -519,6 +519,8 @@
     <Compile Include="src\gallery\GalleryPanel.KeyboardFocus.cs" />
     <Compile Include="src\gallery\GalleryPanel.CommandPalette.cs" />
     <Compile Include="src\gallery\GalleryPanel.TryOn.cs" />
+    <Compile Include="src\gallery\GalleryDepStatus.cs" />
+    <Compile Include="src\gallery\GalleryPanel.DepStatusBadge.cs" />
     <Compile Include="src\gallery\GalleryPanel.DetailStrip.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />

@@ -390,6 +390,7 @@ namespace VPB
             if (file is VarFileEntry vfe) pkg = vfe.Package;
             else if (file is PackageListEntry ple) pkg = ple.Package;
             if (pkg != null) pkg.MissingDepsCount = -1;
+            try { GalleryDepStatus.InvalidateAll(); } catch { }
         }
     }
 }

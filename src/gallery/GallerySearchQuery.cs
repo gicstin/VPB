@@ -80,6 +80,8 @@ namespace VPB
             AutoInstall = 1 << 5,
             Hidden = 1 << 6,
             ScanExcluded = 1 << 7,
+            MissingDeps = 1 << 9,
+            CompleteDeps = 1 << 10,
         }
 
         /// <summary>Fresh empty query (not a shared mutable singleton).</summary>
@@ -620,6 +622,19 @@ namespace VPB
                 case "scan-excluded":
                     branch.Status |= StatusFlags.ScanExcluded;
                     return true;
+                case "missing":
+                case "missingdeps":
+                case "missing-deps":
+                case "incomplete":
+                case "broken":
+                    branch.Status |= StatusFlags.MissingDeps;
+                    return true;
+                case "complete":
+                case "ready":
+                case "nomissing":
+                case "no-missing":
+                    branch.Status |= StatusFlags.CompleteDeps;
+                    return true;
                 default:
                     return false;
             }
@@ -666,6 +681,16 @@ namespace VPB
                 case "notrated":
                 case "unstarred":
                     branch.Status |= StatusFlags.Unrated;
+                    break;
+                case "missing":
+                case "missingdeps":
+                case "incomplete":
+                case "broken":
+                    branch.Status |= StatusFlags.MissingDeps;
+                    break;
+                case "complete":
+                case "ready":
+                    branch.Status |= StatusFlags.CompleteDeps;
                     break;
             }
         }

@@ -3110,6 +3110,8 @@ namespace VPB
             depsDlGO.AddComponent<GalleryDepsDownloadHoverButton>();
             depsDlGO.SetActive(false);
 
+            CreateDepStatusBadge(btnGO);
+
             // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
             GameObject listHoverBarGO = new GameObject("ListHoverBar");
             listHoverBarGO.transform.SetParent(btnGO.transform, false);
@@ -4379,6 +4381,8 @@ namespace VPB
                 bool showStartupBadge = ApplyStartupSceneBadgeVisual(btnGO, file);
                 ApplyDynamicTopLeftBadgeLayout(btnGO, showStartupBadge, false, false, showScanWlBadge, false);
             }
+
+            ApplyDepStatusBadgeVisual(btnGO, file, b, null);
 
             // List Row Bind
             if (isListMode)

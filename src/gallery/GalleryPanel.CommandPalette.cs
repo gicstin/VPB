@@ -189,6 +189,10 @@ namespace VPB
                     try { ClearAllBrowseFiltersKeepCategory(); }
                     catch { try { RefreshFiles(true); } catch { } }
                 });
+            AddCommandPaletteEntry("filter_missing", "gallery.cmd.filter_missing", "Show only incomplete items", "", GBrowse, "missing deps dependencies broken packages not installed",
+                () => { try { ToggleDepStatusSearchChip("missing"); } catch { } });
+            AddCommandPaletteEntry("filter_complete", "gallery.cmd.filter_complete", "Show only complete items", "", GBrowse, "ready installed no missing deps dependencies works",
+                () => { try { ToggleDepStatusSearchChip("complete"); } catch { } });
             AddCommandPaletteEntry("looks_like", "gallery.cmd.looks_like", "Looks like & Hub tags", "", GBrowse, "character identity hub tags lookapedia jinx kinx tags",
                 () => { try { OpenUserTagsForPackFacet(); } catch { } },
                 LookFacetPackEnabled);

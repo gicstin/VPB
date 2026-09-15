@@ -144,6 +144,7 @@ namespace VPB
             try { PluginSettingsHotkeyCaptureUpdate(); } catch { }
             try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
             try { DataPackStatusRowTick(); } catch { }
+            try { DepStatusResolverTick(); } catch { }
             try { RemoveModeUpdate(); } catch { }
             CloseHubFetchConfirmModalIfAbandoned();
 

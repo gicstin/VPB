@@ -1168,6 +1168,7 @@ namespace VPB
             {
                 s_MissingDependenciesCache = null;
             }
+            try { GalleryDepStatus.InvalidateAll(); } catch { }
         }
 
         protected static VarPackage RegisterPackage(string vpath, bool clean = false)

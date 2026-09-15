@@ -724,6 +724,7 @@ namespace VPB
             public bool GalleryGridLabelsEnabled;
             public bool GalleryGridLabelsAutoHideAtHighDensity;
             public bool GalleryGridHoverBadgesEnabled;
+            public bool GalleryDepStatusBadgeEnabled;
             public float GalleryGridLabelFontSize;
             public float GalleryGridSpacingX;
             public float GalleryGridSpacingY;
@@ -1849,6 +1850,14 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryGridHoverBadgesEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "grid.depStatusBadge", GroupKey = "grid",
+                Label = VPBTranslation.T("settings.grid_dep_status_badge", "Missing-package mark"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_dep_status_badge", "Mark items whose dependencies are not installed, without hovering: amber count in the lower-right corner, red ! when the item itself is not on disk. Complete items stay unmarked. Search 'missing' or 'complete' to filter by it."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryDepStatusBadgeEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryDepStatusBadgeEnabled = v; RefreshAllDepStatusBadges(); }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "grid.autoHideHighDensity", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_labels_auto_hide_high_density", "Hide labels at max grid density"),
                 Tooltip = VPBTranslation.T("settings.tip.grid_labels_auto_hide_high_density", "When grid is at 11 or 12 columns (minus pressed to limit), hide label strips."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity,
@@ -2598,6 +2607,7 @@ namespace VPB
                 GalleryGridLabelsEnabled = VPBConfig.Instance.GalleryGridLabelsEnabled,
                 GalleryGridLabelsAutoHideAtHighDensity = VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity,
                 GalleryGridHoverBadgesEnabled = VPBConfig.Instance.GalleryGridHoverBadgesEnabled,
+                GalleryDepStatusBadgeEnabled = VPBConfig.Instance.GalleryDepStatusBadgeEnabled,
                 GalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize,
                 GalleryGridSpacingX = VPBConfig.Instance.GalleryGridSpacingX,
                 GalleryGridSpacingY = VPBConfig.Instance.GalleryGridSpacingY,
@@ -3759,6 +3769,7 @@ namespace VPB
             VPBConfig.Instance.GalleryGridLabelsEnabled = b.GalleryGridLabelsEnabled;
             VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity = b.GalleryGridLabelsAutoHideAtHighDensity;
             VPBConfig.Instance.GalleryGridHoverBadgesEnabled = b.GalleryGridHoverBadgesEnabled;
+            VPBConfig.Instance.GalleryDepStatusBadgeEnabled = b.GalleryDepStatusBadgeEnabled;
             VPBConfig.Instance.GalleryGridLabelFontSize = b.GalleryGridLabelFontSize;
             VPBConfig.Instance.GalleryGridSpacingX = b.GalleryGridSpacingX;
             VPBConfig.Instance.GalleryGridSpacingY = b.GalleryGridSpacingY;

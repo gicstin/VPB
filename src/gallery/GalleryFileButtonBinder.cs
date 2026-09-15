@@ -96,6 +96,7 @@ namespace VPB
         public Transform userTagsBadgeTr;
         public Transform startupSceneBadgeTr;
         public Transform depsBadgeTr;
+        public Transform depStatusBadgeTr;
         public Transform depsDownloadBtnTr;
 
         private bool _resolved;
@@ -206,6 +207,7 @@ namespace VPB
             startupSceneBadgeTr = FindBadge(root, "StartupSceneBadge");
             depsBadgeTr = FindBadge(root, "DepsBadge");
             depsDownloadBtnTr = FindBadge(root, "DepsDownloadBtn");
+            depStatusBadgeTr = FindBadge(root, "DepStatusBadge");
         }
 
         private static void CacheDetail(
@@ -275,6 +277,7 @@ namespace VPB
             if (badgeName == "StartupSceneBadge") return startupSceneBadgeTr;
             if (badgeName == "DepsBadge") return depsBadgeTr;
             if (badgeName == "DepsDownloadBtn") return depsDownloadBtnTr;
+            if (badgeName == "DepStatusBadge") return depStatusBadgeTr;
             return FindBadge(transform, badgeName);
         }
 
