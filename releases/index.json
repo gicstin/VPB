@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-15T15:45:46Z",
+    "UpdatedUtc":  "2026-09-15T16:20:04Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.732",
+                         "Tag":  "build-0.32.732-cea8740",
+                         "Commit":  "cea8740d35c064317cfec0c60826c240573b60d8",
+                         "DateUtc":  "2026-09-15T16:19:57Z",
+                         "Notes":  "feat: \"More Like This\" ΓÇö find items similar to any package",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.728",
                          "Tag":  "build-0.32.728-381abaa",
