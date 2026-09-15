@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-15T16:20:04Z",
+    "UpdatedUtc":  "2026-09-15T18:28:28Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.734",
+                         "Tag":  "build-0.32.734-9cfd1fd",
+                         "Commit":  "9cfd1fdcb509eccba6b7ef3b873988499ef849c9",
+                         "DateUtc":  "2026-09-15T18:28:19Z",
+                         "Notes":  "refactor: consolidation for plugin-data path and dependency whitelist",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.732",
                          "Tag":  "build-0.32.732-cea8740",
