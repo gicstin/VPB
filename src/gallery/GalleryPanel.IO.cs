@@ -140,6 +140,7 @@ namespace VPB
             None = 0,
             Dependencies = 1,
             Dependents = 2,
+            Similar = 3,
         }
 
         private struct FilterFrame
@@ -635,7 +636,7 @@ namespace VPB
             {
                 var st = GetSortState("Files");
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
-                if (activeContentType != ContentType.History)
+                if (activeContentType != ContentType.History && !IsSimilarFilterActive)
                     GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
             }
             catch { }
@@ -664,7 +665,7 @@ namespace VPB
             {
                 var st = GetSortState("Files");
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
-                if (activeContentType != ContentType.History)
+                if (activeContentType != ContentType.History && !IsSimilarFilterActive)
                     GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
             }
             catch { }
@@ -714,6 +715,7 @@ namespace VPB
                             return "Missing";
                         return "Dependencies";
                     case PackageFilterMode.Dependents: return "Dependents";
+                    case PackageFilterMode.Similar: return "Similar";
                     default: return "";
                 }
             }
@@ -5539,6 +5541,7 @@ namespace VPB
             currentPackageFilterMode = frame.mode;
             currentPackageFilterMasterUid = frame.masterUid;
             currentPackageFilterCount = frame.count;
+            if (frame.mode != PackageFilterMode.Similar) ClearSimilarFilterState();
             filterSearchBaseFiles = frame.searchBase;
             filterSearchLower = frame.searchLower;
 
@@ -5579,6 +5582,7 @@ namespace VPB
             currentPackageFilterCount = 0;
             filterSearchBaseFiles = null;
             filterSearchLower = "";
+            ClearSimilarFilterState();
 
             RefreshRecycleGridAfterFilterChange();
             try { RefreshChromeAfterPackageFilterListChange(); } catch { }

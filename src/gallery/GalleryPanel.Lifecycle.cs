@@ -429,6 +429,7 @@ namespace VPB
         void OnDestroy()
         {
             try { CloseHubFetchConfirmModal(false); } catch { }
+            try { ClearSimilarFilterState(); } catch { }
             ReleaseVamMenuAnchor();
             StopCo(ref _categoryQuickApplyCoroutine);
             try { _filterRandomizeGen++; } catch { }

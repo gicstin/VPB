@@ -4909,6 +4909,24 @@ namespace VPB
                         : VPBTranslation.T("gallery.detail.tip.dependents_none", "No dependents"))
             });
 
+            int similar = multi ? 0 : SimilarNeighbourCountForEntry(_detailStripBoundFile);
+            fields.Add(new DetailStripMetaField
+            {
+                Label = VPBTranslation.T("gallery.detail.label_similar", "Similar"),
+                Value = similar.ToString(),
+                Group = 1,
+                Enabled = similar > 0,
+                ValueColor = ColorTagFilter,
+                OnClick = DetailStripOnSimilarClick,
+                Tip = similar > 0
+                    ? string.Format(
+                        VPBTranslation.T("gallery.detail.tip.similar_fmt", "Show the {0} items most like {1}"),
+                        similar, itemName)
+                    : VPBTranslation.T(
+                        "gallery.detail.tip.similar_none",
+                        "Not enough data to compare this one — no Hub tags and too few dependencies")
+            });
+
             return fields;
         }
 

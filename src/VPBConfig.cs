@@ -386,6 +386,7 @@ namespace VPB
         public bool GalleryListNamesLegacyFileName = false;
         /// <summary>When true (default), gallery labels strip "Preset_"/"Plugins_" prefixes and the file extension so presets appear by their human name; the original path moves into the hover tooltip. Mirrors BA's resourceDisplayName behavior.</summary>
         public bool GalleryPrettyPresetNames = true;
+        public bool GalleryRandomPrefersSimilar = false;
         /// <summary>What the gallery search box matches against. See <see cref="NormalizeGallerySearchScope"/> for canonical values; default "PathAndName" preserves prior behavior.</summary>
         public string GallerySearchScope = "PathAndName";
         /// <summary>Which layout(s) show the hover preview. Off, List, Grid, or Both. Default: List.</summary>
@@ -1823,6 +1824,7 @@ namespace VPB
             GalleryShowHiddenPackages = false;
             GalleryListNamesLegacyFileName = false;
             GalleryPrettyPresetNames = true;
+            GalleryRandomPrefersSimilar = false;
             GallerySearchScope = "PathAndName";
             GalleryDefaultLeftSidePanel = "None";
             GalleryDefaultRightSidePanel = "None";
@@ -2177,6 +2179,7 @@ namespace VPB
                         if (node["GalleryThumbPlaceholderSizeScale"] != null) GalleryThumbPlaceholderSizeScale = ClampGalleryThumbPlaceholderSizeScale(node["GalleryThumbPlaceholderSizeScale"].AsFloat);
                         if (node["GalleryListNamesLegacyFileName"] != null) GalleryListNamesLegacyFileName = node["GalleryListNamesLegacyFileName"].AsBool;
                         if (node["GalleryPrettyPresetNames"] != null) GalleryPrettyPresetNames = node["GalleryPrettyPresetNames"].AsBool;
+                        if (node["GalleryRandomPrefersSimilar"] != null) GalleryRandomPrefersSimilar = node["GalleryRandomPrefersSimilar"].AsBool;
                         if (node["GallerySearchScope"] != null) GallerySearchScope = NormalizeGallerySearchScope(node["GallerySearchScope"].Value);
                         if (node["GalleryHoverPreviewMode"] != null)
                             GalleryHoverPreviewMode = NormalizeHoverPreviewMode(node["GalleryHoverPreviewMode"].Value);
@@ -2761,6 +2764,7 @@ namespace VPB
                 node["GalleryThumbPlaceholderSizeScale"].AsFloat = GetGalleryThumbPlaceholderSizeScale();
                 node["GalleryListNamesLegacyFileName"].AsBool = GalleryListNamesLegacyFileName;
                 node["GalleryPrettyPresetNames"].AsBool = GalleryPrettyPresetNames;
+                node["GalleryRandomPrefersSimilar"].AsBool = GalleryRandomPrefersSimilar;
                 node["GallerySearchScope"] = NormalizeGallerySearchScope(GallerySearchScope);
                 node["GalleryHoverPreviewMode"] = NormalizeHoverPreviewMode(GalleryHoverPreviewMode);
                 node["GalleryListHoverPreviewSize"].AsFloat = GalleryListHoverPreviewSize;

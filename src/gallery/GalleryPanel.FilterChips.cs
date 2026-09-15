@@ -206,6 +206,7 @@ namespace VPB
             PackageDeps,
             PackageDependents,
             PackageMissing,
+            PackageSimilar,
             PackageFilterBack,
             ClearAll,
             HiddenOnly,
@@ -232,6 +233,7 @@ namespace VPB
                 case FilterChipKind.PackageDeps: return DetailStripColorDeps;
                 case FilterChipKind.PackageDependents: return DetailStripColorDependents;
                 case FilterChipKind.PackageMissing: return DetailStripColorMissingBad;
+                case FilterChipKind.PackageSimilar: return ColorTagFilter;
                 case FilterChipKind.PackageFilterBack: return new Color(0.28f, 0.42f, 0.62f, 1f);
                 case FilterChipKind.ClearAll: return ColorCategory;
                 case FilterChipKind.HiddenOnly: return new Color(0.55f, 0.35f, 0.55f, 1f);
@@ -761,6 +763,21 @@ namespace VPB
         {
             if (specs == null || !IsFilterActive) return;
 
+            if (IsSimilarFilterActive)
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = SimilarFilterChipLabel() + " · " + GetFilterModeCount,
+                    Kind = FilterChipKind.PackageSimilar,
+                    OnDismiss = () =>
+                    {
+                        try { ClearPackageFilter(); } catch { }
+                    }
+                });
+                CollectPackageFilterBackChipSpec(specs);
+                return;
+            }
+
             string modeLabel = GetFilterModeLabel;
             if (string.IsNullOrEmpty(modeLabel))
                 modeLabel = VPBTranslation.T("gallery.filter_chip.package_filter", "Filter");
@@ -783,18 +800,21 @@ namespace VPB
                 }
             });
 
-            if (_filterStack.Count > 1)
+            CollectPackageFilterBackChipSpec(specs);
+        }
+
+        private void CollectPackageFilterBackChipSpec(List<ActiveFilterChipSpec> specs)
+        {
+            if (specs == null || _filterStack.Count <= 1) return;
+            specs.Add(new ActiveFilterChipSpec
             {
-                specs.Add(new ActiveFilterChipSpec
+                Label = VPBTranslation.T("gallery.filter_chip.back", "Back"),
+                Kind = FilterChipKind.PackageFilterBack,
+                OnDismiss = () =>
                 {
-                    Label = VPBTranslation.T("gallery.filter_chip.back", "Back"),
-                    Kind = FilterChipKind.PackageFilterBack,
-                    OnDismiss = () =>
-                    {
-                        try { NavigateBack(); } catch { }
-                    }
-                });
-            }
+                    try { NavigateBack(); } catch { }
+                }
+            });
         }
 
         private void DismissTagFilterChip(string tag)

@@ -263,6 +263,8 @@ namespace VPB
             if (file != null)
             {
                 GetGridItemLabelLines(file, out primaryText, out secondaryText, out creatorText);
+                string similarReason = SimilarReasonForEntry(file);
+                if (!string.IsNullOrEmpty(similarReason)) secondaryText = similarReason;
                 dual = !string.IsNullOrEmpty(secondaryText);
                 if (!string.IsNullOrEmpty(creatorText)
                     && string.Equals(creatorText, primaryText, StringComparison.OrdinalIgnoreCase))

@@ -15,6 +15,8 @@ namespace VPB
         {
             if (canvas != null) return;
 
+            try { VpbSimilarIndexBuilder.EnsureBuiltInBackground(); } catch { }
+
             // Subscribe to config changes
             if (VPBConfig.Instance != null)
             {

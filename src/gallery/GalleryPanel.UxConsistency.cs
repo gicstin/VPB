@@ -367,6 +367,18 @@ namespace VPB
                     try { DetailStripToggleExpanded(); } catch { }
                 });
 
+            GridCtxAddAction(
+                VPBTranslation.T("gallery.gridctx.more_like_this", "More Like This"),
+                KeyCode.M, "M",
+                GridCtxIcon("versions"),
+                () =>
+                {
+                    FileEntry f = _gridCtxMenuFile;
+                    CloseGridContextMenu();
+                    if (f != null) try { ApplySimilarFilter(f); } catch { }
+                },
+                enabled: selCount <= 1 && EntrySupportsSimilarFilter(file));
+
             GridCtxAddStartupSceneActions();
 
             GridCtxAddSeparator();

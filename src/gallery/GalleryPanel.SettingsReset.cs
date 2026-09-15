@@ -110,6 +110,7 @@ namespace VPB
                     case "helpers.clearInGameLogsOnSceneLaunch": d.SetDefault(fd.ClearInGameLogsOnSceneLaunch); break;
 
                     case "grid.prettyPresetNames": d.SetDefault(fd.GalleryPrettyPresetNames); break;
+                    case "grid.randomPrefersSimilar": d.SetDefault(fd.GalleryRandomPrefersSimilar); break;
                     case "grid.enabled": d.SetDefault(fd.GalleryGridLabelsEnabled); break;
                     case "grid.hoverBadges": d.SetDefault(fd.GalleryGridHoverBadgesEnabled); break;
                     case "grid.depStatusBadge": d.SetDefault(fd.GalleryDepStatusBadgeEnabled); break;

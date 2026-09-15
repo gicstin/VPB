@@ -440,7 +440,8 @@ namespace VPB
             var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
                 ? currentFilteredFiles
                 : lastFilteredFiles;
-            return FilterRandomPoolForCurrentCategory(pool);
+            List<FileEntry> filtered = FilterRandomPoolForCurrentCategory(pool);
+            return ApplySimilarRandomBias(filtered);
         }
 
         /// <param name="excludeIdentityKey">

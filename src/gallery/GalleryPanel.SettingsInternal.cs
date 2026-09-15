@@ -1717,6 +1717,17 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "grid.randomPrefersSimilar", GroupKey = "grid",
+                Label = VPBTranslation.T("settings.gallery_random_prefers_similar", "Random favours similar items"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_random_prefers_similar", "Bias the Random button toward items similar to the one you last applied, instead of drawing evenly from the whole category. Off = a plain uniform draw."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryRandomPrefersSimilar,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryRandomPrefersSimilar = v;
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "search.scope", GroupKey = "search", Label = VPBTranslation.T("settings.gallery_search_scope", "Search Scope"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_search_scope", "What the gallery search box matches against. Path + Name = current; Name only = less verbose; Name starts with = prefix only."),
                 ControlType = InternalSettingControlType.Cycle, Options = new[] { "Path + Name", "Name only", "Name starts with" },

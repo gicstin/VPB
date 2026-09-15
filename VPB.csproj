@@ -447,6 +447,10 @@
     <Compile Include="src\datapack\VpbDataPackService.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.HideMarkers.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.ClothingFootprint.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.Similar.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.SimilarBuild.cs" />
+    <Compile Include="src\gallery\VpbSimilarIndexBuilder.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SimilarFilter.cs" />
     <Compile Include="src\clothing\VpbBodyRegion.cs" />
     <Compile Include="src\clothing\VpbSkinRegionMap.cs" />
     <Compile Include="src\clothing\VpbSkinAreaMap.cs" />
