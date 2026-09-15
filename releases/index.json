@@ -1,10 +1,18 @@
 {
     "IndexVersion":  1,
-    "UpdatedUtc":  "2026-09-14T17:45:22Z",
+    "UpdatedUtc":  "2026-09-15T15:45:46Z",
     "MinRollbackVersion":  "0.32.406",
     "ExcludedBelowMin":  0,
     "Keep":  60,
     "Releases":  [
+                     {
+                         "Version":  "0.32.728",
+                         "Tag":  "build-0.32.728-381abaa",
+                         "Commit":  "381abaa713e49bcae4746d730b24821b54a888ad",
+                         "DateUtc":  "2026-09-15T15:45:38Z",
+                         "Notes":  "feat: mark items with missing dependencies in the grid",
+                         "Schema":  13
+                     },
                      {
                          "Version":  "0.32.727",
                          "Tag":  "build-0.32.727-1cc674a",
