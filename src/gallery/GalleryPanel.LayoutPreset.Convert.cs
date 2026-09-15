@@ -144,8 +144,7 @@ namespace VPB
         {
             get
             {
-                string baseDir = Directory.GetCurrentDirectory();
-                return Path.Combine(Path.Combine(Path.Combine(baseDir, "Saves"), "PluginData"), "VPB");
+                return GlobalInfo.PluginInfoDirectory;
             }
         }
 

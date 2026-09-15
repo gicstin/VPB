@@ -194,7 +194,7 @@ namespace VPB
                 catch { directory = null; }
             }
             if (string.IsNullOrEmpty(directory))
-                directory = Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
+                directory = GlobalInfo.CwdRelativePluginDataDirectory();
             try
             {
                 if (!Directory.Exists(directory))
@@ -336,7 +336,7 @@ namespace VPB
                     GlobalInfo.EnsurePluginDataInitialized();
                     string dir = GlobalInfo.PluginInfoDirectory;
                     if (string.IsNullOrEmpty(dir))
-                        dir = Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
+                        dir = GlobalInfo.CwdRelativePluginDataDirectory();
                     EnsureLocalDatabaseMigratedFromCache(dir);
                     return ResolveDatabaseFilePath(dir);
                 }
@@ -345,7 +345,7 @@ namespace VPB
                     string fallback = null;
                     try { fallback = UnityTemporaryCachePath(); } catch { }
                     if (string.IsNullOrEmpty(fallback))
-                        fallback = Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
+                        fallback = GlobalInfo.CwdRelativePluginDataDirectory();
                     return ResolveDatabaseFilePath(fallback);
                 }
             }

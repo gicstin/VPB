@@ -136,6 +136,9 @@ namespace VPB.src.util
 
         private static string FindFirstPersonAtomId(JSONArray atoms)
         {
+            string id = SceneUtils.FindFirstPersonAtomId(atoms);
+            if (!string.IsNullOrEmpty(id)) return id;
+            if (atoms == null) return null;
             for (int i = 0; i < atoms.Count; i++)
             {
                 JSONClass atom = atoms[i].AsObject;

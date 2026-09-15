@@ -93,11 +93,7 @@ namespace VPB
         {
             try
             {
-                string baseDir = Directory.GetCurrentDirectory();
-                string saveDir = Path.Combine(baseDir, "Saves");
-                saveDir = Path.Combine(saveDir, "PluginData");
-                saveDir = Path.Combine(saveDir, "VPB");
-                string path = Path.Combine(saveDir, "VPB.cfg");
+                string path = GlobalInfo.PluginFile("VPB.cfg");
                 if (!File.Exists(path)) return "";
 
                 string json = File.ReadAllText(path);
@@ -130,13 +126,7 @@ namespace VPB
         {
             get
             {
-                // Use PluginData for persistence (works reliably even with hot reloads / read-only Custom folders).
-                string baseDir = Directory.GetCurrentDirectory();
-                string saveDir = Path.Combine(baseDir, "Saves");
-                saveDir = Path.Combine(saveDir, "PluginData");
-                saveDir = Path.Combine(saveDir, "VPB");
-                if (!Directory.Exists(saveDir)) Directory.CreateDirectory(saveDir);
-                return Path.Combine(saveDir, "VPB.cfg");
+                return GlobalInfo.PluginFile("VPB.cfg");
             }
         }
 
@@ -2992,38 +2982,11 @@ namespace VPB
                 string jsonOutput = JsonSerializationUtil.Serialize(node, 32_768);
                 long msAfterToString = sw.ElapsedMilliseconds;
 
-                // tmp + verify + backup-rotate + move so a crash mid-write can't truncate the live config.
-                string tmpPath = path + ".tmp";
-                File.WriteAllText(tmpPath, jsonOutput);
-
-                if (!File.Exists(tmpPath) || new FileInfo(tmpPath).Length < 2)
+                if (!VpbAtomicTextFile.TryWriteWithBackup(path, jsonOutput))
                 {
                     VPBLogger.Config.LogError("[VPB] Failed to write temporary config file, aborting save.");
                     return;
                 }
-
-                string backupPath = path + ".bak";
-                if (File.Exists(path))
-                {
-                    if (new FileInfo(path).Length > 2)
-                    {
-                        try
-                        {
-                            if (File.Exists(backupPath)) File.Delete(backupPath);
-                            File.Move(path, backupPath);
-                        }
-                        catch (Exception bakEx)
-                        {
-                            VPBLogger.Config.LogWarning("[VPB] Failed to rotate config backup: " + bakEx.Message);
-                            if (File.Exists(path)) File.Delete(path);
-                        }
-                    }
-                    else
-                    {
-                        File.Delete(path);
-                    }
-                }
-                File.Move(tmpPath, path);
                 long msAfterDisk = sw.ElapsedMilliseconds;
                 if (notifyListeners)
                 {

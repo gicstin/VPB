@@ -63,13 +63,7 @@ namespace VPB
         {
             try
             {
-                string baseDir = Directory.GetCurrentDirectory();
-                string saveDir = Path.Combine(Path.Combine(Path.Combine(baseDir, "Saves"), "PluginData"), "VPB");
-
-                if (!Directory.Exists(saveDir))
-                    Directory.CreateDirectory(saveDir);
-
-                jsonPath = Path.Combine(saveDir, "scan_whitelist.json");
+                jsonPath = GlobalInfo.PluginFile("scan_whitelist.json");
                 Load();
             }
             catch (Exception ex)
@@ -151,14 +145,8 @@ namespace VPB
         {
             try
             {
-                if (!File.Exists(path)) return false;
-
                 string json;
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                using (var sr = new StreamReader(fs))
-                    json = sr.ReadToEnd();
-
-                if (string.IsNullOrEmpty(json) || json.Trim().Length < 2) return false;
+                if (!VpbAtomicTextFile.TryReadSharedText(path, out json)) return false;
 
                 ScanWhitelistData data;
                 lock (LogUtil.JsonLock)
@@ -217,34 +205,7 @@ namespace VPB
                         json = JsonConvert.SerializeObject(data, Formatting.Indented);
 
                     if (string.IsNullOrEmpty(json)) return;
-
-                    string tmpPath = jsonPath + ".tmp";
-                    File.WriteAllText(tmpPath, json);
-
-                    if (!File.Exists(tmpPath) || new FileInfo(tmpPath).Length < 2) return;
-
-                    string backupPath = jsonPath + ".bak";
-                    if (File.Exists(jsonPath))
-                    {
-                        if (new FileInfo(jsonPath).Length > 2)
-                        {
-                            try
-                            {
-                                if (File.Exists(backupPath)) File.Delete(backupPath);
-                                File.Move(jsonPath, backupPath);
-                            }
-                            catch
-                            {
-                                if (File.Exists(jsonPath)) File.Delete(jsonPath);
-                            }
-                        }
-                        else
-                        {
-                            File.Delete(jsonPath);
-                        }
-                    }
-
-                    File.Move(tmpPath, jsonPath);
+                    VpbAtomicTextFile.TryWriteWithBackup(jsonPath, json);
                 }
                 catch (Exception ex)
                 {

@@ -42,19 +42,9 @@ namespace VPB
         {
             try
             {
-                string baseDir = Directory.GetCurrentDirectory();
-                string saveDir = Path.Combine(baseDir, "Saves");
-                saveDir = Path.Combine(saveDir, "PluginData");
-                saveDir = Path.Combine(saveDir, "VPB");
+                string saveDir = GlobalInfo.PluginInfoDirectory;
+                jsonPath = GlobalInfo.PluginFile("ratings.json");
 
-                if (!Directory.Exists(saveDir))
-                {
-                    Directory.CreateDirectory(saveDir);
-                }
-                
-                jsonPath = Path.Combine(saveDir, "ratings.json");
-
-                // Load existing JSON if it exists
                 Load();
 
                 try
@@ -63,7 +53,6 @@ namespace VPB
                 }
                 catch { }
 
-                // Legacy migration check (can merge into existing)
                 string oldPath = Path.Combine(saveDir, "ratings.bin");
                 if (File.Exists(oldPath))
                 {
@@ -382,16 +371,8 @@ namespace VPB
         {
             try
             {
-                if (!File.Exists(path)) return false;
-                
                 string json;
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                using (var sr = new StreamReader(fs))
-                {
-                    json = sr.ReadToEnd();
-                }
-
-                if (string.IsNullOrEmpty(json) || json.Trim().Length < 2) return false;
+                if (!VpbAtomicTextFile.TryReadSharedText(path, out json)) return false;
 
                 SerializableRatings data;
                 lock (LogUtil.JsonLock)
@@ -511,44 +492,11 @@ namespace VPB
                         return;
                     }
 
-                    string tmpPath = jsonPath + ".tmp";
-                    File.WriteAllText(tmpPath, json);
-
-                    // Verify tmp file was written correctly
-                    if (!File.Exists(tmpPath) || new FileInfo(tmpPath).Length < 2)
+                    if (!VpbAtomicTextFile.TryWriteWithBackup(jsonPath, json))
                     {
                         Debug.LogError("[VPB] Failed to write temporary ratings file, aborting save.");
                         return;
                     }
-
-                    string backupPath = jsonPath + ".bak";
-                    
-                    // Rotate files
-                    if (File.Exists(jsonPath))
-                    {
-                        // Only overwrite backup if main file is not empty
-                        if (new FileInfo(jsonPath).Length > 2)
-                        {
-                            try 
-                            { 
-                                if (File.Exists(backupPath)) File.Delete(backupPath);
-                                File.Move(jsonPath, backupPath);
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.LogWarning("[VPB] Failed to create backup: " + ex.Message);
-                                // Continue anyway, we have the .tmp
-                                if (File.Exists(jsonPath)) File.Delete(jsonPath);
-                            }
-                        }
-                        else
-                        {
-                            // If main is somehow empty, just delete it and keep the old backup
-                            File.Delete(jsonPath);
-                        }
-                    }
-                    
-                    File.Move(tmpPath, jsonPath);
                 }
                 catch (Exception ex)
                 {

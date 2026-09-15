@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using SimpleJSON;
 
 namespace VPB
 {
@@ -78,6 +79,29 @@ namespace VPB
             if (atom == null) return false;
             try { return IsPersonLikeAtomType(atom.type); }
             catch { return false; }
+        }
+
+        public static string FindFirstPersonAtomId(JSONClass scene)
+        {
+            if (scene == null) return null;
+            JSONNode n = scene["atoms"];
+            JSONArray atoms = n != null ? n.AsArray : null;
+            return FindFirstPersonAtomId(atoms);
+        }
+
+        public static string FindFirstPersonAtomId(JSONArray atoms)
+        {
+            if (atoms == null) return null;
+            for (int i = 0; i < atoms.Count; i++)
+            {
+                JSONClass a = atoms[i] != null ? atoms[i].AsObject : null;
+                if (a == null) continue;
+                string type = a["type"] != null ? a["type"].Value : null;
+                if (!IsPersonLikeAtomType(type)) continue;
+                if (a["id"] != null && !string.IsNullOrEmpty(a["id"].Value))
+                    return a["id"].Value;
+            }
+            return null;
         }
 
         /// <summary>

@@ -279,6 +279,8 @@
     <Compile Include="src\ClothingLoadingUtils.cs" />
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
+    <Compile Include="src\util\VpbAtomicTextFile.cs" />
+    <Compile Include="src\util\JsonUidSetStore.cs" />
     <Compile Include="src\util\VPBLogger.cs" />
     <Compile Include="src\util\VpbLogRepeatGovernor.cs" />
     <Compile Include="src\util\VpbSessionLog.cs" />

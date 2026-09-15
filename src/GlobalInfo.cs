@@ -21,7 +21,17 @@ namespace VPB
             }
         }
 
-        public static string AutoInstallPath => Path.Combine(PluginInfoDirectory, "AutoInstall.txt");
+        public static string AutoInstallPath => PluginFile("AutoInstall.txt");
+
+        public static string PluginFile(string fileName)
+        {
+            return Path.Combine(PluginInfoDirectory, fileName);
+        }
+
+        public static string CwdRelativePluginDataDirectory()
+        {
+            return Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
+        }
 
         /// <summary>Resolves paths, migrates known legacy files once, ensures VPB folder exists.</summary>
         public static void EnsurePluginDataInitialized()

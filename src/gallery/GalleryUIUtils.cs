@@ -966,19 +966,7 @@ namespace VPB
 
         private static string FindFirstPersonAtomId(JSONClass scene)
         {
-            if (scene == null) return null;
-            JSONArray atoms = scene["atoms"] != null ? scene["atoms"].AsArray : null;
-            if (atoms == null) return null;
-            for (int i = 0; i < atoms.Count; i++)
-            {
-                JSONClass a = atoms[i] != null ? atoms[i].AsObject : null;
-                if (a == null) continue;
-                string type = a["type"] != null ? a["type"].Value : null;
-                if (!SceneUtils.IsPersonLikeAtomType(type)) continue;
-                if (a["id"] != null && !string.IsNullOrEmpty(a["id"].Value))
-                    return a["id"].Value;
-            }
-            return null;
+            return SceneUtils.FindFirstPersonAtomId(scene);
         }
 
         private static IEnumerator MergeSceneFileRoutine(

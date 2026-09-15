@@ -313,9 +313,7 @@ namespace VPB
         {
             get
             {
-                string dir = Path.Combine(
-                    Path.Combine(Path.Combine(Directory.GetCurrentDirectory(), "Saves"), "PluginData"), "VPB");
-                return Path.Combine(dir, "VPB.random.json");
+                return GlobalInfo.PluginFile("VPB.random.json");
             }
         }
 

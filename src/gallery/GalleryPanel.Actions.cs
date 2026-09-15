@@ -1500,8 +1500,7 @@ namespace VPB
         {
             get
             {
-                string baseDir = Directory.GetCurrentDirectory();
-                return Path.Combine(Path.Combine(Path.Combine(Path.Combine(baseDir, "Saves"), "PluginData"), "VPB"), "gallery_scroll.json");
+                return GlobalInfo.PluginFile("gallery_scroll.json");
             }
         }
 

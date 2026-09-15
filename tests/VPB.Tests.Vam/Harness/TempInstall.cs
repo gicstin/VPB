@@ -39,6 +39,9 @@ namespace VPB.Tests
         {
             SetStatic(typeof(GlobalInfo), "pathsInitialized", false);
             SetStatic(typeof(GlobalInfo), "pluginInfoDirectory", null);
+            LockedPackagesManager.Reload();
+            AutoLoadPackagesManager.Reload();
+            DependencyWhitelistManager.Reload();
             SetStatic(typeof(VpbHideIndex), "s_prefsDirFull", null);
             VpbHideIndex.Invalidate();
         }
