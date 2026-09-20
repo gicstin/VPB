@@ -41,6 +41,7 @@ $ErrorActionPreference = 'Stop'
 
 $testsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $testsDir
+$onWindows = $IsWindows -or $env:OS -eq 'Windows_NT'
 
 function Write-Section([string] $text) {
     Write-Host ''
@@ -240,6 +241,90 @@ function Read-TrxResults([string] $trxPath) {
     return $results
 }
 
+function Read-XunitXmlResults([string] $xmlPath) {
+    $results = [pscustomobject]@{ Total = 0; Passed = 0; Failed = 0; Skipped = 0; Failures = @() }
+    if (-not (Test-Path $xmlPath)) { return $results }
+
+    [xml] $doc = Get-Content -Path $xmlPath -Raw
+    foreach ($node in $doc.SelectNodes('//test')) {
+        $results.Total++
+        switch ($node.result) {
+            'Pass' { $results.Passed++ }
+            'Fail' {
+                $results.Failed++
+                $message = $node.SelectSingleNode('failure/message')
+                $results.Failures += [pscustomobject]@{
+                    Name    = $node.name
+                    Message = if ($message) { $message.InnerText.Trim() } else { '(no message)' }
+                }
+            }
+            default { $results.Skipped++ }
+        }
+    }
+    return $results
+}
+
+function Find-XunitConsole {
+    $packagesRoot = $env:NUGET_PACKAGES
+    if (-not $packagesRoot) { $packagesRoot = Join-Path $HOME '.nuget/packages' }
+    $candidate = Join-Path $packagesRoot "xunit.runner.console/$xunitVersion/tools/net472/xunit.console.exe"
+    if (Test-Path $candidate) { return $candidate }
+    return $null
+}
+
+function Read-KnownMonoFailures {
+    $path = Join-Path $testsDir 'known-mono-failures.txt'
+    if (-not (Test-Path $path)) { return @() }
+    return @(Get-Content -Path $path | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and -not $_.StartsWith('#') })
+}
+
+function Invoke-VamSuiteUnderMono([string] $projectPath, [string] $xmlPath) {
+    $mono = Get-Command mono -ErrorAction SilentlyContinue
+    if (-not $mono) {
+        Write-Host 'dotnet test cannot host net472 on this OS and mono is not on PATH.' -ForegroundColor Red
+        $script:monoExit = 1
+        return @()
+    }
+
+    $buildArgs = @('build', $projectPath, '--nologo', '-c', $Configuration, '-v', 'q')
+    if (-not $NoBuild) {
+        & dotnet @buildArgs | Out-Host
+        if ($LASTEXITCODE -ne 0) { $script:monoExit = $LASTEXITCODE; return @() }
+    }
+
+    $console = Find-XunitConsole
+    if (-not $console) {
+        Write-Host "xunit.console.exe $xunitVersion not found in the NuGet cache; restore VPB.Tests.Vam first." -ForegroundColor Red
+        $script:monoExit = 1
+        return @()
+    }
+
+    $dll = Join-Path (Split-Path -Parent $projectPath) "bin/$Configuration/net472/VPB.Tests.Vam.dll"
+    $runArgs = @($console, $dll, '-nocolor', '-noautoreporters')
+    if ($Filter) { $runArgs += @('-class', "*$Filter*", '-method', "*$Filter*") }
+    foreach ($known in Read-KnownMonoFailures) { $runArgs += @('-noclass', $known) }
+    if ($xmlPath) {
+        if (Test-Path $xmlPath) { Remove-Item $xmlPath -Force }
+        $runArgs += @('-xml', $xmlPath)
+    }
+
+    $lines = @(& $mono.Source @runArgs 2>&1 | ForEach-Object { "$_" })
+    $script:monoExit = $LASTEXITCODE
+
+    $totals = $lines | Select-String -Pattern 'Total:\s*(\d+),\s*Errors:\s*(\d+),\s*Failed:\s*(\d+),\s*Skipped:\s*(\d+)' | Select-Object -Last 1
+    if ($totals) {
+        $total = [int] $totals.Matches[0].Groups[1].Value
+        $errors = [int] $totals.Matches[0].Groups[2].Value
+        $failed = [int] $totals.Matches[0].Groups[3].Value + $errors
+        $skipped = [int] $totals.Matches[0].Groups[4].Value
+        $passed = $total - $failed - $skipped
+        $verdict = if ($failed -gt 0) { 'Failed!' } else { 'Passed!' }
+        $lines += ("{0} - Failed: {1}, Passed: {2}, Skipped: {3}, Total: {4} - VPB.Tests.Vam.dll (net472 via mono)" -f $verdict, $failed, $passed, $skipped, $total)
+        if ($total -eq 0) { $lines += 'No test is available' }
+    }
+    return $lines
+}
+
 function Write-PasteableReport($rows) {
     $lines = @()
     $lines += '## VPB test run'
@@ -275,6 +360,8 @@ function Write-PasteableReport($rows) {
 $overall = 0
 $summaries = @()
 $reportRows = @()
+$xunitVersion = ([xml](Get-Content -Path (Join-Path $testsDir 'Directory.Build.props') -Raw)).Project.PropertyGroup[0].VpbXunitVersion
+$monoExit = 0
 
 foreach ($project in $projects) {
     Write-Section $project.Name
@@ -292,15 +379,24 @@ foreach ($project in $projects) {
         $arguments += @('--logger', "trx;LogFileName=$trxName", '--results-directory', $trxDir)
     }
 
+    $useMono = ($project.Name -eq 'VPB.Tests.Vam') -and -not $onWindows
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    $output = & dotnet @arguments
-    $exit = $LASTEXITCODE
+    if ($useMono) {
+        $xmlPath = if ($Report) { Join-Path $trxDir "$($project.Name).xunit.xml" } else { $null }
+        $output = Invoke-VamSuiteUnderMono $project.Path $xmlPath
+        $exit = $monoExit
+    }
+    else {
+        $output = & dotnet @arguments
+        $exit = $LASTEXITCODE
+    }
     $ErrorActionPreference = $previousPreference
     $text = ($output | Out-String)
 
     if ($Report) {
-        $reportRows += [pscustomobject]@{ Name = $project.Name; Results = (Read-TrxResults $trxPath) }
+        $results = if ($useMono) { Read-XunitXmlResults $xmlPath } else { Read-TrxResults $trxPath }
+        $reportRows += [pscustomobject]@{ Name = $project.Name; Results = $results }
     }
     else {
         Write-Host $text

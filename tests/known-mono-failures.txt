@@ -1,0 +1,19 @@
+# Test classes that cannot pass when VPB.Tests.Vam runs under mono on Linux/macOS.
+# One fully qualified class per line. Every entry needs a reason.
+#
+# Read by tests/run.ps1 and passed to xunit.console.exe as -noclass. Only the mono
+# fallback honours this list; on Windows dotnet test runs every class.
+# If a test failure sent you here: only add a class whose failure is caused by the host,
+# never one that fails because of VPB code.
+
+# sqlite3.dll is a Windows native library; VpbSqlite3 cannot P/Invoke it under mono.
+VPB.Tests.SqliteTests
+VPB.Tests.GalleryIndexTests
+VPB.Tests.UidWhitespaceRepairTests
+
+# BepInEx.Configuration.ConfigFile's type initializer needs the BepInEx Paths bootstrap that only exists in-game.
+VPB.Tests.FileManagerTests
+VPB.Tests.FileManagerProbe
+
+# Pins the exact ECall failure text of Windows .NET Framework; mono throws a different MissingMethodException.
+VPB.Tests.HarnessSelfTests
