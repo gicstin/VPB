@@ -2174,6 +2174,18 @@ namespace VPB
             }
         }
 
+        private ClothingApplyMode ResolveAppearanceClothingApplyModeFromConfig()
+        {
+            string cfg = AppearanceClothingApplyMode;
+            if (string.Equals(cfg, "keep", StringComparison.OrdinalIgnoreCase))
+                return ClothingApplyMode.Keep;
+            if (string.Equals(cfg, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+                return ClothingApplyMode.MergeOutfit;
+            if (string.Equals(cfg, "merge", StringComparison.OrdinalIgnoreCase))
+                return ClothingApplyMode.Merge;
+            return ClothingApplyMode.Replace;
+        }
+
         // Deletes target-linked CUAs when only the standalone CUA type is selected (Appearance path deletes during
         // its own apply). Then spawns the chosen source CUAs as native atoms.
         private void RunCUAImportWithOptionalDelete(bool standaloneCuaType)
@@ -2220,12 +2232,11 @@ namespace VPB
 
             string storableOverride = ResolveStorableOverrideForType(type);
 
-            // Gallery drag-drop mode is unrelated to sidebar intent, so OFF must load source clothing.
             ClothingApplyMode mode;
             if (type == VpbResourceType.Appearance)
                 mode = importSidebarSuppressClothingLoad
                     ? ClothingApplyMode.Keep
-                    : ClothingApplyMode.Replace;
+                    : ResolveAppearanceClothingApplyModeFromConfig();
             else if (type == VpbResourceType.Clothing || type == VpbResourceType.Hair)
             {
                 mode = importSidebarMergeClothingOrHair ? ClothingApplyMode.Merge : ClothingApplyMode.Replace;

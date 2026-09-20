@@ -483,6 +483,8 @@ namespace VPB
         public bool isSelected = false;
         /// <summary>Keep a faint rim while idle so muted chrome stays discernible. Off for grid thumbs.</summary>
         public bool showIdleRim = false;
+        int _rimSettingsSig;
+        bool _rimSettingsApplied;
         /// <summary>List layout: hover uses <see cref="hoverBorderGO"/> only; selection is a separate Graphic.
         /// Exit always hides hover GO (pool reuse never gets PointerExit). Grid inward border keeps GO when selected.</summary>
         public bool hoverIndicatorUsesSeparateSelectionVisual = false;
@@ -502,14 +504,37 @@ namespace VPB
             {
                 DestroyRimImmediate();
                 StripLegacyOutlineOffTargetGraphic();
+                _rimSettingsApplied = false;
                 return;
             }
 
-            EnsureRim();
+            int sig = RimSettingsSignature();
+            if (_rimSettingsApplied && sig == _rimSettingsSig)
+            {
+                RefreshRimActive();
+                return;
+            }
+            _rimSettingsSig = sig;
+            _rimSettingsApplied = true;
             StripLegacyOutlineOffTargetGraphic();
+            RefreshRimActive();
             RebuildRimLayout();
             ApplyRimTint();
-            RefreshRimActive();
+        }
+
+        int RimSettingsSignature()
+        {
+            int sig = 17;
+            sig = sig * 31 + (inward ? 1 : 0);
+            sig = sig * 31 + (showIdleRim ? 1 : 0);
+            sig = sig * 31 + Mathf.RoundToInt(borderSize * 100f);
+            sig = sig * 31 + hoverColor.GetHashCode();
+            sig = sig * 31 + selectedRimColor.GetHashCode();
+            sig = sig * 31 + idleRimColor.GetHashCode();
+            RoundedRect rounded = targetGraphic as RoundedRect;
+            sig = sig * 31 + Mathf.RoundToInt(
+                (rounded != null ? rounded.cornerRadiusFraction : 0f) * 1000f);
+            return sig;
         }
 
         void Awake()
@@ -525,10 +550,7 @@ namespace VPB
 
             if (hoverBorderGO == null)
             {
-                EnsureRim();
                 StripLegacyOutlineOffTargetGraphic();
-                RebuildRimLayout();
-                ApplyRimTint();
                 RefreshRimActive();
             }
             else DestroyRimImmediate();
@@ -609,14 +631,24 @@ namespace VPB
         private void RefreshRimActive()
         {
             if (hoverBorderGO != null) return;
-            if (rimRoot == null) return;
             bool rimsOn = UI.ChromeButtonRimsEnabled();
             bool showSelected = isSelected && (rimsOn || selectedRimColor.a <= 0.01f);
             bool showHover = hovering && HoverAllowed();
             // Idle grey rim stays on disabled chips (min/max stepper) — only yellow hover is gated.
             bool showIdle = rimsOn && showIdleRim;
             bool show = showHover || showSelected || showIdle;
-            if (rimRoot.activeSelf != show) rimRoot.SetActive(show);
+            if (!show)
+            {
+                if (rimRoot != null && rimRoot.activeSelf) rimRoot.SetActive(false);
+                return;
+            }
+            if (rimRoot == null)
+            {
+                EnsureRim();
+                RebuildRimLayout();
+                ApplyRimTint();
+            }
+            if (rimRoot != null && !rimRoot.activeSelf) rimRoot.SetActive(true);
         }
 
         private void StripLegacyOutlineOffTargetGraphic()
@@ -637,6 +669,7 @@ namespace VPB
 
         private void DestroyRimImmediate()
         {
+            _rimSettingsApplied = false;
             if (rimRoot == null) return;
             try { UnityEngine.Object.Destroy(rimRoot); }
             finally

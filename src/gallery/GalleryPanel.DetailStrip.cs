@@ -4909,6 +4909,28 @@ namespace VPB
                         : VPBTranslation.T("gallery.detail.tip.dependents_none", "No dependents"))
             });
 
+            if (!multi && file != null)
+            {
+                string insightValue;
+                Color insightColor;
+                string insightTip;
+                if (InsightsResolveDetailField(file, out insightValue, out insightColor, out insightTip))
+                {
+                    FileEntry insightFile = file;
+                    fields.Add(new DetailStripMetaField
+                    {
+                        Label = VPBTranslation.T("gallery.detail.label_findings", "Findings"),
+                        Value = insightValue,
+                        Group = 1,
+                        Enabled = true,
+                        ValueColor = insightColor,
+                        OnClick = () => ShowInsightsFloat(
+                            VpbPackageInsightStore.ResolvePackageUid(insightFile), InsightsFloatTab.Package),
+                        Tip = insightTip
+                    });
+                }
+            }
+
             int similar = multi ? 0 : SimilarNeighbourCountForEntry(_detailStripBoundFile);
             fields.Add(new DetailStripMetaField
             {

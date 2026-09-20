@@ -235,7 +235,7 @@ namespace VPB
             new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
             new[] { "troubleshooting", "diag_logs" },
             new[] { "updater",         "updater" },
-            new[] { "maintenance",     "helpers", "ba_migration" },
+            new[] { "maintenance",     "helpers", "ba_migration", "plugin_insights" },
         };
 
         private static Dictionary<string, string> _settingsFineToGroup;
@@ -689,6 +689,9 @@ namespace VPB
             public bool ClothingReplaceUseGeometry;
             public int ClothingReplaceStrictness;
             public bool VerticalMoveKeysEnabled;
+            public bool OutlinerZUpAxes;
+            public bool OutlinerAutoTargets;
+            public bool OutlinerTargetsRootOnly;
             public bool DataPackLookapediaEnabled;
             public bool DataPackHubTagsEnabled;
             public string HubFetchMissingMode;
@@ -1332,6 +1335,98 @@ namespace VPB
             });
 
             defs.Add(new InternalSettingDefinition {
+                Key = "desktop.outlinerRailWidth", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.outliner.rail_width", "Scene Overview rail width"),
+                Tooltip = VPBTranslation.T("settings.tip.outliner.rail_width",
+                    "Width of the Scene Overview when docked as a side rail. Drag the inner edge of the rail to change it live."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance != null
+                    ? VPBConfig.ClampOutlinerWidth(VPBConfig.Instance.OutlinerWidth)
+                    : GalleryUiDesignTokens.OutlinerRailWidthRef,
+                SetFloat = v =>
+                {
+                    if (VPBConfig.Instance == null) return;
+                    VPBConfig.Instance.OutlinerWidth = VPBConfig.ClampOutlinerWidth(v);
+                    ApplyOutlinerLayout();
+                },
+                Min = GalleryUiDesignTokens.OutlinerRailMinWidthRef,
+                Max = GalleryUiDesignTokens.OutlinerRailMaxWidthRef,
+                Step = 10f,
+                Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.outlinerZUpAxes", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.outliner.zup_axes", "Scene Overview: Z is up"),
+                Tooltip = VPBTranslation.T("settings.tip.outliner.zup_axes",
+                    "Label the transform rows the DAZ/Blender way — Z for height, Y for depth. Display only; the scene itself is unchanged."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance != null && VPBConfig.Instance.OutlinerZUpAxes,
+                SetBool = v =>
+                {
+                    if (VPBConfig.Instance == null) return;
+                    VPBConfig.Instance.OutlinerZUpAxes = v;
+                    VPBConfig.Instance.TriggerChange();
+                    InvalidateOutlinerCards();
+                    RebuildOutlinerInspector();
+                }
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.outlinerAutoTargets", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.outliner.auto_targets", "Scene Overview: show targets while editing"),
+                Tooltip = VPBTranslation.T("settings.tip.outliner.auto_targets",
+                    "Switch VaM to Edit mode and light up the move targets when you pick an atom in the Scene Overview, and flash them while you nudge one. Turn off to leave VaM's target state alone."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance != null && VPBConfig.Instance.OutlinerAutoTargets,
+                SetBool = v =>
+                {
+                    if (VPBConfig.Instance == null) return;
+                    VPBConfig.Instance.OutlinerAutoTargets = v;
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.outlinerTargetsRootOnly", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.outliner.targets_root_only", "Scene Overview: root target only"),
+                Tooltip = VPBTranslation.T("settings.tip.outliner.targets_root_only",
+                    "When targets are limited to the selection, show just the atom's root control instead of every body controller."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance != null && VPBConfig.Instance.OutlinerTargetsRootOnly,
+                SetBool = v =>
+                {
+                    if (VPBConfig.Instance == null) return;
+                    VPBConfig.Instance.OutlinerTargetsRootOnly = v;
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.outlinerIncludeParkedTargets", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.outliner.parked_targets", "Scene Overview: include parked targets"),
+                Tooltip = VPBTranslation.T("settings.tip.outliner.parked_targets",
+                    "VaM's 'hide inactive targets' preference, inverted. On shows every controller including parked ones; off hides the ones VaM considers inactive."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => !VPB.Outliner.OutlinerTargets.HideInactiveTargets(),
+                SetBool = v =>
+                {
+                    VPB.Outliner.OutlinerTargets.SetHideInactiveTargets(!v);
+                    ApplyOutlinerTargets(true);
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.outlinerShowHiddenAtoms", GroupKey = "desktop",
+                Label = VPBTranslation.T("settings.outliner.show_hidden_atoms", "Scene Overview: show hidden atoms"),
+                Tooltip = VPBTranslation.T("settings.tip.outliner.show_hidden_atoms",
+                    "VaM's 'show hidden atoms' preference. On lists atoms flagged hidden in the tree and lets their targets show."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPB.Outliner.OutlinerTargets.ShowHiddenAtoms(),
+                SetBool = v =>
+                {
+                    VPB.Outliner.OutlinerTargets.SetShowHiddenAtoms(v);
+                    QueueOutlinerRebuild();
+                }
+            });
+
+            defs.Add(new InternalSettingDefinition {
                 Key = "desktop.fixedEnforceDockEnabled", GroupKey = "desktop", Label = VPBTranslation.T("settings.desktop.fixed_enforce_dock", "Always enforce fixed dock side"),
                 Tooltip = VPBTranslation.T("settings.tip.desktop.fixed_enforce_dock", "When enabled, dock side ignores which anchor button you click."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DesktopFixedEnforceDockSide,
@@ -1646,6 +1741,58 @@ namespace VPB
                 SetBool = v => {
                     if (VPBConfig.Instance != null) VPBConfig.Instance.ClearInGameLogsOnSceneLaunch = v;
                     try { VPBConfig.Instance?.Save(false); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "insights.open", GroupKey = "plugin_insights",
+                Label = VPBTranslation.T("settings.insights.open", "Open Package Insights"),
+                Tooltip = VPBTranslation.T("settings.tip.insights.open",
+                    "Integrity findings, undeclared dependencies, bundled plugin code, and a search for which package holds a given file."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () => { try { ShowInsightsFloat(null, InsightsFloatTab.Overview); } catch { } }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "insights.autoScan", GroupKey = "plugin_insights",
+                Label = VPBTranslation.T("settings.insights.auto_scan", "Scan packages at startup"),
+                Tooltip = VPBTranslation.T("settings.tip.insights.auto_scan",
+                    "Off by default. When ON, VPB reads each package once shortly after launch to collect findings. It runs on a background thread at low priority and skips packages that have not changed since the last scan."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.InsightsAutoScan,
+                SetBool = v => { VPBConfig.Instance.InsightsAutoScan = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "insights.confirmUnreviewed", GroupKey = "plugin_insights",
+                Label = VPBTranslation.T("settings.insights.confirm_unreviewed", "Confirm before loading unreviewed plugin code"),
+                Tooltip = VPBTranslation.T("settings.tip.insights.confirm_unreviewed",
+                    "When ON, launching a scene from a package that bundles scripts, a DLL or an assetbundle you have not marked reviewed opens the report first. The second attempt proceeds."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.InsightsConfirmUnreviewedPlugins,
+                SetBool = v => { VPBConfig.Instance.InsightsConfirmUnreviewedPlugins = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "insights.rescan", GroupKey = "plugin_insights",
+                Label = VPBTranslation.T("settings.insights.rescan", "Rescan all packages now"),
+                Tooltip = VPBTranslation.T("settings.tip.insights.rescan",
+                    "Ignores cached results and reads every package again. Use after editing the keyword list."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () => { try { InsightsStartFullScan(true); } catch { } },
+                ActionEnabled = () => !VpbPackageInsightScanner.IsRunning
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "insights.keywords", GroupKey = "plugin_insights",
+                Label = VPBTranslation.T("settings.insights.keywords", "Create editable script keyword file"),
+                Tooltip = VPBTranslation.T("settings.tip.insights.keywords",
+                    "Writes the built-in keyword list to Saves/PluginData/VPB/insight_keywords.txt so you can add or remove entries. Rescan afterwards to apply."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () =>
+                {
+                    string path;
+                    if (VpbInsightKeywords.TryWriteDefaultUserFile(out path))
+                        ShowTemporaryStatus(string.Format(
+                            VPBTranslation.T("insights.status.keywords_written", "Keyword list written to {0}"), path), 5f);
+                    else
+                        ShowTemporaryStatus(VPBTranslation.T("insights.status.keywords_failed",
+                            "Could not write the keyword list."), 3f);
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -2580,6 +2727,9 @@ namespace VPB
                 ClothingReplaceUseGeometry = VPBConfig.Instance.ClothingReplaceUseGeometry,
                 ClothingReplaceStrictness = VPBConfig.Instance.ClothingReplaceStrictness,
                 VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
+                OutlinerZUpAxes = VPBConfig.Instance.OutlinerZUpAxes,
+                OutlinerAutoTargets = VPBConfig.Instance.OutlinerAutoTargets,
+                OutlinerTargetsRootOnly = VPBConfig.Instance.OutlinerTargetsRootOnly,
                 DataPackLookapediaEnabled = VPBConfig.Instance.DataPackLookapediaEnabled,
                 DataPackHubTagsEnabled = VPBConfig.Instance.DataPackHubTagsEnabled,
                 HubFetchMissingMode = VPBConfig.Instance.HubFetchMissingMode,
@@ -3737,6 +3887,9 @@ namespace VPB
             VPBConfig.Instance.ClothingReplaceUseGeometry = b.ClothingReplaceUseGeometry;
             VPBConfig.Instance.ClothingReplaceStrictness = b.ClothingReplaceStrictness;
             VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;
+            VPBConfig.Instance.OutlinerZUpAxes = b.OutlinerZUpAxes;
+            VPBConfig.Instance.OutlinerAutoTargets = b.OutlinerAutoTargets;
+            VPBConfig.Instance.OutlinerTargetsRootOnly = b.OutlinerTargetsRootOnly;
             if (VPBConfig.Instance.DataPackLookapediaEnabled != b.DataPackLookapediaEnabled
                 || VPBConfig.Instance.DataPackHubTagsEnabled != b.DataPackHubTagsEnabled)
             {

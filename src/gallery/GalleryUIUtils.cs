@@ -432,6 +432,12 @@ namespace VPB
         {
             if (entry == null) return;
 
+            try
+            {
+                if (panel != null && panel.InsightsShouldBlockLaunchForReview(entry)) return;
+            }
+            catch { }
+
             // Guard against duplicate triggers in the same click/frame burst.
             if (!TryBeginSceneLoadThrottle())
             {
@@ -1527,6 +1533,17 @@ namespace VPB
             }
         }
 
+        public static void LayoutVerticalScrollbarViewport(RectTransform viewportRT, float scrollBarWidth)
+        {
+            if (viewportRT == null) return;
+            float w = scrollBarWidth > 0f ? scrollBarWidth : 0f;
+            viewportRT.anchorMin = Vector2.zero;
+            viewportRT.anchorMax = Vector2.one;
+            viewportRT.pivot = new Vector2(0f, 1f);
+            viewportRT.offsetMin = Vector2.zero;
+            viewportRT.offsetMax = new Vector2(-w, 0f);
+        }
+
         public static GameObject CreateVScrollableContent(GameObject parentGO, Color backgroundColor, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, float scrollBarWidth = 15f, float spacing = 0f, bool addBottomFlexSpacer = true)
         {
             GameObject scrollableContentGO = AddChildGOImage(parentGO, backgroundColor, anchorPreset, horizontalSize, verticalSize, anchoredPositionOffset);
@@ -1534,10 +1551,7 @@ namespace VPB
             GameObject viewportGO = new GameObject("Viewport");
             viewportGO.transform.SetParent(scrollableContentGO.transform, false);
             RectTransform viewportRT = viewportGO.AddComponent<RectTransform>();
-            viewportRT.anchorMin = Vector2.zero;
-            viewportRT.anchorMax = Vector2.one;
-            viewportRT.sizeDelta = new Vector2(-scrollBarWidth, 0);
-            viewportRT.anchoredPosition = new Vector2(-scrollBarWidth * 0.5f, 0);
+            LayoutVerticalScrollbarViewport(viewportRT, scrollBarWidth);
             viewportGO.AddComponent<RectMask2D>();
 
             GameObject contentGO = new GameObject("Content");

@@ -153,12 +153,12 @@ namespace VPB.Tests
                 string old = VpbUpdateManifest.LegacyStagingDir(plugins);
                 Directory.CreateDirectory(Path.Combine(neu, "files"));
                 File.WriteAllText(VpbUpdateManifest.PendingPath(neu), "{\"files\":[]}");
-                File.WriteAllText(Path.Combine(neu, "files", "x.tmp"), "x");
+                File.WriteAllText(Path.Combine(Path.Combine(neu, "files"), "x.tmp"), "x");
 
                 Assert.True(VpbUpdateManifest.CopyStaging(neu, old),
                     "Old VPB.Patcher.dll only looks in BepInEx/plugins/vpb_update_staging. Without a copy there, a staged update never applies.");
                 Assert.True(VpbUpdateManifest.StagingHasPending(old));
-                Assert.True(File.Exists(Path.Combine(old, "files", "x.tmp")));
+                Assert.True(File.Exists(Path.Combine(Path.Combine(old, "files"), "x.tmp")));
             }
         }
 
@@ -171,7 +171,7 @@ namespace VPB.Tests
                 string neu = VpbUpdateManifest.NewStagingDir(plugins);
                 string old = VpbUpdateManifest.LegacyStagingDir(plugins);
                 Directory.CreateDirectory(Path.Combine(neu, "files"));
-                File.WriteAllText(Path.Combine(neu, "files", "staged.tmp"), "new-dll");
+                File.WriteAllText(Path.Combine(Path.Combine(neu, "files"), "staged.tmp"), "new-dll");
                 File.WriteAllText(VpbUpdateManifest.PendingPath(neu),
                     "{\"version\":\"1\",\"branch\":\"main\",\"files\":[" +
                     "{\"relativePath\":\"BepInEx/plugins/VPB/VPB.dll\",\"stagedFileName\":\"staged.tmp\",\"sha\":\"\"}]}");
@@ -198,7 +198,7 @@ namespace VPB.Tests
                 string neu = VpbUpdateManifest.NewStagingDir(plugins);
                 string old = VpbUpdateManifest.LegacyStagingDir(plugins);
                 Directory.CreateDirectory(Path.Combine(old, "files"));
-                File.WriteAllText(Path.Combine(old, "files", "staged.tmp"), "from-legacy");
+                File.WriteAllText(Path.Combine(Path.Combine(old, "files"), "staged.tmp"), "from-legacy");
                 File.WriteAllText(VpbUpdateManifest.PendingPath(old),
                     "{\"version\":\"1\",\"branch\":\"main\",\"files\":[" +
                     "{\"relativePath\":\"BepInEx/plugins/VPB/VPB.dll\",\"stagedFileName\":\"staged.tmp\",\"sha\":\"\"}]}");
@@ -228,7 +228,7 @@ namespace VPB.Tests
                 Directory.CreateDirectory(neu);
                 File.WriteAllText(VpbUpdateManifest.PendingPath(neu), "{\"version\":\"1\",\"files\":[]}");
                 Directory.CreateDirectory(Path.Combine(old, "files"));
-                File.WriteAllText(Path.Combine(old, "files", "staged.tmp"), "keep-me");
+                File.WriteAllText(Path.Combine(Path.Combine(old, "files"), "staged.tmp"), "keep-me");
                 File.WriteAllText(VpbUpdateManifest.PendingPath(old),
                     "{\"version\":\"1\",\"branch\":\"main\",\"files\":[" +
                     "{\"relativePath\":\"BepInEx/plugins/VPB/VPB.dll\",\"stagedFileName\":\"staged.tmp\",\"sha\":\"\"}]}");

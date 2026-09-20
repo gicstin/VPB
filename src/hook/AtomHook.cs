@@ -261,7 +261,7 @@ namespace VPB
                     }
                 }
 
-                if (!sceneLoad && ImageLoadingMgr.singleton != null)
+                if (!sceneLoad && !VpbImport.KeepClothingAppearanceLoadActive && ImageLoadingMgr.singleton != null)
                     ImageLoadingMgr.singleton.PrepareForAppearanceLoad();
             }
 

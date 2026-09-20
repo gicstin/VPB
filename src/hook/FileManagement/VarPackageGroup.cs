@@ -141,15 +141,22 @@ namespace VPB
 				}
 				if (package.Enabled)
 				{
-					int num2 = _enabledVersions[_enabledVersions.Count - 1];
-					if (package.Version == num2)
+					if (_enabledVersions.Count <= 0)
 					{
-						package.isNewestEnabledVersion = true;
-						NewestEnabledPackage = package;
+						package.isNewestEnabledVersion = false;
 					}
 					else
 					{
-						package.isNewestEnabledVersion = false;
+						int num2 = _enabledVersions[_enabledVersions.Count - 1];
+						if (package.Version == num2)
+						{
+							package.isNewestEnabledVersion = true;
+							NewestEnabledPackage = package;
+						}
+						else
+						{
+							package.isNewestEnabledVersion = false;
+						}
 					}
 				}
 				else

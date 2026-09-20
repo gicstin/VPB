@@ -81,6 +81,8 @@ namespace VPB
                     case "desktop.startFixed": d.SetDefault(fd.EnableAutoFixedGallery); break;
                     case "desktop.fixedAutoHideSeconds": d.SetDefault(fd.DesktopFixedAutoHideSeconds); break;
                     case "desktop.fixedDefaultDock": d.SetDefault(VPBConfig.NormalizeDesktopFixedDockSide(fd.DesktopFixedDefaultDockSide)); break;
+                    case "desktop.outlinerRailWidth": d.SetDefault(fd.OutlinerWidth); break;
+                    case "desktop.outlinerZUpAxes": d.SetDefault(fd.OutlinerZUpAxes); break;
                     case "desktop.fixedEnforceDockEnabled": d.SetDefault(fd.DesktopFixedEnforceDockSide); break;
                     case "desktop.fixedEnforceDockSide": d.SetDefault(VPBConfig.NormalizeDesktopFixedDockSide(fd.DesktopFixedEnforcedDockSide)); break;
                     case "desktop.initialCategory": d.SetDefault(VPBConfig.NormalizeInitialGalleryCategory(fd.InitialGalleryCategory)); break;
@@ -108,6 +110,8 @@ namespace VPB
                     case "helpers.blockInGameMessages": d.SetDefault(fd.BlockInGameMessages ?? "Off"); break;
                     case "helpers.hideMissingDependencyLogs": d.SetDefault(fd.HideMissingDependencyLogs); break;
                     case "helpers.clearInGameLogsOnSceneLaunch": d.SetDefault(fd.ClearInGameLogsOnSceneLaunch); break;
+                    case "insights.autoScan": d.SetDefault(fd.InsightsAutoScan); break;
+                    case "insights.confirmUnreviewed": d.SetDefault(fd.InsightsConfirmUnreviewedPlugins); break;
 
                     case "grid.prettyPresetNames": d.SetDefault(fd.GalleryPrettyPresetNames); break;
                     case "grid.randomPrefersSimilar": d.SetDefault(fd.GalleryRandomPrefersSimilar); break;

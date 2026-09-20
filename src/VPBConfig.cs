@@ -33,6 +33,48 @@ namespace VPB
         /// <summary>Public clamp for gallery UI scale helpers (auto-detect, settings).</summary>
         public static float ClampUiScalePublic(float v) => ClampUiScale(v);
 
+        public static float ClampOutlinerWidth(float v)
+        {
+            float min = GalleryUiDesignTokens.OutlinerRailMinWidthRef;
+            float max = GalleryUiDesignTokens.OutlinerRailMaxWidthRef;
+            if (float.IsNaN(v) || float.IsInfinity(v)) return GalleryUiDesignTokens.OutlinerRailWidthRef;
+            return Mathf.Clamp(v, min, max);
+        }
+
+        public static float ClampOutlinerMoveStep(float v)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v) || v <= 0f) return 0.1f;
+            return Mathf.Clamp(v, 0.001f, 10f);
+        }
+
+        public static float ClampOutlinerRotateStep(float v)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v) || v <= 0f) return 15f;
+            return Mathf.Clamp(v, 0.1f, 180f);
+        }
+
+        public static float ClampOutlinerTargetsPulse(float v)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v) || v < 0f) return 3f;
+            return Mathf.Clamp(v, 0f, 30f);
+        }
+
+        public static float ClampOutlinerFloatWidth(float v)
+        {
+            float min = GalleryUiDesignTokens.OutlinerFloatMinWidthRef;
+            float max = GalleryUiDesignTokens.OutlinerFloatMaxWidthRef;
+            if (float.IsNaN(v) || float.IsInfinity(v)) return GalleryUiDesignTokens.OutlinerFloatDefaultWidthRef;
+            return Mathf.Clamp(v, min, max);
+        }
+
+        public static float ClampOutlinerFloatHeight(float v)
+        {
+            float min = GalleryUiDesignTokens.OutlinerFloatMinHeightRef;
+            float max = GalleryUiDesignTokens.OutlinerFloatMaxHeightRef;
+            if (float.IsNaN(v) || float.IsInfinity(v)) return GalleryUiDesignTokens.OutlinerFloatDefaultHeightRef;
+            return Mathf.Clamp(v, min, max);
+        }
+
         public static int ClampRatingPresenceFilterMode(int v)
         {
             if (v < 0) return 0;
@@ -808,6 +850,10 @@ namespace VPB
         /// <summary>Plugins float geometry (canvas-local center, design px at scale 1), per mode.</summary>
         public readonly FloatGeometryPair GalleryPluginsFloatGeometry =
             new FloatGeometryPair("GalleryPluginsFloat", 460f, 560f);
+        public readonly FloatGeometryPair GalleryInsightsFloatGeometry =
+            new FloatGeometryPair("GalleryInsightsFloat", 620f, 640f);
+        public readonly FloatGeometryPair GalleryOutlinerFloatGeometry =
+            new FloatGeometryPair("GalleryOutlinerFloat", 980f, 720f);
         public bool GalleryPluginsFloatPosSaved
         {
             get { return GalleryPluginsFloatGeometry.Current.PosSaved; }
@@ -837,6 +883,66 @@ namespace VPB
         {
             get { return GalleryPluginsFloatGeometry.Current.HeightRef; }
             set { GalleryPluginsFloatGeometry.Current.HeightRef = value; }
+        }
+        public bool GalleryInsightsFloatPosSaved
+        {
+            get { return GalleryInsightsFloatGeometry.Current.PosSaved; }
+            set { GalleryInsightsFloatGeometry.Current.PosSaved = value; }
+        }
+        public float GalleryInsightsFloatPosX
+        {
+            get { return GalleryInsightsFloatGeometry.Current.PosX; }
+            set { GalleryInsightsFloatGeometry.Current.PosX = value; }
+        }
+        public float GalleryInsightsFloatPosY
+        {
+            get { return GalleryInsightsFloatGeometry.Current.PosY; }
+            set { GalleryInsightsFloatGeometry.Current.PosY = value; }
+        }
+        public bool GalleryInsightsFloatSizeSaved
+        {
+            get { return GalleryInsightsFloatGeometry.Current.SizeSaved; }
+            set { GalleryInsightsFloatGeometry.Current.SizeSaved = value; }
+        }
+        public float GalleryInsightsFloatWidthRef
+        {
+            get { return GalleryInsightsFloatGeometry.Current.WidthRef; }
+            set { GalleryInsightsFloatGeometry.Current.WidthRef = value; }
+        }
+        public float GalleryInsightsFloatHeightRef
+        {
+            get { return GalleryInsightsFloatGeometry.Current.HeightRef; }
+            set { GalleryInsightsFloatGeometry.Current.HeightRef = value; }
+        }
+        public bool GalleryOutlinerFloatPosSaved
+        {
+            get { return GalleryOutlinerFloatGeometry.Current.PosSaved; }
+            set { GalleryOutlinerFloatGeometry.Current.PosSaved = value; }
+        }
+        public float GalleryOutlinerFloatPosX
+        {
+            get { return GalleryOutlinerFloatGeometry.Current.PosX; }
+            set { GalleryOutlinerFloatGeometry.Current.PosX = value; }
+        }
+        public float GalleryOutlinerFloatPosY
+        {
+            get { return GalleryOutlinerFloatGeometry.Current.PosY; }
+            set { GalleryOutlinerFloatGeometry.Current.PosY = value; }
+        }
+        public bool GalleryOutlinerFloatSizeSaved
+        {
+            get { return GalleryOutlinerFloatGeometry.Current.SizeSaved; }
+            set { GalleryOutlinerFloatGeometry.Current.SizeSaved = value; }
+        }
+        public float GalleryOutlinerFloatWidthRef
+        {
+            get { return GalleryOutlinerFloatGeometry.Current.WidthRef; }
+            set { GalleryOutlinerFloatGeometry.Current.WidthRef = value; }
+        }
+        public float GalleryOutlinerFloatHeightRef
+        {
+            get { return GalleryOutlinerFloatGeometry.Current.HeightRef; }
+            set { GalleryOutlinerFloatGeometry.Current.HeightRef = value; }
         }
         /// <summary>Layout presets manager float geometry (canvas-local center, design px at scale 1), per mode.</summary>
         public readonly FloatGeometryPair GalleryLayoutPresetsFloatGeometry =
@@ -1148,6 +1254,26 @@ namespace VPB
         /// <summary>Try-On Mode: apply presets non-destructively with a Keep/Compare/Revert bar.
         /// Opt-in: while active, applying a second item prompts Keep/Revert first, so browsing costs an extra click per item.</summary>
         public bool TryOnModeEnabled = false;
+        public bool InsightsAutoScan = false;
+        public bool InsightsConfirmUnreviewedPlugins = false;
+        public bool OutlinerOpen = false;
+        public int OutlinerLayoutMode = 0;
+        public int OutlinerDockSide = 0;
+        public float OutlinerWidth = 320f;
+        public float OutlinerSplit = GalleryUiDesignTokens.OutlinerSplitTreeShareRef;
+        public int OutlinerPollFrames = 10;
+        public string OutlinerPinsJson = "{}";
+        public bool OutlinerLinkEdit = false;
+        public bool OutlinerLocalSpace = false;
+        public bool OutlinerZUpAxes = false;
+        public float OutlinerMoveStep = 0.1f;
+        public float OutlinerRotateStep = 15f;
+        public bool OutlinerLookPreviews = true;
+        public int OutlinerTargetsMode = 1;
+        public bool OutlinerAutoTargets = true;
+        public bool OutlinerTargetsRootOnly = false;
+        public float OutlinerTargetsPulseSeconds = 3f;
+        public bool SearchRescueEnabled = true;
         /// <summary>When ON, the E/C keys move the navigation rig up/down in world (complements WASD). On by default.</summary>
         public bool VerticalMoveKeysEnabled = true;
         public bool DataPackLookapediaEnabled = true;
@@ -1909,6 +2035,8 @@ namespace VPB
             GallerySettingsFloatGeometry.Reset();
             GallerySettingsLastGroup = "appearance";
             GalleryPluginsFloatGeometry.Reset();
+            GalleryInsightsFloatGeometry.Reset();
+            GalleryOutlinerFloatGeometry.Reset();
             GalleryLayoutPresetsFloatGeometry.Reset();
             QuickMenuAssignFloatGeometry.Reset();
             GalleryPluginsFloatLatestOnly = false;
@@ -1917,6 +2045,26 @@ namespace VPB
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
             TryOnModeEnabled = false;
+            InsightsAutoScan = false;
+            InsightsConfirmUnreviewedPlugins = false;
+            OutlinerOpen = false;
+            OutlinerLayoutMode = 0;
+            OutlinerDockSide = 0;
+            OutlinerWidth = GalleryUiDesignTokens.OutlinerRailWidthRef;
+            OutlinerSplit = GalleryUiDesignTokens.OutlinerSplitTreeShareRef;
+            OutlinerPollFrames = 10;
+            OutlinerPinsJson = "{}";
+            OutlinerLinkEdit = false;
+            OutlinerLocalSpace = false;
+            OutlinerZUpAxes = false;
+            OutlinerMoveStep = 0.1f;
+            OutlinerRotateStep = 15f;
+            OutlinerLookPreviews = true;
+            OutlinerTargetsMode = 1;
+            OutlinerAutoTargets = true;
+            OutlinerTargetsRootOnly = false;
+            OutlinerTargetsPulseSeconds = 3f;
+            SearchRescueEnabled = true;
             VerticalMoveKeysEnabled = true;
             DataPackLookapediaEnabled = true;
             DataPackHubTagsEnabled = true;
@@ -2311,6 +2459,8 @@ namespace VPB
                         if (node["GallerySettingsLastGroup"] != null)
                             GallerySettingsLastGroup = node["GallerySettingsLastGroup"].Value ?? "appearance";
                         GalleryPluginsFloatGeometry.Load(node);
+                        GalleryInsightsFloatGeometry.Load(node);
+                        GalleryOutlinerFloatGeometry.Load(node);
                         GalleryLayoutPresetsFloatGeometry.Load(node);
                         QuickMenuAssignFloatGeometry.Load(node);
                         if (node["GalleryPluginsFloatLatestOnly"] != null)
@@ -2433,6 +2583,44 @@ namespace VPB
                             SpringScrollButtonMode = node["SpringScrollButtonEnabled"].AsBool ? "Desktop & VR" : "Off";
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["TryOnModeEnabled"] != null) TryOnModeEnabled = node["TryOnModeEnabled"].AsBool;
+                        if (node["InsightsAutoScan"] != null) InsightsAutoScan = node["InsightsAutoScan"].AsBool;
+                        if (node["InsightsConfirmUnreviewedPlugins"] != null) InsightsConfirmUnreviewedPlugins = node["InsightsConfirmUnreviewedPlugins"].AsBool;
+                        if (node["OutlinerOpen"] != null) OutlinerOpen = node["OutlinerOpen"].AsBool;
+                        if (node["OutlinerLayoutMode"] != null) OutlinerLayoutMode = node["OutlinerLayoutMode"].AsInt;
+                        if (node["OutlinerDockSide"] != null) OutlinerDockSide = node["OutlinerDockSide"].AsInt;
+                        if (node["OutlinerWidth"] != null) OutlinerWidth = ClampOutlinerWidth(node["OutlinerWidth"].AsFloat);
+                        if (node["OutlinerSplit"] != null) OutlinerSplit = Mathf.Clamp01(node["OutlinerSplit"].AsFloat);
+                        if (node["OutlinerPollFrames"] != null)
+                        {
+                            int pf = node["OutlinerPollFrames"].AsInt;
+                            if (pf < 1) pf = 1;
+                            if (pf > 60) pf = 60;
+                            OutlinerPollFrames = pf;
+                        }
+                        if (node["OutlinerPinsJson"] != null)
+                            OutlinerPinsJson = node["OutlinerPinsJson"].Value ?? "{}";
+                        if (node["OutlinerLinkEdit"] != null) OutlinerLinkEdit = node["OutlinerLinkEdit"].AsBool;
+                        if (node["OutlinerLocalSpace"] != null) OutlinerLocalSpace = node["OutlinerLocalSpace"].AsBool;
+                        if (node["OutlinerZUpAxes"] != null) OutlinerZUpAxes = node["OutlinerZUpAxes"].AsBool;
+                        if (node["OutlinerMoveStep"] != null)
+                            OutlinerMoveStep = ClampOutlinerMoveStep(node["OutlinerMoveStep"].AsFloat);
+                        if (node["OutlinerRotateStep"] != null)
+                            OutlinerRotateStep = ClampOutlinerRotateStep(node["OutlinerRotateStep"].AsFloat);
+                        if (node["OutlinerLookPreviews"] != null)
+                            OutlinerLookPreviews = node["OutlinerLookPreviews"].AsBool;
+                        if (node["OutlinerTargetsMode"] != null)
+                        {
+                            int tm = node["OutlinerTargetsMode"].AsInt;
+                            OutlinerTargetsMode = tm < 0 ? 0 : (tm > 2 ? 2 : tm);
+                        }
+                        if (node["OutlinerAutoTargets"] != null)
+                            OutlinerAutoTargets = node["OutlinerAutoTargets"].AsBool;
+                        if (node["OutlinerTargetsRootOnly"] != null)
+                            OutlinerTargetsRootOnly = node["OutlinerTargetsRootOnly"].AsBool;
+                        if (node["OutlinerTargetsPulseSeconds"] != null)
+                            OutlinerTargetsPulseSeconds =
+                                ClampOutlinerTargetsPulse(node["OutlinerTargetsPulseSeconds"].AsFloat);
+                        if (node["SearchRescueEnabled"] != null) SearchRescueEnabled = node["SearchRescueEnabled"].AsBool;
                         if (node["VerticalMoveKeysEnabled"] != null) VerticalMoveKeysEnabled = node["VerticalMoveKeysEnabled"].AsBool;
                         if (node["DataPackLookapediaEnabled"] != null) DataPackLookapediaEnabled = node["DataPackLookapediaEnabled"].AsBool;
                         if (node["DataPackHubTagsEnabled"] != null) DataPackHubTagsEnabled = node["DataPackHubTagsEnabled"].AsBool;
@@ -2857,6 +3045,8 @@ namespace VPB
                     ? "appearance"
                     : GallerySettingsLastGroup;
                 GalleryPluginsFloatGeometry.Save(node);
+                GalleryInsightsFloatGeometry.Save(node);
+                GalleryOutlinerFloatGeometry.Save(node);
                 GalleryLayoutPresetsFloatGeometry.Save(node);
                 QuickMenuAssignFloatGeometry.Save(node);
                 node["GalleryPluginsFloatLatestOnly"].AsBool = GalleryPluginsFloatLatestOnly;
@@ -2936,6 +3126,29 @@ namespace VPB
                 node["SpringScrollButtonMode"] = NormalizeSpringScrollButtonMode(SpringScrollButtonMode);
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["TryOnModeEnabled"].AsBool = TryOnModeEnabled;
+                node["InsightsAutoScan"].AsBool = InsightsAutoScan;
+                node["InsightsConfirmUnreviewedPlugins"].AsBool = InsightsConfirmUnreviewedPlugins;
+                node["OutlinerOpen"].AsBool = OutlinerOpen;
+                node["OutlinerLayoutMode"].AsInt = OutlinerLayoutMode;
+                node["OutlinerDockSide"].AsInt = OutlinerDockSide;
+                node["OutlinerWidth"].AsFloat = ClampOutlinerWidth(OutlinerWidth);
+                node["OutlinerSplit"].AsFloat = Mathf.Clamp01(OutlinerSplit);
+                node["OutlinerPollFrames"].AsInt = OutlinerPollFrames < 1 ? 10 : OutlinerPollFrames;
+                node["OutlinerPinsJson"] = string.IsNullOrEmpty(OutlinerPinsJson) ? "{}" : OutlinerPinsJson;
+                node["OutlinerLinkEdit"].AsBool = OutlinerLinkEdit;
+                node["OutlinerLocalSpace"].AsBool = OutlinerLocalSpace;
+                node["OutlinerZUpAxes"].AsBool = OutlinerZUpAxes;
+                node["OutlinerMoveStep"].AsFloat = ClampOutlinerMoveStep(OutlinerMoveStep);
+                node["OutlinerRotateStep"].AsFloat = ClampOutlinerRotateStep(OutlinerRotateStep);
+                node["OutlinerLookPreviews"].AsBool = OutlinerLookPreviews;
+                node["OutlinerTargetsMode"].AsInt = OutlinerTargetsMode < 0
+                    ? 0
+                    : (OutlinerTargetsMode > 2 ? 2 : OutlinerTargetsMode);
+                node["OutlinerAutoTargets"].AsBool = OutlinerAutoTargets;
+                node["OutlinerTargetsRootOnly"].AsBool = OutlinerTargetsRootOnly;
+                node["OutlinerTargetsPulseSeconds"].AsFloat =
+                    ClampOutlinerTargetsPulse(OutlinerTargetsPulseSeconds);
+                node["SearchRescueEnabled"].AsBool = SearchRescueEnabled;
                 node["VerticalMoveKeysEnabled"].AsBool = VerticalMoveKeysEnabled;
                 node["DataPackLookapediaEnabled"].AsBool = DataPackLookapediaEnabled;
                 node["DataPackHubTagsEnabled"].AsBool = DataPackHubTagsEnabled;

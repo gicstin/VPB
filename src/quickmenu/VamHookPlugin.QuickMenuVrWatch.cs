@@ -120,6 +120,8 @@ namespace VPB
             QuickMenuAssignableAction.Cleanup,
             QuickMenuAssignableAction.CreatorMode,
             QuickMenuAssignableAction.TargetAtom,
+            QuickMenuAssignableAction.PersonToggle,
+            QuickMenuAssignableAction.PersonSwitch,
 
             QuickMenuAssignableAction.ReplaceAddToggle,
             QuickMenuAssignableAction.AutoHideGallery,
@@ -129,6 +131,7 @@ namespace VPB
             QuickMenuAssignableAction.History,
             QuickMenuAssignableAction.PerfMode,
             QuickMenuAssignableAction.ToggleImportSidebar,
+            QuickMenuAssignableAction.SceneOutliner,
 
             QuickMenuAssignableAction.RemoveAllClothing,
             QuickMenuAssignableAction.RemoveAllHair,
@@ -159,7 +162,7 @@ namespace VPB
             QuickMenuAssignableAction.OpenCategoryAll,
         };
 
-        private static readonly int[] QuickMenuWatchAssignSectionStarts = { 0, 7, 14, 21, 25, 27, 36 };
+        private static readonly int[] QuickMenuWatchAssignSectionStarts = { 0, 7, 16, 25, 29, 31, 40 };
 
         private static readonly Quaternion QuickMenuWatchWristLocalRot = Quaternion.Euler(90f, 0f, 0f);
         private static readonly Color QuickMenuWatchBezelColor = new Color(0.10f, 0.10f, 0.10f, 0.92f);
@@ -2362,6 +2365,8 @@ namespace VPB
                 case QuickMenuAssignableAction.Cleanup: return VPBTranslation.T("hook.watch.lbl.cleanup", "Cleanup");
                 case QuickMenuAssignableAction.CreatorMode: return VPBTranslation.T("hook.watch.lbl.tools", "Tools");
                 case QuickMenuAssignableAction.TargetAtom: return VPBTranslation.T("hook.watch.lbl.target", "Target");
+                case QuickMenuAssignableAction.PersonToggle: return VPBTranslation.T("hook.watch.lbl.person", "Person");
+                case QuickMenuAssignableAction.PersonSwitch: return VPBTranslation.T("hook.watch.lbl.switch_person", "Switch");
                 case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.watch.lbl.replace", "Replace");
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.watch.lbl.autohide", "AutoHide");
                 case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.watch.lbl.hidden", "Hidden");
@@ -2370,6 +2375,7 @@ namespace VPB
                 case QuickMenuAssignableAction.History: return VPBTranslation.T("hook.watch.lbl.history", "History");
                 case QuickMenuAssignableAction.PerfMode: return VPBTranslation.T("hook.watch.lbl.perf", "Perf");
                 case QuickMenuAssignableAction.ToggleImportSidebar: return VPBTranslation.T("hook.watch.lbl.import", "Import");
+                case QuickMenuAssignableAction.SceneOutliner: return VPBTranslation.T("hook.watch.lbl.outliner", "Overview");
                 case QuickMenuAssignableAction.RemoveAllClothing: return VPBTranslation.T("hook.watch.lbl.noclothes", "Strip");
                 case QuickMenuAssignableAction.RemoveAllHair: return VPBTranslation.T("hook.watch.lbl.nohair", "No hair");
                 case QuickMenuAssignableAction.StarFilter: return VPBTranslation.T("hook.watch.lbl.stars", "Stars");
@@ -2427,7 +2433,8 @@ namespace VPB
             int n = QuickMenuWatchVisibleAssignSlotCount();
             for (int i = 0; i < n; i++)
             {
-                if (QuickMenuGetWatchSlotAction(i) == QuickMenuAssignableAction.PerfMode)
+                var act = QuickMenuGetWatchSlotAction(i);
+                if (act == QuickMenuAssignableAction.PerfMode || act == QuickMenuAssignableAction.PersonToggle || act == QuickMenuAssignableAction.PersonSwitch)
                     QuickMenuSyncWatchAssignSlot(i);
             }
         }

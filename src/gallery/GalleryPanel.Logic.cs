@@ -307,6 +307,8 @@ namespace VPB
                 bool structured = (br.TagInclude != null && br.TagInclude.Count > 0)
                     || (br.TagExclude != null && br.TagExclude.Count > 0)
                     || (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
+                    || (br.FileTerms != null && br.FileTerms.Count > 0)
+                    || br.IssueMask != PkgIssueFlags.None
                     || br.HasDataPackAtoms
                     || br.Status != GallerySearchQuery.StatusFlags.None;
                 string[] broad = br.BroadTerms != null && br.BroadTerms.Count > 0
@@ -703,6 +705,8 @@ namespace VPB
                 try { w = ScanWhitelistManager.IsScanExcludedBadgeVisible(file); } catch { w = false; }
                 if (!w) return false;
             }
+            if (!MatchesInsightSearchBranch(file, br)) return false;
+
             if (br.HasFlag(GallerySearchQuery.StatusFlags.MissingDeps)
                 || br.HasFlag(GallerySearchQuery.StatusFlags.CompleteDeps))
             {
@@ -4405,6 +4409,7 @@ namespace VPB
             catch { }
             // Scene load can leave Tags rail sticky Mask collapsed while Tag Mode stays armed (#74).
             try { RequestUserTagAvailVirtRecoverAfterLayout(); } catch { }
+            try { RefreshOutlinerAfterSceneChange(); } catch { }
         }
 
         public void CycleTarget(bool forward)

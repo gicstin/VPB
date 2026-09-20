@@ -14,6 +14,7 @@ namespace VPB
         PackHubTag = 5,
         PackAny = 6,
         PackHubCat = 7,
+        File = 8,
     }
 
     internal enum TitleSearchChipPolarity
@@ -55,6 +56,8 @@ namespace VPB
                     return (Polarity == TitleSearchChipPolarity.Exclude ? "-#" : "#") + v;
                 case TitleSearchChipKind.Creator:
                     return "@" + v;
+                case TitleSearchChipKind.File:
+                    return "file:" + v;
                 case TitleSearchChipKind.Status:
                     return v;
                 case TitleSearchChipKind.PackSubject:
@@ -81,6 +84,8 @@ namespace VPB
                     return (Polarity == TitleSearchChipPolarity.Exclude ? "-#" : "#") + v;
                 case TitleSearchChipKind.Creator:
                     return "@" + v;
+                case TitleSearchChipKind.File:
+                    return "file:" + v;
                 case TitleSearchChipKind.Status:
                     return v;
                 case TitleSearchChipKind.PackSubject:
@@ -182,6 +187,12 @@ namespace VPB
                     for (int i = 0; i < br.CreatorTerms.Count; i++)
                         TryAdd(dest, TitleSearchChipKind.Creator, TitleSearchChipPolarity.Include, br.CreatorTerms[i], bi);
                 }
+                if (br.FileTerms != null)
+                {
+                    for (int i = 0; i < br.FileTerms.Count; i++)
+                        TryAdd(dest, TitleSearchChipKind.File, TitleSearchChipPolarity.Include, br.FileTerms[i], bi);
+                }
+                AppendIssueChips(dest, br.IssueMask, bi);
                 AppendPackChips(dest, br, bi, forceExclude);
                 AppendStatusChips(dest, br.Status, bi);
             }
@@ -360,6 +371,24 @@ namespace VPB
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.ScanExcluded, "whitelist", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.MissingDeps, "missing", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.CompleteDeps, "complete", branchIndex);
+            TryStatus(dest, status, GallerySearchQuery.StatusFlags.Issues, "issues", branchIndex);
+            TryStatus(dest, status, GallerySearchQuery.StatusFlags.PluginContent, "plugins", branchIndex);
+            TryStatus(dest, status, GallerySearchQuery.StatusFlags.Flagged, "flagged", branchIndex);
+            TryStatus(dest, status, GallerySearchQuery.StatusFlags.Unreviewed, "unreviewed", branchIndex);
+            TryStatus(dest, status, GallerySearchQuery.StatusFlags.Undeclared, "undeclared", branchIndex);
+        }
+
+        private static void AppendIssueChips(List<TitleSearchChip> dest, PkgIssueFlags mask, int branchIndex)
+        {
+            if (mask == PkgIssueFlags.None) return;
+            PkgIssueFlags[] all = VpbInsightLabels.AllIssues;
+            for (int i = 0; i < all.Length; i++)
+            {
+                if ((mask & all[i]) == 0) continue;
+                string key = GallerySearchQuery.IssueKeyFor(all[i]);
+                if (string.IsNullOrEmpty(key)) continue;
+                TryAdd(dest, TitleSearchChipKind.Status, TitleSearchChipPolarity.Include, "issue:" + key, branchIndex);
+            }
         }
 
         private static void TryStatus(

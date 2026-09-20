@@ -219,6 +219,14 @@ namespace VPB
                 icon: UI.LoadIconSprite("geometry", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.creator_mode",
                 tipDefault: "Scene Tools{hint:scene_tools} — sticky scene authoring (Strip Scene, …). Not the Creators author list. Esc exits.");
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.scene_outliner", "Scene Overview"),
+                () => { CloseTitleBarOverflowMenu(); ToggleSceneOutliner(); },
+                IsSceneOutlinerOpen(),
+                icon: UI.LoadIconSprite("topology-star", UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.scene_outliner",
+                tipDefault: "Scene Overview — live tree of atoms in the loaded scene: select, edit, reorganise.");
         }
 
         private void AddOverflowMenuRow(

@@ -157,7 +157,7 @@ $manifest = [pscustomobject]@{
 
 $json = $manifest | ConvertTo-Json -Depth 5
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText($v2Path, $json.Replace("`r`n", "`n").Replace("`n", "`r`n") + "`r`n", $utf8NoBom)
+[System.IO.File]::WriteAllText($v2Path, $json.Replace("`r`n", "`n") + "`n", $utf8NoBom)
 
 $fileCount = @($files | Where-Object { -not $_.IsDirectory }).Count
 Write-Host ("[BuildPatchManifest] patch_manifest2.json: v{0}, {1} file(s), schema {2}." -f $manifest.Version, $fileCount, $manifest.Schema)

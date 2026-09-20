@@ -20,7 +20,7 @@ function Escape-CSharpString([string] $s) {
 
 function Write-TwoLineVersionFile([string] $path, [string] $line1, [int] $line2) {
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-    $content = $line1.TrimEnd() + "`r`n" + [string]$line2
+    $content = $line1.TrimEnd() + "`n" + [string]$line2
     [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
 }
 
@@ -60,7 +60,7 @@ function Write-PluginVersionCs([string] $path, [string] $baseSemVer, [int] $n, [
         '}'
     )
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllText($path, ($lines -join "`r`n") + "`r`n", $utf8NoBom)
+    [System.IO.File]::WriteAllText($path, ($lines -join "`n") + "`n", $utf8NoBom)
 }
 
 if (-not (Test-Path -LiteralPath $VersionFile)) {

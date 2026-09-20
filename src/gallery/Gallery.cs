@@ -297,6 +297,8 @@ namespace VPB
         private void OnFileManagerRefresh()
         {
             VamStartupProfiler.Milestone("Gallery.OnFileManagerRefresh_enter");
+            try
+            {
             bool pendingPackageDelta = false;
             try { pendingPackageDelta = FileManager.HasPendingGalleryPackageDelta(); } catch { }
 
@@ -404,6 +406,15 @@ namespace VPB
                 return;
             }
             autoRefreshCoroutine = StartCoroutine(AutoRefreshAfterPackageScan());
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] Gallery.OnFileManagerRefresh failed: " + ex.Message); } catch { }
+            }
+            finally
+            {
+                VamStartupProfiler.Milestone("Gallery.OnFileManagerRefresh_leave");
+            }
         }
 
         private IEnumerator RunDeferredAutoRefreshAfterStartupReady()

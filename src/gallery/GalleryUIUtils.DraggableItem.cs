@@ -356,6 +356,7 @@ namespace VPB
             if (Panel != null)
             {
                 try { Panel.ClearPluginsFloatSessionDropHover(); } catch { }
+                try { Panel.ClearOutlinerDropHover(); } catch { }
                 Panel.SetStatus("");
             }
         }
@@ -371,6 +372,7 @@ namespace VPB
                 if (Panel != null)
                 {
                     try { Panel.ClearPluginsFloatSessionDropHover(); } catch { }
+                    try { Panel.ClearOutlinerDropHover(); } catch { }
                     Panel.SetStatus("");
                 }
 
@@ -472,9 +474,14 @@ namespace VPB
 
                     ItemType itemTypeForDrop = itemType;
 
-                    // Appearance on person-like → apply (fast path). Empty / non-person → context menu
-                    // (spawn / apply-to-selected). Fixes empty-space appearance drops never opening menu.
-                    if (itemTypeForDrop == ItemType.Appearance && FileEntry != null)
+                    if (itemTypeForDrop == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry)
+                        && Panel != null && Panel.TryConsumePluginsFloatSessionDrop(eventData, FileEntry))
+                    {
+                    }
+                    else if (Panel != null && Panel.TryConsumeOutlinerDrop(eventData, this))
+                    {
+                    }
+                    else if (itemTypeForDrop == ItemType.Appearance && FileEntry != null)
                     {
                         if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
                         {
@@ -489,11 +496,7 @@ namespace VPB
                     // Scripts: Person → person PluginManager; UI strip / void → SessionPluginManager (not Scene).
                     else if (itemTypeForDrop == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry))
                     {
-                        if (Panel != null && Panel.TryConsumePluginsFloatSessionDrop(eventData, FileEntry))
-                        {
-                            // Add-new or replace handled by Plugins float session strip.
-                        }
-                        else if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
+                        if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
                             LoadPlugins(atom);
                         else
                             LoadPluginsAsSession();
@@ -547,7 +550,12 @@ namespace VPB
                 DestroyGhost();
                 DestroyGroundIndicator();
                 isDraggingItem = false;
-                if (Panel != null) Panel.SetStatus("");
+                if (Panel != null)
+                {
+                    try { Panel.ClearPluginsFloatSessionDropHover(); } catch { }
+                    try { Panel.ClearOutlinerDropHover(); } catch { }
+                    Panel.SetStatus("");
+                }
                 dragCam = null;
             }
         }
@@ -559,7 +567,12 @@ namespace VPB
                 DestroyGhost();
                 DestroyGroundIndicator();
                 isDraggingItem = false;
-                if (Panel != null) Panel.SetStatus("");
+                if (Panel != null)
+                {
+                    try { Panel.ClearPluginsFloatSessionDropHover(); } catch { }
+                    try { Panel.ClearOutlinerDropHover(); } catch { }
+                    Panel.SetStatus("");
+                }
                 dragCam = null;
             }
         }
@@ -605,24 +618,56 @@ namespace VPB
                 if (Panel != null)
                     floatDropMsg = Panel.DescribePluginsFloatSessionDrop(eventData, pluginName);
                 if (!string.IsNullOrEmpty(floatDropMsg))
+                {
                     statusMsg = floatDropMsg;
-                else if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
-                    statusMsg = "Adding " + pluginName + " to " + atom.name;
+                    if (Panel != null)
+                    {
+                        Panel.SetPluginsFloatSessionDropHover(eventData);
+                        Panel.ClearOutlinerDropHover();
+                    }
+                }
                 else
-                    statusMsg = "Release for session: " + pluginName;
+                {
+                    if (Panel != null) Panel.ClearPluginsFloatSessionDropHover();
+                    string outlinerMsg = Panel != null ? Panel.DescribeOutlinerDrop(eventData, pluginName) : null;
+                    if (!string.IsNullOrEmpty(outlinerMsg))
+                    {
+                        statusMsg = outlinerMsg;
+                        if (Panel != null) Panel.SetOutlinerDropHover(eventData);
+                    }
+                    else
+                    {
+                        if (Panel != null) Panel.ClearOutlinerDropHover();
+                        if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
+                            statusMsg = "Adding " + pluginName + " to " + atom.name;
+                        else
+                            statusMsg = "Release for session: " + pluginName;
+                    }
+                }
             }
-            else if (atom != null && atom.type == "Person")
+            else
             {
-                 bool replaceMode = (Panel != null && Panel.DragDropReplaceMode);
-                 string action = GetDragActionVerb(itemType, replaceMode);
-                 if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
-                 {
-                     statusMsg = $"{action} Preset {FileEntry.Name} to {atom.name}";
-                 }
-                 else
-                 {
-                     statusMsg = $"{action} {FileEntry.Name} to {atom.name}";
-                 }
+                string itemName = FileEntry != null && !string.IsNullOrEmpty(FileEntry.Name)
+                    ? FileEntry.Name : "item";
+                string outlinerMsg = Panel != null ? Panel.DescribeOutlinerDrop(eventData, itemName) : null;
+                if (!string.IsNullOrEmpty(outlinerMsg))
+                {
+                    statusMsg = outlinerMsg;
+                    if (Panel != null) Panel.SetOutlinerDropHover(eventData);
+                }
+                else
+                {
+                    if (Panel != null) Panel.ClearOutlinerDropHover();
+                    if (atom != null && atom.type == "Person")
+                    {
+                        bool replaceMode = (Panel != null && Panel.DragDropReplaceMode);
+                        string action = GetDragActionVerb(itemType, replaceMode);
+                        if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
+                            statusMsg = $"{action} Preset {FileEntry.Name} to {atom.name}";
+                        else
+                            statusMsg = $"{action} {FileEntry.Name} to {atom.name}";
+                    }
+                }
             }
             return atom;
         }
@@ -964,6 +1009,50 @@ namespace VPB
                 }
             }
             ApplyClothingToAtom(target, FileEntry.Uid);
+        }
+
+        internal bool ApplyToOutlinerAtom(Atom atom)
+        {
+            if (atom == null || FileEntry == null) return false;
+            ItemType t = GetItemType(FileEntry);
+            if (t == ItemType.Plugins)
+            {
+                LoadPlugins(atom);
+                return true;
+            }
+            if (!SceneUtils.IsPersonLikeAtom(atom)) return false;
+            switch (t)
+            {
+                case ItemType.Clothing:
+                case ItemType.ClothingItem:
+                case ItemType.ClothingPreset:
+                    LoadClothing(atom);
+                    return true;
+                case ItemType.Hair:
+                case ItemType.HairItem:
+                case ItemType.HairPreset:
+                    LoadHair(atom);
+                    return true;
+                case ItemType.Appearance:
+                    LoadAppearance(atom);
+                    return true;
+                case ItemType.Skin:
+                case ItemType.BreastPhysics:
+                    LoadSkin(atom);
+                    return true;
+                case ItemType.Morphs:
+                    LoadMorphs(atom);
+                    return true;
+                case ItemType.Pose:
+                    LoadPose(atom);
+                    return true;
+                case ItemType.General:
+                case ItemType.Animation:
+                    ApplyClothingToAtom(atom, FileEntry.Uid);
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>

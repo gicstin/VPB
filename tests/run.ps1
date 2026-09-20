@@ -60,6 +60,10 @@ function Install-GitHooks {
         if (-not (Test-Path $src)) { continue }
         $dst = Join-Path $hooksDst $hook
         Copy-Item -Path $src -Destination $dst -Force
+        # Linux/macOS: Copy-Item drops +x; git refuses to run non-executable hooks.
+        if (-not ($IsWindows -or $env:OS -eq 'Windows_NT')) {
+            & chmod +x $dst 2>$null
+        }
         Write-Host "installed $hook" -ForegroundColor Green
     }
     Write-Host ''

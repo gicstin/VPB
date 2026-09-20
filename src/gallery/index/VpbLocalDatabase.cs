@@ -710,6 +710,7 @@ namespace VPB
             }
 
             EnsurePackageManifestSchema(conn);
+            EnsurePackageInsightSchema(conn);
             EnsureGalleryUserTagTables(conn);
             EnsureFilterPresetTables(conn);
             EnsureLayoutPresetTables(conn);

@@ -28,6 +28,20 @@ function Ensure-Dir {
     }
 }
 
+function Join-VpbPath {
+    param([string] $Base, [Parameter(ValueFromRemainingArguments = $true)][string[]] $Parts)
+    $acc = $Base
+    foreach ($part in $Parts) {
+        if ([string]::IsNullOrEmpty($part)) { continue }
+        $norm = $part -replace '\\', '/'
+        foreach ($seg in ($norm -split '/')) {
+            if ([string]::IsNullOrEmpty($seg)) { continue }
+            $acc = Join-Path $acc $seg
+        }
+    }
+    return $acc
+}
+
 function Copy-FileWithRetry {
     param(
         [string] $SourcePath,
@@ -45,14 +59,23 @@ function Copy-FileWithRetry {
     $srcName = Split-Path -Leaf $SourcePath
     $destFull = Join-Path $DestDir $srcName
 
-    # robocopy retries on a locked dest (SHARING_VIOLATION); /R:5 /W:2 = 5 tries, 2s apart.
-    & robocopy $srcDir $DestDir $srcName /R:5 /W:2 /NJH /NJS /NDL /NFL /NC /NS /NP | Out-Null
-    $rc = $LASTEXITCODE
+    if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+        # robocopy retries on a locked dest (SHARING_VIOLATION); /R:5 /W:2 = 5 tries, 2s apart.
+        & robocopy $srcDir $DestDir $srcName /R:5 /W:2 /NJH /NJS /NDL /NFL /NC /NS /NP | Out-Null
+        $rc = $LASTEXITCODE
 
-    if ($rc -ge 8) {
-        $hint = if ($rc -band 16) { " (destination likely locked - is VaM running?)" } else { "" }
-        Emit-Warning $destFull 'PBD005' ("Robocopy failed (exit {0}){1}." -f $rc, $hint)
-        return $false
+        if ($rc -ge 8) {
+            $hint = if ($rc -band 16) { " (destination likely locked - is VaM running?)" } else { "" }
+            Emit-Warning $destFull 'PBD005' ("Robocopy failed (exit {0}){1}." -f $rc, $hint)
+            return $false
+        }
+    } else {
+        try {
+            Copy-Item -LiteralPath $SourcePath -Destination $destFull -Force -ErrorAction Stop
+        } catch {
+            Emit-Warning $destFull 'PBD005' ("Copy failed: " + $_.Exception.Message)
+            return $false
+        }
     }
 
     # robocopy can exit success yet leave a stale dest; require dest mtime >= source.
@@ -78,11 +101,20 @@ function Copy-DirRecursive {
     if (-not (Test-Path -LiteralPath $SourceDir -PathType Container)) { return }
     Ensure-Dir $DestDir
 
-    & robocopy $SourceDir $DestDir /E /NFL /NDL /NJH /NJS /NC /NS /NP /R:5 /W:2 | Out-Null
-    $rc = $LASTEXITCODE
+    if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+        & robocopy $SourceDir $DestDir /E /NFL /NDL /NJH /NJS /NC /NS /NP /R:5 /W:2 | Out-Null
+        $rc = $LASTEXITCODE
 
-    if ($rc -ge 8) {
-        Emit-Warning $DestDir 'PBD008' ("Robocopy dir failed (exit {0}): {1} -> {2}" -f $rc, $SourceDir, $DestDir)
+        if ($rc -ge 8) {
+            Emit-Warning $DestDir 'PBD008' ("Robocopy dir failed (exit {0}): {1} -> {2}" -f $rc, $SourceDir, $DestDir)
+        }
+    } else {
+        try {
+            # Merge contents into DestDir (robocopy /E semantics), not nest SourceDir name under it.
+            Copy-Item -Path (Join-Path $SourceDir '*') -Destination $DestDir -Recurse -Force -ErrorAction Stop
+        } catch {
+            Emit-Warning $DestDir 'PBD008' ("Copy dir failed: {0} -> {1}: {2}" -f $SourceDir, $DestDir, $_.Exception.Message)
+        }
     }
 }
 
@@ -96,9 +128,9 @@ if (-not $vamPathOk) {
     Write-Host ("[PostBuildDeploy] VaMPath '{0}' not found - skipping VaM deploy, vam_patch staging will still run." -f $VaMPath)
 }
 
-$vamPluginsRoot = Join-Path $VaMPath 'BepInEx\plugins'
-$vamPlugins = Join-Path $vamPluginsRoot 'VPB'
-$patchPlugins = Join-Path $ProjectDir 'vam_patch\BepInEx\plugins\VPB'
+$vamPluginsRoot = Join-VpbPath $VaMPath 'BepInEx' 'plugins'
+$vamPlugins = Join-VpbPath $vamPluginsRoot 'VPB'
+$patchPlugins = Join-VpbPath $ProjectDir 'vam_patch' 'BepInEx' 'plugins' 'VPB'
 
 if ($vamPathOk) { [void](Copy-FileWithRetry $TargetPath $vamPlugins) }
 [void](Copy-FileWithRetry $TargetPath $patchPlugins)
@@ -131,7 +163,7 @@ if ($vamPathOk) {
 }
 
 if ($vamPathOk) {
-    $legacySqlite = Join-Path $VaMPath 'BepInEx\scripts\sqlite3.dll'
+    $legacySqlite = Join-VpbPath $VaMPath 'BepInEx' 'scripts' 'sqlite3.dll'
     if (Test-Path -LiteralPath $legacySqlite) {
         try {
             Remove-Item -LiteralPath $legacySqlite -Force -ErrorAction Stop
@@ -144,13 +176,13 @@ if ($vamPathOk) {
 $patchNative = Join-Path $patchPlugins 'native'
 $vamNative = Join-Path $vamPlugins 'native'
 
-$sqliteSrc = Join-Path $ProjectDir 'lib\sqlite-native\sqlite3.dll'
+$sqliteSrc = Join-VpbPath $ProjectDir 'lib' 'sqlite-native' 'sqlite3.dll'
 if (Test-Path -LiteralPath $sqliteSrc) {
     if ($vamPathOk) { [void](Copy-FileWithRetry $sqliteSrc $vamNative) }
     [void](Copy-FileWithRetry $sqliteSrc $patchNative)
 }
 
-$turboSrc = Join-Path $ProjectDir 'lib\turbojpeg\turbojpeg.dll'
+$turboSrc = Join-VpbPath $ProjectDir 'lib' 'turbojpeg' 'turbojpeg.dll'
 $turboInPatch = Join-Path $patchNative 'turbojpeg.dll'
 if (Test-Path -LiteralPath $turboSrc) {
     if ($vamPathOk) { [void](Copy-FileWithRetry $turboSrc $vamNative) }
@@ -165,7 +197,7 @@ if (Test-Path -LiteralPath $turboSrc) {
 
 # The patcher prunes anything under BepInEx/plugins/VPB that this manifest does not list, so the
 # install carries its own copy - that is what makes the next relocation self-cleaning.
-$manifestSrc = Join-Path $ProjectDir 'vam_patch\patch_manifest.json'
+$manifestSrc = Join-VpbPath $ProjectDir 'vam_patch' 'patch_manifest.json'
 if (Test-Path -LiteralPath $manifestSrc) {
     [void](Copy-FileWithRetry $manifestSrc $patchPlugins)
     if ($vamPathOk) { [void](Copy-FileWithRetry $manifestSrc $vamPlugins) }
@@ -173,9 +205,9 @@ if (Test-Path -LiteralPath $manifestSrc) {
     Emit-Warning $manifestSrc 'PBD013' "patch_manifest.json missing; the shipped copy was not refreshed and the prune will stay inert."
 }
 
-$patcherSrc = Join-Path $ProjectDir 'src\patcher\VPBPatcher.cs'
-$sharedSrc = Join-Path $ProjectDir 'src\util\VpbLegacyLayout.cs'
-$patcherDll = Join-Path $ProjectDir 'vam_patch\BepInEx\patchers\VPB.Patcher.dll'
+$patcherSrc = Join-VpbPath $ProjectDir 'src' 'patcher' 'VPBPatcher.cs'
+$sharedSrc = Join-VpbPath $ProjectDir 'src' 'util' 'VpbLegacyLayout.cs'
+$patcherDll = Join-VpbPath $ProjectDir 'vam_patch' 'BepInEx' 'patchers' 'VPB.Patcher.dll'
 if (-not (Test-Path -LiteralPath $patcherDll)) {
     Emit-Warning $patcherDll 'PBD014' "Shipped VPB.Patcher.dll missing; users get no legacy-layout cleanup. Build VPBPatcher.csproj."
 } else {
@@ -210,7 +242,7 @@ foreach ($name in $assetFiles) {
 # the next VaM launch, driven by the manifest copied above - nothing to name here.
 
 # Runs last: it hashes what was staged above, so anything copied after it would ship unhashed.
-$buildManifestScript = Join-Path $ProjectDir 'scripts\BuildPatchManifest.ps1'
+$buildManifestScript = Join-VpbPath $ProjectDir 'scripts' 'BuildPatchManifest.ps1'
 if (Test-Path -LiteralPath $buildManifestScript) {
     try {
         & $buildManifestScript -ProjectDir $ProjectDir

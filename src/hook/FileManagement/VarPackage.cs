@@ -80,10 +80,11 @@ namespace VPB
         {
             writer.Write(MorphIndexPayloadMagic);
             writer.Write(MorphIndexPayloadVersion);
-            int count = MorphFileEntryNames != null ? MorphFileEntryNames.Count : -1;
+            string[] names = MorphFileEntryNames != null ? MorphFileEntryNames.ToArray() : null;
+            int count = names != null ? names.Length : -1;
             writer.Write(count);
             for (int i = 0; i < count; i++)
-                writer.Write(MorphFileEntryNames[i] ?? string.Empty);
+                writer.Write(names[i] ?? string.Empty);
         }
 
         void TryReadMorphIndexPayloadTrailer(BinaryReader reader)

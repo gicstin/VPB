@@ -22,6 +22,8 @@ namespace VPB
         private GameObject tboxCreatorStripSceneBtn;
         private GameObject tboxCreatorCompressCacheBtn;
         private Image tboxCreatorModeBtnImage;
+        private GameObject tboxSceneOutlinerBtn;
+        private Image tboxSceneOutlinerBtnImage;
         private Image tboxCreatorStripSceneBtnImage;
 
         /// <summary>
@@ -166,6 +168,7 @@ namespace VPB
                 }
                 catch { }
             }
+            RefreshTboxSceneOutlinerTint();
         }
 
         private static bool CreatorModeJsonAtomShouldKeep(JSONNode atomNode, HashSet<string> keepUids)
@@ -873,6 +876,16 @@ namespace VPB
                 }
                 RefreshCreatorModeChrome();
             }
+        }
+
+        internal void RefreshTboxSceneOutlinerTint()
+        {
+            if (tboxSceneOutlinerBtnImage == null) return;
+            try
+            {
+                tboxSceneOutlinerBtnImage.color = IsSceneOutlinerOpen() ? GalleryUiColorTokens.OverviewWellActive : GalleryUiColorTokens.OverviewWell;
+            }
+            catch { }
         }
     }
 }

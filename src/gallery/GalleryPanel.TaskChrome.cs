@@ -258,6 +258,7 @@ namespace VPB
             show(tboxCleanupAddExcludeBtn, false);
             show(tboxCleanupRemoveExcludeBtn, false);
             show(tboxCreatorModeBtn, false);
+            show(tboxSceneOutlinerBtn, false);
             show(tboxCreatorStripSceneBtn, false);
             show(tboxCreatorCompressCacheBtn, false);
             show(tboxAutoInstallBtn, false);
@@ -332,6 +333,7 @@ namespace VPB
                 show(tboxCreatorStripSceneBtn, true);
                 show(tboxCreatorCompressCacheBtn, true);
                 show(tboxCreatorModeBtn, true);
+                show(tboxSceneOutlinerBtn, true);
                 show(_detailStripExpandBtnGO, false);
             }
             else if (state == TaskChromeState.StickyImport)
@@ -398,6 +400,7 @@ namespace VPB
             show(tboxSelectAllBtn, true);
             show(tboxLoadRandomBtn, true);
             show(tboxCreatorModeBtn, true);
+            show(tboxSceneOutlinerBtn, true);
         }
 
         private static void SetTaskChromePeerEnabled(GameObject go, bool enabled)

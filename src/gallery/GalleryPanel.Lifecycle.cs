@@ -465,12 +465,15 @@ namespace VPB
             }
             catch { }
 
+            try { BindOutlinerAtomEvents(false); } catch { }
             RemoveModeDestroyPopup();
 
             _gridHoverBadgeBtnGO = null;
             _hoverPathRevealOwner = null;
 
             try { DestroyPluginsFloatChrome(); } catch { }
+            try { DestroyInsightsFloatChrome(); } catch { }
+            try { DestroyOutlinerChrome(); } catch { }
             try { TeardownLayoutPresetsFloat(); } catch { }
             try { TboxDestroyRandomPreview(); } catch { }
 

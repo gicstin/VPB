@@ -15,6 +15,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="$(VpbTestSdkVersion)" />
     <PackageReference Include="xunit" Version="$(VpbXunitVersion)" />
     <PackageReference Include="xunit.runner.visualstudio" Version="$(VpbXunitRunnerVersion)" />
+    <!-- Linux has no net472 targeting pack; without this SDK falls back to mono and loses facades. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(VpbHasVaM)' == 'true'">
@@ -67,8 +69,14 @@
       <Output TaskParameter="Result" ItemName="_VpbCompileRaw" />
     </XmlPeek>
     <ItemGroup>
+      <!--
+        Skip generated PluginVersion.g.cs. StartsWith('$') alone is not enough: MSBuild expands
+        $(IntermediateOutputPath) inside %(Identity) before the condition runs, so the leading $
+        is already gone and the item would be imported as a broken literal path. Harness ships a
+        stub instead so test builds never bump plugin_version.txt.
+      -->
       <Compile Include="@(_VpbCompileRaw->'$(VpbRoot)%(Identity)')"
-               Condition="!$([System.String]::Copy('%(Identity)').StartsWith('$'))" />
+               Condition="!$([System.String]::Copy('%(Identity)').Contains('PluginVersion.g.cs'))" />
     </ItemGroup>
     <Message Importance="normal" Text="VPB.Tests.Vam: imported @(_VpbCompileRaw->Count()) source entries from VPB.csproj" />
   </Target>

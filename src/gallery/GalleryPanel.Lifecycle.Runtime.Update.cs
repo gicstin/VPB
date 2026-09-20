@@ -145,6 +145,8 @@ namespace VPB
             try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
             try { DataPackStatusRowTick(); } catch { }
             try { DepStatusResolverTick(); } catch { }
+            try { TickOutliner(); } catch { }
+            try { InsightsPumpMainThread(); } catch { }
             try { RemoveModeUpdate(); } catch { }
             CloseHubFetchConfirmModalIfAbandoned();
 
@@ -861,6 +863,12 @@ namespace VPB
             if (TryHandlePluginsFloatEsc())
                 return;
 
+            if (TryHandleInsightsFloatEsc())
+                return;
+
+            if (TryHandleOutlinerEsc())
+                return;
+
             // Layout presets float: Esc menu → rename/delete → close (before InputField gate).
             if (TryHandleLayoutPresetsFloatKeyboard())
                 return;
@@ -968,12 +976,22 @@ namespace VPB
             }
             if (VpbShortcutMap.Down(VpbShortcut.Redo) || VpbShortcutMap.Down(VpbShortcut.RedoAlt))
             {
-                try { Redo(); } catch { }
+                try
+                {
+                    if (TryHandleOutlinerRedo()) return;
+                    Redo();
+                }
+                catch { }
                 return;
             }
             if (VpbShortcutMap.Down(VpbShortcut.Undo))
             {
-                try { Undo(); } catch { }
+                try
+                {
+                    if (TryHandleOutlinerUndo()) return;
+                    Undo();
+                }
+                catch { }
                 return;
             }
 
@@ -988,6 +1006,29 @@ namespace VPB
             if (VpbShortcutMap.Down(VpbShortcut.SceneEraser))
             {
                 try { ToggleRemoveMode(false, false); } catch { }
+                return;
+            }
+
+            if (VpbShortcutMap.Down(VpbShortcut.SceneOutliner))
+            {
+                try { ToggleSceneOutliner(); } catch { }
+                return;
+            }
+
+            if (VpbShortcutMap.Down(VpbShortcut.OutlinerTargets))
+            {
+                try
+                {
+                    if (!IsSceneOutlinerOpen()) OpenSceneOutliner(true);
+                    CycleOutlinerTargetMode();
+                }
+                catch { }
+                return;
+            }
+
+            if (VpbShortcutMap.Down(VpbShortcut.ZeroPoseMorphs))
+            {
+                try { ZeroPoseMorphsOnSelection(); } catch { }
                 return;
             }
 

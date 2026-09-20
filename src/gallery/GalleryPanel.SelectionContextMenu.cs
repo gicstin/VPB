@@ -36,6 +36,7 @@ namespace VPB
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
         private GameObject tboxOpenHubBtn;
+        private GameObject tboxInsightsBtn;
         private GameObject tboxOverwriteSceneBtn;
         private GameObject tboxSuppressScaleBtn;
         private GameObject tboxReplaceBtn;
@@ -210,6 +211,7 @@ namespace VPB
             one(tboxCleanupAddExcludeBtn);
             one(tboxCleanupRemoveExcludeBtn);
             one(tboxCreatorModeBtn);
+            one(tboxSceneOutlinerBtn);
             one(tboxCreatorStripSceneBtn);
             one(tboxCreatorCompressCacheBtn);
             one(tboxLoadBtn);
@@ -218,6 +220,7 @@ namespace VPB
             one(tboxLoadDepsBtn);
             one(tboxCacheTexturesBtn);
             one(tboxOpenHubBtn);
+            one(tboxInsightsBtn);
             one(tboxCopyPkgNamesBtn);
             one(tboxOverwriteSceneBtn);
             one(tboxSuppressScaleBtn);
@@ -269,6 +272,7 @@ namespace VPB
             d(tboxCleanupApplyBtn);
             d(tboxCleanupClearBtn);
             d(tboxCreatorModeBtn);
+            d(tboxSceneOutlinerBtn);
             d(tboxCreatorStripSceneBtn);
             d(tboxCreatorCompressCacheBtn);
             d(tboxCleanupAddExcludeBtn);
@@ -279,6 +283,7 @@ namespace VPB
             d(tboxLoadDepsBtn);
             d(tboxCacheTexturesBtn);
             d(tboxOpenHubBtn);
+            d(tboxInsightsBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxOverwriteSceneBtn);
             d(tboxSuppressScaleBtn);
@@ -401,12 +406,14 @@ namespace VPB
             if (vis(tboxCreatorStripSceneBtn)) ltr.Add(tboxCreatorStripSceneBtn);
             if (vis(tboxCreatorCompressCacheBtn)) ltr.Add(tboxCreatorCompressCacheBtn);
             if (vis(tboxCreatorModeBtn)) ltr.Add(tboxCreatorModeBtn);
+            if (vis(tboxSceneOutlinerBtn)) ltr.Add(tboxSceneOutlinerBtn);
             if (vis(tboxLoadBtn)) ltr.Add(tboxLoadBtn);
             if (vis(tboxLoadRandomBtn)) ltr.Add(tboxLoadRandomBtn);
             if (vis(tboxUnloadBtn)) ltr.Add(tboxUnloadBtn);
             if (vis(tboxLoadDepsBtn)) ltr.Add(tboxLoadDepsBtn);
             if (vis(tboxCacheTexturesBtn)) ltr.Add(tboxCacheTexturesBtn);
             if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
+            if (vis(tboxInsightsBtn)) ltr.Add(tboxInsightsBtn);
             if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
             if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
             if (vis(tboxOverwriteSceneBtn)) ltr.Add(tboxOverwriteSceneBtn);
@@ -1110,6 +1117,29 @@ namespace VPB
             catch { }
             tboxOpenHubBtn.SetActive(false);
 
+            tboxInsightsBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxOpenInsightsForSelection
+            );
+            tboxInsightsBtn.name = "Tbox_Insights";
+            TboxConfigureActionButtonFlex(tboxInsightsBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxInsightsBtn, "gallery.tooltip.tbox_insights",
+                "Package Insights — integrity findings, undeclared dependencies and bundled plugin code for the selected package");
+            try
+            {
+                var insightsIcon = UI.LoadIconSprite("info-square", Color.white);
+                if (insightsIcon != null) UI.AddIconToButton(tboxInsightsBtn, insightsIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxInsightsBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.insights", "Findings");
+                }
+            }
+            catch { }
+            tboxInsightsBtn.SetActive(false);
+
             tboxLoadDepsBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -1389,6 +1419,37 @@ namespace VPB
             catch { }
             try { tboxCreatorModeBtnImage = tboxCreatorModeBtn.GetComponent<Image>(); } catch { tboxCreatorModeBtnImage = null; }
             tboxCreatorModeBtn.SetActive(false);
+
+            tboxSceneOutlinerBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                ToggleSceneOutliner
+            );
+            tboxSceneOutlinerBtn.name = "Tbox_SceneOutliner";
+            TboxConfigureActionButtonFlex(tboxSceneOutlinerBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxSceneOutlinerBtn, "gallery.tooltip.tbox_scene_outliner",
+                "Scene Overview — live tree of atoms in the loaded scene.");
+            try
+            {
+                var outlinerIcon = UI.LoadIconSprite("topology-star", Color.white);
+                if (outlinerIcon != null)
+                {
+                    UI.AddIconToButton(tboxSceneOutlinerBtn, outlinerIcon, padding: 6f,
+                        backdropOverride: GalleryUiColorTokens.OverviewWell);
+                    Transform outlinerIconTr = tboxSceneOutlinerBtn.transform.Find("Icon");
+                    Image outlinerIconImg = outlinerIconTr != null ? outlinerIconTr.GetComponent<Image>() : null;
+                    if (outlinerIconImg != null) outlinerIconImg.color = GalleryUiColorTokens.OverviewGlyph;
+                }
+                else
+                {
+                    Text t = tboxSceneOutlinerBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.scene_outliner", "Overview");
+                }
+            }
+            catch { }
+            try { tboxSceneOutlinerBtnImage = tboxSceneOutlinerBtn.GetComponent<Image>(); } catch { tboxSceneOutlinerBtnImage = null; }
+            tboxSceneOutlinerBtn.SetActive(false);
 
             tboxCreatorStripSceneBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -2386,6 +2447,7 @@ namespace VPB
                 show(tboxLoadDepsBtn, false);
                 show(tboxCacheTexturesBtn, false);
                 show(tboxOpenHubBtn, false);
+                show(tboxInsightsBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
                 show(tboxOverwriteSceneBtn, false);
                 show(tboxSuppressScaleBtn, false);
@@ -2441,6 +2503,7 @@ namespace VPB
             show(tboxLoadDepsBtn, !isCleanup);
             show(tboxCacheTexturesBtn, !isCleanup);
             show(tboxOpenHubBtn, !isCleanup);
+            show(tboxInsightsBtn, !isCleanup);
             // Non-settings mode must explicitly re-show buttons hidden by Settings mode.
             // Otherwise, once Settings hides them, they stay inactive forever.
             show(tboxCopyPkgNamesBtn, true);
@@ -2472,6 +2535,7 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxLoadDepsBtn, false);
                 SetTboxButtonEnabledVisual(tboxCacheTexturesBtn, false);
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
+                SetTboxButtonEnabledVisual(tboxInsightsBtn, false);
                 show(tboxOverwriteSceneBtn, false);
 
                 try { RefreshSceneImportSideButtonVisibility(); } catch { }
@@ -2642,6 +2706,18 @@ namespace VPB
             {
                 tboxOpenHubBtn.SetActive(showOpenHubBtn);
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, canOpenHub);
+            }
+
+            if (tboxInsightsBtn != null)
+            {
+                bool canInspect = false;
+                if (selectedFiles != null && selectedFiles.Count == 1)
+                {
+                    try { canInspect = !string.IsNullOrEmpty(VpbPackageInsightStore.ResolvePackageUid(selectedFiles[0])); }
+                    catch { canInspect = false; }
+                }
+                tboxInsightsBtn.SetActive(selectedFiles != null && selectedFiles.Count > 0);
+                SetTboxButtonEnabledVisual(tboxInsightsBtn, canInspect);
             }
 
             show(tboxRemoveHistoryBtn, historyBrowse);
@@ -2970,6 +3046,12 @@ namespace VPB
                     VPBTranslation.T("gallery.history.removed_n_with_undo", "Removed {0} from History. Undo to restore{hint:undo}."),
                     keys.Count),
                 3f);
+        }
+
+        private void TboxOpenInsightsForSelection()
+        {
+            try { ShowInsightsFloat(InsightsResolveFocusUid(), InsightsFloatTab.Package); }
+            catch (Exception ex) { LogUtil.LogError("[VPB] TboxOpenInsightsForSelection: " + ex.Message); }
         }
 
         private void TboxOpenSelectedItemOnHub()

@@ -90,7 +90,11 @@ namespace VPB
             new QmAssignCatalogEntry(QuickMenuAssignableAction.Hub, QmAssignGroupScene),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.Cleanup, QmAssignGroupScene),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.CreatorMode, QmAssignGroupScene),
+            new QmAssignCatalogEntry(QuickMenuAssignableAction.SceneOutliner, QmAssignGroupScene),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.TargetAtom, QmAssignGroupScene),
+            new QmAssignCatalogEntry(QuickMenuAssignableAction.PersonSwitch, QmAssignGroupScene),
+            new QmAssignCatalogEntry(QuickMenuAssignableAction.PersonSelect, QmAssignGroupScene),
+            new QmAssignCatalogEntry(QuickMenuAssignableAction.PersonToggle, QmAssignGroupScene),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.CompressCache, QmAssignGroupScene),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.FpsCounter, QmAssignGroupPerf),
             new QmAssignCatalogEntry(QuickMenuAssignableAction.PassthroughToggle, QmAssignGroupCore),
@@ -507,6 +511,7 @@ namespace VPB
             m_QuickMenuAssignPopupTargetIdx = -1;
             m_QuickMenuSavePopupTargetIdx = -1;
             m_QuickMenuSavePopupPanel = null;
+            QuickMenuHidePersonPopup();
             QuickMenuCaptureAssignFloatGeometryToMemory();
             QuickMenuPersistAssignFloatGeometry();
             if (m_QuickMenuSavePopupRoot != null && m_QuickMenuSavePopupRoot.activeSelf)
@@ -1095,6 +1100,9 @@ namespace VPB
                 case QuickMenuAssignableAction.Cleanup: return VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup");
                 case QuickMenuAssignableAction.CreatorMode: return VPBTranslation.T("hook.qmbutton.creator_mode", "Scene Tools");
                 case QuickMenuAssignableAction.TargetAtom: return VPBTranslation.T("hook.qmbutton.target_atom", "Target Atom");
+                case QuickMenuAssignableAction.PersonToggle: return VPBTranslation.T("hook.qmbutton.person_toggle", "Person On/Off");
+                case QuickMenuAssignableAction.PersonSwitch: return VPBTranslation.T("hook.qmbutton.person_switch", "Switch Person");
+                case QuickMenuAssignableAction.PersonSelect: return VPBTranslation.T("hook.qmbutton.person_select", "Select Person");
                 case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add");
                 case QuickMenuAssignableAction.CompressCache: return VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache");
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide");
@@ -1107,6 +1115,7 @@ namespace VPB
                 case QuickMenuAssignableAction.RemoveAllClothing: return VPBTranslation.T("hook.qmbutton.remove_all_clothing", "Remove All Clothing");
                 case QuickMenuAssignableAction.RemoveAllHair: return VPBTranslation.T("hook.qmbutton.remove_all_hair", "Remove All Hair");
                 case QuickMenuAssignableAction.ToggleImportSidebar: return VPBTranslation.T("hook.qmbutton.toggle_import_sidebar", "Toggle Import Sidebar");
+                case QuickMenuAssignableAction.SceneOutliner: return VPBTranslation.T("hook.qmbutton.scene_outliner", "Scene Overview");
                 case QuickMenuAssignableAction.StarFilter: return VPBTranslation.T("hook.qmbutton.star_filter", "Star Filter");
                 case QuickMenuAssignableAction.PerfStepUp: return VPBTranslation.T("hook.qmbutton.perf_step_up", "Perf Step Up");
                 case QuickMenuAssignableAction.PerfStepDown: return VPBTranslation.T("hook.qmbutton.perf_step_down", "Perf Step Down");

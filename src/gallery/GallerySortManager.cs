@@ -1198,6 +1198,7 @@ namespace VPB
                 if (pkg != null)
                 {
                     CollectUnsatisfiedDeps(pkg.RecursivePackageDependencies, missing, pkg);
+                    VpbPackageInsightStore.AppendUnsatisfiedUndeclared(pkg, missing);
                     return missing;
                 }
 
@@ -1238,17 +1239,22 @@ namespace VPB
         {
             try
             {
+                int missingCount = 0;
                 var deps = package.RecursivePackageDependencies;
                 if (deps != null && deps.Count > 0)
                 {
-                    int missingCount = 0;
                     foreach (var dep in deps)
                     {
                         if (!FileManager.IsDependencySatisfiedByInstalled(dep, package))
                             missingCount++;
                     }
-                    return missingCount;
                 }
+
+                var counted = deps != null
+                    ? new HashSet<string>(deps, StringComparer.OrdinalIgnoreCase)
+                    : null;
+                missingCount += VpbPackageInsightStore.CountUnsatisfiedUndeclared(package, counted);
+                return missingCount;
             }
             catch { }
             return 0;

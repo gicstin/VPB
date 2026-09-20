@@ -340,5 +340,40 @@ namespace VPB.Tests
             GallerySearchQuery textOnly = GallerySearchQuery.Parse("just some words");
             Assert.Empty(textOnly.WithoutBroadTerms().Branches);
         }
+
+        [Fact]
+        public void FilePrefixIsAContentAtomNotABareWord()
+        {
+            GallerySearchQuery q = GallerySearchQuery.Parse("file:hair");
+            Assert.Single(q.Branches);
+            Assert.Contains("hair", q.Branches[0].FileTerms);
+            Assert.Empty(q.Branches[0].BroadTerms);
+        }
+
+        [Fact]
+        public void IssuePrefixSetsTheFindingMask()
+        {
+            GallerySearchQuery q = GallerySearchQuery.Parse("issue:preloadmorphs");
+            Assert.Single(q.Branches);
+            Assert.Equal(PkgIssueFlags.PreloadMorphs, q.Branches[0].IssueMask);
+            Assert.Empty(q.Branches[0].BroadTerms);
+        }
+
+        [Theory]
+        [InlineData("issues", "Issues")]
+        [InlineData("plugins", "PluginContent")]
+        [InlineData("flagged", "Flagged")]
+        [InlineData("unreviewed", "Unreviewed")]
+        [InlineData("undeclared", "Undeclared")]
+        public void InsightStatusWordsSetTheirFlagAndAreNotTreatedAsText(string raw, string expectedFlagName)
+        {
+            var expected = (GallerySearchQuery.StatusFlags)Enum.Parse(
+                typeof(GallerySearchQuery.StatusFlags), expectedFlagName);
+
+            GallerySearchQuery q = GallerySearchQuery.Parse(raw);
+            Assert.Single(q.Branches);
+            Assert.Equal(expected, q.Branches[0].Status & expected);
+            Assert.Empty(q.Branches[0].BroadTerms);
+        }
     }
 }

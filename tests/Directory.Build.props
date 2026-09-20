@@ -15,6 +15,14 @@
 
   <Import Project="$(VpbRoot)VPB.local.props" Condition="Exists('$(VpbRoot)VPB.local.props')" />
 
+  <!--
+    VPB.local.props may set FrameworkPathOverride to mono 2.0-api for the net35 plugin (MSB3644).
+    Test projects are net472/net8 — keep that override and the BCL collapses to Path.Combine(string,string)
+    only, missing System.Runtime, etc.
+  -->
+  <PropertyGroup>
+    <FrameworkPathOverride></FrameworkPathOverride>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(VaMPath)' == '' Or !Exists('$(VaMPath)\VaM_Data\Managed\Assembly-CSharp.dll')">
     <VaMPath Condition="Exists('C:\vam\VaM_Data\Managed\Assembly-CSharp.dll')">C:\vam</VaMPath>
     <VaMPath Condition="'$(VaMPath)' == '' And Exists('C:\VaM\VaM_Data\Managed\Assembly-CSharp.dll')">C:\VaM</VaMPath>

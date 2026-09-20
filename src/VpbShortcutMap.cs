@@ -34,6 +34,9 @@ namespace VPB
         SceneTools,
         StripScene,
         SceneEraser,
+        SceneOutliner,
+        OutlinerTargets,
+        ZeroPoseMorphs,
 
         NavUp,
         NavDown,
@@ -155,6 +158,19 @@ namespace VPB
             Add(d, VpbShortcut.SceneEraser, "shortcut.scene_eraser", "keys_tools",
                 "shortcut.scene_eraser", "Toggle Scene Eraser",
                 "shortcut.tip.scene_eraser", "Point-and-click removal of scene items.", "Ctrl+Shift+E");
+            Add(d, VpbShortcut.SceneOutliner, "shortcut.scene_outliner", "keys_tools",
+                "shortcut.scene_outliner", "Toggle Scene Overview",
+                "shortcut.tip.scene_outliner", "Open / close the live scene overview.", "Ctrl+Shift+O");
+            Add(d, VpbShortcut.OutlinerTargets, "shortcut.outliner_targets", "keys_tools",
+                "shortcut.outliner_targets", "Cycle move targets",
+                "shortcut.tip.outliner_targets",
+                "Scene Overview: cycle VaM's move targets between off, the selected atom only, and every atom.",
+                "Ctrl+Shift+T");
+            Add(d, VpbShortcut.ZeroPoseMorphs, "shortcut.zero_pose_morphs", "keys_tools",
+                "shortcut.zero_pose_morphs", "Zero pose morphs",
+                "shortcut.tip.zero_pose_morphs",
+                "Set every pose morph (expressions, fingers, visemes) on the selected person back to neutral; with nothing selected, on every person in the scene.",
+                "Ctrl+Shift+N");
 
             Add(d, VpbShortcut.NavUp, "shortcut.nav_up", "keys_world",
                 "shortcut.nav_up", "Move up (hold)",

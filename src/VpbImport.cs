@@ -55,6 +55,8 @@ namespace VPB
 
     internal static class VpbImport
     {
+        internal static bool KeepClothingAppearanceLoadActive { get; private set; }
+
         public static void LoadPreset(
             FileEntry sourceEntry,
             Atom targetAtom,
@@ -498,6 +500,7 @@ namespace VPB
                                 MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
                             if (probe) AppearanceApplyProbe.Phase("LoadPresetFromJSON_start",
                                 "mergeLoad=" + (mergeLoad ? 1 : 0) + " " + AppearanceApplyProbe.SummarizePreset(preset));
+                            KeepClothingAppearanceLoadActive = lockClothing;
                             InvokeLoadPresetFromJSON(presetManager, preset, mergeLoad);
                             if (probe) AppearanceApplyProbe.Phase("LoadPresetFromJSON_done");
 
@@ -518,6 +521,7 @@ namespace VPB
                         }
                         finally
                         {
+                            KeepClothingAppearanceLoadActive = false;
                             if (!string.IsNullOrEmpty(sourcePath))
                                 MVR.FileManagement.FileManager.PopLoadDir();
                             if (lpos != null) lpos.val = lposPre;

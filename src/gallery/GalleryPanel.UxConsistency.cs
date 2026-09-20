@@ -367,6 +367,22 @@ namespace VPB
                     try { DetailStripToggleExpanded(); } catch { }
                 });
 
+            bool canInspect = false;
+            try { canInspect = !string.IsNullOrEmpty(VpbPackageInsightStore.ResolvePackageUid(file)); }
+            catch { canInspect = false; }
+            GridCtxAddAction(
+                VPBTranslation.T("gallery.gridctx.findings", "Findings…"),
+                KeyCode.None, "",
+                GridCtxIcon("info-square"),
+                () =>
+                {
+                    FileEntry f = _gridCtxMenuFile;
+                    CloseGridContextMenu();
+                    string uid = VpbPackageInsightStore.ResolvePackageUid(f);
+                    try { ShowInsightsFloat(uid, InsightsFloatTab.Package); } catch { }
+                },
+                enabled: canInspect);
+
             GridCtxAddAction(
                 VPBTranslation.T("gallery.gridctx.more_like_this", "More Like This"),
                 KeyCode.M, "M",

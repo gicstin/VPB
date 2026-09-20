@@ -68,7 +68,7 @@ if (-not $inserted) {
 }
 
 $json = $out | ConvertTo-Json -Depth 5
-$newContent = $json + "`r`n"
+$newContent = $json.Replace("`r`n", "`n") + "`n"
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 $currentContent = [System.IO.File]::ReadAllText($manifestPath, $utf8NoBom)

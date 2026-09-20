@@ -224,6 +224,23 @@ namespace VPB
                 () => { try { ToggleCreatorMode(); } catch { } });
             AddCommandPaletteEntry("scene_eraser", "gallery.cmd.scene_eraser", "Toggle Scene Eraser", ScHint(VpbShortcut.SceneEraser), GModes, "remove delete atoms erase",
                 () => { try { ToggleRemoveMode(false, false); } catch { } });
+            AddCommandPaletteEntry("scene_outliner", "gallery.cmd.scene_outliner", "Scene Overview", ScHint(VpbShortcut.SceneOutliner), GModes,
+                "live atoms tree inspector lights persons edit scene overview outliner hierarchy",
+                () => { try { OpenSceneOutliner(true); } catch { } });
+            AddCommandPaletteEntry("outliner_targets", "gallery.cmd.outliner_targets", "Cycle move targets", ScHint(VpbShortcut.OutlinerTargets), GModes,
+                "targets controllers handles show hide isolate move gizmo",
+                () =>
+                {
+                    try
+                    {
+                        if (!IsSceneOutlinerOpen()) OpenSceneOutliner(true);
+                        CycleOutlinerTargetMode();
+                    }
+                    catch { }
+                });
+            AddCommandPaletteEntry("zero_pose_morphs", "gallery.cmd.zero_pose_morphs", "Zero pose morphs", ScHint(VpbShortcut.ZeroPoseMorphs), GModes,
+                "reset neutral expression face fingers stuck morph pose person troubleshoot default",
+                () => { try { ZeroPoseMorphsOnSelection(); } catch { } });
             AddCommandPaletteEntry("import", "gallery.cmd.import", "Toggle Import sidebar", ScHint(VpbShortcut.ImportSidebar), GModes, "scene import atoms",
                 () => { try { ToggleImportSidebar(); } catch { } });
             AddCommandPaletteEntry("cleanup", "gallery.cmd.cleanup", "Open Cleanup", "", GModes, "orphans unused",
@@ -353,6 +370,24 @@ namespace VPB
             AddCommandPaletteEntry("exit_eraser", "gallery.cmd.exit_eraser", "Exit Scene Eraser", "Esc", GTools, "leave remove mode",
                 () => { try { if (_removeModeActive) ToggleRemoveMode(false, false); } catch { } },
                 () => _removeModeActive);
+            AddCommandPaletteEntry("insights", "gallery.cmd.insights", "Package Insights", "", GTools,
+                "integrity issues dependencies undeclared plugins scripts dll risk review duplicates find file",
+                () => { try { ShowInsightsFloat(null, InsightsFloatTab.Overview); } catch { } });
+            AddCommandPaletteEntry("insights_package", "gallery.cmd.insights_package", "Package Insights: inspect selection", "", GTools,
+                "report findings package selected",
+                () => { try { ShowInsightsFloat(InsightsResolveFocusUid(), InsightsFloatTab.Package); } catch { } },
+                CmdPaletteHasSelection);
+            AddCommandPaletteEntry("insights_content", "gallery.cmd.insights_content", "Find a file inside packages", "", GTools,
+                "which package contains morph texture duplicate assets search content",
+                () => { try { ShowInsightsFloat(null, InsightsFloatTab.Content); } catch { } });
+            AddCommandPaletteEntry("insights_scan", "gallery.cmd.insights_scan", "Scan packages for findings", "", GTools,
+                "integrity scan library check",
+                () => { try { InsightsStartFullScan(false); } catch { } },
+                () => !VpbPackageInsightScanner.IsRunning);
+            AddCommandPaletteEntry("insights_rescan_sel", "gallery.cmd.insights_rescan_sel", "Rescan selected package(s)", "", GTools,
+                "refresh findings package",
+                () => { try { InsightsRescanSelection(); } catch { } },
+                CmdPaletteHasSelection);
 
             // --- Help ---
             AddCommandPaletteEntry("help", "gallery.cmd.help", "Open help (Hotkeys)", ScHint(VpbShortcut.Help), GHelp, "shortcuts chords",

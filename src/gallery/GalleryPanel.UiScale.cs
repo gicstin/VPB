@@ -114,6 +114,8 @@ namespace VPB
             try { RescaleRemapAtomUidsIfOpen(chromeS); } catch { }
             try { RescaleSettingsFloatIfOpen(chromeS); } catch { }
             try { RescalePluginsFloatIfOpen(chromeS); } catch { }
+            try { RescaleInsightsFloatIfOpen(chromeS); } catch { }
+            try { RescaleOutlinerIfOpen(chromeS); } catch { }
             try { RescaleLayoutPresetsFloatIfOpen(chromeS); } catch { }
             try { RescaleCommandPaletteIfOpen(); } catch { }
             try { RescaleConfirmOverlayIfOpen(); } catch { }

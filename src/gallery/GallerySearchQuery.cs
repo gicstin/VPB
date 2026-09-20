@@ -16,6 +16,8 @@ namespace VPB
         internal readonly List<string> TagInclude = new List<string>();
         internal readonly List<string> TagExclude = new List<string>();
         internal readonly List<string> CreatorTerms = new List<string>();
+        internal readonly List<string> FileTerms = new List<string>();
+        internal PkgIssueFlags IssueMask = PkgIssueFlags.None;
         /// <summary>Data-pack atoms, allocated only when a query actually uses one.</summary>
         internal List<string> PackSubjectInclude;
         internal List<string> PackSubjectExclude;
@@ -51,6 +53,8 @@ namespace VPB
                     && TagInclude.Count == 0
                     && TagExclude.Count == 0
                     && CreatorTerms.Count == 0
+                    && FileTerms.Count == 0
+                    && IssueMask == PkgIssueFlags.None
                     && !HasDataPackAtoms
                     && Status == GallerySearchQuery.StatusFlags.None;
             }
@@ -82,7 +86,16 @@ namespace VPB
             ScanExcluded = 1 << 7,
             MissingDeps = 1 << 9,
             CompleteDeps = 1 << 10,
+            Issues = 1 << 11,
+            PluginContent = 1 << 12,
+            Flagged = 1 << 13,
+            Unreviewed = 1 << 14,
+            Undeclared = 1 << 15,
         }
+
+        internal const StatusFlags InsightStatusMask =
+            StatusFlags.Issues | StatusFlags.PluginContent | StatusFlags.Flagged
+            | StatusFlags.Unreviewed | StatusFlags.Undeclared;
 
         /// <summary>Fresh empty query (not a shared mutable singleton).</summary>
         internal static GallerySearchQuery Empty { get { return new GallerySearchQuery(); } }
@@ -100,6 +113,8 @@ namespace VPB
         internal readonly List<string> TagExclude = new List<string>();
         /// <summary>Union of all branch creator terms.</summary>
         internal readonly List<string> CreatorTerms = new List<string>();
+        internal readonly List<string> FileTerms = new List<string>();
+        internal PkgIssueFlags IssueMask = PkgIssueFlags.None;
         /// <summary>Union of status flags across branches (for RequiresSqlRefresh).</summary>
         internal StatusFlags Status = StatusFlags.None;
 
@@ -165,6 +180,8 @@ namespace VPB
                 return TagInclude.Count > 0
                     || TagExclude.Count > 0
                     || CreatorTerms.Count > 0
+                    || FileTerms.Count > 0
+                    || IssueMask != PkgIssueFlags.None
                     || HasStatusFlags
                     || BroadTerms.Count > 0
                     || BroadExclude.Count > 0
@@ -269,6 +286,21 @@ namespace VPB
                     AddCommaCreatorList(branch, lower.Substring(1));
                     continue;
                 }
+                if (lower.StartsWith("issue:", StringComparison.Ordinal) && lower.Length > 6)
+                {
+                    AddCommaIssueList(branch, lower.Substring(6));
+                    continue;
+                }
+                if (lower.StartsWith("file:", StringComparison.Ordinal) && lower.Length > 5)
+                {
+                    AddCommaFileList(branch, lower.Substring(5));
+                    continue;
+                }
+                if (lower.StartsWith("contains:", StringComparison.Ordinal) && lower.Length > 9)
+                {
+                    AddCommaFileList(branch, lower.Substring(9));
+                    continue;
+                }
                 if (lower.StartsWith("badge:", StringComparison.Ordinal) && lower.Length > 6)
                 {
                     ApplyBadgeAlias(branch, lower.Substring(6));
@@ -321,6 +353,9 @@ namespace VPB
                     for (int i = 0; i < src.TagExclude.Count; i++) AddUnique(br.TagExclude, src.TagExclude[i]);
                 if (src.CreatorTerms != null)
                     for (int i = 0; i < src.CreatorTerms.Count; i++) AddUnique(br.CreatorTerms, src.CreatorTerms[i]);
+                if (src.FileTerms != null)
+                    for (int i = 0; i < src.FileTerms.Count; i++) AddUnique(br.FileTerms, src.FileTerms[i]);
+                br.IssueMask = src.IssueMask;
                 CopyPackAtoms(src, br);
                 br.Status = src.Status;
                 if (!br.IsEmpty) q.Branches.Add(br);
@@ -337,6 +372,8 @@ namespace VPB
             TagInclude.Clear();
             TagExclude.Clear();
             CreatorTerms.Clear();
+            FileTerms.Clear();
+            IssueMask = PkgIssueFlags.None;
             PackSubjectTerms.Clear();
             PackHubTagTerms.Clear();
             PackHubCatTerms.Clear();
@@ -351,6 +388,8 @@ namespace VPB
                 for (int i = 0; i < br.TagInclude.Count; i++) AddUnique(TagInclude, br.TagInclude[i]);
                 for (int i = 0; i < br.TagExclude.Count; i++) AddUnique(TagExclude, br.TagExclude[i]);
                 for (int i = 0; i < br.CreatorTerms.Count; i++) AddUnique(CreatorTerms, br.CreatorTerms[i]);
+                for (int i = 0; i < br.FileTerms.Count; i++) AddUnique(FileTerms, br.FileTerms[i]);
+                IssueMask |= br.IssueMask;
                 AddUniqueRange(PackSubjectTerms, br.PackSubjectInclude);
                 AddUniqueRange(PackSubjectTerms, br.PackSubjectExclude);
                 AddUniqueRange(PackHubTagTerms, br.PackHubTagInclude);
@@ -396,6 +435,82 @@ namespace VPB
             }
         }
 
+        private static void AddCommaIssueList(GallerySearchBranch branch, string body)
+        {
+            if (branch == null || string.IsNullOrEmpty(body)) return;
+            string[] parts = body.Split(',');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i];
+                if (p == null) continue;
+                p = p.Trim();
+                if (p.Length == 0) continue;
+                branch.IssueMask |= IssueFlagForKey(p);
+            }
+        }
+
+        internal static PkgIssueFlags IssueFlagForKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return PkgIssueFlags.None;
+            switch (key.Trim().ToLowerInvariant())
+            {
+                case "undeclared": return PkgIssueFlags.UndeclaredDeps;
+                case "localrefs":
+                case "local": return PkgIssueFlags.LocalReferences;
+                case "refissues":
+                case "references": return PkgIssueFlags.ReferenceIssues;
+                case "preloadmorphs":
+                case "preload": return PkgIssueFlags.PreloadMorphs;
+                case "metamissing":
+                case "nometa": return PkgIssueFlags.MetaMissing;
+                case "metabad":
+                case "badmeta": return PkgIssueFlags.MetaUnparsable;
+                case "namemismatch":
+                case "mismatch": return PkgIssueFlags.NameMismatch;
+                case "nameformat": return PkgIssueFlags.NameFormatBad;
+                case "morphs":
+                case "morphbloat": return PkgIssueFlags.MorphBloat;
+                case "foreign":
+                case "foreignassets": return PkgIssueFlags.ForeignAssets;
+                case "scanfailed":
+                case "unreadable": return PkgIssueFlags.ScanFailed;
+                default: return PkgIssueFlags.None;
+            }
+        }
+
+        internal static string IssueKeyFor(PkgIssueFlags flag)
+        {
+            switch (flag)
+            {
+                case PkgIssueFlags.UndeclaredDeps: return "undeclared";
+                case PkgIssueFlags.LocalReferences: return "localrefs";
+                case PkgIssueFlags.ReferenceIssues: return "refissues";
+                case PkgIssueFlags.PreloadMorphs: return "preloadmorphs";
+                case PkgIssueFlags.MetaMissing: return "metamissing";
+                case PkgIssueFlags.MetaUnparsable: return "metabad";
+                case PkgIssueFlags.NameMismatch: return "namemismatch";
+                case PkgIssueFlags.NameFormatBad: return "nameformat";
+                case PkgIssueFlags.MorphBloat: return "morphs";
+                case PkgIssueFlags.ForeignAssets: return "foreign";
+                case PkgIssueFlags.ScanFailed: return "scanfailed";
+                default: return "";
+            }
+        }
+
+        private static void AddCommaFileList(GallerySearchBranch branch, string body)
+        {
+            if (branch == null || string.IsNullOrEmpty(body)) return;
+            string[] parts = body.Split(',');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i];
+                if (p == null) continue;
+                p = p.Trim().Trim('"').ToLowerInvariant();
+                if (p.Length == 0) continue;
+                AddUnique(branch.FileTerms, p);
+            }
+        }
+
         private static void AddCommaCreatorList(GallerySearchBranch branch, string body)
         {
             if (branch == null || string.IsNullOrEmpty(body)) return;
@@ -412,7 +527,7 @@ namespace VPB
             }
         }
 
-        private static string[] SplitSearchTokens(string s)
+        internal static string[] SplitSearchTokens(string s)
         {
             if (string.IsNullOrEmpty(s)) return new string[0];
             var list = new List<string>(8);
@@ -635,6 +750,31 @@ namespace VPB
                 case "no-missing":
                     branch.Status |= StatusFlags.CompleteDeps;
                     return true;
+                case "issues":
+                case "issue":
+                case "problems":
+                    branch.Status |= StatusFlags.Issues;
+                    return true;
+                case "plugins":
+                case "scripts":
+                case "code":
+                    branch.Status |= StatusFlags.PluginContent;
+                    return true;
+                case "flagged":
+                case "risk":
+                case "risky":
+                    branch.Status |= StatusFlags.Flagged;
+                    return true;
+                case "unreviewed":
+                case "notreviewed":
+                case "not-reviewed":
+                    branch.Status |= StatusFlags.Unreviewed;
+                    return true;
+                case "undeclared":
+                case "undeclareddeps":
+                case "undeclared-deps":
+                    branch.Status |= StatusFlags.Undeclared;
+                    return true;
                 default:
                     return false;
             }
@@ -691,6 +831,19 @@ namespace VPB
                 case "complete":
                 case "ready":
                     branch.Status |= StatusFlags.CompleteDeps;
+                    break;
+                case "i":
+                case "issues":
+                    branch.Status |= StatusFlags.Issues;
+                    break;
+                case "p":
+                case "plugin":
+                case "plugins":
+                    branch.Status |= StatusFlags.PluginContent;
+                    break;
+                case "flagged":
+                case "risk":
+                    branch.Status |= StatusFlags.Flagged;
                     break;
             }
         }

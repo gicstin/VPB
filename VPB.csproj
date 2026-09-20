@@ -419,6 +419,10 @@
     <Compile Include="src\gallery\Gallery.cs" />
     <Compile Include="src\gallery\GalleryFileListSnapshotCache.cs" />
     <Compile Include="src\gallery\GallerySearchQuery.cs" />
+    <Compile Include="src\gallery\GallerySearchRescue.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SearchRescue.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.SearchRescueCount.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.SearchVocabulary.cs" />
     <Compile Include="src\gallery\GalleryHubCategoryNames.cs" />
     <Compile Include="src\gallery\GalleryHubTypeItemScope.cs" />
     <Compile Include="src\gallery\GalleryTitleSearchChip.cs" />
@@ -461,6 +465,12 @@
     <Compile Include="src\clothing\VpbClothingFootprintCache.cs" />
     <Compile Include="src\clothing\VpbClothingReplace.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryLabels.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.PackageInsights.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.ContentSearch.cs" />
+    <Compile Include="src\insights\VpbInsightTypes.cs" />
+    <Compile Include="src\insights\VpbInsightKeywords.cs" />
+    <Compile Include="src\insights\VpbPackageInsightStore.cs" />
+    <Compile Include="src\insights\VpbPackageInsightScanner.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
@@ -508,6 +518,9 @@
     <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Catalog.cs" />
     <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Tree.cs" />
     <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Dest.cs" />
+    <Compile Include="src\gallery\GalleryPanel.InsightsFloat.cs" />
+    <Compile Include="src\gallery\GalleryPanel.InsightsFloat.Body.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Insights.cs" />
     <Compile Include="src\gallery\GalleryPanel.NavigationTiming.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Init.cs" />
@@ -711,6 +724,45 @@
     <Compile Include="src\hook\Hub\HubResourcePackage.cs" />
     <Compile Include="src\hook\Hub\HubResourcePackageUI.cs" />
     <Compile Include="src\hook\Hub\VpbHubDependencyFetcher.cs" />
+    <Compile Include="src\outliner\OutlinerTypes.cs" />
+    <Compile Include="src\outliner\OutlinerVisibility.cs" />
+    <Compile Include="src\outliner\OutlinerModel.cs" />
+    <Compile Include="src\outliner\OutlinerFilter.cs" />
+    <Compile Include="src\outliner\OutlinerModelBuilder.cs" />
+    <Compile Include="src\outliner\OutlinerSelection.cs" />
+    <Compile Include="src\outliner\OutlinerUndo.cs" />
+    <Compile Include="src\outliner\OutlinerPins.cs" />
+    <Compile Include="src\outliner\OutlinerParamCatalog.cs" />
+    <Compile Include="src\outliner\OutlinerParamLabels.cs" />
+    <Compile Include="src\outliner\OutlinerParamPriority.cs" />
+    <Compile Include="src\outliner\OutlinerPlugins.cs" />
+    <Compile Include="src\outliner\OutlinerInspectorSections.cs" />
+    <Compile Include="src\outliner\OutlinerEdits.cs" />
+    <Compile Include="src\outliner\OutlinerCapture.cs" />
+    <Compile Include="src\outliner\OutlinerLookPreview.cs" />
+    <Compile Include="src\outliner\OutlinerTargets.cs" />
+    <Compile Include="src\outliner\OutlinerLock.cs" />
+    <Compile Include="src\outliner\OutlinerGroupEdit.cs" />
+    <Compile Include="src\outliner\OutlinerAlign.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Align.cs" />
+    <Compile Include="src\outliner\OutlinerResetSnapshot.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.CardReset.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Targets.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Chrome.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Tree.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Eye.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Inspector.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Rows.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.RowMenu.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Drop.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.RowDrag.cs" />
+    <Compile Include="src\outliner\OutlinerSpringAxis.cs" />
+    <Compile Include="src\outliner\OutlinerRepeatButton.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.Transform.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.LookCard.cs" />
+    <Compile Include="src\outliner\OutlinerPoseMorphs.cs" />
+    <Compile Include="src\outliner\ui\GalleryPanel.Outliner.PoseCard.cs" />
     <Compile Include="src\Properties\AssemblyInfo.cs" />
     <Compile Include="src\VamHookPlugin_Interface.cs" />
     <Compile Include="src\updater\VpbUpdaterService.cs" />
@@ -748,14 +800,19 @@
     Set SkipVPBVersionPrepare=true to skip (e.g. some CI). Design-time builds are skipped.
   -->
   <Target Name="GeneratePluginVersion" BeforeTargets="BeforeCompile" Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBVersionPrepare)' != 'true'">
-    <!-- Trim trailing \ so cmd.exe does not treat \" inside -IntermediateDir "...\Debug\" as an escaped quote (which drops -ProjectDir). -->
+    <!-- Path.Combine so Linux builds do not get MSBuildProjectDirectory\file (backslash is not a separator).
+         Trim trailing separators so cmd.exe does not treat \" inside -IntermediateDir "...\Debug\" as an escaped quote. -->
     <PropertyGroup>
-      <_PVFullInt>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)'))</_PVFullInt>
-      <PluginVersionIntermediateDir>$([System.String]::Copy('$(_PVFullInt)').TrimEnd('\'))</PluginVersionIntermediateDir>
-      <_PVProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_PVProjDir>
+      <_PVFullInt>$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)'))))</_PVFullInt>
+      <PluginVersionIntermediateDir>$([System.String]::Copy('$(_PVFullInt)').TrimEnd('\').TrimEnd('/'))</PluginVersionIntermediateDir>
+      <_PVProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\').TrimEnd('/'))</_PVProjDir>
+      <_PVScript>$([System.IO.Path]::Combine('$(_PVProjDir)', 'scripts', 'PreparePluginVersion.ps1'))</_PVScript>
+      <_PVVersionFile>$([System.IO.Path]::Combine('$(_PVProjDir)', 'plugin_version.txt'))</_PVVersionFile>
+      <_PVHost Condition="'$(OS)' == 'Windows_NT'">powershell</_PVHost>
+      <_PVHost Condition="'$(OS)' != 'Windows_NT'">pwsh</_PVHost>
     </PropertyGroup>
     <MakeDir Directories="$(PluginVersionIntermediateDir)" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_PVProjDir)\scripts\PreparePluginVersion.ps1&quot; -VersionFile &quot;$(_PVProjDir)\plugin_version.txt&quot; -IntermediateDir &quot;$(PluginVersionIntermediateDir)&quot; -ProjectDir &quot;$(_PVProjDir)&quot;" WorkingDirectory="$(_PVProjDir)" />
+    <Exec EchoOff="true" Command="$(_PVHost) -NoProfile -ExecutionPolicy Bypass -File &quot;$(_PVScript)&quot; -VersionFile &quot;$(_PVVersionFile)&quot; -IntermediateDir &quot;$(PluginVersionIntermediateDir)&quot; -ProjectDir &quot;$(_PVProjDir)&quot;" WorkingDirectory="$(_PVProjDir)" />
   </Target>
   <ItemGroup>
     <VPBIconSource Include="assets\icons\icon_map.json" />
@@ -774,7 +831,7 @@
     <PropertyGroup>
       <_IAProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_IAProjDir>
     </PropertyGroup>
-    <Exec Command="python &quot;$(_IAProjDir)\scripts\build_icon_atlas.py&quot;" WorkingDirectory="$(_IAProjDir)" ContinueOnError="WarnAndContinue" />
+    <Exec EchoOff="true" Command="python &quot;$(_IAProjDir)/scripts/build_icon_atlas.py&quot;" WorkingDirectory="$(_IAProjDir)" ContinueOnError="WarnAndContinue" />
   </Target>
   <!--
     Keeps the vpb_icons rows in vam_patch/patch_manifest.json in sync with the shipped icon pack.
@@ -784,7 +841,7 @@
     <PropertyGroup>
       <_SMProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_SMProjDir>
     </PropertyGroup>
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
+    <Exec EchoOff="true" Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
   </Target>
   <!--
     Installs tests/hooks into .git/hooks on build, so a fresh clone gets pre-commit/pre-push
@@ -803,6 +860,11 @@
           ContinueOnError="WarnAndContinue">
       <Output TaskParameter="CopiedFiles" ItemName="_VPBGitHookInstalled" />
     </Copy>
+    <!-- Unix: MSBuild Copy drops +x; without it git never runs the hooks. -->
+    <Exec EchoOff="true" Command="chmod +x &quot;$(MSBuildProjectDirectory)/.git/hooks/pre-commit&quot; &quot;$(MSBuildProjectDirectory)/.git/hooks/pre-push&quot; &quot;$(MSBuildProjectDirectory)/.git/hooks/post-commit&quot;"
+          Condition="'$(OS)' != 'Windows_NT' And '@(_VPBGitHookInstalled)' != ''"
+          ContinueOnError="WarnAndContinue"
+          IgnoreStandardErrorWarningFormat="true" />
     <Message Importance="high" Condition="'@(_VPBGitHookInstalled)' != ''"
              Text="VPB: installed git hooks (@(_VPBGitHookInstalled->'%(Filename)', ', ')). Bypass a run with --no-verify; disable with -p:SkipVPBGitHooks=true." />
   </Target>
@@ -852,8 +914,9 @@
     -->
     <CallTarget Targets="VpbRuntimeReportLastRun" ContinueOnError="WarnAndContinue" />
 
-    <Exec Command="dotnet build &quot;$(_VPBRuntimeTestsProject)&quot; -c $(Configuration) -p:VaMPath=&quot;$(VaMPath)&quot; -p:DeployToVaM=true -p:SkipVPBRuntimeTestReport=true --nologo -v:m"
+    <Exec EchoOff="true" Command="dotnet build &quot;$(_VPBRuntimeTestsProject)&quot; -c $(Configuration) -p:VaMPath=&quot;$(VaMPath)&quot; -p:DeployToVaM=true -p:SkipVPBRuntimeTestReport=true --nologo -v:q"
           WorkingDirectory="$(MSBuildProjectDirectory)"
+          StandardOutputImportance="low"
           ContinueOnError="true"
           IgnoreExitCode="true"
           IgnoreStandardErrorWarningFormat="true">
@@ -887,8 +950,8 @@
   </Target>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <!-- Deploy logic lives in scripts/PostBuildDeploy.ps1 so cmd-batch quoting and silent copy /Y failures stop eating locked-DLL replacements. Script never fails the build, emits MSBuild-formatted warnings (yellow in Errors panel) on copy/lock issues. -->
-    <PostBuildEvent>powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildProjectDirectory)\scripts\PostBuildDeploy.ps1" -TargetPath "$(TargetPath)" -VaMPath "$(VaMPath)" -ProjectDir "$(MSBuildProjectDirectory)"</PostBuildEvent>
-  </PropertyGroup>
+  <!-- Deploy logic lives in scripts/PostBuildDeploy.ps1 so cmd-batch quoting and silent copy /Y failures stop eating locked-DLL replacements. Script never fails the build, emits MSBuild-formatted warnings (yellow in Errors panel) on copy/lock issues. -->
+  <Target Name="VpbPostBuildDeploy" AfterTargets="PostBuildEvent">
+    <Exec EchoOff="true" Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\scripts\PostBuildDeploy.ps1&quot; -TargetPath &quot;$(TargetPath)&quot; -VaMPath &quot;$(VaMPath)&quot; -ProjectDir &quot;$(MSBuildProjectDirectory)&quot;" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
 </Project>

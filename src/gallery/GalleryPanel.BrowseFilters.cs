@@ -46,6 +46,29 @@ namespace VPB
             try { UpdateEmptyGridState(); } catch { }
         }
 
+        public void ClearBrowseFiltersKeepingSearch()
+        {
+            try { if (IsFilterActive) ClearPackageFilter(); } catch { }
+            currentRatingFilter = "";
+            try
+            {
+                if (HasRatingPresenceFilter())
+                    SetRatingPresenceFilterMode(RatingPresenceFilterMode.Off, refresh: false, showStatus: false);
+            }
+            catch { _ratingPresenceFilterMode = RatingPresenceFilterMode.Off; }
+            try { ClearLicenseFilter(refresh: false); } catch { currentLicenseFilter = ""; }
+            try { activeTags?.Clear(); } catch { }
+            try { ClearCreatorFilters(); } catch { }
+            ClearSubPaneAndExtraBrowseFilters();
+            try { ClearTitleBarBrowseFilters(refresh: false); } catch { }
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+            try { UpdateTabs(); } catch { }
+            RefreshFiles(true);
+            SyncBrowseFilterChipChrome();
+            try { UpdateEmptyGridState(); } catch { }
+        }
+
         /// <summary>Clear title search and refresh chip bar + empty state.</summary>
         private void ClearTitleBarSearchAndSyncChrome()
         {

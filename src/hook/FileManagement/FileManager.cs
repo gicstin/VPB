@@ -2570,6 +2570,8 @@ namespace VPB
 
 		IEnumerator StartScanCo(bool init, bool flag, bool clean, bool runCo)
 		{
+			try
+			{
 			List<VarPackage> invalid = new List<VarPackage>();
 			int allCount = 0;
 			try
@@ -2684,8 +2686,16 @@ namespace VPB
 			}
 
 			VamStartupProfiler.MarkVpbPackageScanComplete();
-			MessageKit.post(MessageDef.FileManagerRefresh);
-			m_StartScanCo = null;
+			try { MessageKit.post(MessageDef.FileManagerRefresh); }
+			catch (Exception ex)
+			{
+				try { LogUtil.LogError("[VPB] FileManagerRefresh observers failed: " + ex.Message); } catch { }
+			}
+			}
+			finally
+			{
+				m_StartScanCo = null;
+			}
 		}
 
 		static int s_DeepScanLastManifestFlushScanned;
@@ -2713,7 +2723,11 @@ namespace VPB
 			VarPackage.ResetScanCounters();
 			s_DeepScanLastManifestFlushScanned = 0;
 			Stopwatch indexAllSw = Stopwatch.StartNew();
-			VarPackage[] packages = packagesByUid.Values.ToArray();
+			VarPackage[] packages;
+			lock (packagesLock)
+			{
+				packages = packagesByUid.Values.ToArray();
+			}
 			int idx = 0;
 			int allCount = packages.Length;
 			try { VpbProgressService.BeginDeepScan(allCount); } catch { }
@@ -2867,7 +2881,14 @@ namespace VPB
 					do
 					{
 						System.Threading.Interlocked.Exchange(ref s_MorphIndexMigrationRequested, 0);
-						VarPackage[] snapshot = GetPackagesSnapshotForBrowse();
+						VarPackage[] snapshot = null;
+						try { snapshot = GetPackagesSnapshotForBrowse(); }
+						catch (Exception snapEx)
+						{
+							LogUtil.LogWarning("[VPB MorphIndex] snapshot failed: " + snapEx.GetType().Name + ": " + snapEx.Message);
+							InvalidateMorphOwnerIndex();
+							break;
+						}
 						int migrated = 0;
 						int failed = 0;
 						int pendingPersist = 0;
@@ -2879,12 +2900,19 @@ namespace VPB
 								if (package == null || package.invalid || package.IsCorruptedArchive
 									|| package.MorphFileEntryNames != null)
 									continue;
-								if (package.EnsureMorphFileEntryNamesIndexed())
+								try
 								{
-									migrated++;
-									pendingPersist++;
+									if (package.EnsureMorphFileEntryNamesIndexed())
+									{
+										migrated++;
+										pendingPersist++;
+									}
+									else failed++;
 								}
-								else failed++;
+								catch
+								{
+									failed++;
+								}
 								if ((i + 1) % 2000 == 0)
 								{
 									LogUtil.Log("[VPB MorphIndex] migration " + (i + 1) + "/" + snapshot.Length
@@ -2898,7 +2926,12 @@ namespace VPB
 							}
 						}
 						if (pendingPersist > 0) VarPackageMgr.singleton.Refresh();
-						RebuildMorphOwnerIndex();
+						try { RebuildMorphOwnerIndex(); }
+						catch (Exception rebuildEx)
+						{
+							InvalidateMorphOwnerIndex();
+							LogUtil.LogWarning("[VPB MorphIndex] rebuild failed: " + rebuildEx.GetType().Name + ": " + rebuildEx.Message);
+						}
 						LogUtil.Log("[VPB MorphIndex] migration done migrated=" + migrated + " failed=" + failed);
 					}
 					while (System.Threading.Interlocked.Exchange(ref s_MorphIndexMigrationRequested, 0) != 0);
@@ -2906,7 +2939,7 @@ namespace VPB
 				catch (Exception ex)
 				{
 					InvalidateMorphOwnerIndex();
-					LogUtil.LogWarning("[VPB MorphIndex] migration failed: " + ex.Message);
+					LogUtil.LogWarning("[VPB MorphIndex] migration failed: " + ex.GetType().Name + ": " + ex.Message);
 				}
 				finally
 				{
@@ -3445,11 +3478,28 @@ namespace VPB
             for (int i = 0; i < snapshot.Length; i++)
             {
                 VarPackage vp = snapshot[i];
-                if (vp == null || vp.RecursivePackageDependencies == null) continue;
+                if (vp == null) continue;
                 List<string> deps = vp.RecursivePackageDependencies;
-                for (int d = 0; d < deps.Count; d++)
+                if (deps != null)
                 {
-                    string key = deps[d];
+                    for (int d = 0; d < deps.Count; d++)
+                    {
+                        string key = deps[d];
+                        if (string.IsNullOrEmpty(key)) continue;
+                        if (IsLocalDependencyPresentForHubMissingScan(key, uidKeys, groupKeys)) continue;
+
+                        string normalized = NormalizeForHub(key);
+                        if (string.IsNullOrEmpty(normalized)) continue;
+                        hashSet.Add(normalized);
+                    }
+                }
+
+                List<string> undeclaredScratch = new List<string>(8);
+                try { VpbPackageInsightStore.AppendUnsatisfiedUndeclared(vp, undeclaredScratch); }
+                catch { }
+                for (int d = 0; d < undeclaredScratch.Count; d++)
+                {
+                    string key = undeclaredScratch[d];
                     if (string.IsNullOrEmpty(key)) continue;
                     if (IsLocalDependencyPresentForHubMissingScan(key, uidKeys, groupKeys)) continue;
 
@@ -4347,17 +4397,19 @@ namespace VPB
 
 		private IEnumerator MvrRefreshCo()
 		{
+			bool skipForStartup = false;
 			try
 			{
-				// Always yield once so VPB Init / Update are not blocked by native Refresh
-				// (Unity 2018 main thread — sync Refresh was a multi-minute hang under scan whitelist + #12).
 				yield return null;
 
-				bool startupNotReady = !LogUtil.IsStartupReadyLogged() && !LogUtil.IsReadyLogged();
-				if (startupNotReady)
-					VamStartupProfiler.Milestone("mvr_native_refresh_delay_skipped (startup)");
-				else
-					yield return new WaitForSeconds(0.5f);
+				skipForStartup = SuperController.singleton == null
+					|| (!LogUtil.IsStartupReadyLogged() && !LogUtil.IsReadyLogged());
+				if (skipForStartup)
+				{
+					VamStartupProfiler.Milestone("mvr_native_refresh_skipped (startup)");
+					yield break;
+				}
+				yield return new WaitForSeconds(0.5f);
 				var sw = Stopwatch.StartNew();
 				VamStartupProfiler.Milestone("mvr_native_FileManager.Refresh_invoke_begin");
 				VamOnDemandLoader.InvokeNativeFileManagerRefreshForDelayedMvr("mvr_delayed_native_refresh");
@@ -4368,7 +4420,9 @@ namespace VPB
 			finally
 			{
 				m_MvrRefreshCo = null;
-				if (m_MvrRefreshPending)
+				if (skipForStartup)
+					m_MvrRefreshPending = false;
+				else if (m_MvrRefreshPending)
 				{
 					m_MvrRefreshPending = false;
 					m_MvrRefreshCo = StartCoroutine(MvrRefreshCo());

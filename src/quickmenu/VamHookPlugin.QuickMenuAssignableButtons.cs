@@ -42,6 +42,7 @@ namespace VPB
                 }
             }
             SyncQuickMenuPopupRoundedBg(m_QuickMenuSavePopupRoot, frac);
+            SyncQuickMenuPopupRoundedBg(m_QuickMenuPersonPopupRoot, frac);
             RoundedRect tooltipRounded = m_QmTooltipBackdrop as RoundedRect;
             if (tooltipRounded != null) tooltipRounded.cornerRadiusFraction = frac;
             SyncQuickMenuBrandPlateCornerRadius(frac);
@@ -130,11 +131,15 @@ namespace VPB
             RemoveAllClothing,
             RemoveAllHair,
             ToggleImportSidebar,
+            SceneOutliner,
             StarFilter,
             OpenCategorySkin,
             PerfStepUp,
             PerfStepDown,
             PassthroughToggle,
+            PersonToggle,
+            PersonSwitch,
+            PersonSelect,
         }
 
         private const int QuickMenuGridCols = 4;
@@ -166,6 +171,11 @@ namespace VPB
         private int m_QuickMenuEditSlotIdx = -1;
         private int m_QuickMenuSavePopupTargetIdx = -1;
         private GalleryPanel m_QuickMenuSavePopupPanel;
+        private GameObject m_QuickMenuPersonPopupRoot;
+        private RectTransform m_QuickMenuPersonPopupRT;
+        private readonly List<GameObject> m_QuickMenuPersonPopupButtons = new List<GameObject>(16);
+        private int m_QuickMenuPersonPopupTargetIdx = -1;
+        private int m_QuickMenuPersonPopupOpenSlotIdx = -1;
 
         private RectTransform m_QmTooltipRT;
         private Text m_QmTooltipText;
@@ -230,6 +240,7 @@ namespace VPB
         private Sprite m_QmIconHexHair;
         private Sprite m_QmIconHexClothing;
         private Sprite m_QmIconTargetAtom;
+        private Sprite m_QmIconSceneOutliner;
         private Sprite m_QmIconNavNext;
         private Sprite m_QmIconNavPrev;
         private Sprite m_QmIconSwitchHand;
@@ -244,6 +255,27 @@ namespace VPB
         private Sprite m_QmIconCategorySkin;
         private Sprite m_QmIconPerfStepUp;
         private Sprite m_QmIconPerfStepDown;
+        private Sprite m_QmIconPersonMaleOn;
+        private Sprite m_QmIconPersonFemaleOn;
+        private Sprite m_QmIconPersonFutaOn;
+        private Sprite m_QmIconPersonUnknownOn;
+        private Sprite m_QmIconPersonMaleOff;
+        private Sprite m_QmIconPersonFemaleOff;
+        private Sprite m_QmIconPersonFutaOff;
+        private Sprite m_QmIconPersonUnknownOff;
+        private Sprite m_QmIconPersonNone;
+        private Sprite m_QmIconPersonSwitchMale;
+        private Sprite m_QmIconPersonSwitchFemale;
+        private Sprite m_QmIconPersonSwitchFuta;
+        private Sprite m_QmIconPersonSwitchUnknown;
+        private Sprite m_QmIconPersonSwitchNone;
+        private Sprite m_QmIconPersonSelectMale;
+        private Sprite m_QmIconPersonSelectFemale;
+        private Sprite m_QmIconPersonSelectFuta;
+        private Sprite m_QmIconPersonSelectUnknown;
+        private Sprite m_QmIconPersonSelectNone;
+        private string m_QmPersonToggleLastStateKey;
+        private string m_QmPersonSwitchLastStateKey;
 
         private Vector2 m_QmLastAnchorCenter = new Vector2(float.NaN, float.NaN);
         private bool m_QmLastAnchorIsVR = false;
@@ -493,10 +525,46 @@ namespace VPB
                 case QuickMenuAssignableAction.RemoveAllClothing: return VPBTranslation.T("hook.qmbutton.remove_all_clothing", "Remove All Clothing");
                 case QuickMenuAssignableAction.RemoveAllHair: return VPBTranslation.T("hook.qmbutton.remove_all_hair", "Remove All Hair");
                 case QuickMenuAssignableAction.ToggleImportSidebar: return VPBTranslation.T("hook.qmbutton.toggle_import_sidebar", "Toggle Import Sidebar");
+                case QuickMenuAssignableAction.SceneOutliner: return VPBTranslation.T("hook.qmbutton.scene_outliner", "Scene Overview");
                 case QuickMenuAssignableAction.StarFilter: return VPBTranslation.T("hook.qmbutton.star_filter", "Star Filter (Rated / Not rated)");
                 case QuickMenuAssignableAction.OpenCategorySkin: return VPBTranslation.T("hook.qmbutton.open_category_skin", "Open Category: Skin");
                 case QuickMenuAssignableAction.PerfStepUp: return VPBTranslation.T("hook.qmbutton.perf_step_up", "Perf Step Up");
                 case QuickMenuAssignableAction.PerfStepDown: return VPBTranslation.T("hook.qmbutton.perf_step_down", "Perf Step Down");
+                case QuickMenuAssignableAction.PersonToggle:
+                {
+                    Atom person = QuickMenuResolvePersonToggleAtom();
+                    string cur;
+                    if (person == null) cur = VPBTranslation.T("hook.qmtarget.none", "None");
+                    else
+                    {
+                        bool on = true;
+                        try { on = person.on; } catch { }
+                        cur = QuickMenuFormatPersonLabel(person) + " (" + (on
+                            ? VPBTranslation.T("hook.qmbutton.person_toggle_on", "On")
+                            : VPBTranslation.T("hook.qmbutton.person_toggle_off", "Off")) + ")";
+                    }
+                    return VPBTranslation.T("hook.qmbutton.person_toggle_tip", "Person On/Off\nLeft Click: toggle active person on/off\n\nCurrent: ") + cur;
+                }
+                case QuickMenuAssignableAction.PersonSwitch:
+                {
+                    Atom person = QuickMenuResolvePersonToggleAtom();
+                    string cur;
+                    if (person == null) cur = VPBTranslation.T("hook.qmtarget.none", "None");
+                    else
+                    {
+                        List<Atom> persons = QuickMenuCollectPersons();
+                        int personIdx = QuickMenuIndexOfPerson(persons, person);
+                        cur = QuickMenuFormatPersonLabel(person);
+                        if (persons != null && personIdx >= 0) cur += " (" + (personIdx + 1) + "/" + persons.Count + ")";
+                    }
+                    return VPBTranslation.T("hook.qmbutton.person_switch_tip", "Switch Person\nLeft Click: select next person\nRight Click: previous person\n\nCurrent: ") + cur;
+                }
+                case QuickMenuAssignableAction.PersonSelect:
+                {
+                    Atom person = QuickMenuResolvePersonToggleAtom();
+                    string cur = person == null ? VPBTranslation.T("hook.qmtarget.none", "None") : QuickMenuFormatPersonLabel(person);
+                    return VPBTranslation.T("hook.qmbutton.person_select_tip", "Select Person\nLeft Click: open person list\n\nCurrent: ") + cur;
+                }
                 case QuickMenuAssignableAction.None:
                 default:
                     if (idx >= 0 && idx <= 3)
@@ -634,10 +702,14 @@ namespace VPB
                 case QuickMenuAssignableAction.RemoveAllClothing: return "remove_all_clothing";
                 case QuickMenuAssignableAction.RemoveAllHair: return "remove_all_hair";
                 case QuickMenuAssignableAction.ToggleImportSidebar: return "toggle_import_sidebar";
+                case QuickMenuAssignableAction.SceneOutliner: return "scene_outliner";
                 case QuickMenuAssignableAction.StarFilter: return "star_filter";
                 case QuickMenuAssignableAction.OpenCategorySkin: return "open_category_skin";
                 case QuickMenuAssignableAction.PerfStepUp: return "perf_step_up";
                 case QuickMenuAssignableAction.PerfStepDown: return "perf_step_down";
+                case QuickMenuAssignableAction.PersonToggle: return "person_toggle";
+                case QuickMenuAssignableAction.PersonSwitch: return "person_switch";
+                case QuickMenuAssignableAction.PersonSelect: return "person_select";
                 case QuickMenuAssignableAction.None:
                 default:
                     return "";
@@ -695,10 +767,14 @@ namespace VPB
                 case "remove_all_clothing": return QuickMenuAssignableAction.RemoveAllClothing;
                 case "remove_all_hair": return QuickMenuAssignableAction.RemoveAllHair;
                 case "toggle_import_sidebar": return QuickMenuAssignableAction.ToggleImportSidebar;
+                case "scene_outliner": return QuickMenuAssignableAction.SceneOutliner;
                 case "star_filter": return QuickMenuAssignableAction.StarFilter;
                 case "open_category_skin": return QuickMenuAssignableAction.OpenCategorySkin;
                 case "perf_step_up": return QuickMenuAssignableAction.PerfStepUp;
                 case "perf_step_down": return QuickMenuAssignableAction.PerfStepDown;
+                case "person_toggle": return QuickMenuAssignableAction.PersonToggle;
+                case "person_switch": return QuickMenuAssignableAction.PersonSwitch;
+                case "person_select": return QuickMenuAssignableAction.PersonSelect;
                 default: return QuickMenuAssignableAction.None;
             }
         }
@@ -806,6 +882,7 @@ namespace VPB
                 m_QuickMenuPageAssignments[p][2] = QuickMenuAssignableAction.BringFront;
                 m_QuickMenuPageAssignments[p][3] = QuickMenuAssignableAction.CloseAll;
             }
+            m_QuickMenuPageAssignments[0][4] = QuickMenuAssignableAction.SceneOutliner;
 
             QuickMenuPersistAssignments(firstTime: true);
         }
@@ -1497,6 +1574,9 @@ namespace VPB
                     icon = on ? m_QmIconImportSidebar : (m_QmIconImportSidebar ?? m_QmIconAssignEmpty);
                     break;
                 }
+                case QuickMenuAssignableAction.SceneOutliner:
+                    icon = m_QmIconSceneOutliner ?? m_QmIconTargetAtom ?? m_QmIconAssignEmpty;
+                    break;
                 case QuickMenuAssignableAction.StarFilter:
                 {
                     bool on = false;
@@ -1512,6 +1592,15 @@ namespace VPB
                     break;
                 case QuickMenuAssignableAction.PerfStepDown:
                     icon = m_QmIconPerfStepDown;
+                    break;
+                case QuickMenuAssignableAction.PersonToggle:
+                    icon = QuickMenuGetPersonToggleIcon();
+                    break;
+                case QuickMenuAssignableAction.PersonSwitch:
+                    icon = QuickMenuGetPersonSwitchIcon();
+                    break;
+                case QuickMenuAssignableAction.PersonSelect:
+                    icon = QuickMenuGetPersonSelectIcon();
                     break;
                 case QuickMenuAssignableAction.None:
                 default:
@@ -1793,6 +1882,13 @@ namespace VPB
                             QuickMenuRefreshSlotVisual(i);
                     break;
                 }
+                case QuickMenuAssignableAction.SceneOutliner:
+                {
+                    var p = QuickMenuGetTargetPanel();
+                    if (p == null) { OpenGallery(); p = QuickMenuGetTargetPanel(); }
+                    if (p != null) p.ToggleSceneOutliner();
+                    break;
+                }
                 case QuickMenuAssignableAction.StarFilter:
                 {
                     var p = QuickMenuGetTargetPanel();
@@ -1810,6 +1906,15 @@ namespace VPB
                     break;
                 case QuickMenuAssignableAction.PerfStepDown:
                     try { VpbPerfController.StepBy(-1, true, true); } catch { }
+                    break;
+                case QuickMenuAssignableAction.PersonToggle:
+                    QuickMenuTogglePersonOn();
+                    break;
+                case QuickMenuAssignableAction.PersonSwitch:
+                    QuickMenuSwitchPerson(+1);
+                    break;
+                case QuickMenuAssignableAction.PersonSelect:
+                    QuickMenuOpenPersonPopupForSlot(m_QuickMenuPersonPopupTargetIdx);
                     break;
                 case QuickMenuAssignableAction.CoreSettingsButton:
                 {
@@ -1845,6 +1950,9 @@ namespace VPB
                     if (p != null) p.QuickMenu_RemoveAllClothing();
                     break;
                 }
+                case QuickMenuAssignableAction.PersonSwitch:
+                    QuickMenuSwitchPerson(-1);
+                    break;
                 default:
                     break;
             }
@@ -2114,10 +2222,14 @@ namespace VPB
                 case QuickMenuAssignableAction.RemoveAllClothing: return m_QmIconRemoveClothing ?? m_QmIconAssignEmpty;
                 case QuickMenuAssignableAction.RemoveAllHair: return m_QmIconRemoveHair ?? m_QmIconAssignEmpty;
                 case QuickMenuAssignableAction.ToggleImportSidebar: return m_QmIconImportSidebar ?? m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.SceneOutliner: return m_QmIconSceneOutliner ?? m_QmIconTargetAtom ?? m_QmIconAssignEmpty;
                 case QuickMenuAssignableAction.StarFilter: return m_QmIconStarOff ?? m_QmIconStarOn ?? m_QmIconAssignEmpty;
                 case QuickMenuAssignableAction.OpenCategorySkin: return m_QmIconCategorySkin ?? m_QmIconOpenCategory;
                 case QuickMenuAssignableAction.PerfStepUp: return m_QmIconPerfStepUp ?? m_QmIconAssignEmpty;
                 case QuickMenuAssignableAction.PerfStepDown: return m_QmIconPerfStepDown ?? m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.PersonToggle: return QuickMenuGetPersonToggleIcon() ?? m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.PersonSwitch: return QuickMenuGetPersonSwitchIcon() ?? m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.PersonSelect: return QuickMenuGetPersonSelectIcon() ?? m_QmIconAssignEmpty;
                 default: return m_QmIconAssignEmpty;
             }
         }
@@ -2134,6 +2246,336 @@ namespace VPB
             for (int i = 0; i < QuickMenuGridSlotCount; i++)
                 if (QuickMenuGetSlotAction(i) == QuickMenuAssignableAction.PerfMode)
                     try { QuickMenuRefreshSlotVisual(i); } catch { }
+        }
+
+        private Atom QuickMenuResolvePersonToggleAtom()
+        {
+            try
+            {
+                var p = QuickMenuGetTargetPanel();
+                Atom a = p != null ? p.SelectedTargetAtom : null;
+                if (a != null && SceneUtils.IsPersonLikeAtom(a)) return a;
+            }
+            catch { }
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc == null) return null;
+                Atom sel = sc.GetSelectedAtom();
+                if (sel != null && SceneUtils.IsPersonLikeAtom(sel)) return sel;
+                var atoms = sc.GetAtoms();
+                if (atoms == null) return null;
+                for (int i = 0; i < atoms.Count; i++)
+                {
+                    Atom a = atoms[i];
+                    if (a != null && SceneUtils.IsPersonLikeAtom(a)) return a;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static List<Atom> QuickMenuCollectPersons()
+        {
+            try
+            {
+                var persons = new List<Atom>();
+                var atoms = SuperController.singleton != null ? SuperController.singleton.GetAtoms() : null;
+                if (atoms != null)
+                {
+                    for (int i = 0; i < atoms.Count; i++)
+                    {
+                        var a = atoms[i];
+                        if (a == null) continue;
+                        try { if (SceneUtils.IsPersonLikeAtom(a)) persons.Add(a); } catch { }
+                    }
+                }
+                return persons;
+            }
+            catch { return null; }
+        }
+
+        private static int QuickMenuIndexOfPerson(List<Atom> persons, Atom person)
+        {
+            if (persons == null || person == null) return -1;
+            for (int i = 0; i < persons.Count; i++)
+                if (ReferenceEquals(persons[i], person)) return i;
+            return -1;
+        }
+
+        private Sprite QuickMenuGetPersonSwitchIcon()
+        {
+            Atom person = QuickMenuResolvePersonToggleAtom();
+            if (person == null) return m_QmIconPersonSwitchNone ?? m_QmIconPersonNone;
+            switch (QuickMenuGetPersonGender(person))
+            {
+                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return m_QmIconPersonSwitchMale ?? m_QmIconPersonMaleOn;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return m_QmIconPersonSwitchFemale ?? m_QmIconPersonFemaleOn;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return m_QmIconPersonSwitchFuta ?? m_QmIconPersonFutaOn;
+            }
+            return m_QmIconPersonSwitchUnknown ?? m_QmIconPersonUnknownOn;
+        }
+
+        private string QuickMenuGetPersonSwitchStateKey()
+        {
+            Atom person = QuickMenuResolvePersonToggleAtom();
+            if (person == null) return "";
+            string uid = "";
+            try { uid = person.uid; } catch { }
+            return uid + "|" + (int)QuickMenuGetPersonGender(person);
+        }
+
+        private void QuickMenuSwitchPerson(int delta)
+        {
+            if (delta == 0) return;
+            List<Atom> persons = QuickMenuCollectPersons();
+            if (persons == null || persons.Count == 0)
+            {
+                LogUtil.Log("[VPB.QuickMenu] Switch Person: no person atom in scene");
+                return;
+            }
+            int curIdx = QuickMenuIndexOfPerson(persons, QuickMenuResolvePersonToggleAtom());
+            int n = persons.Count;
+            int nextIdx = curIdx < 0 ? 0 : ((curIdx + delta) % n + n) % n;
+            Atom next = persons[nextIdx];
+            if (next == null) return;
+
+            var p = QuickMenuGetTargetPanel();
+            if (p != null) try { p.QuickMenu_SetSelectedTargetPersonUid(next.uid); } catch { }
+            try { VPB.Outliner.OutlinerEdits.SelectRoot(next, false, false); } catch { }
+
+            RefreshQuickMenuPersonSwitchSlots();
+            RefreshQuickMenuPersonToggleSlots();
+            try
+            {
+                int hoverIdx = m_QmTooltipHoverSlotIdx;
+                if (hoverIdx >= 0 && hoverIdx < QuickMenuGridSlotCount && QuickMenuGetSlotAction(hoverIdx) == QuickMenuAssignableAction.PersonSwitch)
+                    QuickMenuSetTooltip(QuickMenuGetTooltipForSlot(hoverIdx));
+            }
+            catch { }
+        }
+
+        internal void RefreshQuickMenuPersonSwitchSlots()
+        {
+            m_QmPersonSwitchLastStateKey = QuickMenuGetPersonSwitchStateKey();
+            if (m_QuickMenuGridButtons == null) return;
+            for (int i = 0; i < QuickMenuGridSlotCount; i++)
+            {
+                var act = QuickMenuGetSlotAction(i);
+                if (act == QuickMenuAssignableAction.PersonSwitch || act == QuickMenuAssignableAction.PersonSelect)
+                    try { QuickMenuRefreshSlotVisual(i); } catch { }
+            }
+        }
+
+        private Sprite QuickMenuGetPersonSelectIcon()
+        {
+            Atom person = QuickMenuResolvePersonToggleAtom();
+            if (person == null) return m_QmIconPersonSelectNone ?? m_QmIconPersonNone;
+            switch (QuickMenuGetPersonGender(person))
+            {
+                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return m_QmIconPersonSelectMale ?? m_QmIconPersonMaleOn;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return m_QmIconPersonSelectFemale ?? m_QmIconPersonFemaleOn;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return m_QmIconPersonSelectFuta ?? m_QmIconPersonFutaOn;
+            }
+            return m_QmIconPersonSelectUnknown ?? m_QmIconPersonUnknownOn;
+        }
+
+        private void QuickMenuSelectPerson(Atom next)
+        {
+            if (next == null) return;
+            var p = QuickMenuGetTargetPanel();
+            if (p != null) try { p.QuickMenu_SetSelectedTargetPersonUid(next.uid); } catch { }
+            try { VPB.Outliner.OutlinerEdits.SelectRoot(next, false, false); } catch { }
+            RefreshQuickMenuPersonSwitchSlots();
+            RefreshQuickMenuPersonToggleSlots();
+        }
+
+        private void QuickMenuBuildPersonPopup(GameObject host)
+        {
+            if (host == null) return;
+            m_QuickMenuPersonPopupRoot = UI.AddChildGOImage(host, new Color(0f, 0f, 0f, 0.85f), AnchorPresets.topLeft, 300f, 260f, Vector2.zero, rounded: true);
+            m_QuickMenuPersonPopupRoot.name = "VPB_QM_PersonPopup";
+            m_QuickMenuPersonPopupRT = m_QuickMenuPersonPopupRoot.GetComponent<RectTransform>();
+            if (m_QuickMenuPersonPopupRT != null)
+            {
+                m_QuickMenuPersonPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
+                m_QuickMenuPersonPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
+                m_QuickMenuPersonPopupRT.pivot = new Vector2(0f, 0f);
+            }
+            m_QuickMenuPersonPopupRoot.SetActive(false);
+        }
+
+        private void QuickMenuOpenPersonPopupForSlot(int slotIdx)
+        {
+            if (m_QuickMenuPersonPopupRoot == null || m_QuickMenuPersonPopupRT == null) return;
+            if (m_QuickMenuPersonPopupRoot.activeSelf && m_QuickMenuPersonPopupOpenSlotIdx == slotIdx)
+            {
+                QuickMenuHidePersonPopup();
+                return;
+            }
+            Vector2 pos = Vector2.zero;
+            try
+            {
+                if (m_QuickMenuGridButtonRTs != null && slotIdx >= 0 &&
+                    slotIdx < m_QuickMenuGridButtonRTs.Length &&
+                    m_QuickMenuGridButtonRTs[slotIdx] != null)
+                    pos = m_QuickMenuGridButtonRTs[slotIdx].anchoredPosition;
+            }
+            catch { }
+            if (pos == Vector2.zero) pos = m_QuickMenuPersonPopupRT.anchoredPosition;
+            m_QuickMenuPersonPopupOpenSlotIdx = slotIdx;
+            QuickMenuRebuildPersonPopupButtons();
+            m_QuickMenuPersonPopupRT.anchoredPosition = pos + QuickMenuPopupOffset;
+            if (!m_QuickMenuPersonPopupRoot.activeSelf) m_QuickMenuPersonPopupRoot.SetActive(true);
+            try { m_QuickMenuPersonPopupRoot.transform.SetAsLastSibling(); } catch { }
+            QuickMenuClampRectToScreen(m_QuickMenuPersonPopupRT);
+        }
+
+        private void QuickMenuHidePersonPopup()
+        {
+            m_QuickMenuPersonPopupTargetIdx = -1;
+            m_QuickMenuPersonPopupOpenSlotIdx = -1;
+            if (m_QuickMenuPersonPopupRoot != null && m_QuickMenuPersonPopupRoot.activeSelf)
+                m_QuickMenuPersonPopupRoot.SetActive(false);
+        }
+
+        private void QuickMenuRebuildPersonPopupButtons()
+        {
+            if (m_QuickMenuPersonPopupRoot == null || m_QuickMenuPersonPopupRT == null) return;
+            foreach (var b in m_QuickMenuPersonPopupButtons)
+            {
+                try { if (b != null) DestroyImmediate(b); } catch { }
+            }
+            m_QuickMenuPersonPopupButtons.Clear();
+
+            List<Atom> persons = QuickMenuCollectPersons();
+            if (persons == null) persons = new List<Atom>();
+            Atom current = QuickMenuResolvePersonToggleAtom();
+
+            float w = 260f;
+            float h = 40f;
+            float y = 20f;
+            float gap = 42f;
+            int font = 22;
+
+            int n = persons.Count;
+            if (n == 0)
+            {
+                var emptyGo = UI.CreateUIButton(m_QuickMenuPersonPopupRoot, w, h,
+                    VPBTranslation.T("hook.qmtarget.none_in_scene", "No person in scene"), font, 10f, y + gap, AnchorPresets.bottomLeft, () => { });
+                try
+                {
+                    var b = emptyGo != null ? emptyGo.GetComponent<Button>() : null;
+                    if (b != null) b.interactable = false;
+                    var img = emptyGo != null ? emptyGo.GetComponent<Image>() : null;
+                    if (img != null) img.color = new Color(0.2f, 0.2f, 0.2f, 0.7f);
+                }
+                catch { }
+                m_QuickMenuPersonPopupButtons.Add(emptyGo);
+                n = 1;
+            }
+            for (int i = 0; i < persons.Count; i++)
+            {
+                Atom person = persons[i];
+                if (person == null) continue;
+                bool isCurrent = ReferenceEquals(person, current);
+                var btnGo = UI.CreateUIButton(m_QuickMenuPersonPopupRoot, w, h, QuickMenuFormatPersonLabel(person), font, 10f, y + gap * (n - i), AnchorPresets.bottomLeft, () =>
+                {
+                    QuickMenuSelectPerson(person);
+                    QuickMenuHidePersonPopup();
+                });
+                try
+                {
+                    var img = btnGo != null ? btnGo.GetComponent<Image>() : null;
+                    if (img != null) img.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
+                    var t = btnGo != null ? btnGo.GetComponentInChildren<Text>() : null;
+                    if (t != null) t.color = isCurrent ? UI.PopupText : UI.PopupMutedText;
+                }
+                catch { }
+                m_QuickMenuPersonPopupButtons.Add(btnGo);
+            }
+
+            var closeBtn = UI.CreateUIButton(m_QuickMenuPersonPopupRoot, w, h,
+                VPBTranslation.T("hook.qmbutton.cancel", "Cancel"), font, 10f, y, AnchorPresets.bottomLeft, QuickMenuHidePersonPopup);
+            try
+            {
+                var img = closeBtn != null ? closeBtn.GetComponent<Image>() : null;
+                if (img != null) img.color = new Color(0.55f, 0.22f, 0.22f, 1f);
+            }
+            catch { }
+            m_QuickMenuPersonPopupButtons.Add(closeBtn);
+
+            float totalH = 20f + (n + 1) * gap + 10f;
+            if (totalH < 120f) totalH = 120f;
+            m_QuickMenuPersonPopupRT.sizeDelta = new Vector2(300f, totalH);
+            try { UI.ApplyGalleryPaneHoverPolicy(m_QuickMenuPersonPopupRoot); } catch { }
+        }
+
+        private Sprite QuickMenuGetPersonToggleIcon()
+        {
+            Atom person = QuickMenuResolvePersonToggleAtom();
+            if (person == null) return m_QmIconPersonNone;
+            bool on = true;
+            try { on = person.on; } catch { }
+            switch (QuickMenuGetPersonGender(person))
+            {
+                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return on ? m_QmIconPersonMaleOn : m_QmIconPersonMaleOff;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return on ? m_QmIconPersonFemaleOn : m_QmIconPersonFemaleOff;
+                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return on ? m_QmIconPersonFutaOn : m_QmIconPersonFutaOff;
+            }
+            return on ? m_QmIconPersonUnknownOn : m_QmIconPersonUnknownOff;
+        }
+
+        private string QuickMenuGetPersonToggleStateKey()
+        {
+            Atom person = QuickMenuResolvePersonToggleAtom();
+            if (person == null) return "";
+            bool on = true;
+            try { on = person.on; } catch { }
+            string uid = "";
+            try { uid = person.uid; } catch { }
+            return uid + (on ? "|1|" : "|0|") + (int)QuickMenuGetPersonGender(person);
+        }
+
+        private void QuickMenuTogglePersonOn()
+        {
+            Atom person = QuickMenuResolvePersonToggleAtom();
+            if (person == null)
+            {
+                LogUtil.Log("[VPB.QuickMenu] Person On/Off: no person atom in scene");
+                return;
+            }
+            bool on = true;
+            try { on = person.on; } catch { }
+            try { person.SetOn(!on); }
+            catch (Exception ex) { LogUtil.LogError("[VPB.QuickMenu] Person On/Off failed for '" + person.uid + "': " + ex.Message); return; }
+            RefreshQuickMenuPersonToggleSlots();
+            try
+            {
+                int hoverIdx = m_QmTooltipHoverSlotIdx;
+                if (hoverIdx >= 0 && hoverIdx < QuickMenuGridSlotCount && QuickMenuGetSlotAction(hoverIdx) == QuickMenuAssignableAction.PersonToggle)
+                    QuickMenuSetTooltip(QuickMenuGetTooltipForSlot(hoverIdx));
+            }
+            catch { }
+        }
+
+        internal void RefreshQuickMenuPersonToggleSlots()
+        {
+            m_QmPersonToggleLastStateKey = QuickMenuGetPersonToggleStateKey();
+            if (m_QuickMenuGridButtons == null) return;
+            for (int i = 0; i < QuickMenuGridSlotCount; i++)
+                if (QuickMenuGetSlotAction(i) == QuickMenuAssignableAction.PersonToggle)
+                    try { QuickMenuRefreshSlotVisual(i); } catch { }
+        }
+
+        private void QuickMenuPollPersonToggleState()
+        {
+            string toggleKey = QuickMenuGetPersonToggleStateKey();
+            if (!string.Equals(toggleKey, m_QmPersonToggleLastStateKey, StringComparison.Ordinal))
+                RefreshQuickMenuPersonToggleSlots();
+            string switchKey = QuickMenuGetPersonSwitchStateKey();
+            if (!string.Equals(switchKey, m_QmPersonSwitchLastStateKey, StringComparison.Ordinal))
+                RefreshQuickMenuPersonSwitchSlots();
         }
 
         private static VPB.src.util.LooseVapGenderProbe.Gender QuickMenuGetPersonGender(Atom person)
@@ -2181,23 +2623,7 @@ namespace VPB
             var p = QuickMenuGetTargetPanel();
             if (p == null) return;
 
-            List<Atom> persons = null;
-            try
-            {
-                persons = new List<Atom>();
-                var atoms = SuperController.singleton != null ? SuperController.singleton.GetAtoms() : null;
-                if (atoms != null)
-                {
-                    for (int i = 0; i < atoms.Count; i++)
-                    {
-                        var a = atoms[i];
-                        if (a == null) continue;
-                        try { if (SceneUtils.IsPersonLikeAtom(a)) persons.Add(a); } catch { }
-                    }
-                }
-            }
-            catch { persons = null; }
-
+            List<Atom> persons = QuickMenuCollectPersons();
             if (persons == null || persons.Count == 0) return;
 
             string curUid = null;

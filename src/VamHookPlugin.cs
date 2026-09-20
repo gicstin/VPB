@@ -657,6 +657,7 @@ namespace VPB
         {
             try { VpbPassthrough.Shutdown(); } catch { }
             try { VpbProgressService.ShutdownForQuit(); } catch { }
+            try { VpbPackageInsightScanner.Shutdown(); } catch { }
             try { VpbRandomHistory.Flush(); } catch { }
             try { VpbPerfController.Shutdown(); } catch { }
             try { UI.ClearIconSpriteCache(); } catch { }
@@ -707,6 +708,7 @@ namespace VPB
             VPBLogger.Flush();
             // Runs before OnDestroy during player quit — kill Win32 pump, companion pipe, zstd writers early.
             try { VpbProgressService.ShutdownForQuit(); } catch { }
+            try { VpbPackageInsightScanner.Shutdown(); } catch { }
             try { VpbRandomHistory.Flush(); } catch { }
         }
         // Called on (hard) restart as well.
@@ -1235,6 +1237,7 @@ namespace VPB
                                 QuickMenuRefreshSlotVisual(i);
                         }
                         m_QuickMenuLastVisualState = visualState;
+                        QuickMenuPollPersonToggleState();
                     }
                 }
                 catch { }
@@ -1633,6 +1636,7 @@ namespace VPB
                 m_QmIconReplace = UI.LoadIconSprite("replace", tint);
                 m_QmIconAdd     = UI.LoadIconSprite("layout-grid-add", tint);
                 m_QmIconTargetAtom = UI.LoadIconSprite("focus-2", tint);
+                m_QmIconSceneOutliner = UI.LoadIconSprite("topology-star", tint);
                 m_QmIconNavNext = UI.LoadIconSprite("player-track-next", tint);
                 m_QmIconNavPrev = UI.LoadIconSprite("player-track-prev", tint);
                 m_QmIconSwitchHand = UI.LoadIconSprite("switch-horizontal", tint);
@@ -1647,6 +1651,26 @@ namespace VPB
                 m_QmIconCategorySkin = UI.LoadIconSprite("body-scan", tint);
                 m_QmIconPerfStepUp   = UI.LoadIconSprite("photo-up", tint);
                 m_QmIconPerfStepDown = UI.LoadIconSprite("photo-down", tint);
+                Color personOff = new Color(0.55f, 0.55f, 0.55f, 1f);
+                m_QmIconPersonMaleOn = UI.LoadIconSprite("user", GalleryUiColorTokens.GenderMaleGlyph);
+                m_QmIconPersonFemaleOn = UI.LoadIconSprite("user", GalleryUiColorTokens.GenderFemaleGlyph);
+                m_QmIconPersonFutaOn = UI.LoadIconSprite("user", GalleryUiColorTokens.GenderFutaGlyph);
+                m_QmIconPersonUnknownOn = UI.LoadIconSprite("user", tint);
+                m_QmIconPersonMaleOff = UI.LoadIconSprite("user-off", GalleryUiColorTokens.GenderMaleGlyph);
+                m_QmIconPersonFemaleOff = UI.LoadIconSprite("user-off", GalleryUiColorTokens.GenderFemaleGlyph);
+                m_QmIconPersonFutaOff = UI.LoadIconSprite("user-off", GalleryUiColorTokens.GenderFutaGlyph);
+                m_QmIconPersonUnknownOff = UI.LoadIconSprite("user-off", tint);
+                m_QmIconPersonNone = UI.LoadIconSprite("user-off", personOff);
+                m_QmIconPersonSwitchMale = UI.LoadIconSprite("users", GalleryUiColorTokens.GenderMaleGlyph);
+                m_QmIconPersonSwitchFemale = UI.LoadIconSprite("users", GalleryUiColorTokens.GenderFemaleGlyph);
+                m_QmIconPersonSwitchFuta = UI.LoadIconSprite("users", GalleryUiColorTokens.GenderFutaGlyph);
+                m_QmIconPersonSwitchUnknown = UI.LoadIconSprite("users", tint);
+                m_QmIconPersonSwitchNone = UI.LoadIconSprite("users", personOff) ?? m_QmIconPersonNone;
+                m_QmIconPersonSelectMale = UI.LoadIconSprite("list-details", GalleryUiColorTokens.GenderMaleGlyph);
+                m_QmIconPersonSelectFemale = UI.LoadIconSprite("list-details", GalleryUiColorTokens.GenderFemaleGlyph);
+                m_QmIconPersonSelectFuta = UI.LoadIconSprite("list-details", GalleryUiColorTokens.GenderFutaGlyph);
+                m_QmIconPersonSelectUnknown = UI.LoadIconSprite("list-details", tint);
+                m_QmIconPersonSelectNone = UI.LoadIconSprite("list-details", personOff) ?? m_QmIconPersonNone;
                 m_QmIconCompressCache = GalleryPanel.LoadCompressCacheIconSprite(tint);
                 m_QmIconAutoHideOff = UI.LoadIconSprite("layout-sidebar-right-expand", tint);
                 m_QmIconAutoHideOn  = UI.LoadIconSprite("layout-sidebar-right-collapse",  tint);
@@ -1817,6 +1841,7 @@ namespace VPB
                         var act = QuickMenuGetSlotAction(idxCopy);
                         // Save opens a submenu; remember which slot invoked it.
                         if (act == QuickMenuAssignableAction.Save) m_QuickMenuSavePopupTargetIdx = idxCopy;
+                        if (act == QuickMenuAssignableAction.PersonSelect) m_QuickMenuPersonPopupTargetIdx = idxCopy;
                         QuickMenuExecuteAssignment(act);
                     });
 
@@ -1861,6 +1886,7 @@ namespace VPB
 
                 QuickMenuBuildAssignFloat(canvasObject);
                 QuickMenuBuildSavePopup(canvasObject);
+                QuickMenuBuildPersonPopup(canvasObject);
 
                 try { QuickMenuEnsureDeskPreviewWidget(); } catch { }
 

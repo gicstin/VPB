@@ -51,10 +51,11 @@
     <Compile Include="src\util\VpbUpdateManifest.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <PostBuildEvent>if not exist "$(VaMPath)\BepInEx\patchers" mkdir "$(VaMPath)\BepInEx\patchers"
-copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\patchers\VPB.Patcher.dll"
-if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\patchers" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\patchers"
-copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\patchers\VPB.Patcher.dll"</PostBuildEvent>
-  </PropertyGroup>
+  <!-- MSBuild Copy/MakeDir work on Linux Mono; avoid cmd.exe PostBuild (if/copy /Y). -->
+  <Target Name="DeployPatcher" AfterTargets="Build">
+    <MakeDir Directories="$(VaMPath)/BepInEx/patchers" Condition="Exists('$(VaMPath)')" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(VaMPath)/BepInEx/patchers" Condition="Exists('$(VaMPath)')" SkipUnchangedFiles="true" ContinueOnError="WarnAndContinue" />
+    <MakeDir Directories="$(MSBuildProjectDirectory)/vam_patch/BepInEx/patchers" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(MSBuildProjectDirectory)/vam_patch/BepInEx/patchers" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
