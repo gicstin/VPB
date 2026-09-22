@@ -26,6 +26,75 @@ namespace VPB
 				return true;
 			}
 		}
+
+		public static bool TryParsePluginHotkeySet(
+			string galleryKey,
+			string createGalleryKey,
+			string hubKey,
+			string clearConsoleKey,
+			out KeyUtil gallery,
+			out KeyUtil create,
+			out KeyUtil hub,
+			out KeyUtil clear,
+			out string error)
+		{
+			gallery = null;
+			create = null;
+			hub = null;
+			clear = null;
+			error = null;
+			try
+			{
+				if (UsesDisallowedHotkeyKey(galleryKey) || UsesDisallowedHotkeyKey(createGalleryKey)
+					|| UsesDisallowedHotkeyKey(hubKey) || UsesDisallowedHotkeyKey(clearConsoleKey))
+				{
+					error = VPBTranslation.T("hook.settings.error.disallowed_hotkey", "Mouse buttons cannot be used as hotkeys.");
+					return false;
+				}
+
+				gallery = Parse(NormalizePluginHotkeyPattern(galleryKey));
+				create = Parse(NormalizePluginHotkeyPattern(createGalleryKey));
+				hub = Parse(NormalizePluginHotkeyPattern(hubKey));
+				clear = Parse(NormalizePluginHotkeyPattern(clearConsoleKey));
+
+				if (PluginHotkeyKeyRejected(gallery.key) || PluginHotkeyKeyRejected(create.key)
+					|| PluginHotkeyKeyRejected(hub.key) || PluginHotkeyKeyRejected(clear.key))
+				{
+					error = VPBTranslation.T("hook.settings.error.disallowed_hotkey", "Mouse buttons cannot be used as hotkeys.");
+					return false;
+				}
+
+				if (gallery.IsSame(create) || gallery.IsSame(hub) || gallery.IsSame(clear)
+					|| create.IsSame(hub) || create.IsSame(clear)
+					|| hub.IsSame(clear))
+				{
+					error = VPBTranslation.T("hook.settings.error.duplicate_hotkeys", "Duplicate hotkeys are not allowed.");
+					return false;
+				}
+
+				return true;
+			}
+			catch
+			{
+				gallery = null;
+				create = null;
+				hub = null;
+				clear = null;
+				error = VPBTranslation.T("hook.settings.error.invalid_hotkey", "Invalid setting. Example hotkey: Ctrl+Shift+V");
+				return false;
+			}
+		}
+
+		private static string NormalizePluginHotkeyPattern(string value)
+		{
+			if (string.IsNullOrEmpty(value)) return "";
+			return value.Trim();
+		}
+
+		private static bool PluginHotkeyKeyRejected(KeyCode kc)
+		{
+			return kc != KeyCode.None && IsDisallowedHotkeyKey(kc);
+		}
 		public List<KeyCode> supportKeys = new List<KeyCode>();
 
 		public KeyCode key;

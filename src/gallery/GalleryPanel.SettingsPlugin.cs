@@ -92,6 +92,7 @@ namespace VPB
             _pluginDraftCreateGalleryKey = b.PluginCreateGalleryKey ?? "";
             _pluginDraftHubKey = b.PluginHubKey ?? "";
             _pluginDraftClearConsoleKey = b.PluginClearConsoleKey ?? "";
+            BroadcastPluginHotkeyDrafts();
             try
             {
                 if (b.ShortcutPatterns != null)
@@ -101,6 +102,7 @@ namespace VPB
                 }
                 _shortcutDrafts = VpbShortcutMap.CapturePatterns();
                 _shortcutConflictDirty = true;
+                BroadcastShortcutDrafts(_shortcutDrafts);
             }
             catch { }
             try { VamHookPlugin.singleton?.ApplyGalleryPluginHotkeysFromSettings(); } catch { }
@@ -142,7 +144,7 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.plugin_hotkey_gallery", "Toggle visibility of gallery panes."),
                 ControlType = InternalSettingControlType.Hotkey,
                 GetString = () => _pluginDraftGalleryKey ?? "",
-                SetString = v => _pluginDraftGalleryKey = v ?? ""
+                SetString = v => ApplyPluginHotkeyDraft("plugin.hotkey.gallery", v ?? "")
             });
             defs.Add(new InternalSettingDefinition
             {
@@ -152,7 +154,7 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.plugin_hotkey_create_gallery", "Open a new gallery pane."),
                 ControlType = InternalSettingControlType.Hotkey,
                 GetString = () => _pluginDraftCreateGalleryKey ?? "",
-                SetString = v => _pluginDraftCreateGalleryKey = v ?? ""
+                SetString = v => ApplyPluginHotkeyDraft("plugin.hotkey.create_gallery", v ?? "")
             });
             defs.Add(new InternalSettingDefinition
             {
@@ -162,7 +164,7 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.plugin_hotkey_hub", "Open Hub browse."),
                 ControlType = InternalSettingControlType.Hotkey,
                 GetString = () => _pluginDraftHubKey ?? "",
-                SetString = v => _pluginDraftHubKey = v ?? ""
+                SetString = v => ApplyPluginHotkeyDraft("plugin.hotkey.hub", v ?? "")
             });
             defs.Add(new InternalSettingDefinition
             {
@@ -172,7 +174,7 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.plugin_hotkey_clear_console", "Clear BepInEx console output."),
                 ControlType = InternalSettingControlType.Hotkey,
                 GetString = () => _pluginDraftClearConsoleKey ?? "",
-                SetString = v => _pluginDraftClearConsoleKey = v ?? ""
+                SetString = v => ApplyPluginHotkeyDraft("plugin.hotkey.clear_console", v ?? "")
             });
 
             AppendShortcutBindingSettingDefinitions(defs);
@@ -390,6 +392,23 @@ namespace VPB
                 return;
             }
 
+            string previous = GetPluginHotkeyDraftDisplay(rowKey);
+            string next = pattern ?? "";
+            if (!TryAssignPluginHotkeyDraft(rowKey, next)) return;
+            _shortcutConflictDirty = true;
+            if (string.Equals(previous ?? "", next, StringComparison.Ordinal))
+            {
+                BroadcastPluginHotkeyDrafts();
+                return;
+            }
+
+            if (!PushLivePluginHotkeysFromDrafts(true))
+                TryAssignPluginHotkeyDraft(rowKey, previous ?? "");
+            BroadcastPluginHotkeyDrafts();
+        }
+
+        private bool TryAssignPluginHotkeyDraft(string rowKey, string pattern)
+        {
             if (string.Equals(rowKey, "plugin.hotkey.gallery", StringComparison.OrdinalIgnoreCase))
                 _pluginDraftGalleryKey = pattern;
             else if (string.Equals(rowKey, "plugin.hotkey.create_gallery", StringComparison.OrdinalIgnoreCase))
@@ -398,7 +417,49 @@ namespace VPB
                 _pluginDraftHubKey = pattern;
             else if (string.Equals(rowKey, "plugin.hotkey.clear_console", StringComparison.OrdinalIgnoreCase))
                 _pluginDraftClearConsoleKey = pattern;
-            _shortcutConflictDirty = true;
+            else
+                return false;
+            return true;
+        }
+
+        private bool PushLivePluginHotkeysFromDrafts(bool showErrors)
+        {
+            var plugin = VamHookPlugin.singleton;
+            if (plugin == null) return true;
+            string err;
+            if (!plugin.TryApplyGalleryPluginHotkeys(
+                    _pluginDraftGalleryKey ?? "",
+                    _pluginDraftCreateGalleryKey ?? "",
+                    _pluginDraftHubKey ?? "",
+                    _pluginDraftClearConsoleKey ?? "",
+                    out err))
+            {
+                if (showErrors) ShowTemporaryStatus(err ?? VPBTranslation.T("hook.settings.error.invalid_hotkey", "Invalid setting. Example hotkey: Ctrl+Shift+V"), 4f);
+                return false;
+            }
+            NotifyShortcutBindingsChanged();
+            return true;
+        }
+
+        private void BroadcastPluginHotkeyDrafts()
+        {
+            try
+            {
+                var g = Gallery.singleton;
+                var panels = g != null ? g.Panels : null;
+                if (panels == null) return;
+                for (int i = 0; i < panels.Count; i++)
+                {
+                    GalleryPanel p = panels[i];
+                    if (p == null || ReferenceEquals(p, this)) continue;
+                    p._pluginDraftGalleryKey = _pluginDraftGalleryKey;
+                    p._pluginDraftCreateGalleryKey = _pluginDraftCreateGalleryKey;
+                    p._pluginDraftHubKey = _pluginDraftHubKey;
+                    p._pluginDraftClearConsoleKey = _pluginDraftClearConsoleKey;
+                    p._shortcutConflictDirty = true;
+                }
+            }
+            catch { }
         }
 
         private string GetPluginHotkeyDraftDisplay(string rowKey)

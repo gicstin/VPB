@@ -72,6 +72,8 @@ namespace VPB
         private static readonly List<CameraState> s_cameras = new List<CameraState>(8);
         private static readonly List<Behaviour> s_disabledEffects = new List<Behaviour>(16);
         private static readonly List<Atom> s_hiddenAtoms = new List<Atom>(32);
+        private static readonly List<Renderer> s_hiddenSkyRenderers = new List<Renderer>(4);
+        private static readonly List<Renderer> s_rendererScratch = new List<Renderer>(8);
         private static readonly List<Camera> s_cameraScratch = new List<Camera>(8);
         private static readonly List<MonoBehaviour> s_componentScratch = new List<MonoBehaviour>(32);
         private static Camera[] s_allCameras = new Camera[16];
@@ -96,6 +98,8 @@ namespace VPB
         public static int DisabledEffectCount { get { return s_disabledEffects.Count; } }
 
         public static int HiddenAtomCount { get { return s_hiddenAtoms.Count; } }
+
+        public static int HiddenSkyRendererCount { get { return s_hiddenSkyRenderers.Count; } }
 
         public static int PatchedCameraCount { get { return s_cameras.Count; } }
 
@@ -152,6 +156,8 @@ namespace VPB
                 if (s_disabledEffects[i] == null) s_disabledEffects.RemoveAt(i);
             for (int i = s_hiddenAtoms.Count - 1; i >= 0; i--)
                 if (s_hiddenAtoms[i] == null) s_hiddenAtoms.RemoveAt(i);
+            for (int i = s_hiddenSkyRenderers.Count - 1; i >= 0; i--)
+                if (s_hiddenSkyRenderers[i] == null) s_hiddenSkyRenderers.RemoveAt(i);
             try { VpbPassthroughLights.OnSceneLoadComplete(); }
             catch { }
             s_dirty = true;
@@ -323,6 +329,7 @@ namespace VPB
             ApplyPrefs(exact, cfg.PassthroughHardEdges);
             ApplyEffects(cfg.PassthroughCleanKey);
             ApplyHideScene(VPBConfig.NormalizePassthroughHideScene(cfg.PassthroughHideScene));
+            HideSkyGeometry();
             try { VpbPassthroughLights.Apply(); }
             catch { }
         }
@@ -370,8 +377,58 @@ namespace VPB
             catch { }
 
             UnhideAll();
+            RestoreSkyGeometry();
             s_active = false;
             s_dirty = false;
+        }
+
+        private static void HideSkyGeometry()
+        {
+            SkyshopLightController sky;
+            try { sky = SkyshopLightController.singleton; }
+            catch { return; }
+            if (sky == null) return;
+            HideSkyRenderersUnder(sky.skyContainer);
+            HideSkyRenderersUnder(sky.skyContainer2);
+        }
+
+        private static void HideSkyRenderersUnder(Transform root)
+        {
+            if (root == null) return;
+            try { root.GetComponentsInChildren(true, s_rendererScratch); }
+            catch { return; }
+            for (int i = 0; i < s_rendererScratch.Count; i++)
+            {
+                Renderer r = s_rendererScratch[i];
+                if (r == null) continue;
+                try
+                {
+                    if (!r.enabled) continue;
+                    r.enabled = false;
+                }
+                catch { continue; }
+                if (IndexOfSkyRenderer(r) < 0) s_hiddenSkyRenderers.Add(r);
+            }
+            s_rendererScratch.Clear();
+        }
+
+        private static int IndexOfSkyRenderer(Renderer r)
+        {
+            for (int i = 0; i < s_hiddenSkyRenderers.Count; i++)
+                if (ReferenceEquals(s_hiddenSkyRenderers[i], r)) return i;
+            return -1;
+        }
+
+        private static void RestoreSkyGeometry()
+        {
+            for (int i = 0; i < s_hiddenSkyRenderers.Count; i++)
+            {
+                Renderer r = s_hiddenSkyRenderers[i];
+                if (r == null) continue;
+                try { r.enabled = true; }
+                catch { }
+            }
+            s_hiddenSkyRenderers.Clear();
         }
 
         private static void CollectCameras(List<Camera> into)

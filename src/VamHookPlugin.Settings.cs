@@ -14,35 +14,20 @@ namespace VPB
             out string error)
         {
             error = null;
+            KeyUtil parsedGallery;
+            KeyUtil parsedCreate;
+            KeyUtil parsedHub;
+            KeyUtil parsedClear;
+            if (!KeyUtil.TryParsePluginHotkeySet(galleryKey, createGalleryKey, hubKey, clearConsoleKey,
+                    out parsedGallery, out parsedCreate, out parsedHub, out parsedClear, out error))
+            {
+                if (!string.IsNullOrEmpty(error))
+                    LogUtil.LogWarning("[VPB] Plugin hotkey not applied: " + error);
+                return false;
+            }
+
             try
             {
-                if (KeyUtil.UsesDisallowedHotkeyKey(galleryKey) || KeyUtil.UsesDisallowedHotkeyKey(createGalleryKey)
-                    || KeyUtil.UsesDisallowedHotkeyKey(hubKey) || KeyUtil.UsesDisallowedHotkeyKey(clearConsoleKey))
-                {
-                    error = VPBTranslation.T("hook.settings.error.disallowed_hotkey", "Mouse buttons cannot be used as hotkeys.");
-                    return false;
-                }
-
-                var parsedGallery = KeyUtil.Parse(galleryKey ?? "");
-                var parsedCreate = KeyUtil.Parse(createGalleryKey ?? "");
-                var parsedHub = KeyUtil.Parse(hubKey ?? "");
-                var parsedClear = KeyUtil.Parse(clearConsoleKey ?? "");
-
-                if (KeyUtil.IsDisallowedHotkeyKey(parsedGallery.key) || KeyUtil.IsDisallowedHotkeyKey(parsedCreate.key)
-                    || KeyUtil.IsDisallowedHotkeyKey(parsedHub.key) || KeyUtil.IsDisallowedHotkeyKey(parsedClear.key))
-                {
-                    error = VPBTranslation.T("hook.settings.error.disallowed_hotkey", "Mouse buttons cannot be used as hotkeys.");
-                    return false;
-                }
-
-                if (parsedGallery.IsSame(parsedCreate) || parsedGallery.IsSame(parsedHub) || parsedGallery.IsSame(parsedClear)
-                    || parsedCreate.IsSame(parsedHub) || parsedCreate.IsSame(parsedClear)
-                    || parsedHub.IsSame(parsedClear))
-                {
-                    error = VPBTranslation.T("hook.settings.error.duplicate_hotkeys", "Duplicate hotkeys are not allowed.");
-                    return false;
-                }
-
                 GalleryKey = parsedGallery;
                 CreateGalleryKey = parsedCreate;
                 HubKey = parsedHub;

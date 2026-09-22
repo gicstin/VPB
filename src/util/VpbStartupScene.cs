@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.IO;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace VPB
 {
@@ -233,6 +234,13 @@ namespace VPB
             if (string.IsNullOrEmpty(bannerName)) bannerName = "startup scene";
             try { VpbProgressService.BeginSceneLoadPrep(bannerName); } catch { }
 
+            if (IsUnavailableLocalPath(path))
+            {
+                try { VpbProgressService.EndSceneLoad(); } catch { }
+                ReportMissing(path, "storage not available");
+                yield break;
+            }
+
             float start = Time.realtimeSinceStartup;
             FileEntry fe = null;
             while (Time.realtimeSinceStartup - start < ResolveTimeoutSec)
@@ -257,12 +265,7 @@ namespace VPB
             if (fe == null)
             {
                 try { VpbProgressService.EndSceneLoad(); } catch { }
-                LogUtil.LogWarning("[VPB] Startup scene not found after wait: " + path);
-                try { SceneLoadingUtils.LoadScene(path, false); }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("[VPB] Startup scene LoadScene fallback failed: " + ex.Message);
-                }
+                ReportMissing(path, "file not found");
                 yield break;
             }
 
@@ -272,6 +275,36 @@ namespace VPB
             {
                 LogUtil.LogError("[VPB] Startup scene load failed: " + ex.Message);
             }
+        }
+
+        static bool IsUnavailableLocalPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            if (ExtractPackagePrefix(path) != null) return false;
+            try
+            {
+                if (!Path.IsPathRooted(path)) return false;
+                string root = Path.GetPathRoot(path);
+                if (string.IsNullOrEmpty(root)) return false;
+                return !Directory.Exists(root);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static void ReportMissing(string path, string reason)
+        {
+            string msg = "[VPB] Startup scene skipped (" + reason + "): " + path;
+            LogUtil.LogWarning(msg);
+            try { SuperController.LogError(msg); } catch { }
+            try
+            {
+                if (SuperController.singleton != null)
+                    SuperController.singleton.Alert("Startup scene could not be loaded (" + reason + "):\n" + path + "\n\nCheck the drive is connected or clear the startup scene in VPB settings.", (UnityAction)null);
+            }
+            catch { }
         }
 
         static FileEntry TryResolveFileEntry(string path)

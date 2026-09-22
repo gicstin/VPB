@@ -3799,8 +3799,7 @@ namespace VPB
         private void SaveInternalSettingsSession()
         {
             if (!internalSettingsSessionActive) return;
-            if (!TryCommitPluginSettingsOnSave())
-                return;
+            try { TryCommitPluginSettingsOnSave(); } catch { }
             internalSettingsBackup = CreateInternalSettingsSnapshot();
             try { VPBConfig.Instance.Save(false); } catch { }
             VPBConfig.Instance.TriggerChange();

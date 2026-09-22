@@ -27,8 +27,49 @@ namespace VPB
         private void SetShortcutDraft(int index, string pattern)
         {
             if (_shortcutDrafts == null || index < 0 || index >= _shortcutDrafts.Length) return;
-            _shortcutDrafts[index] = pattern ?? "";
+            string next = pattern ?? "";
+            bool changed = !string.Equals(_shortcutDrafts[index] ?? "", next, StringComparison.Ordinal);
+            _shortcutDrafts[index] = next;
             _shortcutConflictDirty = true;
+            if (!changed)
+            {
+                BroadcastShortcutDraft(index, next);
+                return;
+            }
+            try
+            {
+                VpbShortcutMap.SetPattern(index, next);
+                VpbShortcutMap.SaveToConfig();
+            }
+            catch { }
+            BroadcastShortcutDraft(index, next);
+            NotifyShortcutBindingsChanged();
+        }
+
+        private void BroadcastShortcutDrafts(string[] patterns)
+        {
+            if (patterns == null) return;
+            for (int i = 0; i < patterns.Length; i++)
+                BroadcastShortcutDraft(i, patterns[i]);
+        }
+
+        private void BroadcastShortcutDraft(int index, string pattern)
+        {
+            try
+            {
+                var g = Gallery.singleton;
+                var panels = g != null ? g.Panels : null;
+                if (panels == null) return;
+                for (int i = 0; i < panels.Count; i++)
+                {
+                    GalleryPanel p = panels[i];
+                    if (p == null || ReferenceEquals(p, this)) continue;
+                    if (p._shortcutDrafts == null || index < 0 || index >= p._shortcutDrafts.Length) continue;
+                    p._shortcutDrafts[index] = pattern ?? "";
+                    p._shortcutConflictDirty = true;
+                }
+            }
+            catch { }
         }
 
         private void CommitShortcutDrafts()
