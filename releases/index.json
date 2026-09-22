@@ -1,10 +1,18 @@
 {
   "IndexVersion": 1,
-  "UpdatedUtc": "2026-09-22T15:45:13Z",
+  "UpdatedUtc": "2026-09-22T15:58:20Z",
   "MinRollbackVersion": "0.32.406",
   "ExcludedBelowMin": 0,
   "Keep": 60,
   "Releases": [
+    {
+      "Version": "0.32.866",
+      "Tag": "build-0.32.866-9e65537",
+      "Commit": "9e655378efe79b1f478bdf843ae366445f82b888",
+      "DateUtc": "2026-09-22T15:58:10Z",
+      "Notes": "fix: keep player rig and builtin cameras out of eraser and importer, closes #104",
+      "Schema": 13
+    },
     {
       "Version": "0.32.865",
       "Tag": "build-0.32.865-f567808",
