@@ -134,22 +134,50 @@ namespace VPB
         }
 
         /// <summary>
-        /// Scene-critical atoms that must never be stripped (same keep set as Remove Atom side list).
-        /// Kept silently — not listed in Strip Scene UI.
+        /// Scene-critical atoms that must never be stripped, erased, or imported.
+        /// VaM stores the player rig as type <c>VRController</c>, id <c>[CameraRig]</c>.
+        /// <c>WindowCamera</c> and <c>PlayerNavigationPanel</c> are always in the scene.
+        /// <c>CoreControl*</c> kept by uid. Kept silently — not listed in Strip Scene, Scene Eraser, or Scene Importer.
         /// </summary>
         public static bool IsSystemProtectedAtom(Atom atom)
         {
             if (atom == null) return false;
             string uid = null;
+            string type = null;
             try { uid = atom.uid; } catch { }
-            return IsSystemProtectedAtomId(uid);
+            try { type = atom.type; } catch { }
+            return IsSystemProtectedSceneAtom(uid, type);
         }
 
         public static bool IsSystemProtectedAtomId(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return true;
             if (uid.StartsWith("CoreControl", StringComparison.Ordinal)) return true;
+            if (IsCameraRigUid(uid)) return true;
+            if (string.Equals(uid, "WindowCamera", StringComparison.Ordinal)) return true;
+            if (string.Equals(uid, "PlayerNavigationPanel", StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        public static bool IsSystemProtectedAtomType(string type)
+        {
+            if (string.IsNullOrEmpty(type)) return false;
+            return type == "WindowCamera"
+                || type == "PlayerNavigationPanel"
+                || type == "VRController"
+                || type == "CoreControl";
+        }
+
+        public static bool IsSystemProtectedSceneAtom(string uid, string type)
+        {
+            if (IsSystemProtectedAtomType(type)) return true;
+            return IsSystemProtectedAtomId(uid);
+        }
+
+        private static bool IsCameraRigUid(string uid)
+        {
             if (string.Equals(uid, "CameraRig", StringComparison.Ordinal)) return true;
+            if (string.Equals(uid, "[CameraRig]", StringComparison.Ordinal)) return true;
             return false;
         }
 

@@ -261,7 +261,7 @@ namespace VPB
             if (SuperController.singleton == null) return;
 
             var options = SuperController.singleton.GetAtoms()
-                .Where(a => a != null && !string.IsNullOrEmpty(a.uid) && !a.uid.StartsWith("CoreControl") && !a.uid.Equals("CameraRig"))
+                .Where(a => a != null && !string.IsNullOrEmpty(a.uid) && !SceneUtils.IsSystemProtectedAtom(a))
                 .Select(a => new KeyValuePair<string, string>(a.uid, (!string.IsNullOrEmpty(a.type) ? a.type + ": " : "") + a.uid))
                 .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase).ToList();
 

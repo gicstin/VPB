@@ -871,6 +871,9 @@ namespace VPB
                         return;
                     }
 
+                    if (SceneUtils.IsSystemProtectedAtom(atomRef))
+                        return;
+
                     string label = target.PopupLabel();
                     bool isPerson = RemoveModeIsPersonAtom(atomRef);
                     RemoveModeClearHighlight();
@@ -1277,6 +1280,7 @@ namespace VPB
                     {
                         Atom hitAtom = null;
                         try { hitAtom = col.GetComponentInParent<Atom>(); } catch { }
+                        if (hitAtom != null && SceneUtils.IsSystemProtectedAtom(hitAtom)) continue;
                         if (hitAtom != null && d < bestAtomDist) { bestAtomDist = d; bestAtom = hitAtom; }
                     }
                 }
@@ -1553,6 +1557,7 @@ namespace VPB
             if (target.kind == RemoveTargetKind.Atom && target.atom != null)
             {
                 Atom atom = target.atom;
+                if (SceneUtils.IsSystemProtectedAtom(atom)) return;
                 try { PushUndoSnapshotForAtomRemoval(atom); } catch { }
                 try { SuperController.singleton.RemoveAtom(atom); }
                 catch (Exception ex) { LogUtil.LogError("[VPB] RemoveAtom failed: " + ex); }

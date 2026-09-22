@@ -1613,6 +1613,9 @@ namespace VPB
             HashSet<string> finalNames = new HashSet<string>(StringComparer.Ordinal);
             // System ids always reserved.
             finalNames.Add("CameraRig");
+            finalNames.Add("[CameraRig]");
+            finalNames.Add("WindowCamera");
+            finalNames.Add("PlayerNavigationPanel");
 
             for (int i = 0; i < _stripKeepItems.Count; i++)
             {

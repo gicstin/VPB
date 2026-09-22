@@ -181,14 +181,14 @@ namespace VPB
             }
             catch { }
 
-            if (SceneUtils.IsSystemProtectedAtomId(id)) return true;
-            // Environment sky/sphere — always drop for blank new-scene look.
             string atomType = null;
             try
             {
                 if (atomNode["type"] != null) atomType = atomNode["type"].Value;
             }
             catch { atomType = null; }
+            if (SceneUtils.IsSystemProtectedSceneAtom(id, atomType)) return true;
+            // Environment sky/sphere — always drop for blank new-scene look.
             if (SceneUtils.IsCreatorStripAlwaysDropAtomType(atomType)) return false;
             if (!string.IsNullOrEmpty(id)
                 && string.Equals(id, "Environment", StringComparison.Ordinal))

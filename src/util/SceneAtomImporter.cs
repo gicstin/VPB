@@ -150,6 +150,7 @@ namespace VPB.src.util
                     parentById[id] = parentId;
 
                 if (SceneUtils.IsPersonLikeAtomType(type)) continue;
+                if (SceneUtils.IsSystemProtectedSceneAtom(id, type)) continue;
 
                 bool linksToPerson = false;
                 if (type == "CustomUnityAsset" && !string.IsNullOrEmpty(sourcePersonAtomId))
@@ -1388,6 +1389,12 @@ namespace VPB.src.util
                 if (string.IsNullOrEmpty(uid))
                 {
                     LogAtomWarn("spawn skip — " + DescribeAtomNode(node) + " (missing id).");
+                    spawnSkipped++;
+                    continue;
+                }
+                if (SceneUtils.IsSystemProtectedSceneAtom(uid, type))
+                {
+                    LogAtom("spawn skip '" + uid + "' — system atom (type=" + type + ").");
                     spawnSkipped++;
                     continue;
                 }
