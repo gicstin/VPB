@@ -1,7 +1,7 @@
 {
   "ManifestVersion": 2,
-  "Version": "0.32.866",
-  "BuiltUtc": "2026-09-22T15:57:41Z",
+  "Version": "0.32.867",
+  "BuiltUtc": "2026-09-22T16:12:10Z",
   "Schema": 13,
   "Files": [
     {
@@ -175,8 +175,8 @@
     {
       "RelativePath": "BepInEx/plugins/VPB/VPB.dll",
       "IsDirectory": false,
-      "Sha1": "fbe58f88ce5ee7d911ca7dd146d15445f99e2d6f",
-      "Size": 7096320
+      "Sha1": "7de851e73f1d6dbebb86333a466c8ed224f24a1a",
+      "Size": 7098368
     },
     {
       "RelativePath": "BepInEx/plugins/VPB/assets",

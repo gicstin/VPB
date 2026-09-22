@@ -186,6 +186,7 @@ namespace VPB
         private float _removeNextHoverTime;
         private RemoveTarget _removeHoverTarget;
         private bool _removeHoverValid;
+        private bool _removeEatPress;
 
         // Side buttons (for square-chrome sizing) + their outline and icon image (recolored by state).
         private GameObject rightRemoveModeSideBtn;
@@ -467,6 +468,7 @@ namespace VPB
             RemoveModeUpdateButtonVisual();
             try { EnsureRemoveSiderailOpenForCurrentCategory(); } catch { }
             try { RefreshModeAmbientChrome(); } catch { }
+            _removeEatPress = true;
             ShowTemporaryStatus(
                 VPBTranslation.T(
                     "gallery.remove.entered",
@@ -485,6 +487,7 @@ namespace VPB
             RemoveModeClearHelp();
             RemoveModeHidePopup();
             RemoveModeCloseAtomConfirm(invokeCancel: true);
+            _removeEatPress = false;
             RemoveModeFreezeAnimation(false);
             RemoveModeUpdateButtonVisual();
             try { CloseRemoveSiderailsIfOpen(); } catch { }
@@ -800,9 +803,21 @@ namespace VPB
 
             // Don't fight the gallery UI: when the mouse is over the gallery window on desktop,
             // clear any highlight and skip scene picking so hovering the panel is harmless.
+            bool pressHeld = RemoveModePrimaryHeld(desktop);
             if (desktop)
             {
-                try { if (IsPointerInsideGalleryWindowRect()) { RemoveModeClearHighlight(); RemoveModeClearHelp(); RemoveModeHidePopup(); return; } }
+                try
+                {
+                    if (RemoveModePointerOverGalleryChrome())
+                    {
+                        RemoveModeClearHighlight();
+                        RemoveModeClearHelp();
+                        RemoveModeHidePopup();
+                        if (_removeEatPress && !pressHeld)
+                            _removeEatPress = false;
+                        return;
+                    }
+                }
                 catch { }
             }
 
@@ -841,10 +856,13 @@ namespace VPB
             else RemoveModeClearHelp();
 
             // Floating popup follows the desktop pointer every frame while a target is held.
-            if (desktop && target != null) RemoveModeShowPopup(target);
+            bool eatingHeldPress = _removeEatPress && pressHeld;
+            if (desktop && target != null && !eatingHeldPress) RemoveModeShowPopup(target);
             else RemoveModeHidePopup();
 
-            if (clickThisFrame && target != null)
+            bool swallowClick = RemoveModeClickLatch.Swallow(ref _removeEatPress, pressHeld, clickThisFrame);
+
+            if (clickThisFrame && target != null && !swallowClick)
             {
                 // Modal confirm owns input — do not fire remove under an open dialog.
                 if (_removeAtomConfirmOpen || IsConfirmOverlayOpen())
@@ -1101,7 +1119,46 @@ namespace VPB
             _removeAtomConfirmOk = null;
             _removeAtomConfirmCancel = null;
             _removeAtomConfirmOpen = false;
+            _removeEatPress = true;
             RemoveModeDestroyAtomConfirmCanvas();
+        }
+
+        private static bool RemoveModePrimaryHeld(bool desktop)
+        {
+            if (!desktop) return false;
+            try { return Input.GetMouseButton(0); }
+            catch { return false; }
+        }
+
+        private bool RemoveModePointerOverGalleryChrome()
+        {
+            try { if (IsPointerInsideGalleryWindowRect()) return true; }
+            catch { }
+
+            Vector2 screenPos;
+            if (!TryGetUiPointerScreenPosition(out screenPos)) return false;
+
+            Camera cam = null;
+            try
+            {
+                if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    cam = (canvas.worldCamera != null) ? canvas.worldCamera : Camera.main;
+            }
+            catch { cam = null; }
+
+            return RemoveModeRectContainsScreen(rightSideContainer, screenPos, cam)
+                || RemoveModeRectContainsScreen(leftSideContainer, screenPos, cam)
+                || RemoveModeRectContainsScreen(rightSideHoverStrip, screenPos, cam)
+                || RemoveModeRectContainsScreen(leftSideHoverStrip, screenPos, cam);
+        }
+
+        private static bool RemoveModeRectContainsScreen(GameObject go, Vector2 screenPos, Camera cam)
+        {
+            if (go == null || !go.activeInHierarchy) return false;
+            RectTransform rt = go.GetComponent<RectTransform>();
+            if (rt == null) return false;
+            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam); }
+            catch { return false; }
         }
 
         private void RemoveModeDestroyAtomConfirmCanvas()
@@ -1674,6 +1731,17 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] RemoveMode SetActive fallback: " + ex.Message);
                 return false;
             }
+        }
+    }
+
+    internal static class RemoveModeClickLatch
+    {
+        internal static bool Swallow(ref bool eatPress, bool pressHeld, bool clickEdge)
+        {
+            if (!eatPress) return false;
+            if (pressHeld) return true;
+            eatPress = false;
+            return clickEdge;
         }
     }
 }
