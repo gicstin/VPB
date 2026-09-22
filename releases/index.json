@@ -1,10 +1,18 @@
 {
   "IndexVersion": 1,
-  "UpdatedUtc": "2026-09-20T12:05:36Z",
+  "UpdatedUtc": "2026-09-22T15:45:13Z",
   "MinRollbackVersion": "0.32.406",
   "ExcludedBelowMin": 0,
   "Keep": 60,
   "Releases": [
+    {
+      "Version": "0.32.865",
+      "Tag": "build-0.32.865-f567808",
+      "Commit": "f56780848572b15635bc84008940a57c32025b58",
+      "DateUtc": "2026-09-22T15:45:03Z",
+      "Notes": "fix: settings hotkey change now replaces the live binding, closes #103",
+      "Schema": 13
+    },
     {
       "Version": "0.32.862",
       "Tag": "build-0.32.862-c1af680",
