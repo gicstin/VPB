@@ -1,10 +1,18 @@
 {
   "IndexVersion": 1,
-  "UpdatedUtc": "2026-09-22T15:58:20Z",
+  "UpdatedUtc": "2026-09-22T16:19:26Z",
   "MinRollbackVersion": "0.32.406",
   "ExcludedBelowMin": 0,
   "Keep": 60,
   "Releases": [
+    {
+      "Version": "0.32.867",
+      "Tag": "build-0.32.867-74733a5",
+      "Commit": "74733a53710b8d01a0bc0958eb405edcf5bf13a1",
+      "DateUtc": "2026-09-22T16:19:21Z",
+      "Notes": "fix: scene eraser cancel stays dismissed and no longer opens on the tool click, closes #105",
+      "Schema": 13
+    },
     {
       "Version": "0.32.866",
       "Tag": "build-0.32.866-9e65537",
