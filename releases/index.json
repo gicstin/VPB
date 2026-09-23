@@ -1,10 +1,18 @@
 {
   "IndexVersion": 1,
-  "UpdatedUtc": "2026-09-22T16:19:26Z",
+  "UpdatedUtc": "2026-09-23T16:37:09Z",
   "MinRollbackVersion": "0.32.406",
   "ExcludedBelowMin": 0,
   "Keep": 60,
   "Releases": [
+    {
+      "Version": "0.32.880",
+      "Tag": "build-0.32.880-fdbd043",
+      "Commit": "fdbd043726eb70d77517ad607a55ea57f9f076b1",
+      "DateUtc": "2026-09-23T16:37:02Z",
+      "Notes": "fix: improved loading performance under Linux",
+      "Schema": 13
+    },
     {
       "Version": "0.32.867",
       "Tag": "build-0.32.867-74733a5",
