@@ -175,6 +175,7 @@ namespace VPB
         private static string s_LastError;
         private static bool s_LoggedSqliteUnavailable;
         private static bool s_LoggedEmptyCategoriesDb;
+        private static bool s_LoggedEmptyPackageRebuildSkip;
         private static long s_CachedInvScanBinary = long.MinValue;
         private static int s_CachedInvPkgCount;
         private static string s_CachedInvSig;
@@ -5789,6 +5790,19 @@ namespace VPB
             if (pkgSnap == null) return;
 
             int pkgTotal = pkgSnap != null ? pkgSnap.Count : 0;
+            if (pkgTotal <= 0)
+            {
+                if (!s_LoggedEmptyPackageRebuildSkip)
+                {
+                    s_LoggedEmptyPackageRebuildSkip = true;
+                    try
+                    {
+                        LogUtil.Log(VamStartupOptimizations.LogTag + " gallery SQLite rebuild skipped (no live packages)");
+                    }
+                    catch { }
+                }
+                return;
+            }
             int pkgWithCache = CountPackagesWithFileEntryCache(pkgSnap);
             if (ShouldDeferGalleryRebuildUntilPackageCachesReady(pkgWithCache, pkgTotal))
             {

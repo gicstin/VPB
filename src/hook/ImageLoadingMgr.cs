@@ -1293,7 +1293,7 @@ namespace VPB
                         zstdPath = null;
                 }
 
-                if (!string.IsNullOrEmpty(zstdPath) && File.Exists(zstdPath) && File.Exists(zstdPath + "meta"))
+                if (!string.IsNullOrEmpty(zstdPath))
                 {
                     if (allowSyncZstdDecompress)
                     {
@@ -2785,6 +2785,7 @@ namespace VPB
             try { rawByteLength = new FileInfo(nativePath).Length; } catch { }
             ZstdCompressor.SaveCacheFromFile(targetPath, nativePath, compressionLevel);
             BulkZstdWriteMeta(targetPath, nativePath + "meta", metaJson, compressionLevel, rawByteLength);
+            TextureUtil.NoteZstdCacheFileWritten(targetPath);
         }
 
         private static void BulkZstdRecompressZstdInPlace(string zstdPath, int compressionLevel, JSONNode metaJson)
@@ -3669,6 +3670,7 @@ namespace VPB
 
                 File.Move(metaTmp, zstdPath + "meta");
                 File.Move(dataTmp, zstdPath);
+                TextureUtil.NoteZstdCacheFileWritten(zstdPath);
             }
             catch (Exception ex)
             {

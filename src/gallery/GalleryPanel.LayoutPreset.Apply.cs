@@ -266,8 +266,9 @@ namespace VPB
                 _layoutApplyCo = null;
                 _layoutApplyOrder.Clear();
                 bool wasRestore = s_sessionArrangementRestoring;
+                bool touchedDuringApply = s_sessionArrangementDirty;
                 ClearSessionArrangementRestoring();
-                if (!wasRestore) MarkSessionArrangementDirty();
+                if (!wasRestore || touchedDuringApply) MarkSessionArrangementDirty();
             }
         }
 

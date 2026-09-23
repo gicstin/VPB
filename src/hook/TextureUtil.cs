@@ -16,6 +16,17 @@ namespace VPB
         private static readonly object s_SimPurgeLock = new object();
         private static readonly HashSet<string> s_SimPurgedThisSession = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        private static readonly object s_ZstdDirIndexLock = new object();
+        private static Dictionary<string, List<string>> s_ZstdDirIndexByNameTime;
+        private static Dictionary<string, string> s_ZstdResolveMemo;
+        private static HashSet<string> s_ZstdDirIndexNames;
+        private static List<string> s_ZstdWrittenDuringIndexBuild;
+        private static string s_ZstdDirIndexDir;
+        private static string s_ZstdDirIndexDirKey;
+        private static string s_ZstdDirIndexFailedDir;
+        private static bool s_ZstdDirIndexBuilding;
+        private static int s_ZstdDirIndexBuilds;
+
         public static int GetDownscaledActiveCount()
         {
             lock (s_DownscaledActiveLock)
@@ -235,7 +246,7 @@ namespace VPB
             try
             {
                 string metaPath = cachePath + "meta";
-                if (!File.Exists(metaPath)) return true;
+                if (!DiskFileExists(metaPath)) return true;
                 var metaJson = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
                 if (metaJson == null) return true;
                 return metaJson["mipStorage"] == null || string.IsNullOrEmpty(metaJson["mipStorage"].Value);
@@ -514,9 +525,28 @@ namespace VPB
         /// On-demand may write richer sigs (_C_L, _C_A) than VaM requests at runtime (_C).
         /// Alpha (_C_A) and normal (_L_N) must never fall back to a weaker sig (e.g. _C for _C_A).
         /// </summary>
+        private static bool ZstdDirectoryIndexCovers(string cacheDir)
+        {
+            lock (s_ZstdDirIndexLock)
+            {
+                return s_ZstdDirIndexByNameTime != null
+                    && string.Equals(s_ZstdDirIndexDir, cacheDir, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
         private static string TryResolveExistingZstdVariant(string cacheDir, string fileName, string sizeStr, string timeStr, string requestedSig, string primaryPath)
         {
-            if (File.Exists(primaryPath)) return primaryPath;
+            if (ZstdDirectoryIndexCovers(cacheDir))
+            {
+                string indexed = TryFindZstdCacheSizeAgnostic(cacheDir, fileName, sizeStr, timeStr, requestedSig);
+                if (!string.IsNullOrEmpty(indexed)) return indexed;
+            }
+
+            if (DiskFileExists(primaryPath)) return primaryPath;
+            string dimensionSibling = DimensionJoinSibling(primaryPath, requestedSig);
+            if (!string.IsNullOrEmpty(dimensionSibling) && DiskFileExists(dimensionSibling)) return dimensionSibling;
+            string dimensionHit = TryProbeThumbnailDimensionZstd(cacheDir, fileName, sizeStr, timeStr, requestedSig);
+            if (!string.IsNullOrEmpty(dimensionHit)) return dimensionHit;
 
             string prefix = fileName + "_" + sizeStr + "_" + timeStr + "_";
             string[] trySigs;
@@ -546,7 +576,7 @@ namespace VPB
                 string altSig = trySigs[i];
                 if (altSig == requestedSig) continue;
                 string altPath = System.IO.Path.Combine(cacheDir, prefix + altSig + ".zvamcache");
-                if (File.Exists(altPath)) return altPath;
+                if (DiskFileExists(altPath)) return altPath;
             }
 
             if (!string.IsNullOrEmpty(requestedSig)
@@ -558,13 +588,256 @@ namespace VPB
                 {
                     bulkPath = System.IO.Path.Combine(cacheDir, fileName + "_" + sizeStr + "_" + timeStr + "__C.zvamcache");
                 }
-                if (File.Exists(bulkPath)) return bulkPath;
+                if (DiskFileExists(bulkPath)) return bulkPath;
             }
 
-            string sizeAgnostic = TryFindZstdCacheSizeAgnostic(cacheDir, fileName, timeStr, requestedSig);
+            string sizeAgnostic = TryFindZstdCacheSizeAgnostic(cacheDir, fileName, sizeStr, timeStr, requestedSig);
             if (!string.IsNullOrEmpty(sizeAgnostic)) return sizeAgnostic;
 
             return primaryPath;
+        }
+
+        private static bool ZstdSigHasDimensions(string sig)
+        {
+            if (string.IsNullOrEmpty(sig)) return false;
+            int i = 0;
+            while (i < sig.Length && char.IsDigit(sig[i])) i++;
+            if (i == 0 || i >= sig.Length || sig[i] != '_') return false;
+            int j = i + 1;
+            while (j < sig.Length && char.IsDigit(sig[j])) j++;
+            return j > i + 1;
+        }
+
+        private static string DimensionJoinSibling(string cachePath, string sig)
+        {
+            if (string.IsNullOrEmpty(cachePath) || !ZstdSigHasDimensions(sig)) return null;
+            string dir = Path.GetDirectoryName(cachePath);
+            string file = Path.GetFileName(cachePath);
+            if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(file)) return null;
+            string underscored = "_" + sig + ".zvamcache";
+            string glued = sig + ".zvamcache";
+            if (file.EndsWith(underscored, StringComparison.Ordinal))
+                return Path.Combine(dir, file.Substring(0, file.Length - underscored.Length) + glued);
+            if (file.EndsWith(glued, StringComparison.Ordinal))
+                return Path.Combine(dir, file.Substring(0, file.Length - glued.Length) + underscored);
+            return null;
+        }
+
+        private static string TryProbeThumbnailDimensionZstd(string cacheDir, string fileName, string sizeStr, string timeStr, string requestedSig)
+        {
+            if (string.IsNullOrEmpty(requestedSig) || ZstdSigHasDimensions(requestedSig)) return null;
+            string stem = fileName + "_" + sizeStr + "_" + timeStr;
+            string flags = requestedSig;
+            string underscored = Path.Combine(cacheDir, stem + "_512_512" + flags + ".zvamcache");
+            if (DiskFileExists(underscored) && DiskFileExists(underscored + "meta")) return underscored;
+            string glued = Path.Combine(cacheDir, stem + "512_512" + flags + ".zvamcache");
+            if (DiskFileExists(glued) && DiskFileExists(glued + "meta")) return glued;
+            return null;
+        }
+
+        internal static void ResetZstdCacheDirectoryIndex()
+        {
+            lock (s_ZstdDirIndexLock)
+            {
+                s_ZstdDirIndexByNameTime = null;
+                s_ZstdDirIndexNames = null;
+                s_ZstdWrittenDuringIndexBuild = null;
+                s_ZstdResolveMemo = null;
+                s_ZstdDirIndexDir = null;
+                s_ZstdDirIndexDirKey = null;
+                s_ZstdDirIndexFailedDir = null;
+                s_ZstdDirIndexBuilding = false;
+                s_ZstdDirIndexBuilds = 0;
+            }
+        }
+
+        internal static void PrewarmZstdCacheDirectoryIndex(string cacheDir)
+        {
+            if (string.IsNullOrEmpty(cacheDir)) return;
+            try { EnsureZstdDirectoryIndex(cacheDir); }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] zstd cache index prewarm failed: " + ex.Message); } catch { }
+            }
+        }
+
+        internal static void NoteZstdCacheFileWritten(string zstdPath)
+        {
+            if (string.IsNullOrEmpty(zstdPath)) return;
+            lock (s_ZstdDirIndexLock)
+            {
+                s_ZstdResolveMemo = null;
+                if (s_ZstdDirIndexBuilding)
+                {
+                    if (s_ZstdWrittenDuringIndexBuild == null)
+                        s_ZstdWrittenDuringIndexBuild = new List<string>();
+                    s_ZstdWrittenDuringIndexBuild.Add(zstdPath);
+                }
+                if (s_ZstdDirIndexByNameTime == null || s_ZstdDirIndexNames == null) return;
+                if (!string.Equals(ZstdDirKey(SafeDirectoryName(zstdPath)), s_ZstdDirIndexDirKey, StringComparison.OrdinalIgnoreCase)) return;
+                AddToZstdDirectoryIndex(s_ZstdDirIndexByNameTime, s_ZstdDirIndexNames, zstdPath);
+            }
+        }
+
+        private static string SafeDirectoryName(string path)
+        {
+            try { return Path.GetDirectoryName(path); }
+            catch { return null; }
+        }
+
+        private static string ZstdDirKey(string dir)
+        {
+            if (string.IsNullOrEmpty(dir)) return null;
+            string full;
+            try { full = Path.GetFullPath(dir); }
+            catch { full = dir; }
+            return full.Replace('/', '\\').TrimEnd('\\');
+        }
+
+        private static bool ZstdDirectoryIndexRulesOut(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string name;
+            try { name = Path.GetFileName(path); }
+            catch { return false; }
+            if (string.IsNullOrEmpty(name)) return false;
+            if (name.EndsWith(".zvamcachemeta", StringComparison.OrdinalIgnoreCase))
+                name = name.Substring(0, name.Length - 4);
+            else if (!name.EndsWith(".zvamcache", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            lock (s_ZstdDirIndexLock)
+            {
+                if (s_ZstdDirIndexNames == null || s_ZstdDirIndexDirKey == null) return false;
+            }
+            string dirKey = ZstdDirKey(SafeDirectoryName(path));
+            lock (s_ZstdDirIndexLock)
+            {
+                if (s_ZstdDirIndexNames == null
+                    || !string.Equals(dirKey, s_ZstdDirIndexDirKey, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                return !s_ZstdDirIndexNames.Contains(name);
+            }
+        }
+
+        internal static int ZstdCacheDirectoryIndexBuilds
+        {
+            get
+            {
+                lock (s_ZstdDirIndexLock)
+                {
+                    return s_ZstdDirIndexBuilds;
+                }
+            }
+        }
+
+        internal static string ResolveZstdCacheFileInDirectory(string cacheDir, string fileName, string sizeStr, string timeStr, string requestedSig)
+        {
+            return TryResolveZstdCacheOnDisk(cacheDir, fileName, sizeStr, timeStr, requestedSig, false, false);
+        }
+
+        private static string ZstdDirIndexKey(string fileName, string timeStr)
+        {
+            return fileName + "\n" + timeStr;
+        }
+
+        private static bool AddToZstdDirectoryIndex(Dictionary<string, List<string>> map, HashSet<string> names, string full)
+        {
+            if (string.IsNullOrEmpty(full)) return false;
+            string fileName = Path.GetFileName(full);
+            if (string.IsNullOrEmpty(fileName)) return false;
+            if (!names.Add(fileName)) return false;
+            string baseName = Path.GetFileNameWithoutExtension(full);
+            string parsedSize;
+            string parsedTime;
+            string flagSig;
+            string reconstructed;
+            if (!TryParseNativeVamCacheFileName(baseName, out reconstructed, out parsedSize, out parsedTime, out flagSig))
+                return false;
+            string tail = "_" + parsedSize + "_" + parsedTime;
+            int cut = baseName.LastIndexOf(tail, StringComparison.Ordinal);
+            if (cut <= 0) return false;
+            string key = ZstdDirIndexKey(baseName.Substring(0, cut), parsedTime);
+            List<string> list;
+            if (!map.TryGetValue(key, out list))
+            {
+                list = new List<string>(2);
+                map[key] = list;
+            }
+            list.Add(full);
+            return true;
+        }
+
+        private static void EnsureZstdDirectoryIndex(string cacheDir)
+        {
+            lock (s_ZstdDirIndexLock)
+            {
+                if (s_ZstdDirIndexByNameTime != null
+                    && string.Equals(s_ZstdDirIndexDir, cacheDir, StringComparison.OrdinalIgnoreCase))
+                    return;
+                if (s_ZstdDirIndexBuilding) return;
+                if (string.Equals(s_ZstdDirIndexFailedDir, cacheDir, StringComparison.OrdinalIgnoreCase)) return;
+                s_ZstdDirIndexBuilding = true;
+                s_ZstdWrittenDuringIndexBuild = null;
+            }
+
+            var map = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string[] files = null;
+            bool failed = false;
+            int kept = 0;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                if (!string.IsNullOrEmpty(cacheDir) && Directory.Exists(cacheDir))
+                    files = Directory.GetFiles(cacheDir, "*.zvamcache", SearchOption.TopDirectoryOnly);
+                if (files != null)
+                {
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        if (AddToZstdDirectoryIndex(map, names, files[i])) kept++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                failed = true;
+                try { LogUtil.LogWarning("[VPB] zstd cache index failed: " + ex.Message); } catch { }
+            }
+            finally
+            {
+                lock (s_ZstdDirIndexLock)
+                {
+                    s_ZstdDirIndexBuilding = false;
+                    s_ZstdDirIndexBuilds++;
+                    if (failed)
+                    {
+                        s_ZstdDirIndexFailedDir = cacheDir;
+                    }
+                    else
+                    {
+                        if (s_ZstdWrittenDuringIndexBuild != null)
+                        {
+                            for (int i = 0; i < s_ZstdWrittenDuringIndexBuild.Count; i++)
+                                AddToZstdDirectoryIndex(map, names, s_ZstdWrittenDuringIndexBuild[i]);
+                        }
+                        s_ZstdDirIndexByNameTime = map;
+                        s_ZstdDirIndexNames = names;
+                        s_ZstdDirIndexDir = cacheDir;
+                        s_ZstdDirIndexDirKey = ZstdDirKey(cacheDir);
+                        s_ZstdResolveMemo = null;
+                    }
+                    s_ZstdWrittenDuringIndexBuild = null;
+                }
+            }
+
+            if (failed) return;
+            try
+            {
+                LogUtil.Log("[VPB] zstd cache index files=" + (files != null ? files.Length : 0) + " keyed=" + kept
+                    + " ms=" + sw.ElapsedMilliseconds + " thread=" + System.Threading.Thread.CurrentThread.ManagedThreadId);
+            }
+            catch { }
         }
 
         private static string NormalizeZstdFlagSig(string flagSig)
@@ -601,57 +874,101 @@ namespace VPB
         }
 
         /// <summary>Find .zvamcache when size token differs (on-demand/bulk use payload or native file size, not always FileEntry.Size).</summary>
-        private static string TryFindZstdCacheSizeAgnostic(string cacheDir, string fileName, string timeStr, string requestedSig)
+        private static string TryFindZstdCacheSizeAgnostic(string cacheDir, string fileName, string sizeStr, string timeStr, string requestedSig)
         {
             if (string.IsNullOrEmpty(cacheDir) || string.IsNullOrEmpty(fileName) || string.IsNullOrEmpty(timeStr))
             {
                 return null;
             }
 
-            string[] matches;
-            try
+            EnsureZstdDirectoryIndex(cacheDir);
+            List<string> matches = null;
+            lock (s_ZstdDirIndexLock)
             {
-                matches = Directory.GetFiles(cacheDir, fileName + "_*_" + timeStr + "_*.zvamcache", SearchOption.TopDirectoryOnly);
+                List<string> indexed;
+                if (s_ZstdDirIndexByNameTime != null
+                    && s_ZstdDirIndexByNameTime.TryGetValue(ZstdDirIndexKey(fileName, timeStr), out indexed)
+                    && indexed != null && indexed.Count > 0)
+                {
+                    matches = indexed;
+                }
             }
-            catch
-            {
-                return null;
-            }
-            if (matches == null || matches.Length == 0) return null;
+            if (matches == null) return null;
 
             string[] trySigs = BuildZstdSigVariants(requestedSig);
-            for (int i = 0; i < matches.Length; i++)
+            string thumbSig = null;
+            if (!ZstdSigHasDimensions(requestedSig))
+            {
+                string flags = string.IsNullOrEmpty(requestedSig) ? "_C" : requestedSig;
+                if (!flags.StartsWith("_", StringComparison.Ordinal)) flags = "_" + flags;
+                thumbSig = "512_512" + flags;
+            }
+
+            string sigSize = null;
+            string sigAny = null;
+            string thumbSize = null;
+            string thumbAny = null;
+            for (int i = 0; i < matches.Count; i++)
             {
                 string p = matches[i];
-                if (string.IsNullOrEmpty(p) || !File.Exists(p + "meta")) continue;
+                if (string.IsNullOrEmpty(p)) continue;
 
                 string baseName = Path.GetFileNameWithoutExtension(p);
-                if (!TryParseNativeVamCacheFileName(baseName, out _, out _, out _, out string flagSig))
-                {
+                string parsedSize;
+                string flagSig;
+                if (!TryParseNativeVamCacheFileName(baseName, out _, out parsedSize, out _, out flagSig))
                     continue;
-                }
 
                 string diskSig = NormalizeZstdFlagSig(flagSig);
+                bool sigOk = false;
                 for (int s = 0; s < trySigs.Length; s++)
                 {
                     if (diskSig == NormalizeZstdFlagSig(trySigs[s]))
                     {
-                        return p;
+                        sigOk = true;
+                        break;
+                    }
+                }
+
+                bool sizeOk = !string.IsNullOrEmpty(sizeStr) && string.Equals(parsedSize, sizeStr, StringComparison.Ordinal);
+                if (sigOk)
+                {
+                    if (sizeOk)
+                    {
+                        if (sigSize == null) sigSize = p;
+                    }
+                    else if (sigAny == null)
+                    {
+                        sigAny = p;
+                    }
+                }
+                else if (thumbSig != null && diskSig == thumbSig)
+                {
+                    if (sizeOk)
+                    {
+                        if (thumbSize == null) thumbSize = p;
+                    }
+                    else if (thumbAny == null)
+                    {
+                        thumbAny = p;
                     }
                 }
             }
 
-            return null;
+            if (sigSize != null) return sigSize;
+            if (sigAny != null) return sigAny;
+            if (thumbSize != null) return thumbSize;
+            return thumbAny;
         }
 
         /// <summary>Returns true when zstd meta exists and width*height is at least minPixels.</summary>
         public static bool IsZstdCachePayloadSane(string zstdPath, int minPixels)
         {
-            if (string.IsNullOrEmpty(zstdPath) || !File.Exists(zstdPath)) return false;
+            if (string.IsNullOrEmpty(zstdPath) || !DiskFileExists(zstdPath)) return false;
             try
             {
                 string metaPath = zstdPath + "meta";
-                if (!File.Exists(metaPath)) return false;
+                if (!DiskFileExists(metaPath)) return false;
                 var mz = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
                 if (mz == null) return false;
                 int w = mz["width"].AsInt;
@@ -668,7 +985,7 @@ namespace VPB
             try
             {
                 string metaPath = cachePath + "meta";
-                if (!File.Exists(metaPath)) return false;
+                if (!DiskFileExists(metaPath)) return false;
                 var mz = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
                 if (mz == null) return false;
 
@@ -694,7 +1011,7 @@ namespace VPB
             string metaPath = cachePath + "meta";
             try
             {
-                if (!File.Exists(cachePath) || !File.Exists(metaPath)) return false;
+                if (!DiskFileExists(cachePath) || !DiskFileExists(metaPath)) return false;
 
                 var mz = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
                 if (mz == null) return false;
@@ -717,7 +1034,7 @@ namespace VPB
 
                 string temp = metaPath + ".tmp";
                 File.WriteAllText(temp, VPB.src.util.JsonSerializationUtil.Serialize(mz, 1024));
-                if (File.Exists(metaPath)) File.Delete(metaPath);
+                if (DiskFileExists(metaPath)) File.Delete(metaPath);
                 File.Move(temp, metaPath);
                 return true;
             }
@@ -727,8 +1044,8 @@ namespace VPB
         public static void TryDeleteZstdCacheFile(string zstdPath)
         {
             if (string.IsNullOrEmpty(zstdPath)) return;
-            try { if (File.Exists(zstdPath)) File.Delete(zstdPath); } catch { }
-            try { string meta = zstdPath + "meta"; if (File.Exists(meta)) File.Delete(meta); } catch { }
+            try { if (DiskFileExists(zstdPath)) File.Delete(zstdPath); } catch { }
+            try { string meta = zstdPath + "meta"; if (DiskFileExists(meta)) File.Delete(meta); } catch { }
         }
 
         /// <summary>Delete all VaM native .vamcache rows for a loose thumbnail (any size/time token).</summary>
@@ -832,11 +1149,20 @@ namespace VPB
                 }
                 while (stripped);
 
-                Match dm = Regex.Match(s, @"_(\d+)_(\d+)$");
+                Match dm = Regex.Match(s, @"_(\d{1,5})_(\d{1,5})$");
                 if (dm.Success)
                 {
                     builtSig = dm.Groups[1].Value + "_" + dm.Groups[2].Value + builtSig;
                     s = s.Substring(0, dm.Index);
+                }
+                else
+                {
+                    Match glued = Regex.Match(s, @"_(\d{17,18})(\d{2,5})_(\d{2,5})$");
+                    if (glued.Success)
+                    {
+                        builtSig = glued.Groups[2].Value + "_" + glued.Groups[3].Value + builtSig;
+                        s = s.Substring(0, glued.Index) + "_" + glued.Groups[1].Value;
+                    }
                 }
 
                 flagSig = builtSig;
@@ -960,16 +1286,7 @@ namespace VPB
         private static bool VaMNativeCacheFilePairExists(string cachePath)
         {
             if (string.IsNullOrEmpty(cachePath)) return false;
-            try
-            {
-                if (FileManager.FileExists(cachePath)
-                    && FileManager.FileExists(cachePath + "meta"))
-                {
-                    return true;
-                }
-            }
-            catch { }
-            return File.Exists(cachePath) && File.Exists(cachePath + "meta");
+            return DiskFileExists(cachePath) && DiskFileExists(cachePath + "meta");
         }
 
         /// <summary>Resolve VaM native .vamcache with flag fallbacks (LUT linear, alpha _A, sim compress).</summary>
@@ -1074,14 +1391,14 @@ namespace VPB
             }
 
             string exactPath = CombineZstdCachePath(cacheDir, fileName, sizeStr, timeStr, sig);
-            if (File.Exists(exactPath) && File.Exists(exactPath + "meta")) return exactPath;
+            if (DiskFileExists(exactPath) && DiskFileExists(exactPath + "meta")) return exactPath;
 
             bool isSimReq = isReadable || SuperControllerHook.IsSimulationTexturePath(imgPath);
             if (isSimReq && isReadable)
             {
                 string sigNoR = sig.Replace("_R", string.Empty);
                 string altPath = CombineZstdCachePath(cacheDir, fileName, sizeStr, timeStr, sigNoR);
-                if (File.Exists(altPath) && File.Exists(altPath + "meta")) return altPath;
+                if (DiskFileExists(altPath) && DiskFileExists(altPath + "meta")) return altPath;
             }
 
             return null;
@@ -1089,16 +1406,37 @@ namespace VPB
 
         private static string TryResolveZstdCacheOnDisk(string cacheDir, string fileName, string sizeStr, string timeStr, string sig, bool isSimReq, bool isReadable)
         {
+            string memoKey = (cacheDir ?? "") + "\n" + fileName + "\n" + sizeStr + "\n" + timeStr + "\n" + (sig ?? "")
+                + "\n" + (isSimReq ? "1" : "0") + (isReadable ? "1" : "0");
+            lock (s_ZstdDirIndexLock)
+            {
+                string memoHit;
+                if (s_ZstdResolveMemo != null && s_ZstdResolveMemo.TryGetValue(memoKey, out memoHit))
+                    return memoHit;
+            }
+
+            string resolved = ResolveZstdCacheOnDiskUncached(cacheDir, fileName, sizeStr, timeStr, sig, isSimReq, isReadable);
+            lock (s_ZstdDirIndexLock)
+            {
+                if (s_ZstdResolveMemo == null)
+                    s_ZstdResolveMemo = new Dictionary<string, string>(StringComparer.Ordinal);
+                s_ZstdResolveMemo[memoKey] = resolved;
+            }
+            return resolved;
+        }
+
+        private static string ResolveZstdCacheOnDiskUncached(string cacheDir, string fileName, string sizeStr, string timeStr, string sig, bool isSimReq, bool isReadable)
+        {
             string finalPath = CombineZstdCachePath(cacheDir, fileName, sizeStr, timeStr, sig);
             finalPath = TryResolveExistingZstdVariant(cacheDir, fileName, sizeStr, timeStr, sig, finalPath);
-            if (File.Exists(finalPath) && File.Exists(finalPath + "meta")) return finalPath;
+            if (DiskFileExists(finalPath) && DiskFileExists(finalPath + "meta")) return finalPath;
 
             if (isSimReq && isReadable)
             {
                 string sigNoR = sig.Replace("_R", string.Empty);
                 string altPath = CombineZstdCachePath(cacheDir, fileName, sizeStr, timeStr, sigNoR);
                 altPath = TryResolveExistingZstdVariant(cacheDir, fileName, sizeStr, timeStr, sigNoR, altPath);
-                if (File.Exists(altPath) && File.Exists(altPath + "meta")) return altPath;
+                if (DiskFileExists(altPath) && DiskFileExists(altPath + "meta")) return altPath;
             }
 
             return null;
@@ -1150,7 +1488,7 @@ namespace VPB
             finalPath = BuildExactZstdCachePath(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, targetWidth, targetHeight, bumpStrength, isReadable);
 
             if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2
-                && !string.IsNullOrEmpty(finalPath) && !File.Exists(finalPath)
+                && !string.IsNullOrEmpty(finalPath) && !DiskFileExists(finalPath)
                 && !NativeTextureOnDemandCache.SuppressZstdMissLookupLog)
             {
                 LogUtil.LogTextureTrace("ZstdCacheMiss:" + finalPath, "[VPB] Cache MISS lookup: " + System.IO.Path.GetFileName(finalPath) + " for " + System.IO.Path.GetFileName(imgPath));
@@ -1162,6 +1500,12 @@ namespace VPB
         public static string GetNativeCachePath(string imgPath)
         {
             return GetVaMNativeDiskCachePath(imgPath, true, false, false, false, false, false, 0, 0, 1f);
+        }
+
+        static bool DiskFileExists(string path)
+        {
+            if (ZstdDirectoryIndexRulesOut(path)) return false;
+            return File.Exists(path);
         }
     }
 }

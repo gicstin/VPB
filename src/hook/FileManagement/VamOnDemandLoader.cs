@@ -795,6 +795,7 @@ namespace VPB
 
         public static void NotifyNativeCatalogRefreshed()
         {
+            LocalDiskEntryCache.Invalidate();
             bool skipMorphs = VpbCatalogRefreshGuard.SkipPackageMorphRefresh;
             lock (s_CatalogStaleLock)
             {
@@ -1470,6 +1471,13 @@ namespace VPB
         static void InvokeNativeFileManagerRefresh(string logLabel, string reason)
         {
             bool skipMorphs = ShouldSkipPackageMorphRefreshForCatalogUpdate();
+            if (!skipMorphs
+                && !string.IsNullOrEmpty(reason)
+                && reason.IndexOf("gallery_scene_allowlist", StringComparison.Ordinal) >= 0
+                && !PendingCatalogNeedsMorphRefresh())
+            {
+                skipMorphs = true;
+            }
             Action run = delegate
             {
                 var timingScope = VamCatalogRefreshProfiler.Begin(reason);

@@ -17,6 +17,7 @@ namespace VPB
 
         internal static int PatchedCount;
         internal static int PatchFailures;
+        internal static int NativeCallSkips;
 
         const int TopPerFrame = 6;
         const int TopPerLoad = 12;
@@ -50,7 +51,8 @@ namespace VPB
             }
             sw.Stop();
             LogUtil.LogWarning("[VPB.Perf] frame attribution armed: patched=" + PatchedCount
-                + " failed=" + PatchFailures + " in " + sw.ElapsedMilliseconds + "ms");
+                + " failed=" + PatchFailures + " skipped_native_calls=" + NativeCallSkips
+                + " in " + sw.ElapsedMilliseconds + "ms");
         }
 
         static bool IsCandidateAssembly(Assembly asm)
@@ -110,6 +112,11 @@ namespace VPB
                     null, Type.EmptyTypes, null);
                 if (m == null || m.IsAbstract || m.ContainsGenericParameters) return;
                 if (s_SlotOf.ContainsKey(m)) return;
+                if (CallsGameNativeMethod(m))
+                {
+                    NativeCallSkips++;
+                    return;
+                }
 
                 int slot = NewSlot(Label(t, name));
                 s_SlotOf[m] = slot;
@@ -120,6 +127,30 @@ namespace VPB
             {
                 PatchFailures++;
             }
+        }
+
+        internal static bool CallsGameNativeMethod(MethodBase method)
+        {
+            List<CodeInstruction> body;
+            try { body = PatchProcessor.GetOriginalInstructions(method); }
+            catch { return true; }
+            if (body == null) return true;
+            for (int i = 0; i < body.Count; i++)
+            {
+                MethodBase callee = body[i].operand as MethodBase;
+                if (callee == null) continue;
+                bool native;
+                try
+                {
+                    native = (callee.Attributes & MethodAttributes.PinvokeImpl) != 0
+                        || (callee.GetMethodImplementationFlags() & MethodImplAttributes.InternalCall) != 0;
+                }
+                catch { native = true; }
+                if (!native) continue;
+                Type owner = callee.DeclaringType;
+                if (owner == null || IsCandidateAssembly(owner.Assembly)) return true;
+            }
+            return false;
         }
 
         static string Label(Type t, string method)

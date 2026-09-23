@@ -111,7 +111,11 @@ namespace VPB
 
         internal static void MarkSessionArrangementDirty(bool writeNow)
         {
-            if (s_sessionArrangementRestoring || s_layoutApplyRunning) return;
+            if (s_sessionArrangementRestoring || s_layoutApplyRunning)
+            {
+                s_sessionArrangementDirty = true;
+                return;
+            }
             s_sessionArrangementDirty = true;
             if (writeNow) SaveSessionArrangementSnapshotNow();
         }
@@ -202,6 +206,23 @@ namespace VPB
             catch (Exception ex) { LogUtil.LogError("[VPB][Layout] session snapshot: " + ex.Message); }
         }
 
+        private static bool SnapshotSettingsOpen(GalleryLayoutPreset preset)
+        {
+            if (preset == null || preset.Panes == null) return false;
+            for (int i = 0; i < preset.Panes.Count; i++)
+            {
+                LayoutPaneState pane = preset.Panes[i];
+                if (pane == null || pane.Floats == null) continue;
+                for (int f = 0; f < pane.Floats.Count; f++)
+                {
+                    LayoutFloatState fl = pane.Floats[f];
+                    if (fl == null || fl.Kind != (int)LayoutFloatKind.Settings) continue;
+                    return fl.Open;
+                }
+            }
+            return false;
+        }
+
         private static int CountDockedPanes(GalleryLayoutPreset preset)
         {
             if (preset == null || preset.Panes == null) return 0;
@@ -232,7 +253,8 @@ namespace VPB
             snap.RestoreFilters = false;
 
             LogUtil.Log("[VPB][Layout] restoring arrangement: panes=" + snap.Panes.Count
-                + " docked=" + CountDockedPanes(snap) + " wantedEdges=" + GalleryDockLayout.WantedSideCount());
+                + " docked=" + CountDockedPanes(snap) + " wantedEdges=" + GalleryDockLayout.WantedSideCount()
+                + " settings=" + (SnapshotSettingsOpen(snap) ? "open" : "closed"));
 
             s_sessionArrangementRestoring = true;
             bool started = false;

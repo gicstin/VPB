@@ -103,6 +103,7 @@ namespace VPB
                     ApplyTopDockSideButtonsLayout(ChromeScale);
             }
             catch { }
+            MarkSessionArrangementDirty();
         }
 
         private void HideSettingsFloat()
@@ -112,6 +113,7 @@ namespace VPB
             PersistSettingsFloatGeometry();
             if (_settingsFloatRoot != null)
                 _settingsFloatRoot.SetActive(false);
+            MarkSessionArrangementDirty();
             try { InvalidateTaskChrome(); RefreshTaskChrome(force: true); } catch { }
             try
             {

@@ -1158,6 +1158,12 @@ namespace VPB
                     try { CreateFileBrowser(); } catch { }
                     m_UIInited = true;
                     LogUtil.LogReadyOnce("UI initialized");
+                    try
+                    {
+                        string zstdDir = GetCacheDir();
+                        System.Threading.ThreadPool.QueueUserWorkItem(_ => TextureUtil.PrewarmZstdCacheDirectoryIndex(zstdDir));
+                    }
+                    catch { }
                 }
             }
 

@@ -522,6 +522,7 @@ namespace VPB
                     compressedLen = new FileInfo(zstdPath).Length;
 
                     WriteOrCopyMeta(job, rawLen);
+                    TextureUtil.NoteZstdCacheFileWritten(zstdPath);
 
                     try
                     {
@@ -575,6 +576,7 @@ namespace VPB
 
                 File.Move(metaTmp, zstdPath + "meta");
                 File.Move(dataTmp, zstdPath);
+                TextureUtil.NoteZstdCacheFileWritten(zstdPath);
 
                 try
                 {

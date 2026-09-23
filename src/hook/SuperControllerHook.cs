@@ -757,14 +757,7 @@ namespace VPB
         static bool LocalCustomPathExistsOnDisk(string normalizedCustomPath)
         {
             if (string.IsNullOrEmpty(normalizedCustomPath)) return false;
-            try
-            {
-                // System.IO accepts '/' on Windows; VaM CWD is the game root.
-                if (File.Exists(normalizedCustomPath)) return true;
-                if (Directory.Exists(normalizedCustomPath)) return true;
-            }
-            catch { }
-            return false;
+            return LocalDiskEntryCache.Exists(normalizedCustomPath);
         }
 
         /// <summary>
