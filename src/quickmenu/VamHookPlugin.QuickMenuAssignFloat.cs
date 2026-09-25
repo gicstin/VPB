@@ -182,7 +182,7 @@ namespace VPB
                 Vector2 center = m_QmAssignFloatSavedPosCenter.HasValue
                     ? m_QmAssignFloatSavedPosCenter.Value
                     : Vector2.zero;
-                m_QuickMenuAssignPopupRT.anchoredPosition = QmAssignFloatCenterToTopLeft(center, m_QuickMenuAssignPopupRT.sizeDelta);
+                m_QuickMenuAssignPopupRT.anchoredPosition = FloatPanelCoords.CenterToTopLeft(center, m_QuickMenuAssignPopupRT.sizeDelta);
                 m_QmAssignFloatPlaced = m_QmAssignFloatSavedPosCenter.HasValue;
             }
 
@@ -237,7 +237,6 @@ namespace VPB
 
             var headerDrag = titleBar.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = m_QuickMenuAssignPopupRT;
-            // HUD canvas rect is ~100px; VR parent-rect clamp would pin this to origin.
             headerDrag.ClampPositionInVr = false;
             headerDrag.OnMoved = OnQmAssignFloatMoved;
 
@@ -567,7 +566,7 @@ namespace VPB
 
             if (m_QmAssignFloatSavedPosCenter.HasValue)
             {
-                m_QuickMenuAssignPopupRT.anchoredPosition = QmAssignFloatCenterToTopLeft(
+                m_QuickMenuAssignPopupRT.anchoredPosition = FloatPanelCoords.CenterToTopLeft(
                     m_QmAssignFloatSavedPosCenter.Value, m_QuickMenuAssignPopupRT.sizeDelta);
                 m_QmAssignFloatPlaced = true;
             }
@@ -963,24 +962,11 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (VPBConfig.Instance.QuickMenuAssignFloatPosSaved)
-                {
-                    m_QmAssignFloatSavedPosCenter = new Vector2(
-                        VPBConfig.Instance.QuickMenuAssignFloatPosX,
-                        VPBConfig.Instance.QuickMenuAssignFloatPosY);
-                }
-                if (VPBConfig.Instance.QuickMenuAssignFloatSizeSaved)
-                {
-                    float w = VPBConfig.Instance.QuickMenuAssignFloatWidthRef;
-                    float h = VPBConfig.Instance.QuickMenuAssignFloatHeightRef;
-                    if (w >= GalleryUiDesignTokens.QmAssignFloatMinWidthRef
-                        && h >= GalleryUiDesignTokens.QmAssignFloatMinHeightRef)
-                    {
-                        m_QmAssignFloatSavedSizeRef = new Vector2(
-                            Mathf.Clamp(w, GalleryUiDesignTokens.QmAssignFloatMinWidthRef, GalleryUiDesignTokens.QmAssignFloatMaxWidthRef),
-                            Mathf.Clamp(h, GalleryUiDesignTokens.QmAssignFloatMinHeightRef, GalleryUiDesignTokens.QmAssignFloatMaxHeightRef));
-                    }
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.QuickMenuAssignFloatGeometry.Current;
+                m_QmAssignFloatSavedPosCenter = slot.SavedPos;
+                m_QmAssignFloatSavedSizeRef = slot.SavedSize(
+                    new Vector2(GalleryUiDesignTokens.QmAssignFloatMinWidthRef, GalleryUiDesignTokens.QmAssignFloatMinHeightRef),
+                    new Vector2(GalleryUiDesignTokens.QmAssignFloatMaxWidthRef, GalleryUiDesignTokens.QmAssignFloatMaxHeightRef));
             }
             catch { }
         }
@@ -989,7 +975,7 @@ namespace VPB
         {
             if (m_QuickMenuAssignPopupRT == null) return;
             float s = QmAssignFloatChromeScale;
-            m_QmAssignFloatSavedPosCenter = QmAssignFloatTopLeftToCenter(
+            m_QmAssignFloatSavedPosCenter = FloatPanelCoords.TopLeftToCenter(
                 m_QuickMenuAssignPopupRT.anchoredPosition, m_QuickMenuAssignPopupRT.sizeDelta);
             if (!m_QmAssignFloatCollapsed)
             {
@@ -1004,18 +990,9 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (m_QmAssignFloatSavedPosCenter.HasValue)
-                {
-                    VPBConfig.Instance.QuickMenuAssignFloatPosSaved = true;
-                    VPBConfig.Instance.QuickMenuAssignFloatPosX = m_QmAssignFloatSavedPosCenter.Value.x;
-                    VPBConfig.Instance.QuickMenuAssignFloatPosY = m_QmAssignFloatSavedPosCenter.Value.y;
-                }
-                if (m_QmAssignFloatSavedSizeRef.HasValue)
-                {
-                    VPBConfig.Instance.QuickMenuAssignFloatSizeSaved = true;
-                    VPBConfig.Instance.QuickMenuAssignFloatWidthRef = m_QmAssignFloatSavedSizeRef.Value.x;
-                    VPBConfig.Instance.QuickMenuAssignFloatHeightRef = m_QmAssignFloatSavedSizeRef.Value.y;
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.QuickMenuAssignFloatGeometry.Current;
+                slot.StorePos(m_QmAssignFloatSavedPosCenter);
+                slot.StoreSize(m_QmAssignFloatSavedSizeRef);
                 VPBConfig.Instance.Save(false, true);
             }
             catch { }
@@ -1036,16 +1013,6 @@ namespace VPB
             try { QuickMenuRelayoutAssignFloatGroupTabs(s, chromeSz); } catch { }
             QuickMenuCaptureAssignFloatGeometryToMemory();
             QuickMenuPersistAssignFloatGeometry();
-        }
-
-        private static Vector2 QmAssignFloatCenterToTopLeft(Vector2 center, Vector2 size)
-        {
-            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
-        }
-
-        private static Vector2 QmAssignFloatTopLeftToCenter(Vector2 topLeft, Vector2 size)
-        {
-            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
         }
 
         private void QuickMenuRefreshAssignFloatLocalizedChrome()

@@ -82,14 +82,11 @@ namespace VPB
             UpdateLayout(true, true);
         }
 
-        /// <summary>When false, skips all synchronous side-tab cache fills (legacy single flag).</summary>
         public void UpdateLayout(bool allowAllSynchronousCaches)
         {
             UpdateLayout(allowAllSynchronousCaches, allowAllSynchronousCaches);
         }
 
-        /// <param name="allowSynchronousCreatorCategoryCaches">When false, skips main-thread creator/category scans (worker or <see cref="GalleryPanel.RefreshFilesRoutine"/> overlap).</param>
-        /// <param name="allowSynchronousUserTagsSideTabCache">When false, skips synchronous user-tag side tab scan.</param>
         public void UpdateLayout(bool allowSynchronousCreatorCategoryCaches, bool allowSynchronousUserTagsSideTabCache)
         {
             EnsureUserTagAvailScrollTrackingHooks();
@@ -105,8 +102,6 @@ namespace VPB
             bool skipBrowseSideCaches = settingsListViewActive;
             if (allowSynchronousCreatorCategoryCaches && !skipBrowseSideCaches)
             {
-                // Prefer facet-specific caching from UpdateTabs builders when opening side panes
-                // (ToggleSide passes false here). Full sync only for cold layout / refresh paths.
                 if (!creatorsCached) CacheCreators();
                 if (!categoriesCached) CacheCategoryCounts();
             }
@@ -128,7 +123,6 @@ namespace VPB
             }
             catch { }
 
-            // Ensure UI reflects persisted replace / appearance outfit mode even if the panel was recreated/re-shown.
             UpdateReplaceButtonState();
             UpdateKeepClothingButtonState();
             
@@ -136,8 +130,6 @@ namespace VPB
             float leftOffset = SyncSideRailChrome(BuildLeftSideRailChrome(), closedInset);
             float rightOffset = SyncSideRailChrome(BuildRightSideRailChrome(), -closedInset);
             
-            // Docked Import sidebar hides its side's tab column and pushes the grid edge in by 230.
-            // Floating Import does not occupy the side column (grid stays full width).
             float importInset = GalleryUiDesignTokens.SideTabOpenGridInsetRef * paneScale;
             if (ImportSidebarOccupiesSideColumn)
             {
@@ -176,7 +168,6 @@ namespace VPB
                 float panelW = backgroundBoxGO != null
                     ? backgroundBoxGO.GetComponent<RectTransform>().rect.width
                     : 0f;
-                // Bar spans [leftOffset+pad, panelW+rightOffset-pad] (rightOffset is negative).
                 float chipAvailW = panelW > 1f ? panelW + rightOffset - leftOffset - 2f * chipPad : -1f;
                 RefreshActiveFilterChips(chipAvailW);
             }
@@ -186,21 +177,17 @@ namespace VPB
             try { filterTopInset = ActiveFilterChromeTopInsetPx(paneScale); } catch { }
             try { filterTopInset += ModeSemanticsBannerTopInsetPx(paneScale); } catch { }
             float topOffset = -SidePanelFilterRowTopRef * paneScale - filterTopInset;
-            float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top
+            float tabTopOffset = TabScrollTopOffset();
             ApplySideTabFilterRowVerticalLayout(paneScale);
 
-            // Footer first: main grid/tab insets use the top of this stack (grows when tbox expands).
             if (paginationRT != null)
             {
-                // Footer bar: ALWAYS stretch to full width of backgroundBoxGO
                 paginationRT.offsetMin = new Vector2(0, 0);
                 paginationRT.offsetMax = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef * paneScale);
 
                 if (hoverPathRT != null)
                 {
-                    // Info bar: stretch to full width, sits above the buttons bar
                     hoverPathRT.offsetMin = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef * paneScale);
-                    // Update tbox expansion references so animation uses the correct scale
                     tboxTopOffsetBase  = GalleryUiDesignTokens.FooterToolboxTopRef * paneScale;
                     tboxInfoRowHeight  = GalleryUiDesignTokens.FooterInfoRowHeightRef * paneScale;
                     if (tbox == null)
@@ -247,8 +234,7 @@ namespace VPB
 
             try { RefreshHoverPreviewLayoutImmediate(); } catch { }
 
-            // Layout rebuild / hover refresh can reset ScrollRect viewports after SyncGalleryMainAreaBottomEdge;
-            // sticky chrome must win last so Available / Applied toolbars stay visible in Tags mode.
+            // Layout rebuild / hover refresh can reset ScrollRect viewports after SyncGalleryMainAreaBottomEdge.
             try
             {
                 if (leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags)
@@ -266,8 +252,6 @@ namespace VPB
 
             RestorePreservedUserTagAvailScroll();
 
-            // VR/world-space chrome resize can reflow RecyclingGridView while Settings is open —
-            // re-assert 1-col list config so settings rows never become multi-column tiles.
             if (settingsListViewActive)
             {
                 try
@@ -280,7 +264,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Places side-pane sort/refresh/search row below optional collapse header strip.</summary>
         private void ApplySideTabFilterRowVerticalLayout(float paneScale)
         {
             ApplyMainSideSearchRowLayout(true, paneScale);
@@ -288,7 +271,6 @@ namespace VPB
             SyncSideTabSubFilterRowChrome(paneScale);
         }
 
-        /// <summary>Full horizontal + vertical layout for upper side-pane search row (sort / refresh / search).</summary>
         private void ApplyMainSideSearchRowLayout(bool isLeft, float s)
         {
             if (s <= 0f) s = 1f;
@@ -363,7 +345,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Distance from panel bottom to the top edge of the bottom chrome (footer + info/tbox bar).</summary>
         private float GalleryMainAreaBottomInset()
         {
             float s = ChromeScale;
@@ -371,7 +352,6 @@ namespace VPB
             return GalleryUiDesignTokens.GalleryMainBottomFallbackRef * s;
         }
 
-        /// <summary>Bottom inset for category/creator/tag tab scroll rects — keeps lists above footer + info/tbox bar.</summary>
         private float SideTabScrollBottomInsetY()
         {
             return GalleryMainAreaBottomInset() + GalleryUiDesignTokens.SideTabScrollBottomPadRef * ChromeScale;
@@ -384,7 +364,6 @@ namespace VPB
             return GalleryUiDesignTokens.SideTabSplitSeamRef * s;
         }
 
-        /// <summary>True for the upper stack in a split tab column (category / hub pay-type / etc.).</summary>
         private static bool IsUpperStackedSideTabPane(RectTransform rt)
         {
             if (rt == null) return false;
@@ -401,7 +380,6 @@ namespace VPB
 
         private float ResolveSideTabSubFilterRowAnchorY(bool isLeft)
         {
-            // Prefer live split from sub-pane (may rise when InfoBar is tall).
             GameObject sub = isLeft ? leftSubTabScrollGO : rightSubTabScrollGO;
             if (sub != null && sub.activeSelf)
             {
@@ -436,7 +414,6 @@ namespace VPB
             rt.anchoredPosition = new Vector2(isLeft ? margin : -margin, subRowY);
         }
 
-        /// <summary>Re-anchor lower split filter row (sort + search) to match sub-pane top (φ minor for category).</summary>
         private void SyncSideTabSubFilterRowChrome(float s)
         {
             if (s <= 0f) s = 1f;
@@ -526,7 +503,6 @@ namespace VPB
             contentScrollRT.offsetMin = new Vector2(leftOffset, gridBottomInset);
             contentScrollRT.offsetMax = new Vector2(rightOffset, topOffset);
 
-            // Category/subcategory split: raise split line when tall InfoBar would crush sub-pane.
             try { SyncSideTabSplitAgainstBottomChrome(tabBottomInset, tabTopOffset); } catch { }
 
             if (leftTabScrollGO != null && leftTabScrollGO.activeSelf)
@@ -570,10 +546,6 @@ namespace VPB
             try { ApplyUserTagsStickyScrollChrome(tabTopOffset); } catch { }
         }
 
-        /// <summary>
-        /// When InfoBar/detail-strip grows, fixed φ-split subcategory pane can shrink below usable height.
-        /// Raise split (grow sub-pane) so category tags/subcategory lists stay scrollable above footer.
-        /// </summary>
         private void SyncSideTabSplitAgainstBottomChrome(float tabBottomInset, float tabTopOffset)
         {
             float s = ChromeScale;
@@ -662,7 +634,7 @@ namespace VPB
             followUser = !followUser;
             if (followUser)
             {
-                lastFollowUpdateTime = 0f; // Force immediate update
+                lastFollowUpdateTime = 0f;
                 if (canvas != null)
                 {
                     targetFollowRotation = canvas.transform.rotation;
@@ -757,10 +729,8 @@ namespace VPB
             float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
             if (_sideRailOverflowCollapsedIdx.Count > 0)
                 stackHeight += spacing;
-            // Center in title↔footer free band (bottom chrome ≠ top; pane-center left empty air below …).
             float topY = GetSideRailStackTopY(stackHeight, scale);
 
-            // Settings
             UpdateListPositions(rightSideButtons, topY, spacing, groupGap, isLeftRail: false);
             UpdateListPositions(leftSideButtons, topY, spacing, groupGap, isLeftRail: true);
             try { PlaceSideRailOverflowButtons(topY, spacing, groupGap, scale); } catch { }
@@ -795,7 +765,6 @@ namespace VPB
                             if (go != null && go.activeSelf) visibleCount++;
                         }
                     }
-                    // 5a — anchor on first layout; reuse on removal resyncs to prevent jump
                     if (float.IsNaN(_hairSubmenuAnchorYStart))
                         _hairSubmenuAnchorYStart = -(visibleCount - 1) * 0.5f * spacing;
                     float yStart = _hairSubmenuAnchorYStart;
@@ -817,7 +786,6 @@ namespace VPB
                             rt.anchoredPosition = new Vector2(cx, baseY + yStart + spacing * i);
                         }
 
-                        // Removed - submenus are now handled by side tabs
                     }
 
                     if (rightBaseRT != null)
@@ -837,7 +805,6 @@ namespace VPB
                             rt.anchoredPosition = new Vector2(cx, baseY + yStart + spacing * i);
                         }
 
-                        // Removed - submenus are now handled by side tabs
                     }
                 }
 
@@ -863,7 +830,6 @@ namespace VPB
                             if (go != null && go.activeSelf) visibleCount++;
                         }
                     }
-                    // 5a — anchor on first layout; reuse on removal resyncs to prevent jump
                     if (float.IsNaN(_clothingSubmenuAnchorYStart))
                         _clothingSubmenuAnchorYStart = -(visibleCount - 1) * 0.5f * spacing;
                     float yStart = _clothingSubmenuAnchorYStart;
@@ -955,7 +921,6 @@ namespace VPB
                             rt.anchoredPosition = new Vector2(itemCenterX + (itemW * 0.5f) + (w * 0.5f) + colGap, baseY + yStart + spacing * i);
                         }
 
-                        // Removed - submenus are now handled by side tabs
                     }
                 }
 
@@ -1021,7 +986,6 @@ namespace VPB
 
                 if (saveSubmenuOpen)
                 {
-                    // Tighter than main-rail spacing; row height follows actual submenu <see cref="RectTransform.sizeDelta"/>.y.
                     const float saveSubGapY = 2f;
                     float horizGap = 3f * scale;
 
@@ -1070,7 +1034,6 @@ namespace VPB
                             rt.anchoredPosition = new Vector2(cx, baseY + yStart + saveSubRowStep * i);
                         }
 
-                        // Removed - submenus are now handled by side tabs
                     }
 
                     if (rightBaseRT != null)
@@ -1091,7 +1054,6 @@ namespace VPB
                             rt.anchoredPosition = new Vector2(cx, baseY + yStart + saveSubRowStep * i);
                         }
 
-                        // Removed - submenus are now handled by side tabs
                     }
                 }
             }
@@ -1106,11 +1068,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>
-        /// Top dock: quality/filter pack left-aligns in CenterSection so the side-button overlay
-        /// can sit in the free gap to its right. Other docks keep middle-align.
-        /// Left pad matches footer chip gap so Hub and quality are not flush.
-        /// </summary>
         private void ApplyFooterCenterAlignForDock()
         {
             if (_footerCenterHLG == null) return;
@@ -1144,7 +1101,6 @@ namespace VPB
             {
                 if (_footerSideButtonsGroupGO.activeSelf) _footerSideButtonsGroupGO.SetActive(false);
                 if (groupLE != null) groupLE.ignoreLayout = true;
-                // Ensure group stays an overlay child of the footer root (not CenterSection).
                 if (paginationRT != null && _footerSideButtonsGroupRT.parent != paginationRT)
                     _footerSideButtonsGroupRT.SetParent(paginationRT, worldPositionStays: false);
                 if (_titleBarSideButtonsReparented)
@@ -1168,7 +1124,6 @@ namespace VPB
                 return;
             }
 
-            // Hide side rails in Top dock; buttons move to footer overlay strip.
             if (leftSideContainer != null && leftSideContainer.activeSelf) leftSideContainer.SetActive(false);
             if (rightSideContainer != null && rightSideContainer.activeSelf) rightSideContainer.SetActive(false);
 
@@ -1200,7 +1155,6 @@ namespace VPB
             }
             try { Canvas.ForceUpdateCanvases(); } catch { }
 
-            // Free strip = right of left-aligned quality/filter pack, left of right footer pack.
             Bounds bLeft = RectTransformUtility.CalculateRelativeRectTransformBounds(footerRT, _footerLeftSectionRT);
             Bounds bRight = RectTransformUtility.CalculateRelativeRectTransformBounds(footerRT, _footerRightSectionRT);
             float leftEdge = bLeft.max.x;
@@ -1211,7 +1165,6 @@ namespace VPB
             }
             if (_footerCenterSectionRT != null)
             {
-                // Also clear filter chrome (back/clear/mode) when visible — same left-aligned pack.
                 for (int ci = 0; ci < _footerCenterSectionRT.childCount; ci++)
                 {
                     RectTransform ch = _footerCenterSectionRT.GetChild(ci) as RectTransform;
@@ -1293,10 +1246,6 @@ namespace VPB
             _footerSideButtonsGroupRT.anchoredPosition = new Vector2(cx, 0f);
         }
 
-        /// <summary>
-        /// Edge-anchored side button vs centre-anchored submenu rows: submenu opens on the outer side of the rail
-        /// (left rail: left of anchor; right rail: right of anchor), away from the gallery. Used for Save and Remove submenus.
-        /// </summary>
         private static bool TryComputeOuterSubmenuAnchoredCenterX(RectTransform anchorBtnRT, RectTransform parentRT, bool anchorOnRightSidePanel, float horizGap, float subHalfW, out float anchoredCenterX)
         {
             anchoredCenterX = 0f;
@@ -1304,7 +1253,6 @@ namespace VPB
             try
             {
                 Bounds b = RectTransformUtility.CalculateRelativeRectTransformBounds(parentRT, anchorBtnRT);
-                // Outer edge away from gallery: left rail uses anchor's left (min.x); right rail uses anchor's right (max.x).
                 float outerEdgeX = anchorOnRightSidePanel ? b.max.x : b.min.x;
                 float pivotLocalX = anchorOnRightSidePanel
                     ? (outerEdgeX + horizGap + subHalfW)
@@ -1441,12 +1389,10 @@ namespace VPB
 
         private void SetAtomSubmenuButtonsVisible(bool visible)
         {
-            // Removed - submenus are now handled by side tabs
         }
 
         private void PopulateAtomSubmenuButtons()
         {
-            // Removed - submenus are now handled by side tabs
         }
 
         private void ToggleAtomSubmenuFromSideButtons(bool? forceLeftSide = null)
@@ -1487,7 +1433,6 @@ namespace VPB
 
         private void ToggleTargetSubmenuFromSideButtons(bool? forceLeftSide = null)
         {
-            // Removed: target selection is now in the toolbox.
         }
 
         private void PushUndoSnapshotForAtomRemoval(Atom atom)
@@ -1503,8 +1448,6 @@ namespace VPB
 
                 JSONNode atomNode = null;
 
-                // Primary: Atom.Store serializes the atom into a JSONArray (same call Try-On uses).
-                // This is the reliable path; the reflection probes below are a version fallback.
                 try
                 {
                     JSONArray storeArr = new JSONArray();
@@ -1547,7 +1490,6 @@ namespace VPB
                 catch { }
                 if (atomNode == null) return;
 
-                // Ensure id exists for merge-load
                 try
                 {
                     if (atomNode["id"] == null || string.IsNullOrEmpty(atomNode["id"].Value)) atomNode["id"] = atomUid;
@@ -1590,17 +1532,14 @@ namespace VPB
 
         private void SetHairSubmenuButtonsVisible(bool visible)
         {
-            // Removed - submenus are now handled by side tabs
         }
 
         private void SetClothingSubmenuButtonsVisible(bool visible)
         {
-            // Removed - submenus are now handled by side tabs
         }
 
         private void PopulateHairSubmenuButtons(Atom target)
         {
-            // Removed - submenus are now handled by side tabs
         }
 
         private void ToggleHairSubmenuFromSideButtons(Atom target, bool? forceLeftSide = null)
@@ -1844,8 +1783,6 @@ namespace VPB
 
         private void RefreshSceneImportSideButtonVisibility()
         {
-            // Task chrome: hide Import enter while foreign sticky / cleanup.
-            // Settings float is modeless — Import rail stays available.
             StickyToolMode tool = GetActiveStickyToolMode();
             bool stickyBlocks = tool != StickyToolMode.None && tool != StickyToolMode.Import;
             bool armedBlocks = tool == StickyToolMode.None
@@ -1853,7 +1790,6 @@ namespace VPB
             bool show = !cleanupModeActive
                 && !stickyBlocks && !armedBlocks
                 && (ImportSidebarCategoryAllowed() || importSidebarOpenIntent);
-            // Own Import sticky: keep button visible as exit/toggle affordance.
             if (tool == StickyToolMode.Import)
                 show = ImportSidebarCategoryAllowed() || importSidebarOpenIntent || IsImportStickyToolActive();
             if (rightSceneImportSideBtn != null && rightSceneImportSideBtn.activeSelf != show)
@@ -1862,8 +1798,6 @@ namespace VPB
                 leftSceneImportSideBtn.SetActive(show);
         }
 
-        // True when the current selection contains an appearance preset. Used to reveal the
-        // appearance clothing-mode row in mixed views (History) only when it's relevant.
         private bool SelectionContainsAppearance()
         {
             if (selectedFiles == null) return false;
@@ -1888,10 +1822,7 @@ namespace VPB
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
             bool showSave = true;
 
-            // Appearance clothing-apply-mode segmented row (Full Look / Keep My Outfit / Outfit Only / Merge Outfit)
-            // lives in the toolbox. Shown while browsing the Appearance category, and in History mode
-            // (mixed items) only when the selected item is actually an appearance preset — so it isn't
-            // always on when History contains scenes, clothing, etc.
+            // Appearance clothing-apply-mode segmented row (Full Look / Keep My Outfit / Outfit Only / Merge Outfit) lives in the toolbox.
             bool isHistoryBrowse = activeContentType == ContentType.History
                 || leftActiveContent == ContentType.History
                 || rightActiveContent == ContentType.History;
@@ -1905,7 +1836,6 @@ namespace VPB
             if (rightSaveBtnGO != null) rightSaveBtnGO.SetActive(showSave);
             if (leftSaveBtnGO != null) leftSaveBtnGO.SetActive(showSave);
 
-            // Keep remove-list siderail in sync while Remove Mode (bin) is on.
             if (_removeModeActive)
             {
                 try { EnsureRemoveSiderailOpenForCurrentCategory(); } catch { }
@@ -1953,13 +1883,11 @@ namespace VPB
                             }
                         }
 
-                        // Initialize session-initial UIDs for this atom if not already tracked.
                         if (!_sessionInitialClothingUids.ContainsKey(tgt.uid))
                         {
                             _sessionInitialClothingUids[tgt.uid] = new HashSet<string>(currentUids, StringComparer.OrdinalIgnoreCase);
                         }
 
-                        // Detect changes for auto-refresh.
                         bool hadSnapshot = _lastActiveClothingUids.TryGetValue(tgt.uid, out var lastUids);
                         if (hadSnapshot ? !currentUids.SetEquals(lastUids) : currentUids.Count > 0)
                         {
@@ -1973,7 +1901,6 @@ namespace VPB
                 _sideContextClothingScratch.Clear();
                 if (isClothing) UpdateRemoveClothingButtonLabels(count);
 
-                // Auto-refresh the side tab if the list changed and the tab is open.
                 if (anyClothingChanged && isRemoveClothingOpen)
                 {
                     UpdateTabs();
@@ -2068,14 +1995,12 @@ namespace VPB
             return (visibleCount - 1) * spacing + gapUnits * gap;
         }
 
-        /// <summary>Facet rail chips are square icon wells.</summary>
         private bool UsesSquareChromeSideButton(RectTransform rt, List<RectTransform> list)
         {
             if (rt == null) return false;
             return rt.Find("Icon") != null;
         }
 
-        /// <summary>Right rail: hug inner edge toward gallery. Left rail: hug inner edge toward gallery.</summary>
         private void ApplySquareSideButtonEdgeAlignment(RectTransform rt, List<RectTransform> list, float y)
         {
             if (rt == null || list == null) return;
@@ -2266,8 +2191,5 @@ namespace VPB
                 hb.SyncIndicatorVisibility();
             }
         }
-
-
     }
-
 }

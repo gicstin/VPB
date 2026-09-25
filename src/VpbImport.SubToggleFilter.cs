@@ -34,8 +34,6 @@ namespace VPB
 
     internal static class VpbImportSubToggleFilter
     {
-        // Mutates presetJSON in place. Caller is expected to pass a freshly-built JSON
-        // each Apply (WrapAtomNodeAsPreset or fresh JSON.Parse), never a shared reference.
         public static JSONClass FilterForType(JSONClass presetJSON, VpbResourceType type, SubToggleOptions options)
         {
             if (presetJSON == null) return null;

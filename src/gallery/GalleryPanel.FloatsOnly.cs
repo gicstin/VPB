@@ -7,7 +7,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>Pane body off, canvas kept as float host (Hide disables the canvas and takes floats with it).</summary>
         private bool _floatsOnly;
 
         internal bool IsFloatsOnly
@@ -79,7 +78,6 @@ namespace VPB
             }
         }
 
-        /// <param name="persist">False when the caller already wrote the preference (bulk toggle, preset apply).</param>
         internal void SetFloatsOnly(bool on, bool persist)
         {
             if (persist && VPBConfig.Instance != null && VPBConfig.Instance.GalleryFloatsOnlyMode != on)
@@ -94,7 +92,6 @@ namespace VPB
             if (on)
             {
                 try { PersistCurrentBrowsePlace(); } catch { }
-                // Dock slot still sizes other panes — an invisible claimed edge would steal their width.
                 if (isFixedLocally)
                 {
                     try { SetFixedLocally(false); } catch { }
@@ -114,7 +111,6 @@ namespace VPB
                     try { RefreshFiles(true); } catch { }
                 }
                 try { UpdateLayout(); } catch { }
-                // The canvas stayed enabled as a float host, so visibility did not schedule this.
                 ScheduleDeferredSideTabsFreshAfterReopen();
             }
 
@@ -122,7 +118,6 @@ namespace VPB
             VpbPerfDiag.LogTransition("GalleryPanel.SetFloatsOnly", "on=" + on);
         }
 
-        /// <summary>Drop mode without reveal — Show already does SetCanvasVisible / layout / refresh.</summary>
         private void ClearFloatsOnlyForShow()
         {
             if (!_floatsOnly) return;
@@ -137,7 +132,6 @@ namespace VPB
             VpbPerfDiag.LogTransition("GalleryPanel.SetFloatsOnly", "on=False src=show");
         }
 
-        /// <summary>Canvas on, pane subtree off. Collapse triggers are canvas siblings of the body.</summary>
         private void ApplyFloatsOnlyChrome()
         {
             if (canvas == null) return;

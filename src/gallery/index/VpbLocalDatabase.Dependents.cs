@@ -54,7 +54,6 @@ namespace VPB
 
         private static void FinishDependentSource(List<DependentTargetCount> matched, string source)
         {
-            // An exact edge outside its family still counts, unless another edge matched that family.
             foreach (var target in matched)
                 if (target.Family == null || !string.Equals(target.Family.LastSource, source, StringComparison.Ordinal))
                     target.ExactExtra++;
@@ -115,7 +114,6 @@ namespace VPB
                             }
                         }
                         DependentTargetCount target;
-                        // pkg_dep PRIMARY KEY(src_uid,dep_uid) makes this target unique within this source.
                         if (exact.TryGetValue(dependency, out target)) matchedExact.Add(target);
                     }
                     if (rc != VpbSqlite3.SqliteDone) return false;

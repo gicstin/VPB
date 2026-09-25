@@ -130,6 +130,34 @@ namespace VPB.Tests.Static
         }
 
         [Fact]
+        public void StringMatchingNamesItsComparison()
+        {
+            var hits = new List<string>();
+            foreach (SourceFile f in SourceIndex.Files)
+            {
+                foreach (InvocationExpressionSyntax call in f.Tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>())
+                {
+                    var access = call.Expression as MemberAccessExpressionSyntax;
+                    if (access == null) continue;
+                    SeparatedSyntaxList<ArgumentSyntax> args = call.ArgumentList.Arguments;
+                    if (args.Count != 1) continue;
+                    string name = access.Name.Identifier.ValueText;
+                    bool prefixOrSuffix = name == "StartsWith" || name == "EndsWith";
+                    bool literalSearch = (name == "IndexOf" || name == "LastIndexOf")
+                        && args[0].Expression.IsKind(SyntaxKind.StringLiteralExpression);
+                    if (!prefixOrSuffix && !literalSearch) continue;
+                    hits.Add(f.RelativePath + ":" + f.LineOf(call.SpanStart) + "  " + call.ToString().Replace('\n', ' ').Trim());
+                }
+            }
+
+            Assert.True(hits.Count == 0,
+                "These string checks use the current culture because they name no StringComparison." + Environment.NewLine +
+                "Worker threads and plugin Awake run under the player's Windows locale, so a path or extension test" + Environment.NewLine +
+                "can differ on a Turkish system, and culture matching on Mono is many times slower than Ordinal in scan loops:" + Environment.NewLine +
+                Repo.Bullets(hits));
+        }
+
+        [Fact]
         public void SourceTreeParsesWithoutSyntaxErrors()
         {
             var bad = new List<string>();

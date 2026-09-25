@@ -5,7 +5,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>Bakes gallery thumb placeholder strings to shared textures (no per-cell live Text).</summary>
     internal static class ThumbPlaceholderLabelBitmapCache
     {
         private const int MaxCacheEntries = 384;

@@ -6,12 +6,7 @@ using Valve.Newtonsoft.Json;
 
 namespace VPB
 {
-    /// <summary>
-    /// Manages the VaM scan whitelist: a set of AddonPackages/ subfolders and per-UID overrides
-    /// that VaM's native scanner is restricted to on startup. Packages outside the whitelist
-    /// remain physically in AddonPackages/ and are accessible via on-demand loading but are
-    /// not proactively scanned by VaM, improving startup performance.
-    /// </summary>
+    /// <summary>Manages VaM scan whitelist (folders + per-UID overrides); others load on demand only.</summary>
     public class ScanWhitelistManager
     {
         private static ScanWhitelistManager _instance;
@@ -27,6 +22,19 @@ namespace VPB
         public static void Reload()
         {
             _instance = null;
+            BumpStateVersion();
+        }
+
+        private static int s_StateVersion;
+
+        public static int StateVersion
+        {
+            get { return System.Threading.Interlocked.CompareExchange(ref s_StateVersion, 0, 0); }
+        }
+
+        private static void BumpStateVersion()
+        {
+            System.Threading.Interlocked.Increment(ref s_StateVersion);
         }
 
         private string jsonPath;
@@ -34,12 +42,9 @@ namespace VPB
         private bool hasLoadedSuccessfully = false;
 
         private bool _enabled = false;
-        // Normalized folder paths (forward slashes, no trailing slash), e.g. "AddonPackages/FavoriteCreator"
         private readonly List<string> _whitelistedFolders = new List<string>();
-        // Bucket whitelist folders by top segment (or AddonPackages creator segment) to reduce prefix checks.
         private readonly Dictionary<string, List<string>> _whitelistedFoldersByBucket =
             new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        // Per-package UID overrides: packages included even if their folder is not whitelisted
         private readonly HashSet<string> _includedPackageUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Runtime-only UID overrides for temporary scene-load allow-listing (not persisted).
         private readonly HashSet<string> _temporaryIncludedPackageUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -77,6 +82,7 @@ namespace VPB
             if (string.IsNullOrEmpty(jsonPath)) return;
 
             bool createBlankConfig = false;
+            BumpStateVersion();
             lock (lockObj)
             {
                 _whitelistedFolders.Clear();
@@ -114,8 +120,6 @@ namespace VPB
                 }
                 else
                 {
-                    // File present but unreadable (MP schemaVersion / corrupt). Do not leave
-                    // enabled-empty in memory without rewriting — that splashes forever.
                     _enabled = false;
                     createBlankConfig = true;
                     LogUtil.Log("[VPB ScanWhitelist] Config unreadable — rewriting disabled whitelist");
@@ -214,12 +218,6 @@ namespace VPB
             }
         }
 
-        // --- Query API ---
-
-        /// <summary>
-        /// Returns true if the given .var file path should be scanned by VaM.
-        /// When the feature is disabled, always returns true (passthrough).
-        /// </summary>
         public bool IsPathWhitelisted(string varFilePath)
         {
             if (string.IsNullOrEmpty(varFilePath)) return true;
@@ -227,14 +225,12 @@ namespace VPB
             {
                 if (!_enabled) return true;
                 string norm = varFilePath.Replace('\\', '/');
-                // AllPackages is always passed through (separate system)
                 if (norm.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) return true;
                 List<string> candidates = GetWhitelistBucketCandidatesLocked(norm);
                 for (int i = 0; i < candidates.Count; i++)
                 {
                     string folder = candidates[i];
-                    // folder = "AddonPackages/Creator", norm must start with "AddonPackages/Creator/"
-                    // or exactly equal "AddonPackages/Creator/pkg.var" (file directly in folder)
+                    // folder = "AddonPackages/Creator", norm must start with "AddonPackages/Creator/" or exactly equal "AddonPackages/Creator/pkg.var"
                     if (norm.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase)
                         || norm.StartsWith(folder + "\\", StringComparison.OrdinalIgnoreCase))
                         return true;
@@ -243,10 +239,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Returns true if the package UID is whitelisted via a per-UID override
-        /// (included even though its folder is not whitelisted).
-        /// </summary>
         public bool IsUidOverrideIncluded(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return false;
@@ -256,10 +248,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Returns true only for persistent UID overrides stored in scan_whitelist.json.
-        /// Runtime temporary overrides are excluded from this check.
-        /// </summary>
+        /// <summary>Returns true only for persistent UID overrides stored in scan_whitelist.json.</summary>
         public bool IsUidOverridePersisted(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return false;
@@ -269,10 +258,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Returns true if the package is effectively excluded from VaM's scan
-        /// (feature enabled, path not whitelisted, no UID override).
-        /// </summary>
         public bool IsPackageScanExcluded(string uid, string varFilePath)
         {
             lock (lockObj)
@@ -307,11 +292,13 @@ namespace VPB
             return _includedPackageUids.Contains(uid) || _temporaryIncludedPackageUids.Contains(uid);
         }
 
-        // --- Mutation API ---
-
         public void SetEnabled(bool enabled)
         {
-            lock (lockObj) { _enabled = enabled; }
+            lock (lockObj)
+            {
+                if (_enabled != enabled) BumpStateVersion();
+                _enabled = enabled;
+            }
         }
 
         public bool AddFolder(string folderPath)
@@ -323,6 +310,7 @@ namespace VPB
                 if (_whitelistedFolders.Contains(normalized)) return false;
                 _whitelistedFolders.Add(normalized);
                 AddFolderToBucketsLocked(normalized);
+                BumpStateVersion();
                 return true;
             }
         }
@@ -334,7 +322,11 @@ namespace VPB
             lock (lockObj)
             {
                 bool removed = _whitelistedFolders.Remove(normalized);
-                if (removed) RemoveFolderFromBucketsLocked(normalized);
+                if (removed)
+                {
+                    RemoveFolderFromBucketsLocked(normalized);
+                    BumpStateVersion();
+                }
                 return removed;
             }
         }
@@ -344,7 +336,9 @@ namespace VPB
             if (string.IsNullOrEmpty(uid)) return false;
             lock (lockObj)
             {
-                return _includedPackageUids.Add(uid.Trim());
+                bool added = _includedPackageUids.Add(uid.Trim());
+                if (added) BumpStateVersion();
+                return added;
             }
         }
 
@@ -353,14 +347,13 @@ namespace VPB
             if (string.IsNullOrEmpty(uid)) return false;
             lock (lockObj)
             {
-                return _includedPackageUids.Remove(uid.Trim());
+                bool removed = _includedPackageUids.Remove(uid.Trim());
+                if (removed) BumpStateVersion();
+                return removed;
             }
         }
 
-        /// <summary>
-        /// Adds runtime-only UID overrides for this session and returns only newly-added UIDs.
-        /// Permanent overrides are left untouched and not included in the returned list.
-        /// </summary>
+        /// <summary>Adds runtime-only UID overrides for this session and returns only newly-added UIDs.</summary>
         public List<string> AddTemporaryUidOverrides(IEnumerable<string> uids)
         {
             var added = new List<string>();
@@ -376,6 +369,7 @@ namespace VPB
                     if (_temporaryIncludedPackageUids.Add(uid))
                         added.Add(uid);
                 }
+                if (added.Count > 0) BumpStateVersion();
             }
 
             return added;
@@ -392,12 +386,11 @@ namespace VPB
                 {
                     string uid = string.IsNullOrEmpty(uidRaw) ? null : uidRaw.Trim();
                     if (string.IsNullOrEmpty(uid)) continue;
-                    _temporaryIncludedPackageUids.Remove(uid);
+                    if (_temporaryIncludedPackageUids.Remove(uid)) BumpStateVersion();
                 }
             }
         }
 
-        /// <summary>Whether the whitelist is enabled but has no folders or UID overrides.</summary>
         public bool IsEnabledButEmpty()
         {
             lock (lockObj)
@@ -407,8 +400,6 @@ namespace VPB
                     && _temporaryIncludedPackageUids.Count == 0;
             }
         }
-
-        // --- Gallery helpers ---
 
         /// <summary>True when UID is included only via runtime temporary override (not persisted JSON).</summary>
         public bool IsUidTemporaryOverrideOnly(string uid)
@@ -431,20 +422,14 @@ namespace VPB
             return null;
         }
 
-        /// <summary>Gallery W-badge / rim kind for scan-whitelist inclusion.</summary>
         public enum GalleryScanWlBadgeKind : byte
         {
             None = 0,
-            /// <summary>Folder whitelist or persisted UID override.</summary>
             Persistent = 1,
             /// <summary>Session-only temporary UID override (not folder / not persisted).</summary>
             Temporary = 2
         }
 
-        /// <summary>
-        /// Primary gallery status for scan-whitelist inclusion.
-        /// Persistent wins over temporary when both could apply (folder or saved UID).
-        /// </summary>
         public static GalleryScanWlBadgeKind GetGalleryScanWhitelistBadgeKind(FileEntry entry)
         {
             if (entry == null) return GalleryScanWlBadgeKind.None;
@@ -475,16 +460,10 @@ namespace VPB
             return GetGalleryScanWhitelistBadgeKind(entry) == GalleryScanWlBadgeKind.Temporary;
         }
 
-        /// <summary>
-        /// True when gallery should show the "W" badge: package is included in VaM scan whitelist
-        /// (folder, persisted UID, or session temporary UID).
-        /// </summary>
         public static bool IsScanExcludedBadgeVisible(FileEntry entry)
         {
             return GetGalleryScanWhitelistBadgeKind(entry) != GalleryScanWlBadgeKind.None;
         }
-
-        // --- Helpers ---
 
         public static string NormalizeFolder(string folder)
         {
@@ -552,10 +531,6 @@ namespace VPB
             return _whitelistedFolders;
         }
 
-        /// <summary>
-        /// Given a .var file path, returns the normalized parent folder path suitable for use as a whitelist entry.
-        /// e.g. "AddonPackages\Creator\Sub\pkg.var" → "AddonPackages/Creator/Sub"
-        /// </summary>
         public static string FolderFromVarPath(string varFilePath)
         {
             if (string.IsNullOrEmpty(varFilePath)) return null;

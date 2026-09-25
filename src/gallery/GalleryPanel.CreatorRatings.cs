@@ -5,10 +5,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Creator-row rating badge + 0–5 picker.
-    /// Unrated = plain ★; rated = colored digit. Closed picker deactivated (no hit-steal).
-    /// </summary>
     public class CreatorRatingRowHandler : MonoBehaviour
     {
         private static CreatorRatingRowHandler _openHandler;
@@ -167,8 +163,6 @@ namespace VPB
             if (visible)
             {
                 TryReparentSelectorOutsideScroll();
-                // Explicit star-relative place — worldPositionStays alone is unreliable across
-                // ScrollRect / dropdown / pane size, and layout refresh rewrites anchors.
                 PositionSelectorNearStar();
             }
             else
@@ -182,7 +176,6 @@ namespace VPB
                 selectorGO.transform.SetAsLastSibling();
             else
             {
-                // Inactive closed picker cannot steal hits from rows below (was alpha-0 but still active).
                 try { selectorGO.SetActive(false); } catch { }
             }
         }
@@ -196,13 +189,9 @@ namespace VPB
             if (home == host.transform) return;
             _selectorHomeParent = home;
             _selectorHomeSibling = selectorGO.transform.GetSiblingIndex();
-            // Pose rewritten by PositionSelectorNearStar; keep false so anchors are clean.
             selectorGO.transform.SetParent(host.transform, false);
         }
 
-        /// <summary>
-        /// Place open picker under the star, in host (backgroundBox) local space.
-        /// </summary>
         internal void PositionSelectorNearStar()
         {
             if (selectorGO == null || !selectorGO || panel == null) return;
@@ -224,7 +213,6 @@ namespace VPB
             if (selW < 1f) selW = selRT.sizeDelta.x;
             if (selH < 1f) selH = selRT.sizeDelta.y;
 
-            // Right-align with star; drop just below. Pivot top-right.
             selRT.anchorMin = selRT.anchorMax = new Vector2(0.5f, 0.5f);
             selRT.pivot = new Vector2(1f, 1f);
             float x = starB.max.x;
@@ -248,7 +236,6 @@ namespace VPB
             if (selectorGO == null || _selectorHomeParent == null) return;
             try
             {
-                // false: home layout owns anchors; next EnsureCreatorRatingChrome rewrites pose.
                 selectorGO.transform.SetParent(_selectorHomeParent, false);
                 int max = Mathf.Max(0, _selectorHomeParent.childCount - 1);
                 selectorGO.transform.SetSiblingIndex(Mathf.Clamp(_selectorHomeSibling, 0, max));
@@ -297,7 +284,6 @@ namespace VPB
 
         private void OnDisable()
         {
-            // Row pool recycle — close if still open. Skip during open reparent (same-frame noise).
             if (_suppressDisableClose) return;
             if (_openHandler == this)
                 CloseSelector();
@@ -320,7 +306,6 @@ namespace VPB
 
         internal void NotifyCreatorRatingChanged()
         {
-            // Rating change while sorted/filtered by rating needs list rebuild.
             SortState st = GetSortState("Creator");
             bool needRebuild = creatorRatedOnlyFilter
                 || (st != null && st.Type == SortType.Rating);
@@ -340,9 +325,7 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Arm click-outside dismiss next frame so the opening click cannot hit the blocker.
-        /// </summary>
+        /// <summary>Arm click-outside dismiss next frame so the opening click cannot hit the blocker.</summary>
         internal void BeginCreatorRatingPickerDismissGuard()
         {
             if (_creatorRatingPickerBlockerCo != null)
@@ -412,10 +395,7 @@ namespace VPB
             CreatorRatingRowHandler.CloseAnyOpen();
         }
 
-        /// <summary>
-        /// Display sort only. Rated-only forces Rating type without mutating saved Creator sort;
-        /// keeps Rating direction if user already chose Rating asc/desc.
-        /// </summary>
+        /// <summary>Display sort only.</summary>
         private SortState GetCreatorListSortState()
         {
             if (creatorRatedOnlyFilter)
@@ -447,7 +427,6 @@ namespace VPB
             }
             else
             {
-                // Turning OFF — restore alphabetical (or prior snapshot).
                 creatorRatedOnlyFilter = false;
                 SortState st = GetSortState("Creator");
                 if (st != null)
@@ -536,7 +515,6 @@ namespace VPB
 
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            // Badge inset vs full row height — matches side-tab inward hover, not outward full-cell rim.
             float edge = GalleryUiDesignTokens.CreatorRatingBadgeSizeRef * s;
             float cell = GalleryUiDesignTokens.ButtonSizeRef * s;
             float gap = GalleryUiDesignTokens.SideTabRowSpacingRef * 0.5f * s;
@@ -576,10 +554,6 @@ namespace VPB
             BringCreatorRatingChromeToFront(btnGO, starGO, selectorGO);
         }
 
-        /// <summary>
-        /// Side-tab rows use inward hover; pane enforcer leaves nested ★ outward by default —
-        /// force inward so star rim never outgrows the row outline.
-        /// </summary>
         private static void ConfigureCreatorRatingStarHoverBorder(GameObject starGO)
         {
             if (starGO == null) return;
@@ -634,7 +608,6 @@ namespace VPB
             return starGO;
         }
 
-        /// <summary>Plain star glyph for unrated rows (hidden when rated digit shows).</summary>
         private void EnsureCreatorRatingStarIcon(GameObject starGO)
         {
             if (starGO == null) return;
@@ -659,7 +632,6 @@ namespace VPB
             RectTransform irt = iconImg.rectTransform;
             if (irt != null)
             {
-                // Fill most of badge — readable plain ★ when unrated.
                 irt.anchorMin = new Vector2(0.18f, 0.18f);
                 irt.anchorMax = new Vector2(0.82f, 0.82f);
                 irt.offsetMin = Vector2.zero;
@@ -679,7 +651,6 @@ namespace VPB
                 digit.raycastTarget = false;
                 digit.alignment = TextAnchor.MiddleCenter;
                 digit.fontStyle = FontStyle.Bold;
-                // Visibility owned by RefreshDisplay (star vs digit).
                 digit.transform.SetAsLastSibling();
                 return digit;
             }
@@ -765,9 +736,6 @@ namespace VPB
             return selectorGO;
         }
 
-        /// <summary>
-        /// Rating badge above row label / hover rim so clicks hit rate control, not filter toggle.
-        /// </summary>
         private void BringCreatorRatingChromeToFront(GameObject btnGO, GameObject starGO, GameObject selectorGO)
         {
             if (btnGO == null) return;
@@ -790,7 +758,6 @@ namespace VPB
                     selectorGO.transform.SetAsLastSibling();
                 else if (selectorGO.activeSelf)
                 {
-                    // Closed-but-active legacy: park behind badge and deactivate.
                     selectorGO.transform.SetSiblingIndex(0);
                     try { selectorGO.SetActive(false); } catch { }
                 }
@@ -815,7 +782,6 @@ namespace VPB
             Text digitLabel = EnsureCreatorRatingDigit(starGO);
             if (digitLabel != null)
             {
-                // Slightly larger than body so digit scans like package grid ratings.
                 int digitFont = Mathf.Max(
                     GalleryUiDesignTokens.FontBodyRef + 2,
                     Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * 1.15f));
@@ -836,7 +802,6 @@ namespace VPB
                     srt.sizeDelta = new Vector2(selW, selH);
                     if (!pickerOpen)
                     {
-                        // Closed: parked under row for Find() + ScrollRect recycle.
                         srt.anchorMin = new Vector2(1f, 0.5f);
                         srt.anchorMax = new Vector2(1f, 0.5f);
                         srt.pivot = new Vector2(1f, 1f);
@@ -917,6 +882,5 @@ namespace VPB
 
             BringCreatorRatingChromeToFront(btnGO, starGO, selectorGO);
         }
-
     }
 }

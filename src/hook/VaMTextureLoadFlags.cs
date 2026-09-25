@@ -2,13 +2,8 @@ using SimpleJSON;
 
 namespace VPB
 {
-    /// <summary>
-    /// Maps VaM JSON storable field names to <see cref="ImageLoaderThreaded.QueuedImage"/> flags
-    /// using the same rules as stock loaders in <c>ref/vam</c> (no path/filename heuristics).
-    /// </summary>
     internal static class VaMTextureLoadFlags
     {
-        // MaterialOptions field defaults when sibling *IsLinear/*IsNormal/*IsTransparency are absent.
         private static readonly bool[] CustomSlotDefaultLinear = { false, true, true, false, true, false };
         private static readonly bool[] CustomSlotDefaultNormal = { false, false, false, false, false, false };
         private static readonly bool[] CustomSlotDefaultTransparency = { false, false, false, false, false, false };
@@ -28,13 +23,11 @@ namespace VPB
             };
         }
 
-        /// <summary>DAZCharacterTextureControl.StartSyncImage + ImageControl.SyncUrl defaults.</summary>
         public static NativeTextureOnDemandCache.TextureFlags DiffuseFlags()
         {
             return DefaultImageLoaderFlags();
         }
 
-        /// <summary>DAZCharacterTextureControl TextureType.Specular / Gloss.</summary>
         public static NativeTextureOnDemandCache.TextureFlags SpecularOrGlossFlags()
         {
             var f = DefaultImageLoaderFlags();
@@ -42,7 +35,6 @@ namespace VPB
             return f;
         }
 
-        /// <summary>DAZCharacterTextureControl TextureType.Normal / Detail.</summary>
         public static NativeTextureOnDemandCache.TextureFlags NormalMapFlags()
         {
             var f = DefaultImageLoaderFlags();
@@ -52,7 +44,6 @@ namespace VPB
             return f;
         }
 
-        /// <summary>MaterialOptions.QueueCustomTexture + DAZSkinWrapMaterialOptions sim URL sync.</summary>
         public static NativeTextureOnDemandCache.TextureFlags MaterialOptionsCustomFlags(bool isLinear, bool isNormalMap, bool isTransparency)
         {
             var f = DefaultImageLoaderFlags();
@@ -63,7 +54,6 @@ namespace VPB
             return f;
         }
 
-        /// <summary>VPB zstd path: sim textures are non-readable in VaM but need readable zstd serve.</summary>
         public static NativeTextureOnDemandCache.TextureFlags SimulationTextureFlags()
         {
             var f = MaterialOptionsCustomFlags(isLinear: false, isNormalMap: false, isTransparency: false);
@@ -71,7 +61,6 @@ namespace VPB
             return f;
         }
 
-        /// <summary>Unwrap JSONStorableUrl/string values ({ "val": "..." } or plain string).</summary>
         public static bool TryUnwrapUrlValue(JSONNode valueNode, out string url)
         {
             url = null;
@@ -93,10 +82,6 @@ namespace VPB
             return !string.IsNullOrEmpty(url);
         }
 
-        /// <summary>
-        /// Resolve flags for a texture URL field. Returns false when the key is not a known VaM loader field;
-        /// caller should use <see cref="DefaultImageLoaderFlags"/> (ImageControl / generic QueueImage).
-        /// </summary>
         public static bool TryResolve(string jsonKey, JSONClass parentObject, out NativeTextureOnDemandCache.TextureFlags flags)
         {
             flags = DefaultImageLoaderFlags();
@@ -112,7 +97,6 @@ namespace VPB
                 return true;
             }
 
-            // DAZCharacterTextureControl JSONStorableUrl fields (faceDiffuseUrl, torsoNormalUrl, ...).
             if (jsonKey.EndsWith("DiffuseUrl", System.StringComparison.OrdinalIgnoreCase)
                 || jsonKey.EndsWith("DecalUrl", System.StringComparison.OrdinalIgnoreCase))
             {
@@ -134,7 +118,6 @@ namespace VPB
                 return true;
             }
 
-            // MaterialOptions customTexture1Url .. customTexture6Url (+ sibling bools from preset JSON).
             int slot;
             if (TryParseMaterialOptionsCustomSlot(jsonKey, out slot))
             {
@@ -145,11 +128,9 @@ namespace VPB
                 return true;
             }
 
-            // MaterialOptionTextureGroup shader slot names in VAJ/custom material JSON keys.
             if (TryResolveCustomTextureShaderKey(jsonKey, out flags))
                 return true;
 
-            // ImageControl atom URL field.
             if (jsonKey.Equals("url", System.StringComparison.OrdinalIgnoreCase))
             {
                 flags = DiffuseFlags();
@@ -178,7 +159,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Maps customTexture_* keys tied to MaterialOptionTextureGroup texture slots.</summary>
         private static bool TryResolveCustomTextureShaderKey(string jsonKey, out NativeTextureOnDemandCache.TextureFlags flags)
         {
             flags = DefaultImageLoaderFlags();

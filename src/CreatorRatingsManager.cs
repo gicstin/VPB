@@ -6,11 +6,6 @@ using Valve.Newtonsoft.Json;
 
 namespace VPB
 {
-    /// <summary>
-    /// Local 0–5 star ratings keyed by creator name (case-insensitive).
-    /// Separate from <see cref="RatingsManager"/> so creator keys never collide with file UIDs.
-    /// Warm/cold path: lock + dict; Save on change (same pattern as package ratings).
-    /// </summary>
     public class CreatorRatingsManager
     {
         [Serializable]
@@ -42,7 +37,6 @@ namespace VPB
         private readonly object lockObj = new object();
         private bool hasLoadedSuccessfully;
 
-        /// <summary>Bumped on every successful SetRating. Gallery virt signatures include this.</summary>
         public int DataRevision { get; private set; }
 
         public CreatorRatingsManager()
@@ -91,7 +85,6 @@ namespace VPB
             if (changed) Save();
         }
 
-        /// <summary>Empty → 5 (favorite shortcut); else step down; 1 → clear.</summary>
         public int CycleRating(string creatorName)
         {
             int cur = GetRating(creatorName);

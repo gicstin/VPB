@@ -5,7 +5,6 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>Which way the dock menu opens off the button that raised it.</summary>
     internal enum DockMenuPlacement
     {
         Above = 0,
@@ -15,17 +14,10 @@ namespace VPB
 
     public partial class GalleryPanel
     {
-        // Single dock control. The side rail used to carry a float/fixed toggle AND a dock-to-top
-        // button; this menu replaces both — every edge, the clone variants, and the way back to floating.
-
         private GameObject _dockAnchorMenuGO;
         private GameObject _dockAnchorMenuAnchorGO;
         private bool _dockAnchorMenuOpen;
 
-        /// <summary>
-        /// Wider than <see cref="GalleryUiDesignTokens.PopupMenuPanelWidthRef"/> (230): these rows carry
-        /// both an icon and a two-clause label ("Clone → dock to Right"), which clips at the shared width.
-        /// </summary>
         private const float DockMenuPanelWidthRef = 300f;
 
         private Sprite _dockMenuTopIcon;
@@ -137,7 +129,6 @@ namespace VPB
             for (int i = 0; i < DockMenuSideOrder.Length; i++)
             {
                 GalleryDockSide side = DockMenuSideOrder[i];
-                // A clone needs an edge nobody holds - "free for this pane" is not enough.
                 if (!GalleryDockLayout.IsFreeFor(side, null)) continue;
                 string name = GalleryDockLayout.ToConfigString(side);
                 UI.AddStretchPopupMenuRow(panel,
@@ -159,10 +150,6 @@ namespace VPB
                 icon: _dockMenuCloseIcon);
         }
 
-        /// <summary>
-        /// Opens off <paramref name="anchorGO"/>. Re-clicking the same button closes; clicking a
-        /// different one re-anchors, so the rail and footer entry points never fight over the menu.
-        /// </summary>
         internal void ToggleDockAnchorMenu(GameObject anchorGO, DockMenuPlacement placement)
         {
             bool isVR = false;
@@ -171,7 +158,6 @@ namespace VPB
             {
                 try
                 {
-                    // Menu RightOf the button = left rail; clone onto that side.
                     if (Gallery.singleton != null && Gallery.singleton.PanelCount < Gallery.MaxPanels)
                         Gallery.singleton.ClonePanel(this, placement != DockMenuPlacement.RightOf);
                 }
@@ -197,8 +183,6 @@ namespace VPB
                 RebuildDockAnchorMenuRows(panel);
                 try
                 {
-                    // Passing the width ref matters: without it the panel keeps its 1× width while the
-                    // rows, icons and fonts scale up, which is exactly how the labels start clipping.
                     ScaleVerticalPopupMenuRows(panel.gameObject, ChromeScale,
                         GalleryUiDesignTokens.PopupMenuRowHeightRef,
                         GalleryUiDesignTokens.PopupMenuOverflowFontRef,
@@ -211,7 +195,6 @@ namespace VPB
             _dockAnchorMenuGO.SetActive(true);
         }
 
-        /// <summary>Footer button opens upward; rail buttons open inward, away from their own edge.</summary>
         private void PositionDockAnchorMenuPanel(RectTransform panelRT, GameObject anchorGO, DockMenuPlacement placement)
         {
             if (panelRT == null) return;
@@ -275,10 +258,6 @@ namespace VPB
             Gallery.singleton.ClonePanel(this, true);
         }
 
-        /// <summary>
-        /// Spawns a clone and parks it on <paramref name="side"/>. The clone starts floating and its
-        /// canvas render mode only settles a frame later, so the dock claim waits one frame.
-        /// </summary>
         private void CloneAndDockPane(GalleryDockSide side)
         {
             if (Gallery.singleton == null) return;

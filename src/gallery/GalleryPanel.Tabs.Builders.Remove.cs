@@ -21,7 +21,7 @@ namespace VPB
         {
             string p = normalizedPath.Replace("\\", "/");
             string pl = p.ToLowerInvariant();
-            int idx = pl.IndexOf("/" + markerFolder + "/");
+            int idx = pl.IndexOf("/" + markerFolder + "/", StringComparison.Ordinal);
             string label;
             if (idx >= 0)
             {

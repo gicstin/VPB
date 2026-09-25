@@ -4,7 +4,6 @@ using MeshVR;
 
 namespace VPB
 {
-    // Values 4–7 reserved (removed in-gallery hub); explicit assignments keep stored ints stable.
     public enum ContentType
     {
         Category = 0,
@@ -34,11 +33,6 @@ namespace VPB
     public enum GalleryLayoutMode { Grid, List }
     public enum GalleryHistoryFilterMode { Recent, MostUsed, Scenes, Appearance, Clothing, Hair, Plugins, Pose, Body, Misc }
 
-    /// <summary>
-    /// User Tags Available pane work mode: Tag (click applies) or FilterByTags (click arms include/exclude).
-    /// Include/exclude filter sets are orthogonal and stay live across Tag↔FilterByTags.
-    /// FilterUntagged / FilterTaggedOnly are title-bar presence browse (exclusive of include/exclude).
-    /// </summary>
     public enum UserTagAvailMode { Tag = 0, FilterByTags = 1, FilterUntagged = 2, FilterTaggedOnly = 3 }
     
     public struct CreatorCacheEntry 

@@ -26,7 +26,6 @@ namespace VPB
         public long VarFileSize;
         public long VarLastWriteTimeUtcTicks;
         public bool IsInvalid;
-        /// <summary>Internal "created" from zip header (meta.json entry time), stored as <see cref="DateTime.ToBinary"/>.</summary>
         public long VarInternalCreationTimeBinary;
 
         public List<string> ClothingFileEntryNames;
@@ -34,7 +33,6 @@ namespace VPB
         public List<string> HairFileEntryNames;
         public List<string> HairTags;
         public List<string> MorphFileEntryNames;
-        /// <summary>Windows code page for zip entry names; 0 = system default (legacy rows).</summary>
         public int ZipNameCodePage;
 
         const int MorphIndexPayloadMagic = 0x56504D49;
@@ -109,7 +107,6 @@ namespace VPB
             }
             catch
             {
-                // Truncated/corrupt optional trailer stays unknown; migration repairs it from ZIP directory.
                 MorphFileEntryNames = null;
             }
         }
@@ -121,7 +118,6 @@ namespace VPB
 
         public void Read(BinaryReader reader, bool includeVarMeta, int legacyVersion)
         {
-            //FileEntryNames
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
@@ -133,7 +129,6 @@ namespace VPB
                     }
                 }
             }
-            //FileEntryLastWriteTimeUtcTicks
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
@@ -145,7 +140,6 @@ namespace VPB
                     }
                 }
             }
-            //FileEntrySizes
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
@@ -157,7 +151,6 @@ namespace VPB
                     }
                 }
             }
-            //RecursivePackageDependencies
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
@@ -170,7 +163,6 @@ namespace VPB
                 }
             }
 
-            //ClothingFileEntryNames
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
@@ -182,7 +174,6 @@ namespace VPB
                     }
                 }
             }
-            //ClothingTags
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
@@ -194,7 +185,6 @@ namespace VPB
                     }
                 }
             }
-            //HairFileEntryNames
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
@@ -206,7 +196,6 @@ namespace VPB
                     }
                 }
             }
-            //HairTags
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
@@ -225,8 +214,6 @@ namespace VPB
                 IsInvalid = reader.ReadBoolean();
                 VarInternalCreationTimeBinary = reader.ReadInt64();
                 ZipNameCodePage = 0;
-                // v7 added trailing ZipNameCodePage int. For v6, those 4 bytes belong to the next
-                // record's string-length prefix; reading them here shifts position and corrupts the rest.
                 if (legacyVersion >= 7
                     && reader.BaseStream != null
                     && reader.BaseStream.Length - reader.BaseStream.Position >= 4)
@@ -248,7 +235,6 @@ namespace VPB
 
         public void WritePayloadBody(BinaryWriter writer)
         {
-            //FileEntryNames
             {
                 var count = FileEntryNames?.Count ?? 0;
                 writer.Write(count);
@@ -260,7 +246,6 @@ namespace VPB
                     }
                 }
             }
-            //FileEntryLastWriteTimeUtcTicks
             {
                 var count = FileEntryLastWriteTimeUtcTicks?.Count ?? 0;
                 writer.Write(count);
@@ -272,7 +257,6 @@ namespace VPB
                     }
                 }
             }
-            //FileEntrySizes
             {
                 var count = FileEntrySizes?.Count ?? 0;
                 writer.Write(count);
@@ -284,7 +268,6 @@ namespace VPB
                     }
                 }
             }
-            //RecursivePackageDependencies
             {
                 var count = RecursivePackageDependencies?.Count ?? 0;
                 writer.Write(count);
@@ -297,7 +280,6 @@ namespace VPB
                 }
             }
 
-            //ClothingFileEntryNames
             {
                 var count = ClothingFileEntryNames?.Count ?? 0;
                 writer.Write(count);
@@ -309,7 +291,6 @@ namespace VPB
                     }
                 }
             }
-            //ClothingTags
             {
                 var count = ClothingTags?.Count ?? 0;
                 writer.Write(count);
@@ -321,7 +302,6 @@ namespace VPB
                     }
                 }
             }
-            //HairFileEntryNames
             {
                 var count = HairFileEntryNames?.Count ?? 0;
                 writer.Write(count);
@@ -333,7 +313,6 @@ namespace VPB
                     }
                 }
             }
-            //HairTags
             {
                 var count = HairTags?.Count ?? 0;
                 writer.Write(count);
@@ -362,7 +341,6 @@ namespace VPB
 		private const int CodePageGbk = 936;
 		private const int CodePageSystemDefault = 0;
 
-		/// <summary>Plugins under Custom/Scripts as .cs / .cslist / .dll (paths may use \ or / in zip).</summary>
 		private static bool IsPluginScriptZipEntry(string entryName)
 		{
 			if (string.IsNullOrEmpty(entryName)) return false;
@@ -380,13 +358,10 @@ namespace VPB
 			public int CodePage;
 		}
 
-		// ZipConstants.DefaultCodePage is a global static used by SharpZipLib.
-		// VPB scans packages in parallel, so any interaction with DefaultCodePage must be synchronized.
 		private static readonly object ZipDefaultCodePageLock = new object();
 		private static readonly object ZipNameEncodingCacheLock = new object();
 		private static readonly Dictionary<string, ZipNameEncodingCacheItem> ZipNameEncodingCache = new Dictionary<string, ZipNameEncodingCacheItem>(StringComparer.OrdinalIgnoreCase);
 
-		/// <summary>Per-package code page from manifest; <see cref="int.MinValue"/> when unset.</summary>
 		int _resolvedZipNameCodePage = int.MinValue;
 
 		// Only central-directory name decode shares global code-page lock; enumeration is isolated after open.
@@ -535,11 +510,9 @@ namespace VPB
 				return CodePageSystemDefault;
 			}
 
-			// Suspicious decode: compare against UTF-8 and GBK.
 			double utf8Score = ScoreZipNames(cleanPath, CodePageUtf8);
 			double gbkScore = ScoreZipNames(cleanPath, CodePageGbk);
 
-			// Pick the lowest score; tie-break: prefer UTF-8.
 			int best = CodePageSystemDefault;
 			double bestScore = sysScore;
 			if (utf8Score < bestScore || (Math.Abs(utf8Score - bestScore) < 0.0001 && best != CodePageUtf8))
@@ -558,8 +531,6 @@ namespace VPB
 
 		private static double ScoreZipNames(string cleanPath, int codePage)
 		{
-			// Lower is better.
-			// Heuristic: penalize replacement chars, control chars, suspicious mojibake sequences, and excessive '?'.
 			try
 			{
 				using (ZipFile zf = OpenZipFileForRead(cleanPath, codePage))
@@ -633,13 +604,11 @@ namespace VPB
 				}
 			}
 
-			// Penalize many '?' relative to length.
 			if (question > 0)
 			{
 				score += (question * 2.0);
 			}
 
-			// Mojibake often yields a lot of Latin-1 supplement chars (Ã, Â, etc) while not producing any CJK.
 			if (latin1 > 0 && cjk == 0)
 			{
 				score += latin1 * 1.5;
@@ -699,7 +668,6 @@ namespace VPB
 			{
 				return true;
 			}
-
 		}
 
 		public bool PluginsAlwaysEnabled
@@ -749,7 +717,6 @@ namespace VPB
 			}
 		}
 
-		// The extracted form is called "simulated"
 		public bool IsSimulated
 		{
 			get { return false; }
@@ -807,7 +774,7 @@ namespace VPB
 		}
 		public bool IsInstalled()
         {
-			return Path.StartsWith("AddonPackages/");
+			return Path.StartsWith("AddonPackages/", StringComparison.Ordinal);
 		}
 
 		public string RelativePath;
@@ -1001,7 +968,6 @@ namespace VPB
 			}
 		}
 
-		// Browse manifest omits morphs and preview-less items, so catalog absence requires complete ZIP directory.
 		internal bool TryGetCompleteCatalogContent(out bool hasClothing, out bool hasHair, out bool hasMorphs)
 		{
 			hasClothing = false;
@@ -1137,7 +1103,6 @@ namespace VPB
 			protected set;
 		}
 
-		/// <summary>Top-level meta.json <c>tags</c> (comma-separated), when present. Distinct from clothing/hair item tags.</summary>
 		public List<string> PackageMetaTags;
 
 		/// <summary>True after <see cref="TryEnsureMetaJsonLiteFields"/> ran (success or miss).</summary>
@@ -1148,14 +1113,11 @@ namespace VPB
 			protected set;
 		}
 
-		// Whether all missing dependencies have been checked
 		public bool MissingDependenciesChecked = false;
 		public bool Scaned = false;
 		public List<string> RecursivePackageDependencies;
 		// Number of installed packages that list this package as a (transitive) dependency.
-		// -1 = not computed; >=0 cached (FileManager.ResolveDependentCount / RebuildDependentCounts).
 		public int DependentCount = -1;
-		// Cached count of missing dependencies from the recursive dependency list
 		public int MissingDepsCount = -1;
 
 		public HashSet<string> GetDependenciesDeep(int maxDepth = 2)
@@ -1213,37 +1175,32 @@ namespace VPB
 		}
 		public VarPackage(string uid, string path, VarPackageGroup group, string creator, string name, int version)
 		{
-			Uid = uid;// e.g. VAM_GS.Yinping_1_3.2
-			Path = path.Replace('\\', '/');// e.g. AllPackages/ReignMocap.RM-ActiveMaleSex.1.var
+			Uid = uid;
+			Path = path.Replace('\\', '/');
 
-			if (Path.StartsWith("AddonPackages/"))
+			if (Path.StartsWith("AddonPackages/", StringComparison.Ordinal))
 				RelativePath = this.Path.Substring("AddonPackages/".Length);
-			else if (Path.StartsWith("AllPackages/"))
+			else if (Path.StartsWith("AllPackages/", StringComparison.Ordinal))
 				RelativePath = this.Path.Substring("AllPackages/".Length);
 			else
 				LogUtil.LogError("wrong path:"+Path);
 
-			//Debug.Log("VarPackage " + Path+" "+ Uid+ " "+ name);
 			Name = name;
 			Group = group;
-			//GroupName = group.Name;
 			Creator = creator;
 
 			Version = version;
 			HadReferenceIssues = false;
 
-			//PackageDependencies = new List<string>();
 			PackageDependenciesMissing = new HashSet<string>();
-			//PackageDependenciesResolved = new List<VarPackage>();
 			if (FileManager.debug)
 			{
-				//Debug.Log("New package\n Uid: " + Uid + "\n Path: " + Path + "\n FullPath: " + FullPath + "\n SlashPath: " + SlashPath + "\n Name: " + Name + "\n GroupName: " + GroupName + "\n Creator: " + Creator + "\n Version: " + Version);
 			}
 		}
 
 		protected void SyncEnabled()
 		{
-			_enabled = true;// !FileManager.FileExists(Path + ".disabled");
+			_enabled = true;
 		}
 
 		public void Delete()
@@ -1301,7 +1258,7 @@ namespace VPB
 			string pattern2 = "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
 			foreach (VarFileEntry fileEntry in FileEntries)
 			{
-				if (fileEntry.InternalPath.StartsWith(dir) && Regex.IsMatch(fileEntry.Name, pattern2))
+				if (fileEntry.InternalPath.StartsWith(dir, StringComparison.Ordinal) && Regex.IsMatch(fileEntry.Name, pattern2))
 				{
 					foundFiles.Add(fileEntry);
 				}
@@ -1399,11 +1356,9 @@ namespace VPB
 			PackageDependencies = null;
 		}
 
-		// Missing or corrupt meta is cached so UI hover does not reopen archive repeatedly.
 		public bool TryEnsureMetaJsonLiteFields()
 		{
-			// Early-out on attempt flag only. Old gate also required _referenceVersionOptionsLoaded;
-			// miss/fail left that false → every tip/hover reopened ZIP (main-thread stall).
+			// Early-out on attempt flag only.
 			if (_metaJsonLiteLoaded)
 			{
 				return !string.IsNullOrEmpty(Description)
@@ -1521,8 +1476,6 @@ namespace VPB
 				if (FileManager.IsBulkDeepScanActive)
 					return;
 
-				// Already persisted under this LastWriteTime: skip the zip-open and SQLite write.
-				// An unchanged VAR costs only the in-memory sig lookup.
 				string sig = "0";
 				try { sig = LastWriteTime.ToBinary().ToString(); } catch { }
 				string existingSig;
@@ -1532,8 +1485,6 @@ namespace VPB
 					return;
 				}
 
-				// Fast path populates cachedFileEntryNames; slow path populates FileEntries.
-				// Snapshot whichever is available to avoid holding the lock during zip I/O.
 				List<string> namesCopy = null;
 				lock (cachedEntriesLock)
 				{
@@ -1592,7 +1543,6 @@ namespace VPB
 								ZipEntry ze = zf.GetEntry(cslistInternal);
 								if (ze == null)
 								{
-									// Try original-case lookup with backslashes (some packers write that form).
 									ze = zf.GetEntry(cslistInternal.Replace('/', '\\'));
 								}
 								if (ze == null) continue;
@@ -1674,8 +1624,6 @@ namespace VPB
 				}
 				Interlocked.Increment(ref scanTotal);
 				FileEntries = new List<VarFileEntry>();
-				//ClothingFileEntries = new List<VarFileEntry>();
-				//HairFileEntries = new List<VarFileEntry>();
 				SyncEnabled();
 				bool flag = false;
 				if (File.Exists(Path))
@@ -1714,7 +1662,6 @@ namespace VPB
 							}
 							if (vp.ZipNameCodePage != 0)
 								RememberZipNameCodePage(vp.ZipNameCodePage);
-							// Fast path: keep cached lists and defer VarFileEntry object creation
 							lock (cachedEntriesLock)
 							{
 								fileEntries = null;
@@ -1754,7 +1701,7 @@ namespace VPB
 									if (zipEntry.IsFile)
 									{
 										string entryName = zipEntry.Name;
-										if (entryName.EndsWith(".json"))
+										if (entryName.EndsWith(".json", StringComparison.Ordinal))
 										{
 											if (zipEntry.Name == "meta.json")
 											{
@@ -1780,12 +1727,11 @@ namespace VPB
 														FileEntries.Add(varFileEntry2);
 
 														set.Add(entry);
-
 													}
 												}
 											}
 										}
-										else if (entryName.EndsWith(".vap"))
+										else if (entryName.EndsWith(".vap", StringComparison.Ordinal))
 										{
 											VarFileEntry varFileEntry = new VarFileEntry(this, entryName, zipEntry.DateTime, zipEntry.Size);
 											FileEntries.Add(varFileEntry);
@@ -1806,7 +1752,7 @@ namespace VPB
 												}
 											}
 										}
-										else if (entryName.EndsWith(".vam"))
+										else if (entryName.EndsWith(".vam", StringComparison.Ordinal))
 										{
 											string entry = entryName.Substring(0, entryName.Length - 4) + ".jpg";
 											if (!set.Contains(entry))
@@ -1820,13 +1766,13 @@ namespace VPB
 													FileEntries.Add(varFileEntry2);
 													set.Add(entry);
 
-													if(zipEntry.Name.StartsWith("Custom/Clothing/"))
+													if(zipEntry.Name.StartsWith("Custom/Clothing/", StringComparison.Ordinal))
                                                 {
                                                     if (ClothingFileEntries == null)
                                                         ClothingFileEntries = new List<VarFileEntry>();
                                                     ClothingFileEntries.Add(varFileEntry);
 													}
-													if (zipEntry.Name.StartsWith("Custom/Hair/"))
+													if (zipEntry.Name.StartsWith("Custom/Hair/", StringComparison.Ordinal))
 													{
 														if (HairFileEntries == null)
 															HairFileEntries = new List<VarFileEntry>();
@@ -1841,26 +1787,22 @@ namespace VPB
 											if (morphPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase))
 												morphFileEntryNames.Add(morphPath);
 										}
-										else if (entryName.EndsWith(".assetbundle"))
+										else if (entryName.EndsWith(".assetbundle", StringComparison.Ordinal))
 										{
 											VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
 											FileEntries.Add(varFileEntry);
-											// liu modification: add asset preview image
 											string entry = entryName.Substring(0, entryName.Length - 12) + ".jpg";
-											//SuperController.LogMessage("assetbundle:"+ entry);
 											if (!set.Contains(entry))
 											{
 												ZipEntry jpgEntry = zipFile.GetEntry(entry);
 												if (jpgEntry != null)
 												{
-
 													VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
 													FileEntries.Add(varFileEntry2);
 													set.Add(entry);
 												}
 											}
 										}
-										// Session plugins in VARs.
 										else if (IsPluginScriptZipEntry(entryName))
 										{
 											VarFileEntry varFileEntry = new VarFileEntry(this, entryName, zipEntry.DateTime, zipEntry.Size);
@@ -1900,7 +1842,6 @@ namespace VPB
 							flag = true;
 						}
 						DumpVarPackage(zipFile);
-						// Manifest lists are resident now; keeping every scanned archive open retains its central directory.
 						zipFile.Close();
 						zipFile = null;
 						if (invalid)
@@ -1950,8 +1891,7 @@ namespace VPB
 					invalid = true;
 					if (!File.Exists(Path))
 					{
-						// Registered from a stale cached path inventory (file moved to InvalidPackages or
-						// deleted since the inventory was saved). Drop the row so it stops resurrecting.
+						// Registered from a stale cached path inventory (file moved to InvalidPackages or deleted since the inventory was saved).
 						VpbLocalDatabase.NoteMissingVarPath(Path);
 						VpbPackageIndexDiagnostics.Log(this.Uid, "scanInvalid", "reason=file_missing path='" + (Path ?? "") + "'");
 					}
@@ -1968,7 +1908,6 @@ namespace VPB
 					return;
 				}
 
-				// Initialize clothing tags
 				if (ClothingFileEntryNames != null && ClothingFileEntryNames.Count > 0)
 				{
 					Dictionary<string, string> tags = new Dictionary<string, string>();
@@ -2041,7 +1980,6 @@ namespace VPB
 											if (!TagFilter.HairUnknownTags.Contains(t))
 											{
 												TagFilter.HairUnknownTags.Add(t);
-												//LogUtil.Log("hair tag " + t);
 											}
 										}
 									}
@@ -2152,7 +2090,6 @@ namespace VPB
 				}
 			}
 
-
 			if (metaEntry != null)
 			{
 				try
@@ -2180,7 +2117,6 @@ namespace VPB
 						}
 						catch { }
 
-						// Keep the existing recursive list for backwards compatibility and older caches.
 						HashSet<string> depends = new HashSet<string>();
 						GetDependenciesRecursive(asObject, depends);
 
@@ -2224,7 +2160,6 @@ namespace VPB
 
                             try { PackageReferenceVersionResolver.ApplyFromMetaJson(this, asObject); } catch { }
 
-                            // Full scan already read lite meta fields — skip ZIP reopen on filter/hover.
                             _metaJsonLiteLoaded = true;
 
 						if (!FileManager.IsBulkDeepScanActive)
@@ -2253,20 +2188,20 @@ namespace VPB
 				list2.Add(item.LastWriteTime.ToUniversalTime().Ticks);
 				list3.Add(item.Size);
 			}
-			svp.FileEntryNames = list1;//.ToArray();
-			svp.FileEntryLastWriteTimeUtcTicks = list2;//.ToArray();
-			svp.FileEntrySizes = list3;//.ToArray();
+			svp.FileEntryNames = list1;
+			svp.FileEntryLastWriteTimeUtcTicks = list2;
+			svp.FileEntrySizes = list3;
 			svp.VarFileSize = Size;
 			svp.VarLastWriteTimeUtcTicks = LastWriteTime.ToUniversalTime().Ticks;
 			svp.VarInternalCreationTimeBinary = NormalizeZipHeaderTimeBinary(InternalCreationTimeBinary);
 			if (clothingFileList != null && clothingFileList.Count > 0)
-                svp.ClothingFileEntryNames = clothingFileList;//.ToArray();
+                svp.ClothingFileEntryNames = clothingFileList;
 			if (clothingTags != null && clothingTags.Count > 0)
-                svp.ClothingTags = clothingTags;//.ToArray();
+                svp.ClothingTags = clothingTags;
 			if (hairFileList != null && hairFileList.Count > 0)
-                svp.HairFileEntryNames = hairFileList;//.ToArray();
+                svp.HairFileEntryNames = hairFileList;
 			if (hairTags != null && hairTags.Count > 0)
-                svp.HairTags = hairTags;//.ToArray();
+                svp.HairTags = hairTags;
 			svp.MorphFileEntryNames = MorphFileEntryNames != null
 				? new List<string>(MorphFileEntryNames)
 				: null;
@@ -2298,7 +2233,6 @@ namespace VPB
 			}
 		}
 
-
 		protected void FindMissingDependenciesRecursive(JSONClass jc)
 		{
 			if (FileManager.IsBulkDeepScanActive)
@@ -2316,7 +2250,6 @@ namespace VPB
 
 		void FindMissingDependenciesRecursiveCore(JSONClass jc)
 		{
-			// First, try the explicit "dependencies" key (for well-formed packages)
 			JSONClass asObject = jc["dependencies"].AsObject;
 			if (asObject != null)
 			{
@@ -2336,7 +2269,6 @@ namespace VPB
 				}
 			}
 
-			// Also scan all strings for dependencies (catches local/custom references)
 			HashSet<string> scannedDeps = new HashSet<string>();
 			DependencyExtractor.ScanAllStringsForDependencies(jc, scannedDeps);
 			foreach (string dep in scannedDeps)
@@ -2355,7 +2287,6 @@ namespace VPB
 
 		void GetDependenciesRecursive(JSONClass jc, HashSet<string> depends)
 		{
-			// First, collect from explicit "dependencies" key (for well-formed packages)
 			JSONClass asObject = jc["dependencies"].AsObject;
 			if (asObject != null)
 			{
@@ -2370,7 +2301,6 @@ namespace VPB
 				}
 			}
 
-			// Also scan all strings for dependencies (catches local/custom references and embedded deps)
 			DependencyExtractor.ScanAllStringsForDependencies(jc, depends);
 		}
 		internal sealed class InstallLogCounts
@@ -2446,7 +2376,6 @@ namespace VPB
 
 			bool flag = InstallSelfForOperation(outMovedPackageUids, counts);
 			
-			//string linkvar = "AddonPackages/" + this.Uid + ".var";
             if (this.RecursivePackageDependencies != null)
             {
 				PackageReferenceVersionResolver.BeginReferrerContext(Uid);
@@ -2485,10 +2414,10 @@ namespace VPB
 		private bool InstallSelf(out bool failed)
 		{
 			failed = false;
-			if (this.Path.StartsWith("AddonPackages/")) return false;
+			if (this.Path.StartsWith("AddonPackages/", StringComparison.Ordinal)) return false;
 
 			string linkvar = null;
-			if (this.Path.StartsWith("AllPackages/"))
+			if (this.Path.StartsWith("AllPackages/", StringComparison.Ordinal))
 			{
 				linkvar = "AddonPackages" + this.Path.Substring("AllPackages".Length);
 			}
@@ -2498,7 +2427,7 @@ namespace VPB
 			}
 
 			if (File.Exists(linkvar)) return false;
-			if (Directory.Exists(linkvar))// A directory with the same name may exist
+			if (Directory.Exists(linkvar))
             {
 				LogUtil.LogError("InstallSelf " + this.Path+" exist directory with same name");
 				failed = true;
@@ -2542,7 +2471,7 @@ namespace VPB
 				try { if (File.Exists(tempTarget)) File.Delete(tempTarget); } catch { }
 			}
 			this.Path = linkvar.Replace('\\', '/');
-			if (this.Path.StartsWith("AddonPackages/"))
+			if (this.Path.StartsWith("AddonPackages/", StringComparison.Ordinal))
 				RelativePath = this.Path.Substring("AddonPackages/".Length);
 			// Close stale ZipFile opened from the old AllPackages path so it reopens cleanly from AddonPackages
 			lock (m_ZipFileLock)
@@ -2565,7 +2494,7 @@ namespace VPB
 
 		public bool UninstallSelf()
         {
-			if (!this.Path.StartsWith("AddonPackages/"))
+			if (!this.Path.StartsWith("AddonPackages/", StringComparison.Ordinal))
             {
 				LogUtil.LogError("Uninstall From AddonPackages "+this.Path);
 				return false;
@@ -2576,7 +2505,6 @@ namespace VPB
 				LogUtil.LogError("Uninstall From AddonPackages Exists "+this.Path);
 				return false;
 			}
-			// Move the file
 			string dir = System.IO.Path.GetDirectoryName(linkvar);
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);
@@ -2588,5 +2516,4 @@ namespace VPB
             return true;
 		}
 	}
-
 }

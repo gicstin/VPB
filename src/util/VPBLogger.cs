@@ -28,7 +28,6 @@ namespace VPB.src.util
 
         private static Dictionary<VPBModule, VPBLogSource> _instances = new Dictionary<VPBModule, VPBLogSource>();
 
-
         public static VPBLogSource Main = GetInstance(VPBModule.Main);
         public static VPBLogSource Config = GetInstance(VPBModule.Config);
         public static VPBLogSource Files = GetInstance(VPBModule.Files);
@@ -198,7 +197,6 @@ namespace VPB.src.util
 
     public class VPBLogSource : ILogSource, IDisposable
     {
-
         public string SourceName { get; }
 
         public string OverrideSourceName = null;
@@ -234,49 +232,32 @@ namespace VPB.src.util
             this.LogEvent?.Invoke(this, args);
         }
 
-        /// <summary>
-        /// Log a message of critical importance
-        /// </summary>
         public void LogFatal(object data, bool showInGame = true)
         {
             Log(LogLevel.Fatal, data, showInGame);
         }
 
-        /// <summary>
-        /// Log a message of high importance
-        /// </summary>
         public void LogError(object data, bool showInGame = true)
         {
             Log(LogLevel.Error, data, showInGame);
         }
 
-        /// <summary>
-        /// Log a message of some importance
-        /// </summary>
         public void LogWarning(object data, bool showInGame = true)
         {
             Log(LogLevel.Warning, data, showInGame);
         }
 
-        /// <summary>
-        /// Log a message of minimal importance
-        /// </summary>
         public void LogMessage(object data, bool showInGame = true)
         {
             Log(LogLevel.Message, data, showInGame);
         }
 
-        /// <summary>
-        /// Log a message of no importance
-        /// </summary>
         public void LogInfo(object data, bool showInGame = false)
         {
             Log(LogLevel.Info, data, showInGame);
         }
 
-        /// <summary>
-        /// Log a message for debugging
-        /// </summary>
+        /// <summary>Log a message for debugging</summary>
         public void LogDebug(object data, bool showInGame = false)
         {
             Log(LogLevel.Debug, data, showInGame);
@@ -320,7 +301,6 @@ namespace VPB.src.util
         {
             Source = source;
             ShowInGame = showInGame;
-            // OneShot source names change between calls; retain this event's identity.
             DisplaySourceName = displaySourceName ?? source.OverrideSourceName ?? source.SourceName;
         }
 

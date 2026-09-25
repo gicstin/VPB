@@ -27,7 +27,6 @@ namespace VPB
         /// <summary>Max main-thread work per on-demand frame slice before yielding (higher = faster warm, slightly longer frames).</summary>
         private const float OnDemandFrameBudgetSec = 0.020f;
         private const int DownscaleDimensionProbeMaxBytes = 512 * 1024;
-        /// <summary>Skip 8k downscale probe when VAR entry smaller than this (unlikely 8k source).</summary>
         private const long DownscaleProbeMinEntryBytes = 3L * 1024L * 1024L;
         private const int UiStatusUpdateEveryNTex = 8;
         private const float UiStatusUpdateMinIntervalSec = 0.25f;
@@ -40,7 +39,6 @@ namespace VPB
             public string Title;
             public string Subtitle;
             public string SummaryText;
-            /// <summary>Right column for two-column completion report; null/empty = single column.</summary>
             public string SummaryTextRight;
         }
 
@@ -134,8 +132,6 @@ namespace VPB
         internal static UiSnapshot GetUiSnapshot()
         {
             float progress = 0f;
-            // In bulk mode, progress is per-item (6/8), not per-texture.
-            // In single mode, prefer texture progress whenever possible.
             int total = s_TotalWork;
             int done = s_ProcessedWork;
             if (!s_BatchMode && s_TexturesPlanned > 0)
@@ -166,10 +162,6 @@ namespace VPB
             s_UiVisible = false;
         }
 
-        /// <summary>
-        /// End-of-job report for Settings / Scene Utils bulk Compress Cache (same chrome as on-demand).
-        /// Main-thread only.
-        /// </summary>
         internal static void PresentBulkZstdSummary(ImageLoadingMgr.ZstdStats stats)
         {
             if (stats == null) return;
@@ -207,7 +199,6 @@ namespace VPB
             }
             else if (decompress && comp > 0)
             {
-                // Decompress: compressed → native (growth).
                 savedBytes = orig - comp;
                 float pct = (float)comp / Mathf.Max(1f, (float)orig);
                 float ratio = 100f * Mathf.Clamp01(pct);
@@ -485,7 +476,6 @@ namespace VPB
 
             if (s_IsPurgeJob)
             {
-                // Left: run summary + purged counts. Right: delete tallies.
                 s_UiSummary = FormatReportOverview(elapsedStr)
                     + FormatReportMetric("Resolved", s_PackagesResolved.ToString()) + "\n\n"
                     + FormatReportSection("Purged")
@@ -547,7 +537,6 @@ namespace VPB
                 totalPct = savedPct.ToString("0");
             }
 
-            // Two columns: overview+size | write stats (fills unused width, shortens dialog).
             s_UiSummary = FormatReportOverview(elapsedStr)
                 + "\n"
                 + FormatReportSection("Size")
@@ -640,8 +629,6 @@ namespace VPB
             try { if (File.Exists(path + "meta")) File.Delete(path + "meta"); } catch { }
         }
 
-        // Completion-report rich text (Unity Text). Hierarchy via color, not weight —
-        // matches gallery token philosophy; keeps dense scan without monospace columns.
         private const string ReportLabelHex = "#8B97A5";
         private const string ReportValueHex = "#E8EEF4";
         private const string ReportSectionHex = "#C4D0DC";
@@ -676,7 +663,6 @@ namespace VPB
 
         private static string FormatReportWriteStats(int wrote, int skipped, int failed)
         {
-            // Stacked rows fit narrow right column without wrap (vs inline · separators).
             string failValue = failed > 0
                 ? "<color=" + ReportFailHex + ">" + failed + "</color>"
                 : FormatReportValue("0");
@@ -847,7 +833,6 @@ namespace VPB
 
             int done = s_ProcessedWork;
             int total = s_TotalWork;
-            // In bulk mode, progress is per-item; in single mode, prefer texture progress when available.
             if (!s_BatchMode && s_TexturesPlanned > 0)
             {
                 done = s_TexturesProcessed;
@@ -862,9 +847,6 @@ namespace VPB
                 includeThroughput: true);
         }
 
-        /// <summary>
-        /// Dense live progress: count · % · elapsed · ETA · rate · focus label.
-        /// </summary>
         internal static string FormatLiveProgressLine(
             int done,
             int total,
@@ -1195,7 +1177,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(value)) return false;
             string v = value.Replace('\\', '/').ToLowerInvariant();
-            if (!v.EndsWith(".json")) return false;
+            if (!v.EndsWith(".json", StringComparison.Ordinal)) return false;
             return v.Contains("saves/scene") || v.Contains(":/");
         }
 
@@ -1263,9 +1245,6 @@ namespace VPB
 
             try
             {
-                // Scene purge: purge cache entries for BOTH:
-                // - local disk textures referenced by the scene (SELF:/Custom, SELF:/Saves)
-                // - package textures referenced by the scene (dependency packages)
                 yield return PurgeCacheForSceneTexturesUnity(scenePath);
                 ThrottledLog("[VPB] On-demand scene purge finished.");
                 if (!s_BatchMode) EndUiJob(s_CancelRequested ? "Texture purge cancelled" : "Texture purge complete");
@@ -1276,28 +1255,41 @@ namespace VPB
             }
         }
 
-        private static IEnumerator PurgeCacheForSceneTexturesUnity(string scenePath)
+        private static bool TryReadSceneTextureRefs(string scenePath, string verb, out string sceneText,
+            out List<RequiredTexture> required, out List<RequiredJsonFile> jsonRefs)
         {
-            if (string.IsNullOrEmpty(scenePath)) yield break;
-
-            Trace("ScenePurgeStart: " + scenePath);
-
-            string sceneText = null;
+            required = null;
+            jsonRefs = null;
+            sceneText = null;
             try { sceneText = FileManager.ReadAllText(scenePath); }
             catch (Exception ex)
             {
-                ThrottledLog("[VPB] On-demand purge abort: cannot read scene: " + ex.Message);
-                yield break;
+                ThrottledLog("[VPB] On-demand " + verb + " abort: cannot read scene: " + ex.Message);
+                return false;
             }
 
             if (string.IsNullOrEmpty(sceneText))
             {
-                ThrottledLog("[VPB] On-demand purge abort: empty scene");
-                yield break;
+                ThrottledLog("[VPB] On-demand " + verb + " abort: empty scene");
+                return false;
             }
 
-            // Determine self UID if the scene is inside a package; this affects resolution of relative refs.
-            string selfUid = null;
+            JSONNode sceneNode = null;
+            try { sceneNode = JSON.Parse(sceneText); } catch { }
+            if (sceneNode == null)
+            {
+                ThrottledLog("[VPB] On-demand " + verb + " abort: JSON parse failed");
+                return false;
+            }
+
+            required = new List<RequiredTexture>();
+            jsonRefs = new List<RequiredJsonFile>();
+            ExtractSceneUrlsRecursive(sceneNode, ResolveScenePackageUid(scenePath), required, jsonRefs);
+            return true;
+        }
+
+        private static string ResolveScenePackageUid(string scenePath)
+        {
             try
             {
                 string normalized = scenePath.Replace('\\', '/');
@@ -1313,27 +1305,25 @@ namespace VPB
                 int idx = normalized.IndexOf(":/", StringComparison.Ordinal);
                 if (idx > 0)
                 {
-                    string pkgId = NormalizePackageId(normalized.Substring(0, idx));
-                    VarPackage p = ResolvePackageWithFallback(pkgId);
-                    if (p != null) selfUid = p.Uid;
+                    VarPackage p = ResolvePackageWithFallback(NormalizePackageId(normalized.Substring(0, idx)));
+                    if (p != null) return p.Uid;
                 }
             }
             catch { }
+            return null;
+        }
 
-            JSONNode sceneNode = null;
-            try { sceneNode = JSON.Parse(sceneText); } catch { }
-            if (sceneNode == null)
-            {
-                ThrottledLog("[VPB] On-demand purge abort: JSON parse failed");
-                yield break;
-            }
+        private static IEnumerator PurgeCacheForSceneTexturesUnity(string scenePath)
+        {
+            if (string.IsNullOrEmpty(scenePath)) yield break;
 
-            var required = new List<RequiredTexture>();
-            var jsonRefs = new List<RequiredJsonFile>();
-            ExtractSceneUrlsRecursive(sceneNode, selfUid, required, jsonRefs);
+            Trace("ScenePurgeStart: " + scenePath);
 
-            // Scene JSON typically contains an explicit "dependencies" object; use it so purge matches
-            // the gallery's dependency count, not just textures referenced directly by the scene.
+            string sceneText;
+            List<RequiredTexture> required;
+            List<RequiredJsonFile> jsonRefs;
+            if (!TryReadSceneTextureRefs(scenePath, "purge", out sceneText, out required, out jsonRefs)) yield break;
+
             HashSet<string> depIds = null;
             try { depIds = DependencyExtractor.ExtractDependenciesFromJson(sceneText, fastModeOnly: true); }
             catch { depIds = null; }
@@ -1344,55 +1334,11 @@ namespace VPB
                 if (depIds == null || depIds.Count == 0) yield break;
             }
 
-            var byPkgFlags = new Dictionary<string, Dictionary<string, List<TextureFlags>>>(StringComparer.OrdinalIgnoreCase);
-            var byPkgOrig = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
             var localFlags = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
             var localOrig = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            GroupRequiredTexturesByPackage(required, localFlags, localOrig, out var byPkgFlags, out var byPkgOrig);
 
-            for (int i = 0; i < required.Count; i++)
-            {
-                RequiredTexture rt = required[i];
-                if (string.IsNullOrEmpty(rt.InternalPath)) continue;
-                if (rt.PackageId != null && rt.PackageId.Length == 0)
-                {
-                    string internalLowerLocal = rt.InternalPath.ToLowerInvariant();
-                    AddFlagVariant(localFlags, internalLowerLocal, rt.Flags);
-                    if (!localOrig.ContainsKey(internalLowerLocal)) localOrig[internalLowerLocal] = rt.InternalPath;
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(rt.PackageId)) continue;
-
-                VarPackage pkg = ResolvePackageWithFallback(rt.PackageId);
-                if (pkg == null) continue;
-
-                string pkgUid = pkg.Uid;
-                string internalLower = rt.InternalPath.ToLowerInvariant();
-
-                Dictionary<string, List<TextureFlags>> flagsMap;
-                if (!byPkgFlags.TryGetValue(pkgUid, out flagsMap))
-                {
-                    flagsMap = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
-                    byPkgFlags[pkgUid] = flagsMap;
-                }
-
-                Dictionary<string, string> origMap;
-                if (!byPkgOrig.TryGetValue(pkgUid, out origMap))
-                {
-                    origMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    byPkgOrig[pkgUid] = origMap;
-                }
-
-                AddFlagVariant(flagsMap, internalLower, rt.Flags);
-                if (!origMap.ContainsKey(internalLower)) origMap[internalLower] = rt.InternalPath;
-            }
-
-            int totalWork = 0;
-            foreach (var kv in byPkgOrig)
-            {
-                if (kv.Value != null) totalWork += kv.Value.Count;
-            }
+            int totalWork = CountPlannedTextures(byPkgOrig);
             if (localOrig != null) totalWork += localOrig.Count;
 
             if (totalWork <= 0)
@@ -1421,21 +1367,7 @@ namespace VPB
                 plannedPackages = plannedUids.Count;
             }
 
-            if (s_BatchMode)
-            {
-                s_TexturesPlanned += totalWork;
-                UpdateUiStatus();
-            }
-            else
-            {
-                s_PackagesPlanned = plannedPackages;
-                s_PackagesProcessed = 0;
-                s_TexturesPlanned = totalWork;
-                s_TexturesProcessed = 0;
-                s_TotalWork = Math.Max(1, s_TexturesPlanned);
-                s_ProcessedWork = 0;
-                UpdateUiStatus();
-            }
+            BeginTextureWorkStatus(totalWork, plannedPackages);
 
             int pkgIndex = 0;
             foreach (var kv in byPkgFlags)
@@ -1457,7 +1389,7 @@ namespace VPB
                 s_PackagesResolved++;
 
                 s_PurgeWorkerAnyDeletes = false;
-                yield return WorkerPurgeSelectiveUnityCoroutine(pkg, flagsMap, origMap);
+                yield return WorkerPurgeSelectiveUnityCoroutine(pkg.Uid + ":/", flagsMap, origMap);
                 if (s_PurgeWorkerAnyDeletes) s_PurgePackagesDeleted++;
 
                 if (!s_BatchMode)
@@ -1470,11 +1402,10 @@ namespace VPB
             if (localOrig != null && localOrig.Count > 0)
             {
                 s_PurgeWorkerAnyDeletes = false;
-                yield return WorkerPurgeLocalSelectiveUnityCoroutine(localFlags, localOrig);
+                yield return WorkerPurgeSelectiveUnityCoroutine("SELF:/", localFlags, localOrig);
                 if (s_PurgeWorkerAnyDeletes) s_PurgePackagesDeleted++;
             }
 
-            // Additionally purge caches for explicit dependency packages (even if the scene doesn't reference their textures directly).
             if (depIds != null && depIds.Count > 0)
             {
                 var depUidDedup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1501,205 +1432,20 @@ namespace VPB
             }
         }
 
-        private static IEnumerator WorkerPurgeLocalSelectiveUnityCoroutine(Dictionary<string, List<TextureFlags>> internalLowerToFlags, Dictionary<string, string> internalLowerToOriginal)
-        {
-            if (internalLowerToOriginal == null || internalLowerToOriginal.Count == 0) yield break;
-
-            foreach (var kv in internalLowerToOriginal)
-            {
-                if (s_CancelRequested) yield break;
-                string internalLower = kv.Key;
-                string internalPath = kv.Value;
-                if (string.IsNullOrEmpty(internalPath)) continue;
-
-                try
-                {
-                    List<TextureFlags> variants;
-                    if (internalLowerToFlags == null || !internalLowerToFlags.TryGetValue(internalLower, out variants) || variants == null || variants.Count == 0)
-                    {
-                        variants = new List<TextureFlags>
-                        {
-                            new TextureFlags
-                            {
-                                compress = true,
-                                linear = false,
-                                isNormalMap = false,
-                                createAlphaFromGrayscale = false,
-                                createNormalFromBump = false,
-                                invert = false,
-                                isReadable = false,
-                                bumpStrength = 1f
-                            }
-                        };
-                    }
-
-                    string imgUidPath = "SELF:/" + (internalPath ?? string.Empty);
-
-                    for (int v = 0; v < variants.Count; v++)
-                    {
-                        TextureFlags flags = variants[v];
-                        int[] sizedWidths;
-                        int[] sizedHeights;
-                        GetSizedCacheDimensionArrays(flags, internalPath, out sizedWidths, out sizedHeights);
-                        for (int si = 0; si < sizedWidths.Length; si++)
-                        {
-                            int targetWidth = sizedWidths[si];
-                            int targetHeight = sizedHeights[si];
-                            int beforeDeletes = s_NativeDeletes + s_ZstdDeletes;
-
-                            string nativePath = null;
-                            try { nativePath = ResolveVaMNativeCachePath(imgUidPath, flags, targetWidth, targetHeight); }
-                            catch { nativePath = null; }
-
-                            if (!string.IsNullOrEmpty(nativePath))
-                            {
-                                TryDeleteFileAndMeta(nativePath, ref s_NativeDeletes);
-                            }
-                            else
-                            {
-                                TryDeleteNativeCacheWildcard(imgUidPath, flags, targetWidth, targetHeight);
-                            }
-
-                            string zstdPath = null;
-                            try
-                            {
-                                zstdPath = TextureUtil.GetZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
-                            }
-                            catch { zstdPath = null; }
-
-                            if (!string.IsNullOrEmpty(zstdPath))
-                            {
-                                TryDeleteFileAndMeta(zstdPath, ref s_ZstdDeletes);
-                            }
-
-                            int afterDeletes = s_NativeDeletes + s_ZstdDeletes;
-                            if (afterDeletes > beforeDeletes)
-                            {
-                                s_PurgeTexturesDeleted++;
-                                s_PurgeWorkerAnyDeletes = true;
-                            }
-                        }
-                    }
-                }
-                catch { }
-
-                yield return null;
-
-                s_TexturesProcessed++;
-                if (!s_BatchMode)
-                {
-                    s_ProcessedWork++;
-                }
-                UpdateUiStatus();
-            }
-        }
-
         private static IEnumerator BuildCacheForSceneTexturesUnity(string scenePath)
         {
             if (string.IsNullOrEmpty(scenePath)) yield break;
 
             Trace("SceneStart: " + scenePath);
 
-            string sceneText = null;
-            try { sceneText = FileManager.ReadAllText(scenePath); }
-            catch (Exception ex)
-            {
-                ThrottledLog("[VPB] On-demand cache abort: cannot read scene: " + ex.Message);
-                yield break;
-            }
-
-            if (string.IsNullOrEmpty(sceneText))
-            {
-                ThrottledLog("[VPB] On-demand cache abort: empty scene");
-                yield break;
-            }
-
-            string selfUid = null;
-            try
-            {
-                string normalized = scenePath.Replace('\\', '/');
-                if (normalized.StartsWith("var:/", StringComparison.OrdinalIgnoreCase))
-                {
-                    normalized = normalized.Substring("var:/".Length);
-                }
-                else if (normalized.StartsWith("var:", StringComparison.OrdinalIgnoreCase))
-                {
-                    normalized = normalized.Substring("var:".Length);
-                    if (!string.IsNullOrEmpty(normalized) && normalized[0] == '/') normalized = normalized.Substring(1);
-                }
-                int idx = normalized.IndexOf(":/", StringComparison.Ordinal);
-                if (idx > 0)
-                {
-                    string pkgId = NormalizePackageId(normalized.Substring(0, idx));
-                    VarPackage p = ResolvePackageWithFallback(pkgId);
-                    if (p != null) selfUid = p.Uid;
-                }
-            }
-            catch { }
-
-            JSONNode sceneNode = null;
-            try { sceneNode = JSON.Parse(sceneText); } catch { }
-            if (sceneNode == null)
-            {
-                ThrottledLog("[VPB] On-demand cache abort: JSON parse failed");
-                yield break;
-            }
-
-            var required = new List<RequiredTexture>();
-            var jsonRefs = new List<RequiredJsonFile>();
-            ExtractSceneUrlsRecursive(sceneNode, selfUid, required, jsonRefs);
+            string sceneText;
+            List<RequiredTexture> required;
+            List<RequiredJsonFile> jsonRefs;
+            if (!TryReadSceneTextureRefs(scenePath, "cache", out sceneText, out required, out jsonRefs)) yield break;
             try { ExtractEmbeddedVamImageRefs(sceneText, required); } catch { }
             try { MergeSceneDependencyPresetTextures(sceneText, required); } catch { }
 
-            var visitedJson = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var queue = new Queue<KeyValuePair<RequiredJsonFile, int>>();
-            if (jsonRefs != null)
-            {
-                for (int i = 0; i < jsonRefs.Count; i++)
-                {
-                    queue.Enqueue(new KeyValuePair<RequiredJsonFile, int>(jsonRefs[i], 1));
-                }
-            }
-
-            while (queue.Count > 0)
-            {
-                var kv = queue.Dequeue();
-                RequiredJsonFile rj = kv.Key;
-                int depth = kv.Value;
-                if (depth > JsonWalkMaxDepth) continue;
-                if (string.IsNullOrEmpty(rj.PackageId) || string.IsNullOrEmpty(rj.InternalPath)) continue;
-
-                string depPkgId = NormalizePackageId(rj.PackageId);
-
-                VarPackage jp = ResolvePackageWithFallback(rj.PackageId);
-                if (jp == null) continue;
-
-                Trace("JsonDequeue: depth=" + depth + " pkgId='" + depPkgId + "' resolvedUid='" + jp.Uid + "' path='" + rj.InternalPath + "'");
-
-                string jsonUidPath = jp.Uid + ":/" + rj.InternalPath;
-                string visitKey = jsonUidPath.ToLowerInvariant();
-                if (!visitedJson.Add(visitKey)) continue;
-
-                string txt = null;
-                try { txt = FileManager.ReadAllText(jsonUidPath); } catch { txt = null; }
-                if (string.IsNullOrEmpty(txt)) continue;
-
-                JSONNode n = null;
-                try { n = JSON.Parse(txt); } catch { n = null; }
-                if (n == null) continue;
-
-                var nestedTex = new List<RequiredTexture>();
-                var nestedJson = new List<RequiredJsonFile>();
-                ExtractSceneUrlsRecursive(n, jp.Uid, rj.InternalPath, nestedTex, nestedJson);
-                if (nestedTex != null && nestedTex.Count > 0) required.AddRange(nestedTex);
-                if (nestedJson != null && nestedJson.Count > 0)
-                {
-                    for (int i = 0; i < nestedJson.Count; i++)
-                    {
-                        queue.Enqueue(new KeyValuePair<RequiredJsonFile, int>(nestedJson[i], depth + 1));
-                    }
-                }
-            }
+            WalkNestedJsonRefs(jsonRefs, required, null);
 
             if (required.Count == 0)
             {
@@ -1707,79 +1453,17 @@ namespace VPB
                 yield break;
             }
 
-            var byPkgFlags = new Dictionary<string, Dictionary<string, List<TextureFlags>>>(StringComparer.OrdinalIgnoreCase);
-            var byPkgOrig = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
             var localFlags = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
             var localOrig = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            for (int i = 0; i < required.Count; i++)
-            {
-                RequiredTexture rt = required[i];
-                if (string.IsNullOrEmpty(rt.InternalPath)) continue;
-
-                if (rt.PackageId != null && rt.PackageId.Length == 0)
-                {
-                    string internalLowerLocal = rt.InternalPath.ToLowerInvariant();
-                    AddFlagVariant(localFlags, internalLowerLocal, rt.Flags);
-                    if (!localOrig.ContainsKey(internalLowerLocal)) localOrig[internalLowerLocal] = rt.InternalPath;
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(rt.PackageId)) continue;
-
-                VarPackage pkg = ResolvePackageWithFallback(rt.PackageId);
-                if (pkg == null) continue;
-
-                string pkgUid = pkg.Uid;
-                string internalLower = rt.InternalPath.ToLowerInvariant();
-
-                Dictionary<string, List<TextureFlags>> flagsMap;
-                if (!byPkgFlags.TryGetValue(pkgUid, out flagsMap))
-                {
-                    flagsMap = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
-                    byPkgFlags[pkgUid] = flagsMap;
-                }
-
-                Dictionary<string, string> origMap;
-                if (!byPkgOrig.TryGetValue(pkgUid, out origMap))
-                {
-                    origMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    byPkgOrig[pkgUid] = origMap;
-                }
-
-                AddFlagVariant(flagsMap, internalLower, rt.Flags);
-                if (!origMap.ContainsKey(internalLower))
-                {
-                    origMap[internalLower] = rt.InternalPath;
-                }
-            }
+            GroupRequiredTexturesByPackage(required, localFlags, localOrig, out var byPkgFlags, out var byPkgOrig);
 
             ExpandCachedPackagesToNewestInstalled(byPkgFlags, byPkgOrig);
 
-            int totalWork = 0;
-            foreach (var kv in byPkgOrig)
-            {
-                if (kv.Value != null) totalWork += kv.Value.Count;
-            }
+            int totalWork = CountPlannedTextures(byPkgOrig);
 
             if (localOrig != null) totalWork += localOrig.Count;
 
-            if (s_BatchMode)
-            {
-                s_TexturesPlanned += totalWork;
-                UpdateUiStatus();
-            }
-            else
-            {
-                s_PackagesPlanned = byPkgOrig.Count;
-                s_PackagesProcessed = 0;
-                s_TexturesPlanned = totalWork;
-                s_TexturesProcessed = 0;
-                s_TotalWork = Math.Max(1, totalWork);
-                s_ProcessedWork = 0;
-                UpdateUiStatus();
-            }
+            BeginTextureWorkStatus(totalWork, byPkgOrig.Count);
 
             int pkgIndex = 0;
             foreach (var kv in byPkgFlags)
@@ -1793,21 +1477,7 @@ namespace VPB
                 VarPackage pkg = ResolvePackageWithFallback(pkgUid);
                 if (pkg == null)
                 {
-                    int missing = (origMap != null) ? origMap.Count : 0;
-                    if (missing > 0)
-                    {
-                        if (s_BatchMode)
-                        {
-                            s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
-                        }
-                        else
-                        {
-                            s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
-                            s_TotalWork = Math.Max(1, s_TexturesPlanned);
-                            s_PackagesPlanned = Math.Max(0, s_PackagesPlanned - 1);
-                        }
-                    }
-                    UpdateUiStatus();
+                    DiscountUnresolvedPackage(origMap);
                     continue;
                 }
 
@@ -1888,7 +1558,7 @@ namespace VPB
                         string name = ze.Name;
                         if (string.IsNullOrEmpty(name)) continue;
                         string lower = name.ToLowerInvariant();
-                        if (lower.EndsWith(".png") || lower.EndsWith(".jpg") || lower.EndsWith(".jpeg"))
+                        if (lower.EndsWith(".png", StringComparison.Ordinal) || lower.EndsWith(".jpg", StringComparison.Ordinal) || lower.EndsWith(".jpeg", StringComparison.Ordinal))
                         {
                             list.Add(new ImageEntry
                             {
@@ -1915,6 +1585,96 @@ namespace VPB
             if (flags.createNormalFromBump) sig += "_BN" + flags.bumpStrength;
             if (flags.invert) sig += "_I";
             return sig;
+        }
+
+        private static void GroupRequiredTexturesByPackage(List<RequiredTexture> required,
+            Dictionary<string, List<TextureFlags>> localFlags, Dictionary<string, string> localOrig,
+            out Dictionary<string, Dictionary<string, List<TextureFlags>>> byPkgFlags,
+            out Dictionary<string, Dictionary<string, string>> byPkgOrig)
+        {
+            byPkgFlags = new Dictionary<string, Dictionary<string, List<TextureFlags>>>(StringComparer.OrdinalIgnoreCase);
+            byPkgOrig = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < required.Count; i++)
+            {
+                RequiredTexture rt = required[i];
+                if (string.IsNullOrEmpty(rt.InternalPath)) continue;
+
+                if (localFlags != null && rt.PackageId != null && rt.PackageId.Length == 0)
+                {
+                    string internalLowerLocal = rt.InternalPath.ToLowerInvariant();
+                    AddFlagVariant(localFlags, internalLowerLocal, rt.Flags);
+                    if (!localOrig.ContainsKey(internalLowerLocal)) localOrig[internalLowerLocal] = rt.InternalPath;
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(rt.PackageId)) continue;
+
+                VarPackage pkg = ResolvePackageWithFallback(rt.PackageId);
+                if (pkg == null) continue;
+
+                string pkgUid = pkg.Uid;
+                string internalLower = rt.InternalPath.ToLowerInvariant();
+
+                Dictionary<string, List<TextureFlags>> flagsMap;
+                if (!byPkgFlags.TryGetValue(pkgUid, out flagsMap))
+                {
+                    flagsMap = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
+                    byPkgFlags[pkgUid] = flagsMap;
+                }
+
+                Dictionary<string, string> origMap;
+                if (!byPkgOrig.TryGetValue(pkgUid, out origMap))
+                {
+                    origMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    byPkgOrig[pkgUid] = origMap;
+                }
+
+                AddFlagVariant(flagsMap, internalLower, rt.Flags);
+                if (!origMap.ContainsKey(internalLower)) origMap[internalLower] = rt.InternalPath;
+            }
+        }
+
+        private static int CountPlannedTextures(Dictionary<string, Dictionary<string, string>> byPkgOrig)
+        {
+            int total = 0;
+            foreach (var kv in byPkgOrig)
+            {
+                if (kv.Value != null) total += kv.Value.Count;
+            }
+            return total;
+        }
+
+        private static void BeginTextureWorkStatus(int totalWork, int packagesPlanned)
+        {
+            if (s_BatchMode)
+            {
+                s_TexturesPlanned += totalWork;
+                UpdateUiStatus();
+                return;
+            }
+            s_PackagesPlanned = packagesPlanned;
+            s_PackagesProcessed = 0;
+            s_TexturesPlanned = totalWork;
+            s_TexturesProcessed = 0;
+            s_TotalWork = Math.Max(1, totalWork);
+            s_ProcessedWork = 0;
+            UpdateUiStatus();
+        }
+
+        private static void DiscountUnresolvedPackage(Dictionary<string, string> origMap)
+        {
+            int missing = (origMap != null) ? origMap.Count : 0;
+            if (missing > 0)
+            {
+                s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
+                if (!s_BatchMode)
+                {
+                    s_TotalWork = Math.Max(1, s_TexturesPlanned);
+                    s_PackagesPlanned = Math.Max(0, s_PackagesPlanned - 1);
+                }
+            }
+            UpdateUiStatus();
         }
 
         private static void AddFlagVariant(Dictionary<string, List<TextureFlags>> map, string internalLower, TextureFlags flags)
@@ -1995,13 +1755,11 @@ namespace VPB
             string n = NormalizePackageId(pkgId);
             if (string.IsNullOrEmpty(n)) return n;
 
-            // Drop a trailing .latest
             if (n.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
             {
                 n = n.Substring(0, n.Length - ".latest".Length);
             }
 
-            // If the last segment is an integer version, strip it.
             int lastDot = n.LastIndexOf('.');
             if (lastDot > 0 && lastDot + 1 < n.Length)
             {
@@ -2019,7 +1777,6 @@ namespace VPB
             @"([A-Za-z0-9][A-Za-z0-9_\-\.]*\.[A-Za-z0-9][A-Za-z0-9_\-\.]*\.\d+):/(Custom/[^\s""\\]+\.(?:png|jpg|jpeg|tif|tiff))",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        /// <summary>Scene saves embed exact package versions (e.g. MacGruber.PostMagic.4) outside preset JSON trees.</summary>
         private static void ExtractEmbeddedVamImageRefs(string text, List<RequiredTexture> outTextures)
         {
             if (string.IsNullOrEmpty(text) || outTextures == null) return;
@@ -2121,7 +1878,6 @@ namespace VPB
             try { p = FileManager.GetPackageForDependency(depPkgId, true); } catch { p = null; }
             if (p != null) return p;
 
-            // First try creator.asset.latest (or keep .latest if already).
             string latest = ToLatestPackageId(depPkgId);
             if (!string.IsNullOrEmpty(latest) && !latest.Equals(depPkgId, StringComparison.OrdinalIgnoreCase))
             {
@@ -2129,7 +1885,6 @@ namespace VPB
                 if (p != null) return p;
             }
 
-            // Back-compat: if caller passed a base id without version, allow base.latest.
             if (!depPkgId.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
             {
                 try { p = FileManager.GetPackageForDependency(depPkgId + ".latest", true); } catch { p = null; }
@@ -2177,7 +1932,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(value)) return false;
             string v = value.Trim().ToLowerInvariant();
-            return v.EndsWith(".png") || v.EndsWith(".jpg") || v.EndsWith(".jpeg") || v.EndsWith(".tif") || v.EndsWith(".tiff");
+            return v.EndsWith(".png", StringComparison.Ordinal) || v.EndsWith(".jpg", StringComparison.Ordinal) || v.EndsWith(".jpeg", StringComparison.Ordinal) || v.EndsWith(".tif", StringComparison.Ordinal) || v.EndsWith(".tiff", StringComparison.Ordinal);
         }
 
         private static bool IsTextureJsonKey(string key)
@@ -2201,8 +1956,6 @@ namespace VPB
             string p = internalPath.Replace('\\', '/');
             if (p.StartsWith("/", StringComparison.Ordinal)) p = p.Substring(1);
 
-            // Collapse path segments like ./ and ../ anywhere in the path.
-            // This matters because many .vaj files use './texture/foo.png'.
             string[] parts = p.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
             var stack = new List<string>(parts.Length);
             for (int i = 0; i < parts.Length; i++)
@@ -2242,9 +1995,6 @@ namespace VPB
 
             if (!LooksLikeImagePath(rawValue)) return false;
 
-            // Local scenes / presets often reference images by VaM-relative disk path (e.g. "Custom/Textures/foo.png")
-            // without a package prefix ("pkg:/..."). In that case, treat it like a SELF reference so the scene-cache
-            // local lane (PackageId == "") can process it.
             if (string.IsNullOrEmpty(selfPackageUid))
             {
                 string localRel = rawValue.Trim().Replace('\\', '/');
@@ -2253,12 +2003,10 @@ namespace VPB
                 else if (localRel.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
                     localRel = localRel.Substring(5);
 
-                // Normalize leading slash, and strip "AllPackages/" if present.
                 localRel = localRel.TrimStart('/');
                 if (localRel.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
                     localRel = localRel.Substring("AllPackages/".Length);
 
-                // Accept common VaM-local roots. (AddonPackages/AllPackages are package repos; local content is typically Custom/ or Saves/.)
                 if (localRel.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
                     localRel.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase))
                 {
@@ -2381,7 +2129,6 @@ namespace VPB
             return VaMTextureLoadFlags.DefaultImageLoaderFlags();
         }
 
-        /// <summary>Fallback when <see cref="VaMTextureLoadFlags.TryResolveHeuristic"/> is unavailable (older VaMTextureLoadFlags.cs).</summary>
         private static bool TryResolveOnDemandFlagsFallback(string jsonKey, JSONClass parentObject, string internalPath, out TextureFlags flags)
         {
             flags = VaMTextureLoadFlags.DefaultImageLoaderFlags();
@@ -2514,7 +2261,7 @@ namespace VPB
                                 continue;
 
                             string il = (internalPath ?? string.Empty).ToLowerInvariant();
-                            if (!il.EndsWith(".png") && !il.EndsWith(".jpg") && !il.EndsWith(".jpeg") && !il.EndsWith(".tif") && !il.EndsWith(".tiff"))
+                            if (!il.EndsWith(".png", StringComparison.Ordinal) && !il.EndsWith(".jpg", StringComparison.Ordinal) && !il.EndsWith(".jpeg", StringComparison.Ordinal) && !il.EndsWith(".tif", StringComparison.Ordinal) && !il.EndsWith(".tiff", StringComparison.Ordinal))
                                 continue;
 
                             outTextures.Add(new RequiredTexture
@@ -2556,7 +2303,7 @@ namespace VPB
                         if (TryResolveTextureRef(rawUrl, selfPackageUid, referencingInternalPath, out pkgId, out internalPath))
                         {
                             string il = (internalPath ?? string.Empty).ToLowerInvariant();
-                            if ((il.EndsWith(".png") || il.EndsWith(".jpg") || il.EndsWith(".jpeg") || il.EndsWith(".tif") || il.EndsWith(".tiff")) && outTextures != null)
+                            if ((il.EndsWith(".png", StringComparison.Ordinal) || il.EndsWith(".jpg", StringComparison.Ordinal) || il.EndsWith(".jpeg", StringComparison.Ordinal) || il.EndsWith(".tif", StringComparison.Ordinal) || il.EndsWith(".tiff", StringComparison.Ordinal)) && outTextures != null)
                             {
                                 TextureFlags flags = ResolveTextureFlags(key, obj, internalPath);
                                 if (flags.isReadable && !string.IsNullOrEmpty(pkgId))
@@ -2573,7 +2320,7 @@ namespace VPB
 
                                 Trace("FoundTexture: key='" + (key ?? string.Empty) + "' pkg='" + (pkgId ?? string.Empty) + "' path='" + (internalPath ?? string.Empty) + "' flags=" + GetFlagsSignature(flags));
                             }
-                            else if ((il.EndsWith(".vap") || il.EndsWith(".json") || il.EndsWith(".vaj") || il.EndsWith(".vam") || il.EndsWith(".vmi")) && outJsonFiles != null)
+                            else if ((il.EndsWith(".vap", StringComparison.Ordinal) || il.EndsWith(".json", StringComparison.Ordinal) || il.EndsWith(".vaj", StringComparison.Ordinal) || il.EndsWith(".vam", StringComparison.Ordinal) || il.EndsWith(".vmi", StringComparison.Ordinal)) && outJsonFiles != null)
                             {
                                 outJsonFiles.Add(new RequiredJsonFile
                                 {
@@ -2583,7 +2330,7 @@ namespace VPB
 
                                 Trace("FoundJsonRef: key='" + (key ?? string.Empty) + "' pkg='" + (pkgId ?? string.Empty) + "' path='" + (internalPath ?? string.Empty) + "'");
 
-                                if (il.EndsWith(".vam") && !string.IsNullOrEmpty(internalPath))
+                                if (il.EndsWith(".vam", StringComparison.Ordinal) && !string.IsNullOrEmpty(internalPath))
                                 {
                                     string vajPath = null;
                                     try { vajPath = internalPath.Substring(0, internalPath.Length - 4) + ".vaj"; } catch { vajPath = null; }
@@ -2819,7 +2566,6 @@ namespace VPB
             return (rt.PackageId ?? string.Empty) + "|" + rt.InternalPath + "|" + GetFlagsSignature(rt.Flags);
         }
 
-        /// <summary>Add textures referenced from dependency VAR presets (scene.dependencies), deduped against scene graph.</summary>
         private static void MergeSceneDependencyPresetTextures(string sceneText, List<RequiredTexture> required)
         {
             if (string.IsNullOrEmpty(sceneText) || required == null) return;
@@ -2979,7 +2725,6 @@ namespace VPB
                 int h = job.Height;
                 TextureFormat fmt = job.Format;
 
-
                 slot.Value = CustomImageLoaderThreaded.BuildOnDemandFinishFromDecoded(
                     imgUidPath,
                     raw,
@@ -3116,9 +2861,9 @@ namespace VPB
                 (internalLower, internalPath) => uid + ":/" + internalPath);
         }
 
-        private static IEnumerator WorkerPurgeSelectiveUnityCoroutine(VarPackage pkg, Dictionary<string, List<TextureFlags>> internalLowerToFlags, Dictionary<string, string> internalLowerToOriginal)
+        private static IEnumerator WorkerPurgeSelectiveUnityCoroutine(string uidPrefix, Dictionary<string, List<TextureFlags>> internalLowerToFlags, Dictionary<string, string> internalLowerToOriginal)
         {
-            if (pkg == null || internalLowerToOriginal == null || internalLowerToOriginal.Count == 0) yield break;
+            if (internalLowerToOriginal == null || internalLowerToOriginal.Count == 0) yield break;
 
             foreach (var kv in internalLowerToOriginal)
             {
@@ -3148,7 +2893,7 @@ namespace VPB
                         };
                     }
 
-                    string imgUidPath = pkg.Uid + ":/" + internalPath;
+                    string imgUidPath = uidPrefix + (internalPath ?? string.Empty);
 
                     for (int v = 0; v < variants.Count; v++)
                     {
@@ -3224,7 +2969,6 @@ namespace VPB
             EnterSuppressZstdMissLookupLog();
             try
             {
-
             Trace("CacheImageStart: uidPath='" + imgUidPath + "' internal='" + internalPath + "' variants=" + variants.Count);
 
             float frameStart = Time.realtimeSinceStartup;
@@ -3720,7 +3464,6 @@ namespace VPB
                     }
 
                 AfterZstd: ;
-
                     }
                     finally
                     {
@@ -3759,6 +3502,84 @@ namespace VPB
             while (it != null && it.MoveNext()) { }
         }
 
+        private static void CollectPackageSeedRefs(VarPackage pkg, List<RequiredTexture> seedTex, List<RequiredJsonFile> seedJson)
+        {
+            foreach (var fe in pkg.FileEntries)
+            {
+                if (fe == null) continue;
+                if (string.IsNullOrEmpty(fe.InternalPath)) continue;
+                if (!IsOnDemandSeedPath(fe.InternalPath)) continue;
+
+                try
+                {
+                    string text = FileManager.ReadAllText(pkg.Uid + ":/" + fe.InternalPath);
+                    if (string.IsNullOrEmpty(text)) continue;
+
+                    JSONNode node = null;
+                    try { node = JSON.Parse(text); } catch { node = null; }
+                    if (node == null) continue;
+
+                    ExtractSceneUrlsRecursive(node, pkg.Uid, fe.InternalPath, seedTex, seedJson);
+                }
+                catch { }
+            }
+        }
+
+        private static void WalkNestedJsonRefs(List<RequiredJsonFile> seeds, List<RequiredTexture> into, VarPackage onlyPackage)
+        {
+            if (seeds == null) return;
+            var visitedJson = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var queue = new Queue<KeyValuePair<RequiredJsonFile, int>>();
+            for (int i = 0; i < seeds.Count; i++)
+            {
+                queue.Enqueue(new KeyValuePair<RequiredJsonFile, int>(seeds[i], 1));
+            }
+
+            while (queue.Count > 0)
+            {
+                var kv = queue.Dequeue();
+                RequiredJsonFile rj = kv.Key;
+                int depth = kv.Value;
+                if (depth > JsonWalkMaxDepth) continue;
+                if (string.IsNullOrEmpty(rj.PackageId) || string.IsNullOrEmpty(rj.InternalPath)) continue;
+
+                string depPkgId = NormalizePackageId(rj.PackageId);
+                VarPackage jp;
+                if (onlyPackage != null)
+                {
+                    if (!depPkgId.Equals(NormalizePackageId(onlyPackage.Uid), StringComparison.OrdinalIgnoreCase)) continue;
+                    jp = onlyPackage;
+                }
+                else
+                {
+                    jp = ResolvePackageWithFallback(rj.PackageId);
+                    if (jp == null) continue;
+                }
+
+                Trace("JsonDequeue: depth=" + depth + " pkgId='" + depPkgId + "' resolvedUid='" + jp.Uid + "' path='" + rj.InternalPath + "'");
+
+                string jsonUidPath = jp.Uid + ":/" + rj.InternalPath;
+                if (!visitedJson.Add(jsonUidPath)) continue;
+
+                string txt = null;
+                try { txt = FileManager.ReadAllText(jsonUidPath); } catch { txt = null; }
+                if (string.IsNullOrEmpty(txt)) continue;
+
+                JSONNode n = null;
+                try { n = JSON.Parse(txt); } catch { n = null; }
+                if (n == null) continue;
+
+                var nestedTex = new List<RequiredTexture>();
+                var nestedJson = new List<RequiredJsonFile>();
+                ExtractSceneUrlsRecursive(n, jp.Uid, rj.InternalPath, nestedTex, nestedJson);
+                into.AddRange(nestedTex);
+                for (int i = 0; i < nestedJson.Count; i++)
+                {
+                    queue.Enqueue(new KeyValuePair<RequiredJsonFile, int>(nestedJson[i], depth + 1));
+                }
+            }
+        }
+
         private static Dictionary<string, List<TextureFlags>> BuildInternalPathToFlagsFromPackagePresets(VarPackage pkg)
         {
             Dictionary<string, List<TextureFlags>> internalPathToFlags = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
@@ -3769,69 +3590,9 @@ namespace VPB
                 var seedJson = new List<RequiredJsonFile>();
                 var seedTex = new List<RequiredTexture>();
 
-                foreach (var fe in pkg.FileEntries)
-                {
-                    if (fe == null) continue;
-                    if (string.IsNullOrEmpty(fe.InternalPath)) continue;
+                CollectPackageSeedRefs(pkg, seedTex, seedJson);
 
-                    if (!IsOnDemandSeedPath(fe.InternalPath)) continue;
-
-                    try
-                    {
-                        string uidPath = pkg.Uid + ":/" + fe.InternalPath;
-                        string text = FileManager.ReadAllText(uidPath);
-                        if (string.IsNullOrEmpty(text)) continue;
-
-                        JSONNode node = null;
-                        try { node = JSON.Parse(text); } catch { node = null; }
-                        if (node == null) continue;
-
-                        ExtractSceneUrlsRecursive(node, pkg.Uid, fe.InternalPath, seedTex, seedJson);
-                    }
-                    catch { }
-                }
-
-                var visitedJson = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var queue = new Queue<KeyValuePair<RequiredJsonFile, int>>();
-                for (int i = 0; i < seedJson.Count; i++)
-                {
-                    queue.Enqueue(new KeyValuePair<RequiredJsonFile, int>(seedJson[i], 1));
-                }
-
-                while (queue.Count > 0)
-                {
-                    var kv = queue.Dequeue();
-                    RequiredJsonFile rj = kv.Key;
-                    int depth = kv.Value;
-                    if (depth > JsonWalkMaxDepth) continue;
-                    if (string.IsNullOrEmpty(rj.PackageId) || string.IsNullOrEmpty(rj.InternalPath)) continue;
-
-                    if (!NormalizePackageId(rj.PackageId).Equals(NormalizePackageId(pkg.Uid), StringComparison.OrdinalIgnoreCase)) continue;
-
-                    string jsonUidPath = pkg.Uid + ":/" + rj.InternalPath;
-                    if (!visitedJson.Add(jsonUidPath)) continue;
-
-                    string txt = null;
-                    try { txt = FileManager.ReadAllText(jsonUidPath); } catch { txt = null; }
-                    if (string.IsNullOrEmpty(txt)) continue;
-
-                    JSONNode n = null;
-                    try { n = JSON.Parse(txt); } catch { n = null; }
-                    if (n == null) continue;
-
-                    var nestedTex = new List<RequiredTexture>();
-                    var nestedJson = new List<RequiredJsonFile>();
-                    ExtractSceneUrlsRecursive(n, pkg.Uid, rj.InternalPath, nestedTex, nestedJson);
-
-                    if (nestedTex != null && nestedTex.Count > 0) seedTex.AddRange(nestedTex);
-                    if (nestedJson != null && nestedJson.Count > 0)
-                    {
-                        for (int i = 0; i < nestedJson.Count; i++)
-                        {
-                            queue.Enqueue(new KeyValuePair<RequiredJsonFile, int>(nestedJson[i], depth + 1));
-                        }
-                    }
-                }
+                WalkNestedJsonRefs(seedJson, seedTex, pkg);
 
                 for (int i = 0; i < seedTex.Count; i++)
                 {
@@ -3860,71 +3621,9 @@ namespace VPB
                 var seedJson = new List<RequiredJsonFile>();
                 var seedTex = new List<RequiredTexture>();
 
-                foreach (var fe in pkg.FileEntries)
-                {
-                    if (fe == null) continue;
-                    if (string.IsNullOrEmpty(fe.InternalPath)) continue;
+                CollectPackageSeedRefs(pkg, seedTex, seedJson);
 
-                    if (!IsOnDemandSeedPath(fe.InternalPath)) continue;
-
-                    try
-                    {
-                        string uidPath = pkg.Uid + ":/" + fe.InternalPath;
-                        string text = FileManager.ReadAllText(uidPath);
-                        if (string.IsNullOrEmpty(text)) continue;
-
-                        JSONNode node = null;
-                        try { node = JSON.Parse(text); } catch { node = null; }
-                        if (node == null) continue;
-
-                        ExtractSceneUrlsRecursive(node, pkg.Uid, fe.InternalPath, seedTex, seedJson);
-                    }
-                    catch { }
-                }
-
-                var visitedJson = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var queue = new Queue<KeyValuePair<RequiredJsonFile, int>>();
-                for (int i = 0; i < seedJson.Count; i++)
-                {
-                    queue.Enqueue(new KeyValuePair<RequiredJsonFile, int>(seedJson[i], 1));
-                }
-
-                while (queue.Count > 0)
-                {
-                    var kv = queue.Dequeue();
-                    RequiredJsonFile rj = kv.Key;
-                    int depth = kv.Value;
-                    if (depth > JsonWalkMaxDepth) continue;
-                    if (string.IsNullOrEmpty(rj.PackageId) || string.IsNullOrEmpty(rj.InternalPath)) continue;
-
-                    VarPackage jp = ResolvePackageWithFallback(rj.PackageId);
-                    if (jp == null) continue;
-
-                    string jsonUidPath = jp.Uid + ":/" + rj.InternalPath;
-                    string visitKey = jsonUidPath.ToLowerInvariant();
-                    if (!visitedJson.Add(visitKey)) continue;
-
-                    string txt = null;
-                    try { txt = FileManager.ReadAllText(jsonUidPath); } catch { txt = null; }
-                    if (string.IsNullOrEmpty(txt)) continue;
-
-                    JSONNode n = null;
-                    try { n = JSON.Parse(txt); } catch { n = null; }
-                    if (n == null) continue;
-
-                    var nestedTex = new List<RequiredTexture>();
-                    var nestedJson = new List<RequiredJsonFile>();
-                    ExtractSceneUrlsRecursive(n, jp.Uid, rj.InternalPath, nestedTex, nestedJson);
-
-                    if (nestedTex != null && nestedTex.Count > 0) seedTex.AddRange(nestedTex);
-                    if (nestedJson != null && nestedJson.Count > 0)
-                    {
-                        for (int i = 0; i < nestedJson.Count; i++)
-                        {
-                            queue.Enqueue(new KeyValuePair<RequiredJsonFile, int>(nestedJson[i], depth + 1));
-                        }
-                    }
-                }
+                WalkNestedJsonRefs(seedJson, seedTex, null);
 
                 var seenTex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < seedTex.Count; i++)
@@ -3963,66 +3662,15 @@ namespace VPB
 
             OnDemandLog("Package cache: " + required.Count + " texture ref(s) from presets for " + packagePath);
 
-            var byPkgFlags = new Dictionary<string, Dictionary<string, List<TextureFlags>>>(StringComparer.OrdinalIgnoreCase);
-            var byPkgOrig = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
-            for (int i = 0; i < required.Count; i++)
-            {
-                RequiredTexture rt = required[i];
-                if (string.IsNullOrEmpty(rt.PackageId) || string.IsNullOrEmpty(rt.InternalPath)) continue;
-
-                VarPackage tp = ResolvePackageWithFallback(rt.PackageId);
-                if (tp == null) continue;
-
-                string pkgUid = tp.Uid;
-                string internalLower = rt.InternalPath.ToLowerInvariant();
-
-                Dictionary<string, List<TextureFlags>> flagsMap;
-                if (!byPkgFlags.TryGetValue(pkgUid, out flagsMap))
-                {
-                    flagsMap = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
-                    byPkgFlags[pkgUid] = flagsMap;
-                }
-
-                Dictionary<string, string> origMap;
-                if (!byPkgOrig.TryGetValue(pkgUid, out origMap))
-                {
-                    origMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    byPkgOrig[pkgUid] = origMap;
-                }
-
-                AddFlagVariant(flagsMap, internalLower, rt.Flags);
-                if (!origMap.ContainsKey(internalLower))
-                {
-                    origMap[internalLower] = rt.InternalPath;
-                }
-            }
+            GroupRequiredTexturesByPackage(required, null, null, out var byPkgFlags, out var byPkgOrig);
 
             ExpandCachedPackagesToNewestInstalled(byPkgFlags, byPkgOrig);
 
-            int totalWork = 0;
-            foreach (var kv in byPkgOrig)
-            {
-                if (kv.Value != null) totalWork += kv.Value.Count;
-            }
+            int totalWork = CountPlannedTextures(byPkgOrig);
             if (totalWork <= 0) yield break;
 
             s_CurrentPackage = pkg.Uid;
-            if (s_BatchMode)
-            {
-                s_TexturesPlanned += totalWork;
-                UpdateUiStatus();
-            }
-            else
-            {
-                s_PackagesPlanned = byPkgOrig.Count;
-                s_PackagesProcessed = 0;
-                s_TexturesPlanned = totalWork;
-                s_TexturesProcessed = 0;
-                s_TotalWork = Math.Max(1, totalWork);
-                s_ProcessedWork = 0;
-                UpdateUiStatus();
-            }
+            BeginTextureWorkStatus(totalWork, byPkgOrig.Count);
 
             int pkgIndex = 0;
             foreach (var kv in byPkgFlags)
@@ -4035,21 +3683,7 @@ namespace VPB
                 VarPackage tp = ResolvePackageWithFallback(pkgUid);
                 if (tp == null)
                 {
-                    int missing = (origMap != null) ? origMap.Count : 0;
-                    if (missing > 0)
-                    {
-                        if (s_BatchMode)
-                        {
-                            s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
-                        }
-                        else
-                        {
-                            s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
-                            s_TotalWork = Math.Max(1, s_TexturesPlanned);
-                            s_PackagesPlanned = Math.Max(0, s_PackagesPlanned - 1);
-                        }
-                    }
-                    UpdateUiStatus();
+                    DiscountUnresolvedPackage(origMap);
                     continue;
                 }
 
@@ -4088,64 +3722,13 @@ namespace VPB
             var required = BuildRequiredTexturesFromPackagePresetsFollowDeps(pkg);
             if (required == null || required.Count == 0) yield break;
 
-            var byPkgFlags = new Dictionary<string, Dictionary<string, List<TextureFlags>>>(StringComparer.OrdinalIgnoreCase);
-            var byPkgOrig = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+            GroupRequiredTexturesByPackage(required, null, null, out var byPkgFlags, out var byPkgOrig);
 
-            for (int i = 0; i < required.Count; i++)
-            {
-                RequiredTexture rt = required[i];
-                if (string.IsNullOrEmpty(rt.PackageId) || string.IsNullOrEmpty(rt.InternalPath)) continue;
-
-                VarPackage tp = ResolvePackageWithFallback(rt.PackageId);
-                if (tp == null) continue;
-
-                string pkgUid = tp.Uid;
-                string internalLower = rt.InternalPath.ToLowerInvariant();
-
-                Dictionary<string, List<TextureFlags>> flagsMap;
-                if (!byPkgFlags.TryGetValue(pkgUid, out flagsMap))
-                {
-                    flagsMap = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
-                    byPkgFlags[pkgUid] = flagsMap;
-                }
-
-                Dictionary<string, string> origMap;
-                if (!byPkgOrig.TryGetValue(pkgUid, out origMap))
-                {
-                    origMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    byPkgOrig[pkgUid] = origMap;
-                }
-
-                AddFlagVariant(flagsMap, internalLower, rt.Flags);
-                if (!origMap.ContainsKey(internalLower))
-                {
-                    origMap[internalLower] = rt.InternalPath;
-                }
-            }
-
-            int totalWork = 0;
-            foreach (var kv in byPkgOrig)
-            {
-                if (kv.Value != null) totalWork += kv.Value.Count;
-            }
+            int totalWork = CountPlannedTextures(byPkgOrig);
             if (totalWork <= 0) yield break;
 
             s_CurrentPackage = pkg.Uid;
-            if (s_BatchMode)
-            {
-                s_TexturesPlanned += totalWork;
-                UpdateUiStatus();
-            }
-            else
-            {
-                s_PackagesPlanned = byPkgOrig.Count;
-                s_PackagesProcessed = 0;
-                s_TexturesPlanned = totalWork;
-                s_TexturesProcessed = 0;
-                s_TotalWork = Math.Max(1, totalWork);
-                s_ProcessedWork = 0;
-                UpdateUiStatus();
-            }
+            BeginTextureWorkStatus(totalWork, byPkgOrig.Count);
 
             int pkgIndex = 0;
             foreach (var kv in byPkgFlags)
@@ -4158,21 +3741,7 @@ namespace VPB
                 VarPackage tp = ResolvePackageWithFallback(pkgUid);
                 if (tp == null)
                 {
-                    int missing = (origMap != null) ? origMap.Count : 0;
-                    if (missing > 0)
-                    {
-                        if (s_BatchMode)
-                        {
-                            s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
-                        }
-                        else
-                        {
-                            s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
-                            s_TotalWork = Math.Max(1, s_TexturesPlanned);
-                            s_PackagesPlanned = Math.Max(0, s_PackagesPlanned - 1);
-                        }
-                    }
-                    UpdateUiStatus();
+                    DiscountUnresolvedPackage(origMap);
                     continue;
                 }
 
@@ -4187,7 +3756,7 @@ namespace VPB
 
                 s_PackagesResolved++;
                 s_PurgeWorkerAnyDeletes = false;
-                yield return WorkerPurgeSelectiveUnityCoroutine(tp, flagsMap, origMap);
+                yield return WorkerPurgeSelectiveUnityCoroutine(tp.Uid + ":/", flagsMap, origMap);
                 if (s_PurgeWorkerAnyDeletes) s_PurgePackagesDeleted++;
 
                 if (!s_BatchMode)
@@ -4207,35 +3776,7 @@ namespace VPB
             var required = BuildRequiredTexturesFromPackagePresetsFollowDeps(rootPkg);
             if (required == null || required.Count == 0) yield break;
 
-            var byPkgFlags = new Dictionary<string, Dictionary<string, List<TextureFlags>>>(StringComparer.OrdinalIgnoreCase);
-            var byPkgOrig = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
-            for (int i = 0; i < required.Count; i++)
-            {
-                RequiredTexture rt = required[i];
-                if (string.IsNullOrEmpty(rt.PackageId) || string.IsNullOrEmpty(rt.InternalPath)) continue;
-
-                VarPackage tp = ResolvePackageWithFallback(rt.PackageId);
-                if (tp == null) continue;
-
-                string pkgUid = tp.Uid;
-                string internalLower = rt.InternalPath.ToLowerInvariant();
-
-                if (!byPkgFlags.TryGetValue(pkgUid, out var flagsMap))
-                {
-                    flagsMap = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
-                    byPkgFlags[pkgUid] = flagsMap;
-                }
-
-                if (!byPkgOrig.TryGetValue(pkgUid, out var origMap))
-                {
-                    origMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    byPkgOrig[pkgUid] = origMap;
-                }
-
-                AddFlagVariant(flagsMap, internalLower, rt.Flags);
-                if (!origMap.ContainsKey(internalLower)) origMap[internalLower] = rt.InternalPath;
-            }
+            GroupRequiredTexturesByPackage(required, null, null, out var byPkgFlags, out var byPkgOrig);
 
             foreach (var kv in byPkgFlags)
             {
@@ -4250,7 +3791,7 @@ namespace VPB
                 s_CurrentPackage = tp.Uid;
                 UpdateUiStatus();
 
-                yield return WorkerPurgeSelectiveUnityCoroutine(tp, kv.Value, origMap);
+                yield return WorkerPurgeSelectiveUnityCoroutine(tp.Uid + ":/", kv.Value, origMap);
             }
         }
 
@@ -4287,7 +3828,6 @@ namespace VPB
             s_HotkeyRewriteExistingZstdDown = false;
 
             // If the previous job summary is still visible, close it before starting a new job.
-            // Otherwise the UI can remain in summary-mode and block the new run.
             try { NativeTextureOnDemandCache.DismissSummary(); } catch { }
 
             var sc = SuperController.singleton;
@@ -4323,7 +3863,6 @@ namespace VPB
                 return;
             }
 
-            // Single selection: run single-mode so the job reports correct per-item totals.
             if (selectedScenePaths != null && selectedScenePaths.Count == 1)
             {
                 NativeTextureOnDemandCache.TryBuildSceneCacheOnDemand(sc, selectedScenePaths[0]);
@@ -4335,7 +3874,6 @@ namespace VPB
                 return;
             }
 
-            // Fallback: no selection, try current scene
             NativeTextureOnDemandCache.TryBuildSceneCacheOnDemand(sc);
         }
 
@@ -4362,7 +3900,6 @@ namespace VPB
             NativeTextureOnDemandCache.BeginBatchJob("Caching Textures...", totalItems);
             try
             {
-                // Scenes first
                 if (scenePaths != null)
                 {
                     for (int i = 0; i < scenePaths.Count; i++)
@@ -4379,7 +3916,6 @@ namespace VPB
                     }
                 }
 
-                // Packages second
                 if (packagePaths != null)
                 {
                     for (int i = 0; i < packagePaths.Count; i++)
@@ -4441,7 +3977,7 @@ namespace VPB
                     if (!isVarSelection && !string.IsNullOrEmpty(selectedPath))
                     {
                         string lower = selectedPath.ToLowerInvariant();
-                        if (lower.EndsWith(".json"))
+                        if (lower.EndsWith(".json", StringComparison.Ordinal))
                         {
                             if (sceneDedup.Add(selectedPath)) scenePathsOut.Add(selectedPath);
                         }

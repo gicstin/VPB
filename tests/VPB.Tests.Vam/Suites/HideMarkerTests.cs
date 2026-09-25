@@ -214,5 +214,34 @@ namespace VPB.Tests
                 Assert.True(VpbHideIndex.IsItemHidden("Creator.Pack.1", "Saves/scene/one.json"));
             }
         }
+
+        [Fact]
+        public void HidingAMissingVersionNeverTargetsAnotherVersionsFile()
+        {
+            using (var install = new TempInstall("hide_missing_version"))
+            using (var library = new VamLibrary(install))
+            {
+                VarPackage five = library.AddScene("Creator", "Pack", 5);
+
+                string path = PackageHidePrefs.ResolveVarRelPathForUid("Creator.Pack.1");
+                _out.WriteLine("Creator.Pack.1 -> " + path);
+
+                Assert.NotEqual(five.Path.Replace('\\', '/'), path);
+                Assert.Equal("AddonPackages/Creator.Pack.1.var", path);
+            }
+        }
+
+        [Fact]
+        public void HidingAnInstalledVersionTargetsItsOwnFile()
+        {
+            using (var install = new TempInstall("hide_installed_version"))
+            using (var library = new VamLibrary(install))
+            {
+                VarPackage one = library.AddScene("Creator", "Pack", 1);
+                library.AddScene("Creator", "Pack", 5);
+
+                Assert.Equal(one.Path.Replace('\\', '/'), PackageHidePrefs.ResolveVarRelPathForUid("Creator.Pack.1"));
+            }
+        }
     }
 }

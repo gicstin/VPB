@@ -4,23 +4,19 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Highlights only the value part (not separators) on pointer hover.
-    /// Resets on Set() and OnDisable so recycled list rows never keep a stuck hover color.
-    /// </summary>
+    /// <summary>Highlights only the value part (not separators) on pointer hover.</summary>
     public class UIRichValueHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public Text target;
         public string prefix = "";
         public string value = "";
-        public string separator = "";  // Part that stays uncolored (e.g., "  |  ")
+        public string separator = "";
         public Color normalColor = new Color(0.75f, 0.75f, 0.75f, 1f);
         public Color hoverColor = Color.yellow;
 
-        // Conditional coloring: different colors based on value
         public bool useConditionalColoring = false;
-        public Color zeroValueColor = Color.green;  // Color when value is 0
-        public Color nonZeroValueColor = Color.red; // Color when value > 0
+        public Color zeroValueColor = Color.green;
+        public Color nonZeroValueColor = Color.red;
 
         private bool _hover;
 
@@ -57,16 +53,13 @@ namespace VPB
             if (target == null) return;
             target.supportRichText = true;
 
-            // Determine the color for the value based on conditional coloring
             Color colorToUse = hoverColor;
             if (useConditionalColoring && !string.IsNullOrEmpty(value))
             {
-                // Check if value is "0" (possibly with spaces)
                 string trimmedValue = value.Trim();
                 colorToUse = (trimmedValue == "0") ? zeroValueColor : nonZeroValueColor;
             }
 
-            // Use rich text to color prefix + value, but not the separator
             if (_hover && (!string.IsNullOrEmpty(prefix) || !string.IsNullOrEmpty(value)))
             {
                 string colorHex = ColorUtility.ToHtmlStringRGB(colorToUse);

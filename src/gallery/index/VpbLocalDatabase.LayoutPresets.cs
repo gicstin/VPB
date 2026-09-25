@@ -4,7 +4,6 @@ using SimpleJSON;
 
 namespace VPB
 {
-    /// <summary>SQLite-backed gallery layout presets. Sibling of <c>gallery_filter_preset</c>.</summary>
     internal static partial class VpbLocalDatabase
     {
         private static void EnsureLayoutPresetTables(VpbSqlite3.Connection conn)
@@ -22,11 +21,7 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_glp_mode ON gallery_layout_preset(mode, sort_order);");
         }
 
-        /// <summary>
-        /// Loads presets. With <paramref name="withPayload"/> false only the list-view columns are read
-        /// and <see cref="GalleryLayoutPreset.Panes"/> stays empty — so opening the manager with a large
-        /// collection costs one query and no JSON parsing.
-        /// </summary>
+        /// <summary>Loads presets. With withPayload false only the list-view columns are read and Panes stays empty.</summary>
         internal static bool TryLoadLayoutPresets(List<GalleryLayoutPreset> into, bool withPayload)
         {
             if (into == null) return false;
@@ -90,7 +85,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Reads one preset's full payload. Used when a lazily listed row is applied or edited.</summary>
         internal static GalleryLayoutPreset TryLoadLayoutPresetPayload(int id)
         {
             if (id <= 0 || !VpbSqlite3.IsAvailable) return null;
@@ -128,10 +122,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Replace-all write. Rows whose payload was never loaded keep their stored JSON, so a lazy
-        /// list can be reordered or renamed without first parsing every preset.
-        /// </summary>
         internal static bool TrySaveLayoutPresets(IList<GalleryLayoutPreset> presets)
         {
             if (presets == null) return false;
@@ -172,8 +162,6 @@ namespace VPB
                         for (int i = 0; i < presets.Count; i++)
                         {
                             GalleryLayoutPreset e = presets[i];
-                            // Built-in ids sit in a reserved high band — seeding nextId from one would
-                            // hand every new user preset an id inside that band.
                             if (e != null && !e.IsBuiltIn && e.Id > maxId) maxId = e.Id;
                         }
                         int nextId = maxId + 1;

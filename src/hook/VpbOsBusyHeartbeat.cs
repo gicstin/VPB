@@ -4,10 +4,7 @@ using System.Threading;
 
 namespace VPB
 {
-    /// <summary>
-    /// Topmost Win32 strip pulsed off the Unity main thread.
-    /// Only path that keeps moving while Unity is stuck in sync work (Tier B).
-    /// </summary>
+    /// <summary>Topmost Win32 strip pulsed off the Unity main thread.</summary>
     internal static class VpbOsBusyHeartbeat
     {
         private const string WindowClassName = "VPB_OsBusyHeartbeat";
@@ -68,11 +65,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Tear down Win32 message pump. Hide alone is not enough — GetMessage thread
-        /// + HWND keep VaM from exiting cleanly after any EnterBlocking (scene load).
-        /// Only PostMessage from foreign threads — DestroyWindow runs on STA owner via WndProc.
-        /// </summary>
         internal static void Shutdown()
         {
             s_ShutdownRequested = true;
@@ -92,7 +84,6 @@ namespace VPB
 
             if (thread != null && thread.IsAlive)
             {
-                // Window may still be creating — brief retry so PostMessage can land.
                 for (int i = 0; i < 3 && thread.IsAlive; i++)
                 {
                     hwnd = s_Hwnd;

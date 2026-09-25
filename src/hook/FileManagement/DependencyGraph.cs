@@ -5,10 +5,6 @@ using System.Text.RegularExpressions;
 
 namespace VPB
 {
-	/// <summary>
-	/// Lazy dependency graph: nodes built on demand from SQLite/bulk pkg_dep edges.
-	/// No full-library rebuild at startup.
-	/// </summary>
 	public static class DependencyGraph
 	{
 		private sealed class Node
@@ -244,8 +240,7 @@ namespace VPB
 				PackageReferenceVersionResolver.BeginReferrerContext(uid);
 				try
 				{
-					resolved = FileManager.GetPackageForDependency(depId, false);
-					// Exact meta pin may still be satisfied by newer version when option is Latest/Minimum.
+					resolved = FileManager.GetInstalledPackageOrDependency(depId);
 					if (resolved == null && FileManager.IsDependencySatisfiedByInstalled(depId, n.Package))
 					{
 						string group = FileManager.PackageIDToPackageGroupID(depId);

@@ -15,25 +15,17 @@ namespace VPB
         private const float LayoutFloatMinHeightRef = 240f;
         private const float LayoutFloatMaxWidthRef = 720f;
         private const float LayoutFloatMaxHeightRef = 900f;
-        /// <summary>Match filter-presets list row: one line + <see cref="GalleryUiDesignTokens.ButtonSizeRef"/> chips.</summary>
         private const float LayoutPresetRowHeightRef = GalleryUiDesignTokens.PopupMenuRowHeightRef;
         private const float LayoutPresetRowGapRef = GalleryUiDesignTokens.PopupMenuRowSpacingRef;
         private const float LayoutPresetRowPadHRef = 6f;
         private const float LayoutPresetRowPadVRef = 2f;
-        /// <summary>Applied-preset marker: a left edge stripe, not a glyph competing with the name.</summary>
         private const float LayoutPresetActiveStripeWidthRef = 3f;
         private const float LayoutPresetMiniMapWidthRef = 36f;
         private const float LayoutPresetMiniMapInsetRef = 4f;
         private const int LayoutPresetMiniMapCellCount = 4;
-        /// <summary>Rows built beyond the viewport so a flick does not expose empty space.</summary>
         private const int LayoutPresetWindowMargin = 3;
         private const int LayoutPresetsOverlaySortingOrder = 5000;
-        /// <summary>
-        /// VR: the pointer laser draws in the default sorting band, so a high-order canvas paints over it
-        /// and the beam reads as passing behind the window. Sit in the pane band (just above panes).
-        /// </summary>
         private const int LayoutPresetsWorldSortingOrder = DockBaseSortingOrder + 1000;
-        /// <summary>WorldSpace overlay has no screen to size itself from — same virtual surface as a pane.</summary>
         private static readonly Vector2 LayoutOverlayWorldSizePx = new Vector2(1200f, 800f);
         private const float LayoutOverlayWorldDistanceMeters = 1.2f;
 
@@ -82,10 +74,6 @@ namespace VPB
             return s_layoutFloatOwner != null && s_layoutFloatOwner.IsLayoutPresetsFloatOpen();
         }
 
-        /// <summary>
-        /// Opens the manager from surfaces that may run with no pane on screen (quick menu, VR watch).
-        /// Lives on its own overlay canvas — gallery hide must not swallow it.
-        /// </summary>
         internal static void OpenLayoutPresetsFloatAnywhere()
         {
             Gallery g = Gallery.singleton;
@@ -102,10 +90,6 @@ namespace VPB
             host.ToggleLayoutPresetsFloat();
         }
 
-        /// <summary>
-        /// Owner for apply/save coroutines. Overlay canvas is independent, so a hidden pane is
-        /// enough — do not OpenGallery just to show the manager.
-        /// </summary>
         private static GalleryPanel ResolveLayoutPresetsFloatHost(Gallery g)
         {
             if (g == null) return null;
@@ -223,7 +207,6 @@ namespace VPB
         {
             GalleryPanel owner = s_layoutFloatOwner;
             if (owner == null || !owner.IsLayoutPresetsFloatOpen()) return;
-            // Pane Update early-outs when canvas is off — hotkey + Esc live here then.
             try { GalleryUiScaleHotkey.TryNudgeFromKeyboard(); } catch { }
             try { GalleryUiScaleHotkey.TickDeferredSave(); } catch { }
             bool paneAlive = false;
@@ -291,11 +274,7 @@ namespace VPB
             return go;
         }
 
-        /// <summary>
-        /// VR renders through the HMD camera, where a ScreenSpaceOverlay canvas only ever reaches the
-        /// companion window — the manager was built and toggled green but never drawn in the headset.
-        /// Mirror the pane's own WorldSpace setup and sit in player-UI space so worldScale cannot resize it.
-        /// </summary>
+        /// <summary>VR renders through the HMD camera, where a ScreenSpaceOverlay canvas only ever reaches the companion window.</summary>
         private static void ApplyLayoutPresetsOverlayRenderMode()
         {
             GameObject go = s_layoutOverlayGO;
@@ -336,10 +315,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Park the WorldSpace overlay in front of the player on every open: without a screen to anchor to,
-        /// a pose change since last use otherwise leaves the manager behind the player or inside a pane.
-        /// </summary>
         private static void PlaceLayoutPresetsOverlayInFrontOfPlayer()
         {
             GameObject go = s_layoutOverlayGO;
@@ -364,7 +339,6 @@ namespace VPB
             VpbWorldSpaceUiScale.ApplyMetersPerPixelLocalScale(tf);
         }
 
-        /// <summary>Null for the desktop overlay canvas; the HMD camera when the manager is WorldSpace.</summary>
         private static Camera ResolveLayoutFloatUiCamera()
         {
             Canvas c = s_layoutOverlayCanvas;
@@ -372,10 +346,6 @@ namespace VPB
             return c.worldCamera != null ? c.worldCamera : Camera.main;
         }
 
-        /// <summary>
-        /// In VR the overlay leaves Gallery's transform for player-UI space, so Gallery teardown no
-        /// longer reaches it by parenting — destroy it explicitly.
-        /// </summary>
         internal static void DestroyLayoutPresetsOverlay()
         {
             s_layoutFloatOwner = null;
@@ -709,7 +679,6 @@ namespace VPB
             return go;
         }
 
-        /// <summary>Live ChromeScale adapt — resize shell + rebuild pooled rows once.</summary>
         internal void RescaleLayoutPresetsFloatIfOpen(float chromeScale)
         {
             if (!IsLayoutPresetsFloatOpen()) return;
@@ -862,7 +831,6 @@ namespace VPB
             _layoutFloatWindowStart = -1;
         }
 
-        /// <summary>Esc: menu → rename/delete → close window. Overlay tick + pane Update share this.</summary>
         internal bool TryHandleLayoutPresetsFloatKeyboard()
         {
             if (!IsLayoutPresetsFloatOpen()) return false;
@@ -905,7 +873,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Esc + live scale while the manager sits on a canvas that outlives a hidden pane.</summary>
     internal sealed class LayoutPresetsOverlayTick : MonoBehaviour
     {
         private void Update()

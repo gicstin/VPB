@@ -28,7 +28,6 @@ namespace VPB
                 var c = cat;
                 bool isActive = (c.path == currentPath && c.extension == currentExtension)
                     && !IsHubTypeBrowseActive();
-                // Keep selected row visible so accordion facets have a parent (current location).
                 if (!isActive && !string.IsNullOrEmpty(categoryFilter) && cat.name.IndexOf(categoryFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
 
                 Color btnColor = isActive ? GalleryUiColorTokens.ActiveSelected : ColorInactiveRow;
@@ -36,9 +35,6 @@ namespace VPB
                 int count = 0;
                 if (categoryCounts.ContainsKey(c.name)) count = categoryCounts[c.name];
 
-                // Keep some special rows visible even when count is 0.
-                // - Plugins: mostly local Custom/Scripts files (fresh install -> 0)
-                // - ALL VAR: package-level listing; should stay available as navigation root
                 if (count == 0
                     && !isActive
                     && !string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase)
@@ -53,7 +49,6 @@ namespace VPB
                 TextAnchor labelAnchor = catIcon != null ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
 
                 CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                    // Plugins float is overlay palette — keep current gallery category/grid (e.g. Clothing).
                     if (string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase))
                     {
                         try { OpenPluginsFloat(forceShow: true); } catch { }
@@ -72,9 +67,6 @@ namespace VPB
                         // Write disk only: Save(true) runs ConfigChanged -> UpdateLayout (~seconds). Show/UpdateTabs already refreshed UI.
                         try { VPBConfig.Instance.Save(false); } catch { }
                     }
-                    // Show() already ran UpdateTabs or UpdateTabsImpl(false) while refresh runs; a second
-                    // full UpdateTabs() here blocked the UI for seconds. Side strips refresh when
-                    // RefreshFilesRoutine finishes (DeferredGallerySideTabsAfterGridReady).
                 }, trackedButtons, () => {
                     SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
                     currentPath = "";
@@ -93,7 +85,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Per-category left icon for side-rail Category mode. Falls back to category-2. Null when setting off.</summary>
         private Sprite GetCategoryTabIcon(string categoryName)
         {
             if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryShowCategoryIcons)
@@ -131,49 +122,47 @@ namespace VPB
             return galleryCategorySprite;
         }
 
-        /// <summary>Colored chip behind category side-rail icons. Dark accents so white glyphs stay readable.</summary>
         private static Color GetCategoryTabIconBackdrop(string categoryName)
         {
             if (string.IsNullOrEmpty(categoryName))
                 return new Color(0.28f, 0.18f, 0.22f, 1f);
 
             if (string.Equals(categoryName, Gallery.EverythingCategoryName, StringComparison.OrdinalIgnoreCase))
-                return new Color(0.42f, 0.12f, 0.12f, 1f); // dark red
+                return new Color(0.42f, 0.12f, 0.12f, 1f);
             if (string.Equals(categoryName, "Plugins", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.28f, 0.12f, 0.38f, 1f); // dark purple
+                return new Color(0.28f, 0.12f, 0.38f, 1f);
             if (string.Equals(categoryName, "Clothing", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.14f, 0.26f, 0.48f, 1f); // dark blue
+                return new Color(0.14f, 0.26f, 0.48f, 1f);
             if (string.Equals(categoryName, "ALL VAR", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(categoryName, "All", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.45f, 0.12f, 0.32f, 1f); // dark magenta
+                return new Color(0.45f, 0.12f, 0.32f, 1f);
             if (string.Equals(categoryName, "Pose", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.32f, 0.40f, 0.12f, 1f); // dark olive-lime
+                return new Color(0.32f, 0.40f, 0.12f, 1f);
             if (string.Equals(categoryName, "Scenes", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.10f, 0.36f, 0.38f, 1f); // dark teal
+                return new Color(0.10f, 0.36f, 0.38f, 1f);
             if (string.Equals(categoryName, "Hair", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.14f, 0.34f, 0.18f, 1f); // dark green
+                return new Color(0.14f, 0.34f, 0.18f, 1f);
             if (string.Equals(categoryName, "CUA", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.32f, 0.34f, 0.12f, 1f); // dark olive
+                return new Color(0.32f, 0.34f, 0.12f, 1f);
             if (string.Equals(categoryName, "Appearance", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.22f, 0.20f, 0.42f, 1f); // dark indigo
+                return new Color(0.22f, 0.20f, 0.42f, 1f);
             if (string.Equals(categoryName, "SubScenes", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.48f, 0.28f, 0.10f, 1f); // dark orange
+                return new Color(0.48f, 0.28f, 0.10f, 1f);
             if (string.Equals(categoryName, "Skin", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.36f, 0.26f, 0.16f, 1f); // dark brown
+                return new Color(0.36f, 0.26f, 0.16f, 1f);
             if (string.Equals(categoryName, "Plugin Presets", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.42f, 0.18f, 0.32f, 1f); // dark pink
+                return new Color(0.42f, 0.18f, 0.32f, 1f);
             if (string.Equals(categoryName, "Morphs", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.32f, 0.16f, 0.40f, 1f); // dark violet
+                return new Color(0.32f, 0.16f, 0.40f, 1f);
             if (string.Equals(categoryName, "Hair Presets", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.16f, 0.34f, 0.28f, 1f); // dark teal-green
+                return new Color(0.16f, 0.34f, 0.28f, 1f);
             if (string.Equals(categoryName, "Body Physics", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.36f, 0.22f, 0.14f, 1f); // dark warm brown
+                return new Color(0.36f, 0.22f, 0.14f, 1f);
             if (string.Equals(categoryName, "Animation", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.14f, 0.28f, 0.38f, 1f); // dark steel
+                return new Color(0.14f, 0.28f, 0.38f, 1f);
             if (string.Equals(categoryName, "General", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.24f, 0.26f, 0.30f, 1f); // dark slate
+                return new Color(0.24f, 0.26f, 0.30f, 1f);
 
-            // Unknown categories: stable dark hue from name hash (not launch-random).
             int h = 0;
             for (int i = 0; i < categoryName.Length; i++)
                 h = unchecked(h * 31 + char.ToLowerInvariant(categoryName[i]));
@@ -186,7 +175,7 @@ namespace VPB
             if (titleText == null) return;
             if (IsHubTypeBrowseActive())
             {
-                titleText.text = "Hub: " + VpbLocalDatabase.DataPackHubCategoryDisplayName(_hubTypeBrowseToken);
+                titleText.text = VPBTranslation.T("gallery.title.hub_prefix", "Hub: ") + VpbLocalDatabase.DataPackHubCategoryDisplayName(_hubTypeBrowseToken);
                 return;
             }
             titleText.text = currentCategoryTitle ?? "";
@@ -588,7 +577,6 @@ namespace VPB
             }
 
             // Sort once (in-place) then virtualize visible rows only.
-            // Rated-only may override display to Rating; saved Creator sort stays unless user picks Rating.
             var sortState = GetCreatorListSortState();
             GallerySortManager.Instance.SortCreators(displayCreators, sortState);
 
@@ -599,7 +587,6 @@ namespace VPB
                 _creatorVirtView.Clear();
                 string filterNow = creatorFilter ?? "";
 
-                // Build set of creators present in current filtered file list when name search active.
                 HashSet<string> creatorsInResults = null;
                 bool hasNameFilter = HasActiveNameFilter();
                 if (hasNameFilter && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
@@ -629,7 +616,6 @@ namespace VPB
                     _creatorVirtView.Add(c);
                 }
 
-                // New view list: reset scroll to top for stability.
                 ScrollRect sr = container.GetComponentInParent<ScrollRect>();
                 if (sr != null) sr.verticalNormalizedPosition = 1f;
                 if (isLeft) _leftCreatorVirtLastFirstIdx = -1;
@@ -638,8 +624,6 @@ namespace VPB
 
             EnsureCreatorVirtScrollHook(isLeft, container);
 
-            // UpdateCreatorVirtualVisible handles its own pooling and tracking.
-            // We do NOT add them to trackedButtons because that would return them to shared pool every UpdateTabs call.
             UpdateCreatorVirtualVisible(isLeft);
         }
 
@@ -675,7 +659,6 @@ namespace VPB
                 bool isActive = string.Equals(currentPackagePathFilter, pe.Path, StringComparison.OrdinalIgnoreCase);
                 bool zeroCount = pe.Count <= 0;
 
-                // Keep zero-count folders visible (muted). Counts are category-scoped; folder tree is not.
                 string label = pe.Path + " (" + pe.Count + ")";
                 Color btnColor = isActive
                     ? ColorPath
@@ -750,5 +733,3 @@ namespace VPB
         }
     }
 }
-
-

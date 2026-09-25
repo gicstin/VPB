@@ -20,9 +20,6 @@ namespace VPB
         private CanvasGroup backgroundCanvasGroup;
         private GameObject contentGO;
         private ScrollRect scrollRect;
-        /// <summary>
-        /// Filter-randomize / background refresh: rebuild lists without clearing or rebinding the visible grid.
-        /// </summary>
         private bool _quietGalleryRefresh;
         private readonly List<FileEntry> _quietDisplayFiles = new List<FileEntry>();
         private float lastScrollTime;
@@ -30,10 +27,7 @@ namespace VPB
         private Coroutine thumbnailCacheCoroutine;
         private int _nextThumbPriority = 10;
 
-        /// <summary>
-        /// BepInEx builds use the normal csproj (DEBUG/TRACE only): UNITY_EDITOR is never defined here.
-        /// Default on for Debug configuration; set true at runtime to profile Release builds.
-        /// </summary>
+        /// <summary>BepInEx builds use the normal csproj (DEBUG/TRACE only): UNITY_EDITOR is never defined here.</summary>
 #if DEBUG
         public static bool LogCategoryCreatorSideTabSwitchTiming = true;
 #else
@@ -50,28 +44,20 @@ namespace VPB
         private Stopwatch _categoryTypeNavStopwatch;
         private int _categoryTypeNavTargetSession;
         private string _categoryTypeNavLabel;
-        /// <summary>Set when <see cref="GalleryPanel.RefreshFiles"/> starts a routine; copied at coroutine entry for correct timing when clicks overlap.</summary>
         private int _boundCategoryNavSessionForCurrentRefresh;
 
-        /// <summary>Incremented at each <see cref="GalleryPanel.RefreshFiles"/> so deferred sub-pane tag counting aborts when a newer refresh supersedes it.</summary>
         private int _deferredSubPaneSessionId;
 
-        /// <summary>
-        /// Extra, high-detail refresh timing logs around <see cref="GalleryPanel.RefreshFilesRoutine"/>.
-        /// Intended for diagnosing stalls that do not show up in catNav timing (e.g. startup, auto-refresh).
-        /// </summary>
 #if DEBUG
         public static bool LogGalleryRefreshDeepTiming = true;
 #else
         public static bool LogGalleryRefreshDeepTiming = false;
 #endif
 
-        /// <summary>Optional label from last <see cref="GalleryPanel.RefreshFiles"/>; copied into <c>[VPB.Gallery.DeepTiming]</c> lines.</summary>
         private string _refreshFilesDebugSource;
 
         /// <summary>Deferred phase1/phase2 side-tab work after the grid is shown; stopped when a new <see cref="GalleryPanel.RefreshFiles"/> supersedes it.</summary>
         private Coroutine _deferredGallerySideTabsCoroutine;
-        /// <summary><see cref="GalleryPanel.IO.RefreshFilesRoutine"/> spawn; parent refresh stop does not cancel nested IEnumerator — stop explicitly on supersede.</summary>
         private Coroutine _earlyMetaApplyCoroutine;
         /// <summary>Sliced tag/facet scan started from <see cref="GalleryPanel.UpdateTabs"/> (e.g. clothing subfilter) so we never block the main thread like <c>CacheTagCounts()</c>.</summary>
         private Coroutine _sideTabsTagCountSliceCo;
@@ -80,7 +66,6 @@ namespace VPB
         /// <summary>Background History filter-tab counts (SQLite); avoids multi-second stalls on History toggle.</summary>
         private Coroutine _historyModeCountsCo;
 
-        // Thumbnail cache counters (perf telemetry; no progress chrome)
         private int _thumbCacheTotalEnqueued;
         private int _thumbCacheSaved;
         private Text titleText;
@@ -117,7 +102,7 @@ namespace VPB
 
         private List<GameObject> activeButtons = new List<GameObject>();
         private Stack<GameObject> fileButtonPool = new Stack<GameObject>();
-        private Stack<GameObject> navButtonPool = new Stack<GameObject>(); // NEW: Separate pool for Nav buttons
+        private Stack<GameObject> navButtonPool = new Stack<GameObject>();
         private Dictionary<string, Image> fileButtonImages = new Dictionary<string, Image>();
         private string selectedPath = null;
         private Stack<Action> undoStack = new Stack<Action>();
@@ -126,9 +111,9 @@ namespace VPB
         private Stack<string> redoLabelStack = new Stack<string>();
         private bool isApplyingUndoRedo = false;
         private List<GameObject> leftActiveTabButtons = new List<GameObject>();
-        private List<GameObject> leftSubActiveTabButtons = new List<GameObject>(); // NEW
+        private List<GameObject> leftSubActiveTabButtons = new List<GameObject>();
         private List<GameObject> rightActiveTabButtons = new List<GameObject>();
-        private List<GameObject> rightSubActiveTabButtons = new List<GameObject>(); // NEW
+        private List<GameObject> rightSubActiveTabButtons = new List<GameObject>();
 
         // Dual-buffer Category/Creator main side-tab lists (avoids destroying hundreds of buttons on each toggle).
         private GameObject leftCategoryTabHolder;
@@ -177,16 +162,12 @@ namespace VPB
         }
 
         // Returns count of runtime + persistent listeners on scrollRect.onValueChanged, or -1 on failure.
-        // Used to detect leaked AddListener subscriptions across panel rebuilds.
         public int GetScrollListenerCountForTelemetry()
         {
             if (scrollRect == null) return -1;
             return VpbPerfTelemetry.CountListeners(scrollRect.onValueChanged);
         }
 
-        // Button-pool / button-list counters for VpbPerfTelemetry retention diagnosis.
-        // Pools only grow (Stack pattern, no Shrink). Active lists rebuild on category switch.
-        // Tab buttons sum dual-buffer side-tabs (category + creator, left + right) plus active sub-tabs.
         public void GetButtonPoolTelemetry(
             out int fileButtonPoolCount,
             out int navButtonPoolCount,
@@ -212,7 +193,6 @@ namespace VPB
 
         private bool refreshOnNextShow;
         private bool hasLoadedContent = false;
-        // When gallery is unhidden via menu gate (no Show() call), refresh raycaster once.
         private bool _queuedRaycastRefreshOnVisible;
         // VR cold boot: avoid enabling canvas/raycaster before World UI ready.
         private Coroutine _deferredSetVisibleCoroutine;
@@ -220,35 +200,18 @@ namespace VPB
         /// <summary>Show() re-entrancy guard — SetCanvasVisible must not recurse into Show.</summary>
         private int _showReentrancyDepth;
         private Dictionary<string, float> categoryScrollPositions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-        // Tracks category keys that were written during this app session (not just loaded from disk cache).
         private HashSet<string> sessionCategoryScrollKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private float _pendingScrollRestore = 1f;
         private bool _scrollCacheLoaded = false;
         private DateTime lastAppliedPackageRefreshTime = DateTime.MinValue;
-        /// <summary>True when <see cref="ApplyPackageDelta"/> modified the active grid this scan.</summary>
         private bool lastPackageDeltaChangedGrid;
-        /// <summary>Package scan time used when category/creator side-tab counts were last built.</summary>
         private DateTime _lastCategoryCountsScanTime = DateTime.MinValue;
         
-        // Configuration
-        /// <summary>
-        /// Transient override for filter-preset multi-random (replace once then add members).
-        /// Null = use persisted config. Does not write disk.
-        /// Token-scoped so StopCoroutine dispose / superseded gen cannot clear a newer owner.
-        /// </summary>
         private static bool? _dragDropReplaceModeOverride;
         private static int _dragDropReplaceOverrideToken;
 
-        /// <summary>
-        /// Bumped when filter-preset randomize restarts so deferred clothing/hair toggles
-        /// from a superseded LoadRandom abort instead of stacking on top of Replace.
-        /// </summary>
         private static int _clothingApplySerial;
 
-        /// <summary>
-        /// Count of deferred clothing/hair apply coroutines (preset wait / legacy toggle retry).
-        /// Filter-randomize waits for zero so merge steps and rapid re-dice do not race Clear/toggle.
-        /// </summary>
         private static int _clothingApplyInFlight;
 
         public bool DragDropReplaceMode
@@ -268,7 +231,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Effective replace/add for clothing apply (honors randomize override).</summary>
         internal static bool EffectiveDragDropReplaceMode
         {
             get
@@ -279,38 +241,32 @@ namespace VPB
             }
         }
 
-        /// <summary>Capture serial for deferred clothing/hair work; abort if <see cref="InvalidateClothingApplySerial"/> ran.</summary>
         internal static int CaptureClothingApplySerial()
         {
             return _clothingApplySerial;
         }
 
-        /// <summary>True when deferred apply still belongs to current randomize/load generation.</summary>
         internal static bool IsClothingApplySerialCurrent(int serial)
         {
             return serial == _clothingApplySerial;
         }
 
-        /// <summary>Invalidate in-flight deferred clothing/hair applies (rapid re-dice).</summary>
         internal static void InvalidateClothingApplySerial()
         {
             _clothingApplySerial++;
         }
 
-        /// <summary>Mark deferred clothing/hair apply started (pair with <see cref="EndClothingApplyWork"/>).</summary>
         internal static void BeginClothingApplyWork()
         {
             _clothingApplyInFlight++;
         }
 
-        /// <summary>Mark deferred clothing/hair apply finished or aborted.</summary>
         internal static void EndClothingApplyWork()
         {
             if (_clothingApplyInFlight > 0)
                 _clothingApplyInFlight--;
         }
 
-        /// <summary>True while deferred clothing/hair apply coroutines still run.</summary>
         internal static bool HasPendingClothingApplyWork()
         {
             return _clothingApplyInFlight > 0;
@@ -331,7 +287,6 @@ namespace VPB
             _dragDropReplaceOverrideToken = 0;
         }
 
-        /// <summary>Force-clear override (lifecycle / randomize restart). Ignores token.</summary>
         internal static void ClearDragDropReplaceOverride()
         {
             _dragDropReplaceModeOverride = null;
@@ -372,13 +327,13 @@ namespace VPB
         private ContentType? rightPrevActiveContent = null;
         
         private GameObject leftTabScrollGO;
-        private GameObject leftSubTabScrollGO; // NEW: For split view
+        private GameObject leftSubTabScrollGO;
         private GameObject rightTabScrollGO;
-        private GameObject rightSubTabScrollGO; // NEW: For split view
+        private GameObject rightSubTabScrollGO;
         private GameObject leftTabContainerGO;
-        private GameObject leftSubTabContainerGO; // NEW: For split view
+        private GameObject leftSubTabContainerGO;
         private GameObject rightTabContainerGO;
-        private GameObject rightSubTabContainerGO; // NEW: For split view
+        private GameObject rightSubTabContainerGO;
         private RectTransform _leftTabViewportRT;
         private RectTransform _rightTabViewportRT;
         private RectTransform _leftSubTabViewportRT;
@@ -409,7 +364,6 @@ namespace VPB
         private Text rightUserTagAppliedTitleText;
         private RectTransform contentScrollRT;
         
-        // Buttons
         private Text rightCategoryBtnText;
         private Image rightCategoryBtnImage;
         private Image rightCategoryBtnIconImage;
@@ -434,7 +388,6 @@ namespace VPB
         private GameObject leftCreatorSideBtnGO;
         /// <summary>Root GO for right creator rail button (null when hide setting — never created).</summary>
         private GameObject rightCreatorSideBtnGO;
-        /// <summary>Retired: pack facets live in Tags. Kept so overflow/layout null-checks still compile.</summary>
         private GameObject leftLookFacetSideBtnGO = null;
         private GameObject rightLookFacetSideBtnGO = null;
         private Text leftLookFacetBtnText = null;
@@ -463,7 +416,6 @@ namespace VPB
         private string historyTabFilter = "";
 
         private string settingsFilter = "";
-        /// <summary>While true, main side-rail search <see cref="InputField.onValueChanged"/> handlers ignore events (programmatic text assignment / layout).</summary>
         private bool _suppressMainSideSearchValueChanged;
         private string currentSettingsGroup = "appearance";
         /// <summary>Settings list: show only rows that differ from factory default.</summary>
@@ -471,7 +423,6 @@ namespace VPB
         private bool settingsListViewActive = false;
         private bool internalSettingsSessionActive = false;
         private InternalSettingsSnapshot internalSettingsBackup;
-        /// <summary>Isolated list zoom while internal Settings panel open; does not persist to <see cref="ListRowHeight"/>.</summary>
         private float internalSettingsListRowHeightSession = GalleryUiDesignTokens.SettingsFloatRowHeightRef;
 
         private GameObject footerUndoBtnGO;
@@ -527,15 +478,12 @@ namespace VPB
 
         private const float ClothingSubmenuSyncInterval = 0.5f;
 
-        // 5a — anchor yStart captured on first submenu open; reused on removal resyncs to prevent button jump
         private float _clothingSubmenuAnchorYStart = float.NaN;
         private float _hairSubmenuAnchorYStart = float.NaN;
 
         private float sideContextLastUpdateTime = 0f;
         private const float SideContextUpdateInterval = 0.25f;
 
-        // Selection toolbox/context menu updates can be expensive (package lookups, layout refresh).
-        // Throttle them to avoid per-frame work when selection is active.
         private float selectionContextLastUpdateTime = 0f;
         private const float SelectionContextUpdateInterval = 0.25f;
         private int _selectionContextLastSelCount = -1;
@@ -550,9 +498,7 @@ namespace VPB
         private List<string> previewRemoveClothingAllItemUids = new List<string>();
         private List<bool> previewRemoveClothingAllPrevVals = new List<bool>();
 
-        // Tracks active clothing UIDs per atom to detect changes for auto-refresh.
         private Dictionary<string, HashSet<string>> _lastActiveClothingUids = new Dictionary<string, HashSet<string>>();
-        // Tracks clothing UIDs that were present when the atom was first encountered in this session.
         private Dictionary<string, HashSet<string>> _sessionInitialClothingUids = new Dictionary<string, HashSet<string>>();
 
         private bool isPreviewRemoveHairAll = false;
@@ -581,14 +527,12 @@ namespace VPB
         private GameObject rightRefreshBtn;
         private Text rightRefreshBtnText;
 
-        // Sub Sort/Search
         private GameObject leftSubSortBtn;
         private Text leftSubSortBtnText;
         private Image leftSubSortBtnBackdrop;
         private Image leftSubSortBtnIconImage;
         private InputField leftSubSearchInput;
 
-        /// <summary>Scene split (All/Addon/Custom): one square button cycling 4 file-sort modes; replaces <see cref="leftSubSortBtn"/>.</summary>
         private GameObject leftSubSceneSortBtn;
         private Image leftSubSceneSortBtnBackdrop;
         private Image leftSubSceneSortIconImage;
@@ -604,18 +548,15 @@ namespace VPB
         private Image rightSubSortBtnBackdrop;
         private Image rightSubSortBtnIconImage;
         private InputField rightSubSearchInput;
-        private GameObject rightSubClearBtn; // NEW
-        private Text rightSubClearBtnText; // NEW
+        private GameObject rightSubClearBtn;
+        private Text rightSubClearBtnText;
         
-        private GameObject leftSubClearBtn; // NEW
-        private Text leftSubClearBtnText; // NEW
-        // Creator filter: pipe-separated canonical list (supports multi-select).
-        // Example: "foo|bar". Empty = no filter.
+        private GameObject leftSubClearBtn;
+        private Text leftSubClearBtnText;
         private string currentCreator = "";
         private string _currentCreatorSetSrc = null;
         private readonly HashSet<string> _currentCreatorSet = new HashSet<string>(StringComparer.Ordinal);
 
-        // Title bar creator dropdown
         private GameObject titleCreatorBtn;
         private Image titleCreatorBtnBackdrop;
         private Text titleCreatorBtnText;
@@ -640,9 +581,7 @@ namespace VPB
         private string currentSizeFilter = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
-        /// <summary>Side-list typeahead for Look-A-Pedia facet (does not arm the grid).</summary>
         private string lookapediaFilter = "";
-        /// <summary>False = Looks like subjects; true = Hub tags. Ambient mode chip in the pane.</summary>
         private bool _lookFacetHubMode;
         private string pathFilter = "";
         private string removeClothingFilter = "";
@@ -650,7 +589,6 @@ namespace VPB
         private string removeAtomFilter = "";
         private string targetFilter = "";
         
-        // Creator side-tab virtualization (fast: pool + rebind visible rows on scroll)
         private readonly List<CreatorCacheEntry> _creatorVirtView = new List<CreatorCacheEntry>(512);
         private string _creatorVirtViewSig = null;
 
@@ -678,18 +616,14 @@ namespace VPB
         private int _leftLookFacetVirtLastFirstIdx = -1;
         private int _rightLookFacetVirtLastFirstIdx = -1;
         private bool _lookFacetVirtBuilding;
-        private string tagFilter = ""; // NEW
+        private string tagFilter = "";
         private string userTagFilter = "";
-        /// <summary>Lower split pane when <see cref="ContentType.UserTags"/> — filters tags applied to current selection.</summary>
         private string userTagAppliedFilter = "";
-        /// <summary>Selected applied-tag rows for remove / multi-select (CTRL toggle, SHIFT range); see <see cref="GalleryPanel.RemoveFocusedAppliedUserTagFromSelection"/>.</summary>
         private readonly HashSet<string> userTagAppliedRemoveSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Range anchor for SHIFT+click in applied-tags list (visible order).</summary>
         private string userTagAppliedRemoveAnchor = null;
         private readonly List<UserTagSideTabEntry> cachedAppliedUserTagsSelection = new List<UserTagSideTabEntry>(32);
 
-        // Live All/Local/.var source filter. Per-category when GallerySourceFilterIndependent;
-        // otherwise one shared value (also persisted as VPBConfig.GlobalSourceFilter).
         private VPBConfig.GlobalSourceFilterValue currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
 
         /// <summary>Filter menu cycle: Off / Apply (prefer) / Only. Visible 3-way segment (no Shift+click).</summary>
@@ -708,10 +642,6 @@ namespace VPB
             UnloadedOnly = 2
         }
 
-        /// <summary>
-        /// Title-bar ★ presence filter. Primary click cycles Off → RatedOnly → UnratedOnly → Off
-        /// (VR laser = left only). RMB clears when armed.
-        /// </summary>
         private enum RatingPresenceFilterMode : byte
         {
             Off = 0,
@@ -719,7 +649,6 @@ namespace VPB
             UnratedOnly = 2
         }
 
-        // Title-bar Filter cycles (per-category via CategoryFilterState; settings mirrored when applied).
         private BrowseFilterCycle _browseHiddenCycle;
         private BrowseFilterCycle _browseAlwaysLoadedCycle;
         /// <summary>Default <see cref="BrowseFilterCycle.Apply"/> = newest only (hide old).</summary>
@@ -729,7 +658,6 @@ namespace VPB
         /// <summary>True when current file list was narrowed by SQL <c>pkg.license</c> (skip per-row license PassesFilters).</summary>
         private bool _fileListHadSqlLicenseFilter;
         private BrowseFilterCycle _browseUnusedCycle;
-        /// <summary>Cached armed count for Filter button chrome — skip icon reload when unchanged.</summary>
         private int _globalSourceFilterBtnArmedCount = -1;
         /// <summary>Cached label text to avoid redundant Text assigns.</summary>
         private string _globalSourceFilterBtnLabelCached;
@@ -762,7 +690,6 @@ namespace VPB
         private readonly Dictionary<string, string> _hubThumbnailUrlCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private bool _cacheRetryPending = false;
 
-        // Grid hover cell currently showing rating star.
         private GameObject _gridHoverBadgeBtnGO;
         /// <summary>When set, logs elapsed time when the first file-list load finishes after create/clone pane.</summary>
         private System.Diagnostics.Stopwatch _paneLoadTimingStopwatch;
@@ -772,16 +699,12 @@ namespace VPB
         private bool _sideTabsNeedFullRebuildAfterFirstRefresh;
         private bool _deferSideTabCountsForceRefresh;
         private Coroutine _packageDeltaSideTabsCoroutine;
-        // Handle to the active clothing/hair subfilter chip's label Text. UpdateSelectionContextMenu
-        // rewrites its "(N)" from the live grid count each tick so it stays equal to the bottom "X Items".
         private UnityEngine.UI.Text _activeSubfilterChipText;
         private string _activeSubfilterChipLabelPrefix;
         
         private string nameFilter = "";
         private string nameFilterLower = "";
-        // Tokenized search terms (lowercased, whitespace-split). Enables multi-term search like "acid timeline".
         private string[] nameFilterTerms = new string[0];
-        /// <summary>Parsed title-bar search (bare OR tags; <c>tag:</c>/<c>creator:</c>/time).</summary>
         private GallerySearchQuery nameFilterQuery = GallerySearchQuery.Empty;
         private Coroutine _titleSearchSqlDebounceCo;
         private Coroutine _titleSearchInMemoryDebounceCo;
@@ -793,25 +716,12 @@ namespace VPB
         private Dictionary<string, HashSet<string>> _searchPackUidsCache;
         private string _searchPackUidsCacheFor;
 
-        // Tagging
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>
-        /// User-tag grid filter include set. Always live when non-empty (orthogonal to F/T work mode).
-        /// Tag mode applies via <c>toggleTagForSelectedItems</c> immediately — does not use this set.
-        /// FilterUntagged browse ignores include/exclude until dismissed.
-        /// </summary>
         private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>User-tag grid filter exclude (none-of). Always live when non-empty; same orthogonality as include.</summary>
         private readonly HashSet<string> excludedUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>
-        /// Available pane work mode: Tag (click applies) or FilterByTags (click arms include/exclude).
-        /// Does not gate whether include/exclude filter the grid. FilterUntagged is title-bar browse filter.
-        /// </summary>
         private UserTagAvailMode _userTagAvailMode = UserTagAvailMode.FilterByTags;
-        /// <summary>Work mode restored when title-bar Not tagged filter turns off (Tag or FilterByTags).</summary>
         private UserTagAvailMode _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
-        /// <summary>Filter-mode Available list: expand collapsed Unused bucket (zero-count tags).</summary>
         private bool _userTagShowUnusedBucket;
         /// <summary>User Tags Available list: expand collapsed Hub tags bucket (data-pack, read-only).</summary>
         private bool _userTagShowHubBucket;
@@ -833,30 +743,20 @@ namespace VPB
         private string _hubBrowseReturnPath;
         private readonly List<CreatorCacheEntry> _hubCatItemFacetRows = new List<CreatorCacheEntry>(24);
         private string _hubCatItemFacetSig;
-        /// <summary>Guard against recursive title↔filter user-tag chip bridging.</summary>
         private bool _bridgingUserTagFilterTitleSearch;
         /// <summary>Not Tagged filter: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
         private readonly HashSet<string> _untaggedTaggedPinKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>ALL VAR only: when true, applying/removing user tags on package row also touches all indexed child items in that VAR.</summary>
         private bool _userTagInheritVarToChildren;
-        /// <summary>Set during refresh drain when SQLite category query already constrained rows by gallery user tags.</summary>
         private bool _refreshSqliteBulkIncludedUserTagGridFilter;
-        /// <summary>
-        /// Package-scan fallback pre-filtered VAR rows using <see cref="VpbLocalDatabase.TryBuildCatMemRowKeysMatchingAllUserTags"/> on worker
-        /// (SQLite category query unavailable). Stored as int for .NET 3.5 (no System.Threading.Volatile).
-        /// </summary>
+        /// <summary>Package-scan fallback pre-filtered VAR rows from worker; int for .NET 3.5.</summary>
         private int _refreshWorkerFallbackUserTagPrefilterFlag;
         private bool userTagsCached = false;
-        /// <summary>True when side-tab per-category counts query succeeded (gate hide-unused; independent of <see cref="userTagsCached"/>).</summary>
         private bool _userTagSideTabCountsReady = false;
-        /// <summary>Cached: any <c>gallery_item_user_tag</c> row exists. False on fresh/wiped DB (skip hide-unused).</summary>
         private bool _userTagAnyAssignmentExists = false;
-        /// <summary>Bumped when <see cref="GalleryPanel.CacheUserTagsSideTab"/> finishes rebuilding SQLite-backed rows.</summary>
         private int userTagSideTabDataRevision = 0;
         private List<UserTagSideTabEntry> cachedUserTagSideTab = new List<UserTagSideTabEntry>(64);
 
-        /// <summary>Filtered/sorted view for virtualized User Tags pick list (same role as <see cref="_creatorVirtView"/>).</summary>
-        /// <summary>Create-tag row + pinned tags; fixed above scroll (not virtualized).</summary>
         private readonly List<UserTagSideTabEntry> _userTagStickyRows = new List<UserTagSideTabEntry>(24);
         private readonly List<UserTagSideTabEntry> _userTagAppliedPinnedRows = new List<UserTagSideTabEntry>(24);
         private readonly List<UserTagSideTabEntry> _userTagVirtView = new List<UserTagSideTabEntry>(256);
@@ -907,7 +807,6 @@ namespace VPB
         private const float UserTagVisualPulseSeconds = 0.65f;
         private const string UserTagDropFlashName = "VPB_UserTagDropFlash";
 
-        /// <summary>Unified tag editor root (DetailStripTagMenu). Legacy overlay name retired.</summary>
         private GameObject _userTagEditorRoot;
         private Transform _userTagEditorRowsParent;
         private InputField _userTagEditorFilterInput;
@@ -922,12 +821,9 @@ namespace VPB
         private GameObject _userTagEditorRenameModalGo;
         private Text _userTagEditorRenameModalTitleText;
         private InputField _userTagEditorRenameModalInput;
-        /// <summary>Display name of row used as rename prefix (also updates tags starting with prefix + space).</summary>
         private string _userTagEditorRenameSourcePrefix;
-        /// <summary>0=name asc, 1=name desc, 2=count desc, 3=count asc.</summary>
         private int _userTagEditorSortMode;
         private readonly HashSet<string> _userTagEditorRowSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Last row clicked without Shift; anchor for Shift+click range in tag editor list.</summary>
         private string _userTagEditorAnchorTag;
 
         [Flags]
@@ -997,67 +893,18 @@ namespace VPB
         private bool _sceneHubSubfilterExplicit;
         private bool _sceneHubDefaultStatusShown;
 
-        private int clothingSubfilterCountAll = 0;
-        private int clothingSubfilterCountReal = 0;
-        private int clothingSubfilterCountPresets = 0;
-        private int clothingSubfilterCountCustom = 0;
-        private int clothingSubfilterCountCustomPreset = 0;
-        private int clothingSubfilterCountItems = 0;
-        private int clothingSubfilterCountMale = 0;
-        private int clothingSubfilterCountFemale = 0;
-        private int clothingSubfilterCountDecals = 0;
 
-        private int clothingSubfilterFacetCountReal = 0;
-        private int clothingSubfilterFacetCountPresets = 0;
-        private int clothingSubfilterFacetCountCustom = 0;
-        private int clothingSubfilterFacetCountCustomPreset = 0;
-        private int clothingSubfilterFacetCountItems = 0;
-        private int clothingSubfilterFacetCountMale = 0;
-        private int clothingSubfilterFacetCountFemale = 0;
-        private int clothingSubfilterFacetCountDecals = 0;
 
-        private int hairSubfilterCountAll = 0;
-        private int hairSubfilterCountPresets = 0;
-        private int hairSubfilterCountCustom = 0;
-        private int hairSubfilterCountCustomPreset = 0;
-        private int hairSubfilterCountItems = 0;
-        private int hairSubfilterCountMale = 0;
-        private int hairSubfilterCountFemale = 0;
 
-        private int hairSubfilterFacetCountPresets = 0;
-        private int hairSubfilterFacetCountCustom = 0;
-        private int hairSubfilterFacetCountCustomPreset = 0;
-        private int hairSubfilterFacetCountItems = 0;
-        private int hairSubfilterFacetCountMale = 0;
-        private int hairSubfilterFacetCountFemale = 0;
 
-        private int appearanceSubfilterCountAll = 0;
-        private int appearanceSubfilterCountPresets = 0;
-        private int appearanceSubfilterCountCustom = 0;
-        private int appearanceSubfilterCountMale = 0;
-        private int appearanceSubfilterCountFemale = 0;
-        private int appearanceSubfilterCountFuta = 0;
-        private int appearanceSubfilterCountUnknown = 0;
 
-        private int appearanceSubfilterFacetCountPresets = 0;
-        private int appearanceSubfilterFacetCountCustom = 0;
-        private int appearanceSubfilterFacetCountMale = 0;
-        private int appearanceSubfilterFacetCountFemale = 0;
-        private int appearanceSubfilterFacetCountFuta = 0;
-        private int appearanceSubfilterFacetCountUnknown = 0;
 
-        private int appearanceSubfilterCurrentCountAll = 0;
-        private int appearanceSubfilterCurrentCountMale = 0;
-        private int appearanceSubfilterCurrentCountFemale = 0;
-        private int appearanceSubfilterCurrentCountFuta = 0;
-        private int appearanceSubfilterCurrentCountUnknown = 0;
+
+        private readonly TagFacetCounts tagFacets = new TagFacetCounts();
 
         private int posePeopleFacetCountSingle = 0;
         private int posePeopleFacetCountDual = 0;
 
-        private int appearanceSourceCountAll = 0;
-        private int appearanceSourceCountPresets = 0;
-        private int appearanceSourceCountCustom = 0;
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;
@@ -1074,15 +921,12 @@ namespace VPB
         private Image _titleSearchPopupPanelImg;
         private InputField _titleSearchPopupField;
         private bool _titleSearchPopupOpen;
-        /// <summary>Frame popup opened; outside-click dismiss skips this frame + next.</summary>
         private int _titleSearchPopupOpenedFrame = -1;
-        /// <summary>Unscaled end time for open-cue flash; 0 = idle.</summary>
         private float _titleSearchPopupCueUntil;
         private static readonly Color TitleSearchPopupPanelIdle = GalleryUiColorTokens.TitleSearchPopupIdle;
         private static readonly Color TitleSearchPopupPanelCue = GalleryUiColorTokens.TitleSearchPopupCue;
         private const float TitleSearchPopupCueSeconds = 0.28f;
 
-        /// <summary>Soft-undo for search clear now uses main PushUndo stack (label "Search clear").</summary>
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
         private List<GameObject> tboxPersonAtomBtns = new List<GameObject>();
@@ -1117,11 +961,9 @@ namespace VPB
         private GameObject rightSideContainer;
         private GameObject leftSideHoverStrip;
         private GameObject rightSideHoverStrip;
-        /// <summary>Thin bars between Layout / Browse / Tools (and tools context) on each rail.</summary>
         private GameObject[] _leftSideZoneSeps;
         private GameObject[] _rightSideZoneSeps;
         private const int SideRailZoneSepSlots = 3;
-        /// <summary>Full-height invisible hit targets beside side buttons (half legacy 130px width).</summary>
         private const float GallerySideHoverStripWidth = GalleryUiDesignTokens.SideHoverStripWidthRef;
         private const float GallerySideHoverStripOffset = GalleryUiDesignTokens.SideHoverStripOffsetRef;
         private Stack<GameObject> tabButtonPool = new Stack<GameObject>();
@@ -1140,8 +982,6 @@ namespace VPB
         private const float FpsInterval = 0.5f;
         private string _fpsLastAppliedText = null;
 
-        // Follow Mode Fields
-        /// <summary>Owner for life. First-live-pane lookup let clones inherit the slot when the owner closed.</summary>
         private static GalleryPanel s_vamMenuAnchorOwner;
         private bool _vamMenuAnchorOptIn;
 
@@ -1226,7 +1066,6 @@ namespace VPB
         private bool _titleBarLayoutLastHasSource;
         private bool _titleBarLayoutLastFollowShown;
 
-        // Fixed desktop dock "Top": side rail buttons live on footer bar.
         private GameObject _footerSideButtonsGroupGO;
         private RectTransform _footerSideButtonsGroupRT;
         private LayoutElement _footerSideButtonsGroupLE;
@@ -1248,7 +1087,6 @@ namespace VPB
         private Image footerFollowDistanceImage;
         private GameObject footerFollowHeightBtn;
         private Image footerFollowHeightImage;
-        // Icon swap fields for multi-state footer buttons
         private Image footerLayoutIconImage;
         private Sprite footerLayoutGridSprite;
         private Sprite footerLayoutListSprite;
@@ -1265,21 +1103,17 @@ namespace VPB
         private Sprite footerAutoHideTopOffSprite;
         private Sprite footerAutoHideTopOnSprite;
 
-        // Side buttons for dynamic positioning
         private List<RectTransform> rightSideButtons = new List<RectTransform>();
         private List<RectTransform> leftSideButtons = new List<RectTransform>();
-        /// <summary>Side-rail Tags (UserTags) buttons — for layout / edge-align.</summary>
         private GameObject leftUserTagsSideBtn;
         private GameObject rightUserTagsSideBtn;
-        /// <summary>Side-rail Scene Import buttons — above Tags; toggle Import sidebar.</summary>
         private GameObject leftSceneImportSideBtn;
         private GameObject rightSceneImportSideBtn;
-        /// <summary>True during <see cref="Gallery.ClonePanel"/> init — skip global import-open restore and config import defaults.</summary>
         internal bool importSidebarInitAsClone;
 
         private Sprite galleryCreatorOffSprite;
 
-        private QuickFiltersUI quickFiltersUI; // NEW
+        private QuickFiltersUI quickFiltersUI;
         
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();
         private bool creatorsCached = false;
@@ -1292,21 +1126,18 @@ namespace VPB
         private Dictionary<string, int> tagCounts = new Dictionary<string, int>();
         private bool tagsCached = false;
 
-        /// <summary>Incremented on each full <see cref="GalleryPanel.RefreshFiles"/> so background tag scans can abort when superseded.</summary>
         private int galleryFileRefreshSequence;
         internal int GalleryFileRefreshSequence { get { return System.Threading.Thread.VolatileRead(ref galleryFileRefreshSequence); } }
         private TagParallelWaiter tagParallelWaiter;
 
-        // Footer bar
         private RectTransform paginationRT;
         private HorizontalLayoutGroup footerHLG;
 
-        // Resize handles (seated alongside the bar buttons; one corner slot, mode picks which is active)
-        private GameObject _resizeHandleBottomLeftGO;        // floating BL (footer left slot)
-        private GameObject _resizeHandleBottomRightGO;       // floating BR (footer right slot)
-        private GameObject _resizeHandleTopLeftGO;           // floating TL (title bar far-left)
-        private GameObject _resizeHandleFixedBottomGO;       // fixed Right/Top dock (footer left slot)
-        private GameObject _resizeHandleFixedBottomRightGO;  // fixed Left dock (footer right slot)
+        private GameObject _resizeHandleBottomLeftGO;
+        private GameObject _resizeHandleBottomRightGO;
+        private GameObject _resizeHandleTopLeftGO;
+        private GameObject _resizeHandleFixedBottomGO;
+        private GameObject _resizeHandleFixedBottomRightGO;
         /// <summary>Cached comps for fixed-dock Update — avoid GetComponent every frame.</summary>
         private RectTransform _backgroundBoxRT;
         private RectTransform _collapseTriggerRT;
@@ -1320,19 +1151,13 @@ namespace VPB
         private Text footerFilterModeText;
         private GameObject footerFilterModeSpacerGO;
         private Text hoverPathText;
-        // True when hoverPathText is showing the filtered item count fallback (not an item path).
         private bool hoverPathIsCountMode = false;
         private RectTransform hoverPathRT;
         private CanvasGroup hoverPathCanvasGroup;
         private Coroutine hoverFadeCoroutine;
-        /// <summary>
-        /// UIHoverReveal that currently owns the hover-path row. Deferred grid exit must not
-        /// clear path when pointer already moved onto another cell (sibling enter claims first).
-        /// </summary>
         private UIHoverReveal _hoverPathRevealOwner;
         /// <summary>Reuse for grid caption recovery strings (info-bar hover) — warm path only.</summary>
         private readonly System.Text.StringBuilder _gridLabelCaptionSb = new System.Text.StringBuilder(160);
-        /// <summary>Cached: filtered set needs two-line strip (any dual package/leaf). Invalidated on layout apply.</summary>
         private bool _gridLabelDualBandCached;
         private bool _gridLabelDualBandValid;
         private bool _gridCreatorRedundantCached;
@@ -1340,7 +1165,6 @@ namespace VPB
         private List<FileEntry> _gridCreatorStatsList;
         private int _gridCreatorStatsFirst = -1;
         private int _gridCreatorStatsLast = -1;
-        // Hover preview overlay (canvas-local X/Y offset + size; drag placeholder in settings)
         private GameObject hoverPreviewGO;
         private RectTransform hoverPreviewRT;
         private RawImage hoverPreviewImage;
@@ -1351,7 +1175,6 @@ namespace VPB
         private UIHoverPreviewTrigger hoverPreviewSource;
         private Vector2 hoverPreviewDragGrabLocal;
         private bool hoverPreviewDragging;
-        /// <summary>Swallow the click that ends a placeholder drag so it cannot step a settings row underneath.</summary>
         private bool hoverPreviewSuppressSettingsClick;
         private float hoverPreviewScrollNotchAccum;
         private GameObject gridSizeMinusBtn;
@@ -1382,10 +1205,6 @@ namespace VPB
         private Text footerApplyModeBtnText;
         private Sprite footerHoldToLaunchOnSprite;
         private Sprite footerHoldToLaunchOffSprite;
-        /// <summary>
-        /// Per-pane grid column count. <see cref="VPBConfig.GridColumnCount"/> is last-used default for newly created panes.
-        /// Wheel/± must not write that default with ConfigChanged — every pane RebuildGridLayout would hitch.
-        /// </summary>
         public int GridColumnCount
         {
             get { return gridColumnCount; }
@@ -1423,7 +1242,6 @@ namespace VPB
             return ListRowHeight;
         }
 
-        /// <summary>Thumb decode density: settings list acts as single-column (widest) regardless of saved grid columns.</summary>
         private int EffectiveGridColumnsForThumbDecode()
         {
             if (settingsListViewActive)
@@ -1443,7 +1261,6 @@ namespace VPB
             }
         }
 
-        // Apply Mode
         public ApplyMode ItemApplyMode
         {
             get {
@@ -1482,7 +1299,6 @@ namespace VPB
         private Image leftDockAnchorBtnImage;
         private Image leftDockAnchorBtnIconImage;
 
-        /// <summary>First N entries in <see cref="rightSideButtons"/> / <see cref="leftSideButtons"/> are 50×50 icon buttons (dock, follow).</summary>
         internal const int GalleryLeadingIconButtonCount = 2;
 
         private Sprite galleryDockAnchorSprite;
@@ -1528,17 +1344,11 @@ namespace VPB
 
         /// <summary>Scratch build list for <see cref="RefreshFilesRoutine"/> — Clear+reuse; never share with snapshot cache storage.</summary>
         private readonly List<FileEntry> _refreshBuildFiles = new List<FileEntry>(4096);
-        /// <summary>Scratch for loose-disk search roots during refresh.</summary>
         private readonly List<string> _refreshPathsToSearch = new List<string>(16);
-        /// <summary>Scratch for SafeGetFiles during refresh loose-file scan.</summary>
         private readonly List<string> _refreshSysFilePathScratch = new List<string>(512);
-        /// <summary>Scratch for sys-cache row filter during refresh.</summary>
         private readonly List<VpbLocalDatabase.SystemFileRow> _refreshSysRowsToKeepScratch = new List<VpbLocalDatabase.SystemFileRow>(256);
-        /// <summary>Scratch for writing sys-file cache during refresh.</summary>
         private readonly List<VpbLocalDatabase.SystemFileRow> _refreshSysRowsForWriteScratch = new List<VpbLocalDatabase.SystemFileRow>(256);
-        /// <summary>Scratch for SQLite sys-file cache read during refresh.</summary>
         private readonly List<VpbLocalDatabase.SystemFileRow> _refreshSysCachedRowsScratch = new List<VpbLocalDatabase.SystemFileRow>(256);
-        /// <summary>Scratch sorted copy of search roots for sys-cache key/sig.</summary>
         private readonly List<string> _refreshPathKeySortScratch = new List<string>(16);
 
         /// <summary>Post-drain file list before hide-strip (same as <see cref="lastFilteredFiles"/> after full refresh). Used to toggle &quot;show hidden&quot; without re-running <see cref="GalleryPanel.RefreshFilesRoutine"/>.</summary>
@@ -1546,12 +1356,7 @@ namespace VPB
 
         private bool galleryPreHideSnapshotValid = false;
 
-        /// <summary>Refuse select-all (toolbar and Ctrl+A) when the filtered gallery has more than this many items.</summary>
         private const int SelectAllSafetyMaxItemCount = 1000;
-        /// <summary>
-        /// Above this selection size, skip per-item dep scans / package resolve storms on warm selection refresh.
-        /// Counts become enable-all heuristics; exact per-UID work stays on explicit actions.
-        /// </summary>
         private const int SelectionHeavyScanMax = 48;
         public FileEntry selectedFile
         {
@@ -1569,18 +1374,14 @@ namespace VPB
         #pragma warning disable CS0414
         #pragma warning restore CS0414
         
-        // Content-type accent colors — <see cref="GalleryUiColorTokens"/> facets.
         public static readonly Color ColorCategory = GalleryUiColorTokens.FacetCategory;
         public static readonly Color ColorCreator = GalleryUiColorTokens.FacetCreator;
         public static readonly Color ColorLooksLike = GalleryUiColorTokens.FacetLooksLike;
         public static readonly Color ColorHubType = GalleryUiColorTokens.FacetHubType;
         public static readonly Color ColorTagFilter = GalleryUiColorTokens.FacetTag;
         public static readonly Color ColorRatingFilter = GalleryUiColorTokens.FacetRating;
-        /// <summary>★ Not-rated filter armed (slate; distinct from rated purple accent).</summary>
         public static readonly Color ColorUnratedFilterAccent = GalleryUiColorTokens.FacetUnrated;
-        /// <summary>★ Not-rated label/text tint on title-bar chrome.</summary>
         public static readonly Color ColorUnratedFilterLabel = GalleryUiColorTokens.FacetUnratedLabel;
-        /// <summary>★ Not-rated icon tint when presence filter armed.</summary>
         public static readonly Color ColorUnratedFilterIcon = GalleryUiColorTokens.FacetUnratedIcon;
         public static readonly Color ColorSourceFilter = GalleryUiColorTokens.FacetSource;
         public static readonly Color ColorSubfilterFilter = GalleryUiColorTokens.FacetSubfilter;
@@ -1590,7 +1391,6 @@ namespace VPB
         public static readonly Color ColorPath = GalleryUiColorTokens.FacetPath;
         public static readonly Color ColorHistory = GalleryUiColorTokens.FacetHistory;
         public static readonly Color ColorHistoryAccent = GalleryUiColorTokens.FacetHistoryAccent;
-        /// <summary>Scene Import side-rail button backdrop (idle + active).</summary>
         public static readonly Color ColorSceneImport = GalleryUiColorTokens.FacetSceneImport;
         public static readonly Color ColorHub = GalleryUiColorTokens.FacetHub;
         public static readonly Color ColorLicense = GalleryUiColorTokens.FacetLicense;
@@ -1607,11 +1407,10 @@ namespace VPB
 
         public bool isFixedLocally = false;
         private bool isCollapsed = false;
-        /// <summary>Fixed-mode dock collapse strip and &lt; &gt; bar (half legacy 60px).</summary>
         private const float FixedCollapseTriggerThickness = 30f;
         private const float FixedCollapseTriggerChamferSize = 50f;
         private const int FixedCollapseTriggerArrowFontSize = GalleryUiDesignTokens.FontBodyRef;
-        private GameObject collapseTriggerGO; // Right dock
+        private GameObject collapseTriggerGO;
         private Text collapseHandleText;
         private GameObject collapseTriggerLeftGO;
         private Text collapseHandleLeftText;
@@ -1621,7 +1420,6 @@ namespace VPB
         private bool isHoveringTrigger = false;
         private Camera _cachedCamera;
 
-        // Per-category filter state memory (BA-style: each category remembers its own filters)
         private readonly Dictionary<string, CategoryFilterState> _categoryFilterStates = new Dictionary<string, CategoryFilterState>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stable browse-memory key. Assigned by <see cref="Gallery.AddPanel"/> — never GetHashCode (that broke SQL restore after Close/restart).</summary>
         private string _panelId = null;
@@ -1638,7 +1436,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Gallery assigns slot ids (<c>panel_0</c>, <c>panel_1</c>, …) so filter SQL survives Close + recreate.</summary>
         internal void AssignStablePanelId(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
@@ -1646,7 +1443,6 @@ namespace VPB
             InvalidateDockSideCache();
         }
 
-        // Sorting
         private Dictionary<string, SortState> contentSortStates = new Dictionary<string, SortState>();
 
         public GalleryLayoutMode layoutMode = GalleryLayoutMode.Grid;
@@ -1698,24 +1494,23 @@ namespace VPB
         private bool _userHidden = false;
         private bool _hiddenByMenuGate = false;
         
-        private Text fileSortBtnText; // NEW
-        private Text fileSortTypeText; // Sort Type button text (Az/Dt/Sz/Rt)
+        private Text fileSortBtnText;
+        private Text fileSortTypeText;
         private Text fileSortDirText; // Optional; null when direction shown as icon only
-        private Image fileSortDirIconImage; // Asc/desc glyph on file-sort direction button
+        private Image fileSortDirIconImage;
         private Sprite fileSortDirAscSprite;
         private Sprite fileSortDirDescSprite;
-        private Image ratingSortIconImage; // Icon image on the star toggle (swapped on/off)
-        private Sprite ratingStarNormalSprite; // star — shown when filter is OFF
-        private Sprite ratingStarOffSprite;    // outline star — shown when filter is ON
+        private Image ratingSortIconImage;
+        private Sprite ratingStarNormalSprite;
+        private Sprite ratingStarOffSprite;
         private GameObject fileSortTypeMenuRoot;
         private GameObject fileSortTypeMenuPanelGO;
         
-        // Side-pane sort dropdown (Category/Creator/Tags/etc)
         private GameObject sidePaneSortMenuRoot;
         private GameObject sidePaneSortMenuPanelGO;
         private RectTransform sidePaneSortMenuPanelRT;
         private string sidePaneSortMenuContext;
-        private Text quickFiltersToggleBtnText; // NEW
+        private Text quickFiltersToggleBtnText;
         private Image quickFiltersToggleBtnIconImage;
         private Text layoutPresetsToggleBtnText;
         private Image layoutPresetsToggleBtnIconImage;
@@ -1728,20 +1523,15 @@ namespace VPB
         private GameObject languageMenuPopupGO;
         private bool languageMenuOpen;
         private RatingPresenceFilterMode _ratingPresenceFilterMode;
-        /// <summary>Scratch for rating-mutate prune (reuse; warm path, no per-click HashSet churn).</summary>
         private readonly List<FileEntry> _ratingMutatedScratch = new List<FileEntry>(8);
         private readonly List<FileEntry> _ratingPruneSurvivingSelected = new List<FileEntry>(8);
         private HashSet<FileEntry> _ratingPruneRemoveRefs;
         private HashSet<string> _ratingPruneRemoveKeys;
 
-        // Tracks panels hidden when a save flow starts, so they can be restored when it ends
         private List<Canvas> _canvasesHiddenForSave;
         private List<GalleryPanel> _panelsHiddenForSave;
-        // Scene save can hand off to VaM screenshot capture asynchronously; keep save mode
-        // active until that flow ends so overwrite/screenshot UI is not interrupted.
         private Coroutine _sceneSaveFinalizeCoroutine;
         private bool _sceneSaveSawScreenshotCamera;
         private bool _sceneSaveRehideApplied;
     }
 }
-

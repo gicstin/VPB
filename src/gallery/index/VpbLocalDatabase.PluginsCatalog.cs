@@ -5,20 +5,14 @@ using System.IO;
 
 namespace VPB
 {
-    /// <summary>
-    /// Plugins float catalog — same SQL hot path as gallery grid (cat_mem JOIN pkg).
-    /// Never DeepMaxDirMtime / SafeGetFiles / PackagesByUid on open.
-    /// </summary>
+    /// <summary>Plugins float catalog — same SQL hot path as gallery grid (cat_mem JOIN pkg).</summary>
     internal static partial class VpbLocalDatabase
     {
         internal const string PluginsCategoryName = "Plugins";
         internal const string PluginsFloatLooseCacheKey = "plugins:float_loose|root=Custom/Scripts";
         internal const string CslistChildrenKeyPrefix = "plugins:cslist_children|parent=";
 
-        /// <summary>
-        /// Grid-parity catalog: TryQueryGalleryCategoryRows + warm sys_file loose rows (stored sig only).
-        /// ThreadPool-safe. Builds lightweight FileEntry like RefreshFilesRoutine bulk path.
-        /// </summary>
+        /// <summary>Grid-parity catalog: TryQueryGalleryCategoryRows + warm sys_file loose rows (stored sig only).</summary>
         internal static bool TryBuildPluginsFloatCatalog(List<FileEntry> outEntries)
         {
             if (outEntries == null) return false;
@@ -74,7 +68,6 @@ namespace VPB
                 if (!ok)
                 {
                     reject = stats.RejectReason ?? "query_false";
-                    // Direct cat_mem read — same data grid uses once index ready; skip extension gate.
                     usedDirectFallback = TryReadPluginsCatMemDirect(rows, out reject);
                     if (!usedDirectFallback)
                     {
@@ -165,10 +158,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Bypass ExtensionSetsEqual / ready-gate for float when grid query rejects.
-        /// Still JOIN pkg for timestamps like bulk path.
-        /// </summary>
         private static bool TryReadPluginsCatMemDirect(List<Row> outRows, out string detail)
         {
             detail = null;
@@ -221,10 +210,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Read plugins:custom_scripts (or float_loose) using meta-stored sig only.
-        /// No DeepMaxDirMtimeBinary — that walk is why float felt slower than grid.
-        /// </summary>
+        /// <summary>Read plugins:custom_scripts (or float_loose) using meta-stored sig only.</summary>
         private static void AppendWarmLoosePluginScripts(List<FileEntry> outEntries)
         {
             if (outEntries == null) return;
@@ -286,7 +272,7 @@ namespace VPB
             if (sep >= 0 && !(sep == 1 && char.IsLetter(p[0])))
                 check = p.Substring(sep + 2);
             string l = check.ToLowerInvariant();
-            if (!(l.EndsWith(".cs") || l.EndsWith(".cslist") || l.EndsWith(".dll")))
+            if (!(l.EndsWith(".cs", StringComparison.Ordinal) || l.EndsWith(".cslist", StringComparison.Ordinal) || l.EndsWith(".dll", StringComparison.Ordinal)))
                 return false;
             if (check.IndexOf("Custom/Scripts/", StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
@@ -299,9 +285,6 @@ namespace VPB
             return sep >= 0;
         }
 
-        /// <summary>
-        /// Rebuild loose Custom/Scripts rows. Disk IO — never call from float open.
-        /// </summary>
         internal static void EnsurePluginsFloatLooseCache()
         {
             if (!VpbSqlite3.IsAvailable) return;

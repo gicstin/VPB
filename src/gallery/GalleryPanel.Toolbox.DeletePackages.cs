@@ -22,7 +22,6 @@ namespace VPB
             else LogUtil.LogWarning(msg);
         }
 
-        /// <summary>Unique package UIDs referenced by the current selection (same basis as copy / delete).</summary>
         private static HashSet<string> CollectUniquePackageUidsFromSelection(IList<FileEntry> files)
         {
             var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -37,7 +36,6 @@ namespace VPB
             return uids;
         }
 
-        /// <summary>Classify selected UIDs for toolbox delete; <paramref name="toDelete"/> matches what the confirm dialog will move.</summary>
         private static void ClassifyUidsForTboxDelete(
             HashSet<string> uids,
             string currentScenePkg,
@@ -71,20 +69,16 @@ namespace VPB
                     continue;
                 }
 
-                // Currently loaded scene package: allow delete (file move + undo) but warn.
-                // Blocking it hid Delete for the open scene; confirm dialog is the friction (High risk).
                 bool isLoadedScenePkg = !string.IsNullOrEmpty(currentScenePkg)
                     && string.Equals(uid, currentScenePkg, StringComparison.OrdinalIgnoreCase);
                 if (isLoadedScenePkg)
                     warned.Add(uid + ".var (currently loaded scene)");
 
-                // Running scene dependency (skip if already called out as the loaded scene package).
                 if (!isLoadedScenePkg && runningSceneDeps != null && runningSceneDeps.Contains(uid))
                 {
                     warned.Add($"{uid}.var (referenced by running scene)");
                 }
 
-                // Dependents warning (skip for exclusive-dep pass — those dependents are the packages we are already deleting).
                 if (warnDependents)
                 {
                     int depCount = 0;
@@ -103,7 +97,6 @@ namespace VPB
                     continue;
                 }
 
-                // Critical: already deleted
                 try
                 {
                     string norm = srcPath.Replace('\\', '/');
@@ -210,7 +203,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Package count for toolbox Delete (local scenes counted separately via <see cref="GetTboxDeleteEligibleLocalSceneCount"/>).</summary>
         private int GetTboxDeleteEligiblePackageCount()
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return 0;
@@ -229,7 +221,6 @@ namespace VPB
             return toDelete.Count;
         }
 
-        // Called by the toolbox button created in GalleryPanel.SelectionContextMenu.cs
         private void TboxDeleteSelectedPackages()
         {
             try
@@ -300,8 +291,6 @@ namespace VPB
                 if (deletingLoadedScene)
                     AppendLoadedLocalSceneWarnings(localScenes, warned);
 
-                // Related-entry dump: useful when a package hides collateral gallery items.
-                // Multi-select with one listing per package = selection echo — skip (Hick / memory load).
                 string relatedBlock = BuildRelatedEntriesBlock(relatedEntries, toDelete.Count);
 
                 var summaryLines = new List<string>();
@@ -674,10 +663,7 @@ namespace VPB
                 ShowTemporaryStatus("Delete failed (" + fail + "). See log.", 3f);
         }
 
-        /// <summary>
-        /// If entire selection will leave the grid after delete, select nearest survivor first
-        /// so detail strip stays open (same nearest-next policy as rating prune).
-        /// </summary>
+        /// <summary>If entire selection will leave the grid after delete.</summary>
         private void SelectNextBeforeTboxDelete(
             List<string> packageUidsToDelete,
             List<LocalSceneDeleteItem> localScenes,
@@ -750,7 +736,6 @@ namespace VPB
                 }
             }
 
-            // Partial multi-select: purge keeps survivors — no reselect needed.
             if (anySurvivor) return;
 
             int pivot = anchorRemovedIdx >= 0 ? anchorRemovedIdx : firstRemovedIdx;
@@ -873,7 +858,6 @@ namespace VPB
                     }
 
                     File.Move(srcPath, dstPath);
-                    // Drop the cached path-inventory row so the gone file is not re-registered next launch.
                     try { VpbLocalDatabase.NoteMissingVarPath(srcPath); } catch { }
                     moved++;
                     movedUids.Add(uid);
@@ -907,7 +891,7 @@ namespace VPB
         {
             try
             {
-                var pkg = FileManager.GetPackageForDependency(uid, false);
+                var pkg = FileManager.GetInstalledPackageOrDependency(uid);
                 if (pkg != null)
                     return FileManager.ResolveDependentCount(pkg);
             }
@@ -933,7 +917,7 @@ namespace VPB
         {
             try
             {
-                var pkg = FileManager.GetPackageForDependency(uid, false);
+                var pkg = FileManager.GetPackage(uid, false);
                 if (pkg != null && !string.IsNullOrEmpty(pkg.Path))
                 {
                     string p = pkg.Path.Replace('\\', '/');
@@ -952,7 +936,6 @@ namespace VPB
                 LogSuppressed("DeletePackages.ResolveVarPathForUid(FileManager)", ex);
             }
 
-            // Fallback: try common folder by filename
             try
             {
                 string candidate = "AddonPackages/" + uid + ".var";
@@ -976,7 +959,6 @@ namespace VPB
                 string json = TryGetSceneJsonString(sc);
                 if (string.IsNullOrEmpty(json)) return null;
 
-                // This is fast and does not require full JSON walking
                 return DependencyExtractor.ExtractDependenciesFromRawText(json);
             }
             catch (Exception ex)
@@ -1038,7 +1020,6 @@ namespace VPB
             var names = new List<string>();
             if (string.IsNullOrEmpty(packageUid)) return names;
 
-            // Prefer current filtered list (what the user is actually looking at)
             try
             {
                 if (currentFilteredFiles != null)
@@ -1065,10 +1046,9 @@ namespace VPB
 
             if (names.Count > 0) return names;
 
-            // Fallback to package cache (shows "other scenes" even if not visible in current list)
             try
             {
-                var pkg = FileManager.GetPackageForDependency(packageUid, false);
+                var pkg = FileManager.GetInstalledPackageOrDependency(packageUid);
                 if (pkg != null && pkg.TryGetCachedFileEntryData(out List<string> entryNames, out _, out _))
                 {
                     for (int i = 0; i < entryNames.Count && names.Count < maxNames; i++)
@@ -1125,11 +1105,6 @@ namespace VPB
                 lines.Add(unique[i]);
         }
 
-        /// <summary>
-        /// Related gallery paths inside packages being moved.
-        /// Single package: list paths (collateral awareness).
-        /// Multi: only when some package exposes &gt;1 listing; otherwise selection already named the tiles.
-        /// </summary>
         private static string BuildRelatedEntriesBlock(Dictionary<string, List<string>> relatedEntries, int packageDeleteCount)
         {
             if (relatedEntries == null || relatedEntries.Count == 0) return "";
@@ -1145,14 +1120,12 @@ namespace VPB
             if (totalEntries == 0) return "";
 
             bool multi = packageDeleteCount > 1 || relatedEntries.Count > 1;
-            // Multi + one listing per package = echo of selection / package list. Skip.
             if (multi && maxPerPkg <= 1) return "";
 
             var lines = new List<string>();
 
             if (!multi)
             {
-                // One package: keep scannable path list under a single header.
                 lines.Add("Also removing related gallery entries:");
                 foreach (var kvp in relatedEntries)
                 {
@@ -1170,7 +1143,6 @@ namespace VPB
                 return string.Join("\n", lines.ToArray());
             }
 
-            // Multi with collateral (unselected scenes/presets inside package).
             lines.Add("Also removing other gallery entries inside these packages:");
             int pkgShown = 0;
             foreach (var kvp in relatedEntries)
@@ -1201,7 +1173,6 @@ namespace VPB
 
             try
             {
-                // Remove from selection
                 if (selectedFiles != null)
                 {
                     selectedFiles.RemoveAll(f =>
@@ -1222,7 +1193,6 @@ namespace VPB
 
             try
             {
-                // Remove from current list and refresh UI
                 if (currentFilteredFiles != null)
                 {
                     int before = currentFilteredFiles.Count;
@@ -1250,4 +1220,3 @@ namespace VPB
         }
     }
 }
-

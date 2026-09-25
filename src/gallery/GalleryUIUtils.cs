@@ -18,7 +18,6 @@ namespace VPB
     {
         private static float _lastLoadSceneStartTime = -9999f;
 
-        // Universal gallery chrome — aliases <see cref="GalleryUiColorTokens"/> (single source).
         public static readonly Color PopupBackdrop = GalleryUiColorTokens.PopupSurface;
         public static readonly Color PopupRowBackdrop = GalleryUiColorTokens.PopupRowIdle;
         public static readonly Color PopupRowActiveBackdrop = GalleryUiColorTokens.PopupRowActive;
@@ -32,33 +31,23 @@ namespace VPB
         public static readonly Color InputFieldBg = GalleryUiColorTokens.SurfaceDarker;
         public static readonly Color TextShadowColor = GalleryUiColorTokens.TextShadow;
 
-        // Neutral chrome fills (formerly written inline as raw new Color(...) dozens of times).
         public static readonly Color ChromeDarker = GalleryUiColorTokens.SurfaceDarker;
         public static readonly Color ChromeDark = GalleryUiColorTokens.SurfaceDark;
         public static readonly Color ChromePanel = GalleryUiColorTokens.SurfacePanel;
         public static readonly Color ChromeMid = GalleryUiColorTokens.SurfaceMid;
-        // Interactive accents: selected = muted cool-grey, green = confirm CTA, red = destructive.
         public static readonly Color AccentBlue = GalleryUiColorTokens.AccentSelected;
         public static readonly Color AccentGreen = GalleryUiColorTokens.AccentConfirm;
         public static readonly Color AccentRed = GalleryUiColorTokens.AccentDanger;
 
-        /// <summary>Background of centered modal panels (formerly inline new Color(0.06,0.06,0.08,1)).</summary>
         public static readonly Color ModalPanel = GalleryUiColorTokens.ModalSurface;
-        // Standard gallery Button ColorBlock tints (formerly inlined per button). White normalColor keeps the
-        // RoundedRect fill unchanged; hover brightens, press darkens, disabled dims + fades.
+        // Standard gallery Button ColorBlock tints (formerly inlined per button).
         public static readonly Color ButtonHighlight = GalleryUiColorTokens.ButtonHighlight;
         public static readonly Color ButtonPressed = GalleryUiColorTokens.ButtonPressed;
         public static readonly Color ButtonDisabled = GalleryUiColorTokens.ButtonDisabled;
 
-        /// <summary>White with the given alpha — for hover/separator/overlay tints (replaces inline new Color(1,1,1,a)).</summary>
         public static Color White(float alpha) => new Color(1f, 1f, 1f, alpha);
-        /// <summary>Black with the given alpha — for scrims/shadows (replaces inline new Color(0,0,0,a)).</summary>
         public static Color Black(float alpha) => new Color(0f, 0f, 0f, alpha);
 
-        /// <summary>
-        /// Kills Unity <see cref="Selectable"/> ColorTint hover/press (the gray “fill” on neutral buttons).
-        /// Keeps <see cref="ColorBlock.disabledColor"/> so disabled chrome still dims.
-        /// </summary>
         public static void NeutralizeSelectableColorTint(Selectable sel)
         {
             if (sel == null) return;
@@ -107,22 +96,12 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Gallery pane: no ColorTint fill on any <see cref="Selectable"/>; buttons get
-        /// <see cref="UIHoverBorder"/>. Run once at init and on a throttle via <see cref="GalleryPaneChromeEnforcer"/>
-        /// so tabs/redraws cannot restore default hover fill.
-        /// </summary>
+        /// <summary>Gallery pane: no ColorTint fill on any Selectable; buttons get UIHoverBorder.</summary>
         public static void ApplyGalleryPaneHoverPolicy(GameObject root)
         {
             ApplyHoverPolicyCore(root, forceInward: false);
         }
 
-        /// <summary>
-        /// Modeless float roots live on canvas (outside <see cref="GalleryPaneChromeEnforcer"/>).
-        /// Same neutralize + border policy, but always inward — float title/footer/panel use
-        /// <see cref="RectMask2D"/> and outward rims clip (invisible hover).
-        /// Cold/warm after build or list rebuild — not per-frame.
-        /// </summary>
         public static void ApplyFloatRootHoverPolicy(GameObject root)
         {
             ApplyHoverPolicyCore(root, forceInward: true);
@@ -148,8 +127,7 @@ namespace VPB
                         var hb = s.GetComponent<UIHoverBorder>();
                         bool added = hb == null;
                         if (added) hb = s.gameObject.AddComponent<UIHoverBorder>();
-                        // Only stamp default border color on newly added borders — never overwrite
-                        // side-rail selected tints / custom hover colors (that caused a 0.5s pulse).
+                        // Only stamp default border color on newly added borders.
                         bool wantInward = forceInward || IsUnderImportSidebarScrollViewport(s.transform);
                         ApplyHoverBorderPolicyIfChanged(hb, border, wantInward, assignDefaultColor: added);
                         EnableChromeIdleRim(hb);
@@ -169,9 +147,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Ensure inward + optional default color. Never rewrite an existing custom <see cref="UIHoverBorder.hoverColor"/>.
-        /// </summary>
         private static void ApplyHoverBorderPolicyIfChanged(UIHoverBorder hb, Color border, bool wantInward, bool assignDefaultColor)
         {
             if (hb == null) return;
@@ -189,7 +164,6 @@ namespace VPB
             if (needApply) hb.ApplyBorderSettings();
         }
 
-        /// <summary>Obsolete name — use <see cref="ApplyGalleryPaneHoverPolicy"/>.</summary>
         public static void EnforceBorderHoverForAllButtons(GameObject root)
         {
             ApplyGalleryPaneHoverPolicy(root);
@@ -205,7 +179,6 @@ namespace VPB
                 if (p.Length == 0) return;
                 int sep = p.IndexOf(":/", StringComparison.Ordinal);
                 if (sep <= 0) return;
-                // Ignore Windows drive paths like C:/...
                 if (sep == 1 && char.IsLetter(p[0])) return;
                 string uid = p.Substring(0, sep);
                 if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
@@ -230,7 +203,6 @@ namespace VPB
             }
 
             // History rows can be lazy/deferred and dependency parsing may fail before package resolution.
-            // Always include the host package UID from entry identifiers as fallback.
             try
             {
                 if (entry != null)
@@ -241,8 +213,7 @@ namespace VPB
             }
             catch { }
 
-            // Expand transitive meta.json deps from the SQLite index so scan-whitelist temp allow
-            // covers packages the scene JSON never names (same closure PrewarmOnDemand uses).
+            // Expand transitive meta.json deps so temp allow covers packages the scene never names.
             if (needed.Count > 0)
             {
                 try
@@ -350,8 +321,6 @@ namespace VPB
             if (asWarning) LogUtil.LogWarning(msg);
             else LogUtil.Log(msg);
 
-            // Drain pending catalog refresh while scene temp allow-list is still active so native
-            // Refresh does not drop just-loaded packages in the same window we remove overrides.
             try
             {
                 if (VamOnDemandLoader.HasPendingCoalescedVamRefresh())
@@ -367,7 +336,7 @@ namespace VPB
         {
             if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Waiting for scene to finish loading...");
             int startSerial = cleanupState != null ? cleanupState.SceneLoadTotalSerialAtStart : LogUtil.GetSceneLoadTotalSerial();
-            float timeout = 60f; // Max 60 seconds
+            float timeout = 60f;
             float elapsed = 0f;
             bool completedBySceneTotal = false;
 
@@ -384,12 +353,11 @@ namespace VPB
 
             if (completedBySceneTotal)
             {
-                yield return null; // allow one frame for end-of-load side effects
+                yield return null;
                 FinalizeSceneLoadCleanup(cleanupState, "scene total ended");
                 yield break;
             }
 
-            // Fallback for edge cases where scene-total auto-end is not reached in time.
             if (LogUtil.IsSceneLoading())
                 FinalizeSceneLoadCleanup(cleanupState, "scene-load-total signal timeout reached (cleanup fallback)", true);
             else
@@ -438,14 +406,11 @@ namespace VPB
             }
             catch { }
 
-            // Guard against duplicate triggers in the same click/frame burst.
             if (!TryBeginSceneLoadThrottle())
             {
                 LogUtil.LogWarning("[VPB] UI.LoadSceneFile ignored (throttled)");
                 return;
             }
-
-            // History: SuperController.LoadInternal records scene use (covers VPB + VAM Browser + Scene Loader).
 
             if (Messager.singleton == null)
             {
@@ -492,9 +457,6 @@ namespace VPB
             public SceneLoadCleanupState CleanupState;
         }
 
-        /// <summary>
-        /// Shared ensure / whitelist / refresh / rewrite path for gallery scene load and merge.
-        /// </summary>
         private static IEnumerator PrepareSceneEntryCoroutine(
             FileEntry entry,
             GalleryPanel panel,
@@ -554,11 +516,6 @@ namespace VPB
             bool hasTemporaryAllowList = temporaryUidOverrides != null && temporaryUidOverrides.Count > 0;
             bool packageStateChanged = outcome.DepsChanged || hasTemporaryAllowList;
 
-            // Gallery scene load previously skipped Prewarm (drag/VDS/import call it). With scan
-            // whitelist on, register host+transitive deps into VaM before the native catalog refresh
-            // so FileExists/GetVarFileEntry miss hooks are not the only path for meta-only deps.
-            // Queue coalesced catalog refresh only when this coroutine will not run an explicit
-            // bridge refresh; FinalizeSceneLoadCleanup drains any pending coalesced refresh.
             if (ScanWhitelistManager.Instance.IsEnabled)
             {
                 try
@@ -572,7 +529,6 @@ namespace VPB
                 }
             }
 
-            // Tell LoadInternal funnel gallery already prepped this path — skip duplicate native prep.
             try { SceneLoadingUtils.NoteGallerySceneLoadPrep(path); } catch { }
 
             LogUtil.Log("[VPB] UI.EnsureInstalled (with dependency scan) depsChanged:" + outcome.DepsChanged
@@ -695,9 +651,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Clears scene banner + OS heartbeat when merge loads skip WorldUI.Activate / EndSceneLoadTotal.
-        /// </summary>
         private static IEnumerator SceneLoadBannerFallbackRoutine(int serialAtStart, float timeoutSec = 180f)
         {
             yield return null;
@@ -817,16 +770,10 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// How scene atoms are added into the live scene from the floating context menu.
-        /// </summary>
         public enum SceneAddMode
         {
-            /// <summary>VaM LoadMerge of the whole scene (persons + everything). Heavy; may blank view.</summary>
             FullMerge = 0,
-            /// <summary>Spawn non-Person atoms via SceneAtomImporter (preferred). Falls back to filtered LoadMerge.</summary>
             NonPersons = 1,
-            /// <summary>Filtered LoadMerge excluding Person-like atoms (includes free-standing CUAs).</summary>
             NonPersonsMergeLoad = 2,
             /// <summary>Filtered LoadMerge of Person-like atoms only (unique ids).</summary>
             PersonsOnly = 3
@@ -1115,11 +1062,6 @@ namespace VPB
                 StatusBrief(panel, VPBTranslation.T("ctx.merge.nonpersons_done", "Non-person merge started."));
         }
 
-        /// <summary>
-        /// Preferred add path: spawn non-Person atoms without VaM LoadMerge overlay.
-        /// Falls back to filtered LoadMerge when importer finds nothing but JSON has atoms
-        /// (e.g. only free-standing CUAs with no person target).
-        /// </summary>
         private static IEnumerator AddNonPersonAtomsRoutine(
             FileEntry entry,
             string normalizedPath,
@@ -1238,7 +1180,6 @@ namespace VPB
             int spawned = afterCount - beforeCount;
             if (spawned <= 0 && nonPersonCount > 0)
             {
-                // Importer skipped CUAs / nothing new — fall back to filtered LoadMerge.
                 LogUtil.Log("[VPB] AddNonPersonAtoms: importer spawned 0; falling back to filtered LoadMerge");
                 string filtered = SceneLoadingUtils.CreateFilteredSceneJSON(
                     normalizedPath,
@@ -1336,7 +1277,6 @@ namespace VPB
 
             try
             {
-                // FileManager.NormalizePath is more reliable in this codebase
                 return FileManager.NormalizePath(path);
             }
             catch (Exception ex)
@@ -1352,7 +1292,7 @@ namespace VPB
                 if (normalizedPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase))
                 {
                     normalizedPath = normalizedPath.Substring(currentDir.Length);
-                    if (normalizedPath.StartsWith("/")) normalizedPath = normalizedPath.Substring(1);
+                    if (normalizedPath.StartsWith("/", StringComparison.Ordinal)) normalizedPath = normalizedPath.Substring(1);
                 }
             }
             catch (Exception ex)
@@ -1362,9 +1302,6 @@ namespace VPB
             return normalizedPath;
         }
 
-        /// <summary>
-        /// True for VaM package paths (creator.pkg.version:/internal), false for Windows drive paths (C:/...) and http(s) URLs.
-        /// </summary>
         private static bool LooksLikeVarPackagePath(string p)
         {
             if (string.IsNullOrEmpty(p)) return false;
@@ -1378,17 +1315,11 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Use instead of raw <c>path.Contains(":")</c> so Windows drives and URLs are not mistaken for VAR references.
-        /// </summary>
         public static bool IsLikelyVarPackageReference(string path)
         {
             return LooksLikeVarPackagePath(path);
         }
 
-        /// <summary>
-        /// Whether <paramref name="entry"/> refers to the same file as <paramref name="path"/> (any of path / Uid / normalized forms).
-        /// </summary>
         private static bool FileEntryMatchesPathForJsonLoad(FileEntry entry, string path)
         {
             if (entry == null || string.IsNullOrEmpty(path)) return false;
@@ -1434,8 +1365,6 @@ namespace VPB
 
             try
             {
-                // Selected VarFileEntry row: read this file from the .var directly. Do not require the
-                // virtual path string to match entry.Path/Uid (spacing/slashes often differ from rebuilt paths).
                 if (entry is VarFileEntry directVfe)
                 {
                     try
@@ -1494,7 +1423,6 @@ namespace VPB
                 LogUtil.LogWarning($"[VPB] LoadJSONWithFallback stream read failed for {path}: {ex.Message}");
             }
 
-            // Loose file on disk (not a package-internal path; exclude Windows drive letters)
             if (string.IsNullOrEmpty(content))
             {
                 string check = path.Replace('\\', '/');
@@ -1585,9 +1513,7 @@ namespace VPB
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
-            // IMPORTANT: Do NOT assign scrollRect.verticalScrollbar directly, as it triggers Unity's 
-            // internal auto-sizing which causes 1px flickering with large content heights.
-            // We use ScrollbarSync instead to handle synchronization manually.
+            // IMPORTANT: Do NOT assign scrollRect.verticalScrollbar directly.
             scrollRect.verticalScrollbar = null; 
             scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
 
@@ -1646,10 +1572,9 @@ namespace VPB
             scrollbar.handleRect = handleRT;
             scrollbar.targetGraphic = handleImg;
 
-            // Add BoxCollider to ensure reliable hit detection in 3D space
             var bc = scrollbarGO.AddComponent<BoxCollider>();
             bc.size = new Vector3(width, height > 0 ? height : 800f, 1f);
-            bc.center = new Vector3(-width / 2, 0, 0); // Pivot is (1, 0.5)
+            bc.center = new Vector3(-width / 2, 0, 0);
             // UI collider must not participate in physics collisions with scene atoms.
             bc.isTrigger = true;
 
@@ -1667,7 +1592,6 @@ namespace VPB
             return GalleryUiDesignTokens.ButtonCornerRadiusFraction;
         }
 
-        /// <summary>Rounded fill for gallery buttons, rows, and input chrome — uses live corner-radius setting.</summary>
         public static Image AddGalleryElementRoundedBg(GameObject go, Color color, bool raycastTarget = true)
         {
             RoundedRect rr = go.AddComponent<RoundedRect>();
@@ -1686,7 +1610,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Re-applies the configured corner radius to every live <see cref="RoundedRect"/> / <see cref="RoundedRectOutline"/>.</summary>
         public static void ApplyGalleryElementCornerRadiusGlobally()
         {
             float frac = ResolveGalleryElementCornerRadiusFraction();
@@ -1739,11 +1662,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Creates a child GameObject with a RectTransform anchored/sized from an <see cref="AnchorPresets"/> preset.
-        /// The single primitive behind the image/label/row factories — folds the repeated
-        /// new GameObject + SetParent + AddComponent&lt;RectTransform&gt; + GetAnchorMin/Max/Pivot boilerplate.
-        /// </summary>
         public static GameObject CreateChildRT(GameObject parentGO, string name, int anchorPreset = AnchorPresets.stretchAll, Vector2 size = default(Vector2), Vector2 anchoredPosition = default(Vector2))
         {
             GameObject go = new GameObject(name);
@@ -1759,9 +1677,6 @@ namespace VPB
 
         public static GameObject AddChildGOImage(GameObject parentGO, Color color, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, bool rounded = false)
         {
-            // RectTransform is pre-added by CreateChildRT; AddComponent<Image> reuses it (Graphic requires RectTransform).
-            // RoundedRect is an Image subclass; with cornerRadius 0 it renders an identical quad,
-            // so callers/lookups via GetComponent<Image>() are unaffected until a radius is set.
             GameObject go = CreateChildRT(parentGO, "Image", anchorPreset, new Vector2(horizontalSize, verticalSize), anchoredPositionOffset);
             Image img = rounded ? go.AddComponent<RoundedRect>() : go.AddComponent<Image>();
             img.color = color;
@@ -1787,9 +1702,6 @@ namespace VPB
             return go;
         }
 
-        /// <summary>Adds an Image to an existing GameObject, setting color + raycastTarget — folds the pervasive
-        /// AddComponent&lt;Image&gt;(); img.color=..; img.raycastTarget=..; pattern. Unity's default raycastTarget is
-        /// true, so color-only sites (no raycastTarget line) fold safely with the default.</summary>
         public static Image AddImage(GameObject go, Color color, bool raycastTarget = true)
         {
             Image img = go.AddComponent<Image>();
@@ -1798,7 +1710,6 @@ namespace VPB
             return img;
         }
 
-        /// <summary>Scaled <see cref="RectOffset"/> — folds the pervasive new RectOffset(RoundToInt(x*s), ...) pattern.</summary>
         public static RectOffset Pad(float left, float right, float top, float bottom, float scale = 1f)
         {
             return new RectOffset(
@@ -1829,10 +1740,8 @@ namespace VPB
         public static RectOffset PadGroup(float scale = 1f) => PadUniform(GalleryUiDesignTokens.GroupGapRef, scale);
         public static RectOffset PadDialog(float scale = 1f) => PadUniform(GalleryUiDesignTokens.DialogPadRef, scale);
         public static RectOffset PadSection(float scale = 1f) => PadUniform(GalleryUiDesignTokens.SectionGapRef, scale);
-        /// <summary>Float footer / packed chrome: band L/R, tight T/B.</summary>
         public static RectOffset PadFloatFooter(float scale = 1f)
             => PadHV(GalleryUiDesignTokens.FloatChromePadHRef, GalleryUiDesignTokens.FloatChromePadVRef, scale);
-        /// <summary>Popup / dropdown shell — same as band (Gestalt: menus match chrome).</summary>
         public static RectOffset PadPopup(float scale = 1f)
             => PadUniform(GalleryUiDesignTokens.PopupMenuPaddingRef, scale);
 
@@ -1866,7 +1775,6 @@ namespace VPB
             rt.offsetMax = max;
         }
 
-        /// <summary>Adds a <see cref="VerticalLayoutGroup"/>. Defaults match the common gallery list column.</summary>
         public static VerticalLayoutGroup AddVLG(GameObject go, float spacing = 0f, RectOffset padding = null, TextAnchor childAlignment = TextAnchor.UpperLeft, bool childControlWidth = true, bool childControlHeight = true, bool childForceExpandWidth = true, bool childForceExpandHeight = false)
         {
             VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
@@ -1880,7 +1788,6 @@ namespace VPB
             return vlg;
         }
 
-        /// <summary>Adds a <see cref="HorizontalLayoutGroup"/>. Defaults match the common gallery row.</summary>
         public static HorizontalLayoutGroup AddHLG(GameObject go, float spacing = 0f, RectOffset padding = null, TextAnchor childAlignment = TextAnchor.MiddleLeft, bool childControlWidth = true, bool childControlHeight = true, bool childForceExpandWidth = true, bool childForceExpandHeight = false)
         {
             HorizontalLayoutGroup hlg = go.AddComponent<HorizontalLayoutGroup>();
@@ -1894,10 +1801,6 @@ namespace VPB
             return hlg;
         }
 
-        /// <summary>
-        /// Adds a <see cref="LayoutElement"/>. Each dimension defaults to -1 (Unity's "ignore this constraint"
-        /// sentinel), so omitting an argument leaves that field unset exactly like a hand-rolled AddComponent.
-        /// </summary>
         public static LayoutElement AddLE(GameObject go, float minWidth = -1f, float minHeight = -1f, float preferredWidth = -1f, float preferredHeight = -1f, float flexibleWidth = -1f, float flexibleHeight = -1f)
         {
             LayoutElement le = go.AddComponent<LayoutElement>();
@@ -1910,12 +1813,6 @@ namespace VPB
             return le;
         }
 
-        /// <summary>
-        /// Creates a gallery text label. Bakes in the Arial builtin font, non-bold style, and VPBUiFont hook.
-        /// Optional-parameter DEFAULTS mirror Unity's own <see cref="Text"/> defaults (Wrap/Truncate/UpperLeft,
-        /// raycast+richtext on) so omitting an argument reproduces a hand-rolled AddComponent&lt;Text&gt; site exactly.
-        /// Returns the <see cref="Text"/>; use <c>.rectTransform</c>/<c>.gameObject</c> for further layout tweaks.
-        /// </summary>
         public static Text CreateLabel(GameObject parentGO, string text, int fontSize, Color? color = null,
             TextAnchor alignment = TextAnchor.UpperLeft,
             HorizontalWrapMode horizontalWrap = HorizontalWrapMode.Wrap,
@@ -1940,9 +1837,6 @@ namespace VPB
             return t;
         }
 
-        /// <summary>
-        /// Modal/header title: <see cref="CreateLabel"/> + <see cref="GalleryUiMetrics.ApplyEmphasisTitle"/>.
-        /// </summary>
         public static Text CreateEmphasisTitleLabel(GameObject parentGO, string text, int fontSize, Color? color = null,
             TextAnchor alignment = TextAnchor.MiddleLeft, string name = "Title")
         {
@@ -1951,9 +1845,7 @@ namespace VPB
             return t;
         }
 
-        /// <summary>
-        /// Destroys all children of <paramref name="parent"/> (reverse order).
-        /// </summary>
+        /// <summary>Destroys all children of parent (reverse order).</summary>
         public static void DestroyAllChildren(Transform parent)
         {
             if (parent == null) return;
@@ -1965,9 +1857,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Layout-group single-line input: rounded bg, padded TextArea, placeholder + text labels.
-        /// </summary>
         public static InputField CreateChromeLayoutInputField(
             Transform parent,
             int fontSize,
@@ -2015,10 +1904,6 @@ namespace VPB
             return input;
         }
 
-        /// <summary>
-        /// Magnifying-glass inside a chrome input (idempotent). Sets left TextArea inset;
-        /// caller keeps right inset for clear (X) if present.
-        /// </summary>
         public static void LayoutChromeSearchIcon(GameObject inputGO, float scale = 1f)
         {
             if (inputGO == null) return;
@@ -2067,11 +1952,6 @@ namespace VPB
             taRt.offsetMin = new Vector2(left, taRt.offsetMin.y);
         }
 
-        /// <summary>
-        /// Full-footer drag hit behind chrome buttons (same job as title-bar drag).
-        /// Disables footer tint raycasts; stretch Graphic + ignoreLayout so HLG/VLG does not crush it.
-        /// Caller AddComponent panel-drag on returned GO (init-time only).
-        /// </summary>
         public static GameObject CreateFloatFooterDragArea(GameObject footer)
         {
             if (footer == null) return null;
@@ -2091,10 +1971,6 @@ namespace VPB
             return footerDragArea;
         }
 
-        /// <summary>
-        /// Flexible footer spacer needs a Graphic to receive drags (empty RT does not).
-        /// Caller AddComponent panel-drag after this (init-time only).
-        /// </summary>
         public static Image EnsureFloatFooterSpacerDragHit(GameObject spacer)
         {
             if (spacer == null) return null;
@@ -2105,11 +1981,6 @@ namespace VPB
             return spacerImg;
         }
 
-        /// <summary>
-        /// Hover rim for float chrome that is not a <see cref="Button"/> (resize grip, etc.).
-        /// <see cref="ApplyGalleryPaneHoverPolicy"/> only auto-adds borders on Buttons.
-        /// Inward by default so footer/title <see cref="RectMask2D"/> does not clip the rim.
-        /// </summary>
         public static UIHoverBorder EnsureFloatChromeHoverBorder(GameObject go, bool inward = true)
         {
             if (go == null) return null;
@@ -2122,7 +1993,6 @@ namespace VPB
             return hb;
         }
 
-        /// <summary>Idle + selected chrome rims. Hover rim always stays. Default on.</summary>
         public static bool ChromeButtonRimsEnabled()
         {
             try
@@ -2133,9 +2003,7 @@ namespace VPB
             catch { return true; }
         }
 
-        /// <summary>
-        /// Show/hide idle + selected chrome rims on live <see cref="UIHoverBorder"/> (not grid thumbs).
-        /// </summary>
+        /// <summary>Show/hide idle + selected chrome rims on live UIHoverBorder (not grid thumbs).</summary>
         public static void ApplyGalleryButtonChromeRimsGlobally()
         {
             try
@@ -2151,10 +2019,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Faint idle rim on muted chrome buttons so they still look clickable (Norman signifier).
-        /// Skip grid thumbs that use <see cref="UIHoverBorder.hoverBorderGO"/>.
-        /// </summary>
         public static void EnableChromeIdleRim(UIHoverBorder hb)
         {
             if (hb == null || hb.hoverBorderGO != null) return;
@@ -2169,10 +2033,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Persistent selected rim (muted cool), distinct from yellow hover. Fill stays the caller's job.
-        /// Hidden when <see cref="ChromeButtonRimsEnabled"/> is off.
-        /// </summary>
         public static void SetControlSelectedRim(GameObject go, bool selected)
         {
             if (go == null) return;
@@ -2188,10 +2048,7 @@ namespace VPB
             hb.SyncIndicatorVisibility();
         }
 
-        /// <summary>
-        /// Non-interactive window-type glyph for float title bars (after grip, before title).
-        /// Host includes trailing gap so label is not stuck to icon.
-        /// </summary>
+        /// <summary>Non-interactive window-type glyph for float title bars (after grip, before title).</summary>
         public static GameObject CreateFloatTitleWindowIcon(GameObject titleBar, string iconRelativePath, float size)
         {
             if (titleBar == null || string.IsNullOrEmpty(iconRelativePath) || size <= 0f) return null;
@@ -2239,10 +2096,6 @@ namespace VPB
             return host;
         }
 
-        /// <summary>
-        /// Shared float title HLG pad/spacing + grip column width (tight icon inset).
-        /// Call at create and on ChromeScale rescale.
-        /// </summary>
         public static void ApplyFloatTitleBarMetrics(HorizontalLayoutGroup hlg, GameObject grip, float scale)
         {
             float s = scale > 0f ? scale : 1f;
@@ -2266,10 +2119,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Shared float chrome square icon button (collapse / close / footer tools).
-        /// Cold/warm create only — not per-frame. net35-safe.
-        /// </summary>
         public static GameObject CreateFloatChromeIconButton(
             Transform parent, float size, string iconPath, Color backdrop, UnityAction onClick)
         {
@@ -2281,11 +2130,6 @@ namespace VPB
             return go;
         }
 
-        /// <summary>
-        /// Style existing square chrome button (CreateUIButton → this). Same pad/tint as
-        /// <see cref="CreateFloatChromeIconButton"/>. Inward hover rim — title/footer
-        /// <see cref="RectMask2D"/> clips outward rims.
-        /// </summary>
         public static void StyleFloatChromeIconButton(
             GameObject go, float size, string iconPath, Color? backdropOverride = null)
         {
@@ -2333,7 +2177,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Rescale float chrome icon button + Icon child pad (ChromeScale adapt).</summary>
         public static void ScaleFloatChromeIconButton(GameObject go, float size, float scale = 1f)
         {
             if (go == null || size <= 0f) return;
@@ -2360,13 +2203,6 @@ namespace VPB
             EnsureFloatChromeHoverBorder(go, inward: true);
         }
 
-        /// <summary>
-        /// Tree-row expand affordance: <c>chevron-right</c> collapsed / <c>chevron-down</c> open.
-        /// Warm bind path — uses icon sprite cache; no new Icon GO after first apply.
-        /// </summary>
-        /// <param name="transparentWhenEmpty">
-        /// Plugins leaf rows: clear well. Strip Keep empty categories: opaque placeholder well.
-        /// </param>
         public static void ApplyTreeRowExpandIcon(
             GameObject expandBtn, bool canExpand, bool expanded, float scale,
             bool transparentWhenEmpty = true)
@@ -2444,7 +2280,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Rescale <c>WindowIcon</c> host + glyph + trailing gap under a float title bar.</summary>
         public static void LayoutFloatTitleWindowIcon(GameObject titleBar, float size)
         {
             if (titleBar == null || size <= 0f) return;
@@ -2487,11 +2322,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Turns off Unity's <see cref="Selectable"/> transition + keyboard/gamepad navigation on a button
-        /// (the pair written inline at dozens of sites). Optionally applies the standard gallery ColorBlock
-        /// (white normal, brighter hover, darker press, dimmed disabled) used by rounded chrome buttons.
-        /// </summary>
         public static void ConfigButtonFlat(Button btn, bool applyColors = false)
         {
             if (btn == null) return;
@@ -2508,11 +2338,6 @@ namespace VPB
             btn.navigation = new Navigation { mode = Navigation.Mode.None };
         }
 
-        /// <summary>
-        /// Creates a stretch-all click-to-dismiss dim layer (black at <paramref name="dimAlpha"/>, transition +
-        /// navigation off). Returns the dim GameObject. Used standalone for scrim/blocker overlays and as the
-        /// base of <see cref="CreateModalChrome"/>.
-        /// </summary>
         public static GameObject CreateDimBlocker(GameObject parentGO, string name, UnityAction onDismiss, float dimAlpha = GalleryUiDesignTokens.ModalDimAlpha)
         {
             GameObject dim = CreateChildRT(parentGO, name, AnchorPresets.stretchAll);
@@ -2523,12 +2348,6 @@ namespace VPB
             return dim;
         }
 
-        /// <summary>
-        /// Builds the standard full-screen modal scaffold: a stretch-all root, a click-to-dismiss dim layer
-        /// (black at <paramref name="dimAlpha"/>, transition/navigation off), and a centered panel of the given
-        /// size + background. Returns the root; the panel is returned via <paramref name="panelGO"/> for the
-        /// caller to attach its own layout group / click blocker / content.
-        /// </summary>
         public static GameObject CreateModalChrome(GameObject parentGO, string name, float panelWidth, float panelHeight, Color panelBg, UnityAction onDismiss, out GameObject panelGO, float dimAlpha = GalleryUiDesignTokens.ModalDimAlpha)
         {
             GameObject root = CreateChildRT(parentGO, name, AnchorPresets.stretchAll);
@@ -2541,9 +2360,6 @@ namespace VPB
             return root;
         }
 
-        /// <summary>
-        /// Stretch-all popup root with near-transparent child backdrop for click-outside dismiss.
-        /// </summary>
         public static GameObject CreatePopupMenuRoot(GameObject parentGO, string name, UnityAction onClose)
         {
             GameObject root = CreateChildRT(parentGO, name, AnchorPresets.stretchAll);
@@ -2555,9 +2371,6 @@ namespace VPB
             return root;
         }
 
-        /// <summary>
-        /// Standard dropdown panel: PopupBackdrop fill, VLG, vertical ContentSizeFitter.
-        /// </summary>
         public static GameObject CreatePopupMenuPanel(
             GameObject rootGO,
             string panelName,
@@ -2580,9 +2393,6 @@ namespace VPB
             return panelGO;
         }
 
-        /// <summary>
-        /// Sort/language-style popup row: left-aligned label, active/inactive chrome.
-        /// </summary>
         public static GameObject AddPopupMenuRow(
             GameObject panelGO,
             float width,
@@ -2611,10 +2421,6 @@ namespace VPB
             return row;
         }
 
-        /// <summary>
-        /// Stretch-width popup row (overflow/save menus): left-aligned label with inner text pad.
-        /// Optional leading <paramref name="icon"/> (does not hide label).
-        /// </summary>
         public static GameObject AddStretchPopupMenuRow(
             Transform panel,
             string label,
@@ -2676,7 +2482,6 @@ namespace VPB
             return row;
         }
 
-        /// <summary>Inset popup-row label from left/right edges (scale with chrome). <paramref name="leftExtraRef"/> is unscaled (icon slot).</summary>
         public static void ApplyPopupMenuRowTextPadding(Text t, float scale, float leftExtraRef = 0f)
         {
             if (t == null) return;
@@ -2711,10 +2516,6 @@ namespace VPB
             panelRT.anchoredPosition = pos;
         }
 
-        /// <summary>
-        /// Keep panel Y inside overlay. <paramref name="bottomFloorLocalY"/> is min allowed Y for panel bottom
-        /// (e.g. top of tooltip/info bar) in overlay local space; null = overlay bottom + pad.
-        /// </summary>
         public static void ClampPopupMenuPanelY(RectTransform panelRT, RectTransform overlayRT, float pad, float? bottomFloorLocalY = null)
         {
             if (panelRT == null || overlayRT == null) return;
@@ -2731,7 +2532,7 @@ namespace VPB
             float maxY = o.yMax - pad - panelH * (1f - pivotY);
             Vector2 pos = panelRT.anchoredPosition;
             if (maxY < minY)
-                pos.y = minY; // prefer clearing bottom chrome when space is tight
+                pos.y = minY;
             else
                 pos.y = Mathf.Clamp(pos.y, minY, maxY);
             panelRT.anchoredPosition = pos;
@@ -2748,8 +2549,6 @@ namespace VPB
 
         public static GameObject CreateUIButton(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction onClick)
         {
-            // Rounded background. Fraction-of-size radius is scale-resistant (re-derived from the live
-            // rect on every resize) and uniform across every gallery button.
             GameObject buttonGO = AddChildGOImage(parentGO, ChromePanel, anchorPreset, width, height, new Vector2(xOffset, yOffset), rounded: true);
             buttonGO.name = "Button_" + label;
             RoundedRect bgRounded = buttonGO.GetComponent<RoundedRect>();
@@ -2757,24 +2556,18 @@ namespace VPB
             Button btn = buttonGO.AddComponent<Button>();
             if (onClick != null) btn.onClick.AddListener(onClick);
 
-            // Standard gallery button ColorBlock + no transition/navigation (white normalColor keeps the
-            // RoundedRect fill; hover brightens, press darkens, disabled dims).
+            // Standard gallery button ColorBlock, no transition/navigation.
             ConfigButtonFlat(btn, applyColors: true);
 
             CreateLabel(buttonGO, label, fontSize, TextPrimary, TextAnchor.MiddleCenter, name: "Text");
 
-            // Add Hover Border
             UIHoverBorder chromeHb = buttonGO.AddComponent<UIHoverBorder>();
             EnableChromeIdleRim(chromeHb);
 
             return buttonGO;
         }
 
-        /// <summary>
-        /// Layout-group chrome button: rounded fill, flat Button, hover border, fixed or flexible width.
-        /// Used by modal headers/footers (scan whitelist, quick-menu pos, category quick editor, etc.).
-        /// Pass <paramref name="width"/> &lt;= 0 for flexibleWidth=1 (shares row with siblings).
-        /// </summary>
+        /// <summary>Layout-group chrome button: rounded fill, flat Button, hover border, fixed or flexible width.</summary>
         public static GameObject CreateChromeLayoutButton(Transform parent, float width, float height, string label, int fontSize, Color bg, UnityAction onClick)
         {
             GameObject go = new GameObject("Btn");
@@ -2811,10 +2604,6 @@ namespace VPB
             return go;
         }
 
-        /// <summary>
-        /// Alternating stripe list row with trailing remove chrome button (scan whitelist lists).
-        /// Returns the remove button so callers can attach tooltips.
-        /// </summary>
         public static GameObject CreateRemovableStripeRow(
             Transform parent,
             string label,
@@ -2845,11 +2634,6 @@ namespace VPB
             return CreateChromeLayoutButton(row.transform, removeW, rowH - removeHeightInset, removeLabel, fontSize, new Color(0.52f, 0.28f, 0.28f, 1f), onRemove);
         }
 
-        /// <summary>
-        /// Square trailing control for optional actions on gallery side-tab rows (rename today; other categories later).
-        /// Uses a fixed <paramref name="edgeLengthPx"/> for both axes so layout groups cannot collapse one dimension.
-        /// Pair <paramref name="edgeLengthPx"/> with the same value used for the row’s tab height (e.g. 35 × InnerPaneScale).
-        /// </summary>
         public static GameObject CreateSideTabSquareIconButton(GameObject rowParent, float edgeLengthPx, Sprite icon, UnityAction onClick, Color backdrop, float iconPadding)
         {
             GameObject go = new GameObject("SideTabSquareIcon");
@@ -2879,7 +2663,6 @@ namespace VPB
 
             LayoutElement le = AddLE(go, minWidth: edgeLengthPx, minHeight: edgeLengthPx, preferredWidth: edgeLengthPx, preferredHeight: edgeLengthPx, flexibleWidth: 0f, flexibleHeight: 0f);
 
-            // HorizontalLayoutGroup row height can exceed edgeLengthPx; match width to height so icon stays square.
             AspectRatioFitter arf = go.AddComponent<AspectRatioFitter>();
             arf.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
             arf.aspectRatio = 1f;
@@ -2948,7 +2731,6 @@ namespace VPB
             return null;
         }
 
-        /// <summary>Loads a Tabler source id (e.g. <c>shirt-off</c>, <c>filled/star</c>).</summary>
         public static Sprite LoadIconSprite(string iconRole, Color? recolorTo = null)
         {
             try
@@ -3023,7 +2805,6 @@ namespace VPB
             return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
         }
 
-        /// <summary>Raised icon well (resize handles, perf-on fill). Idle bar/toolbox chips use ChromeIconWell.</summary>
         public static readonly Color IconButtonBackdrop = GalleryUiColorTokens.SurfaceIconBtn;
 
         /// <summary>Recolor passed to <see cref="LoadIconSprite"/> for gallery left/right rail icons (glyph pixels only).</summary>
@@ -3032,18 +2813,11 @@ namespace VPB
         /// <summary>Neutral glyph tint for top/bottom bar icons (glyph pixels only).</summary>
         public static readonly Color BarIconGlyphTint = Color.white;
 
-        /// <summary>
-        /// Adds an icon Image child to <paramref name="buttonGO"/>, hides its text label, and sets
-        /// the button's background to <paramref name="backdropOverride"/> (or
-        /// <see cref="GalleryUiColorTokens.ChromeIconWell"/> when null). Pass an override for accents
-        /// (confirm / destroy / armed) or a raised well (<see cref="IconButtonBackdrop"/>).
-        /// </summary>
         public static void AddIconToButton(GameObject buttonGO, Sprite icon, float padding = 4f, Color? backdropOverride = null)
         {
             Image btnImg = buttonGO.GetComponent<Image>();
             if (btnImg != null) btnImg.color = backdropOverride ?? GalleryUiColorTokens.ChromeIconWell;
 
-            // Hide text — icon replaces it; text remains as fallback when icon is absent
             Text t = buttonGO.GetComponentInChildren<Text>(true);
             if (t != null) t.gameObject.SetActive(false);
 
@@ -3069,7 +2843,6 @@ namespace VPB
             iconRT.anchoredPosition = Vector2.zero;
         }
 
-        /// <summary>Updates or creates the Icon child from atlas role <paramref name="iconRole"/> using bar glyph tint.</summary>
         public static void RegisterIconButtonPath(GameObject buttonGO, string iconRole, float padding = 4f, Color? backdropOverride = null)
         {
             ApplyBarIconFromPath(buttonGO, iconRole, padding, backdropOverride);
@@ -3097,7 +2870,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Like <see cref="ApplyBarIconFromPath"/> but uses <see cref="SideRailIconGlyphTint"/>.</summary>
         public static bool ApplySideRailIconFromPath(GameObject buttonGO, string iconRole, float padding = 4f, Color? backdropOverride = null)
         {
             if (buttonGO == null || string.IsNullOrEmpty(iconRole)) return false;
@@ -3145,7 +2917,6 @@ namespace VPB
             Image boxImg = AddGalleryElementRoundedBg(boxGO, Color.white);
             toggle.targetGraphic = boxImg;
 
-            // Inner Box (Background - Black)
             GameObject innerGO = new GameObject("Inner");
             innerGO.transform.SetParent(boxGO.transform, false);
             RectTransform innerRT = innerGO.AddComponent<RectTransform>();
@@ -3155,7 +2926,6 @@ namespace VPB
             innerRT.sizeDelta = new Vector2(16, 16);
             Image innerImg = AddGalleryElementRoundedBg(innerGO, Color.black, raycastTarget: false);
 
-            // Checkmark (Fill - White)
             GameObject checkGO = new GameObject("Checkmark");
             checkGO.transform.SetParent(innerGO.transform, false); 
             RectTransform checkRT = checkGO.AddComponent<RectTransform>();
@@ -3193,7 +2963,6 @@ namespace VPB
             Image boxImg = AddGalleryElementRoundedBg(boxGO, Color.white);
             toggle.targetGraphic = boxImg;
 
-            // Inner Box (Background - Black)
             GameObject innerGO = new GameObject("Inner");
             innerGO.transform.SetParent(boxGO.transform, false);
             RectTransform innerRT = innerGO.AddComponent<RectTransform>();
@@ -3203,15 +2972,13 @@ namespace VPB
             innerRT.sizeDelta = new Vector2(16, 16);
             Image innerImg = AddGalleryElementRoundedBg(innerGO, Color.black, raycastTarget: false);
 
-            // Checkmark (Fill - White)
             GameObject checkGO = new GameObject("Checkmark");
-            checkGO.transform.SetParent(innerGO.transform, false); // Parent to inner or box, doesn't matter much if positioned correctly
+            checkGO.transform.SetParent(innerGO.transform, false);
             RectTransform checkRT = checkGO.AddComponent<RectTransform>();
             checkRT.anchorMin = new Vector2(0.5f, 0.5f);
             checkRT.anchorMax = new Vector2(0.5f, 0.5f);
             checkRT.pivot = new Vector2(0.5f, 0.5f);
             checkRT.sizeDelta = new Vector2(14, 14); // Slightly smaller to leave a hint of border or full size? Let's use 14 to leave black gap, or 16 for solid. User said "white is selected". Solid white looks best.
-            // Actually if I make it 16, it covers the black inner completely, merging with white outer.
             checkRT.sizeDelta = new Vector2(16, 16); 
             Image checkImg = AddGalleryElementRoundedBg(checkGO, Color.white, raycastTarget: false);
             toggle.graphic = checkImg;
@@ -3233,8 +3000,6 @@ namespace VPB
             Button btn = btnGO.GetComponent<Button>();
             Text t = btnGO.GetComponentInChildren<Text>();
             
-            // Use a local variable to capture index if possible, but UnityAction works with captured vars
-            // We need a wrapper class to hold state if we want it to persist, but for now closure is fine
             int idx = currentIdx;
             
             btn.onClick.AddListener(() => {
@@ -3278,7 +3043,6 @@ namespace VPB
             
             inputField.placeholder = p;
 
-            // Standard editor shortcut: Ctrl+Backspace deletes previous word.
             inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(inputField);
             
             if (onEndEdit != null) inputField.onEndEdit.AddListener(onEndEdit);

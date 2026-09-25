@@ -7,10 +7,6 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>
-    /// Plugins category floating work surface: search + ★ rated filter + cslist→cs tree.
-    /// Chrome mirrors SettingsFloat (always-float palette). Drag rows → header Person / Session · void = session.
-    /// </summary>
     public partial class GalleryPanel
     {
         private static readonly Color PluginsFloatTitleBarBg = GalleryUiColorTokens.SurfaceDark;
@@ -78,10 +74,6 @@ namespace VPB
             return _pluginsFloatRoot != null && _pluginsFloatRoot.activeSelf;
         }
 
-        /// <summary>
-        /// Open Plugins float work surface. Does NOT switch gallery category / grid
-        /// (Clothing stays Clothing). forceShow=false toggles like Settings.
-        /// </summary>
         public void OpenPluginsFloat(bool forceShow = true)
         {
             if (!forceShow && IsPluginsFloatOpen())
@@ -230,10 +222,9 @@ namespace VPB
                 Vector2 center = _pluginsFloatSavedPosCenter.HasValue
                     ? _pluginsFloatSavedPosCenter.Value
                     : new Vector2(180f, 40f);
-                _pluginsFloatPanelRT.anchoredPosition = PluginsFloatCenterToTopLeft(center, _pluginsFloatPanelRT.sizeDelta);
+                _pluginsFloatPanelRT.anchoredPosition = FloatPanelCoords.CenterToTopLeft(center, _pluginsFloatPanelRT.sizeDelta);
             }
 
-            // Title bar
             GameObject titleBar = UI.CreateChildRT(panel, "TitleBar", AnchorPresets.hStretchTop,
                 new Vector2(0f, titleH), Vector2.zero);
             Image titleBg = UI.AddImage(titleBar, PluginsFloatTitleBarBg);
@@ -268,10 +259,9 @@ namespace VPB
                 font, Color.white, TextAnchor.MiddleLeft, name: "Title");
             UI.AddLE(title.gameObject, flexibleWidth: 0f, minWidth: 48f * s, preferredWidth: 64f * s);
 
-            // Session / Person link chips live in header (also drop targets).
             BuildPluginsFloatDestBar(titleBar, s, font, chromeSz);
 
-            _pluginsFloatCollapseBtn = PluginsFloatSquareIconButton(
+            _pluginsFloatCollapseBtn = UI.CreateFloatChromeIconButton(
                 titleBar.transform, chromeSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, TogglePluginsFloatCollapsed);
             if (_pluginsFloatCollapseBtn != null)
@@ -281,7 +271,7 @@ namespace VPB
                 _pluginsFloatCollapseIcon = iconTr != null ? iconTr.GetComponent<Image>() : null;
             }
 
-            GameObject closeBtn = PluginsFloatSquareIconButton(
+            GameObject closeBtn = UI.CreateFloatChromeIconButton(
                 titleBar.transform, chromeSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, HidePluginsFloat);
             if (closeBtn != null)
@@ -426,7 +416,6 @@ namespace VPB
                 SyncPluginsFloatRatedOnlyButton();
             }
 
-            // Filter facets under search — equal columns (Gestalt proximity; Hick: two clear toggles).
             _pluginsFloatOptionsRow = UI.CreateChildRT(panel, "OptionsRow", AnchorPresets.hStretchTop,
                 new Vector2(0f, optionsH), new Vector2(0f, -(titleH + filterH)));
             RectTransform optRT = _pluginsFloatOptionsRow.GetComponent<RectTransform>();
@@ -487,7 +476,6 @@ namespace VPB
                     "Hide orphan .cs / .dll roots. Keep .cslist parents; expand still shows referenced scripts.");
             }
 
-            // Footer: expand/collapse tree + hint + resize
             _pluginsFloatFooter = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
             UI.AddImage(_pluginsFloatFooter, PluginsFloatFooterBarBg);
@@ -506,7 +494,6 @@ namespace VPB
             if (_pluginsFloatFooter.GetComponent<RectMask2D>() == null)
                 _pluginsFloatFooter.AddComponent<RectMask2D>();
 
-            // Full-footer drag hit (behind expand/hint/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(_pluginsFloatFooter);
             if (footerDragArea != null)
             {
@@ -515,7 +502,7 @@ namespace VPB
                 footerDrag.OnMoved = OnPluginsFloatMoved;
             }
 
-            _pluginsFloatExpandAllBtn = PluginsFloatSquareIconButton(
+            _pluginsFloatExpandAllBtn = UI.CreateFloatChromeIconButton(
                 _pluginsFloatFooter.transform, chromeSz, "chevrons-down",
                 GalleryUiColorTokens.ChromeIconWell, ExpandAllPluginsFloatCreators);
             if (_pluginsFloatExpandAllBtn != null)
@@ -524,7 +511,7 @@ namespace VPB
                 AddTooltip(_pluginsFloatExpandAllBtn, "gallery.tooltip.plugins_expand_all",
                     "Expand all creators (shows packages). Open row chevron for scripts.");
             }
-            _pluginsFloatCollapseAllBtn = PluginsFloatSquareIconButton(
+            _pluginsFloatCollapseAllBtn = UI.CreateFloatChromeIconButton(
                 _pluginsFloatFooter.transform, chromeSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, CollapseAllPluginsFloatTree);
             if (_pluginsFloatCollapseAllBtn != null)
@@ -576,7 +563,6 @@ namespace VPB
                 GalleryUiDesignTokens.PluginsFloatMaxHeightRef * _pluginsFloatChromeScale);
             resizer.OnResized = OnPluginsFloatResized;
 
-            // Scroll list
             _pluginsFloatScrollHost = UI.CreateChildRT(panel, "ScrollHost", AnchorPresets.stretchAll);
             RectTransform scrollRT = _pluginsFloatScrollHost.GetComponent<RectTransform>();
             if (scrollRT != null)
@@ -971,24 +957,11 @@ namespace VPB
                 if (VPBConfig.Instance == null) return;
                 _pluginsFloatLatestOnly = VPBConfig.Instance.GalleryPluginsFloatLatestOnly;
                 _pluginsFloatCslistOnly = VPBConfig.Instance.GalleryPluginsFloatCslistOnly;
-                if (VPBConfig.Instance.GalleryPluginsFloatPosSaved)
-                {
-                    _pluginsFloatSavedPosCenter = new Vector2(
-                        VPBConfig.Instance.GalleryPluginsFloatPosX,
-                        VPBConfig.Instance.GalleryPluginsFloatPosY);
-                }
-                if (VPBConfig.Instance.GalleryPluginsFloatSizeSaved)
-                {
-                    float w = VPBConfig.Instance.GalleryPluginsFloatWidthRef;
-                    float h = VPBConfig.Instance.GalleryPluginsFloatHeightRef;
-                    if (w >= GalleryUiDesignTokens.PluginsFloatMinWidthRef
-                        && h >= GalleryUiDesignTokens.PluginsFloatMinHeightRef)
-                    {
-                        _pluginsFloatSavedSizeRef = new Vector2(
-                            Mathf.Clamp(w, GalleryUiDesignTokens.PluginsFloatMinWidthRef, GalleryUiDesignTokens.PluginsFloatMaxWidthRef),
-                            Mathf.Clamp(h, GalleryUiDesignTokens.PluginsFloatMinHeightRef, GalleryUiDesignTokens.PluginsFloatMaxHeightRef));
-                    }
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GalleryPluginsFloatGeometry.Current;
+                _pluginsFloatSavedPosCenter = slot.SavedPos;
+                _pluginsFloatSavedSizeRef = slot.SavedSize(
+                    new Vector2(GalleryUiDesignTokens.PluginsFloatMinWidthRef, GalleryUiDesignTokens.PluginsFloatMinHeightRef),
+                    new Vector2(GalleryUiDesignTokens.PluginsFloatMaxWidthRef, GalleryUiDesignTokens.PluginsFloatMaxHeightRef));
             }
             catch { }
         }
@@ -1019,7 +992,7 @@ namespace VPB
         {
             if (_pluginsFloatPanelRT == null) return;
             float s = _pluginsFloatChromeScale > 0f ? _pluginsFloatChromeScale : 1f;
-            _pluginsFloatSavedPosCenter = PluginsFloatTopLeftToCenter(
+            _pluginsFloatSavedPosCenter = FloatPanelCoords.TopLeftToCenter(
                 _pluginsFloatPanelRT.anchoredPosition, _pluginsFloatPanelRT.sizeDelta);
             if (!_pluginsFloatCollapsed)
             {
@@ -1034,18 +1007,9 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (_pluginsFloatSavedPosCenter.HasValue)
-                {
-                    VPBConfig.Instance.GalleryPluginsFloatPosSaved = true;
-                    VPBConfig.Instance.GalleryPluginsFloatPosX = _pluginsFloatSavedPosCenter.Value.x;
-                    VPBConfig.Instance.GalleryPluginsFloatPosY = _pluginsFloatSavedPosCenter.Value.y;
-                }
-                if (_pluginsFloatSavedSizeRef.HasValue)
-                {
-                    VPBConfig.Instance.GalleryPluginsFloatSizeSaved = true;
-                    VPBConfig.Instance.GalleryPluginsFloatWidthRef = _pluginsFloatSavedSizeRef.Value.x;
-                    VPBConfig.Instance.GalleryPluginsFloatHeightRef = _pluginsFloatSavedSizeRef.Value.y;
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GalleryPluginsFloatGeometry.Current;
+                slot.StorePos(_pluginsFloatSavedPosCenter);
+                slot.StoreSize(_pluginsFloatSavedSizeRef);
             }
             catch { return; }
             try { ScheduleQuickFiltersConfigSave(); } catch { }
@@ -1064,23 +1028,6 @@ namespace VPB
             PersistPluginsFloatGeometry();
         }
 
-        private static Vector2 PluginsFloatCenterToTopLeft(Vector2 center, Vector2 size)
-        {
-            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
-        }
-
-        private static Vector2 PluginsFloatTopLeftToCenter(Vector2 topLeft, Vector2 size)
-        {
-            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
-        }
-
-        private static GameObject PluginsFloatSquareIconButton(
-            Transform parent, float size, string iconPath, Color backdrop, UnityAction onClick)
-        {
-            return UI.CreateFloatChromeIconButton(parent, size, iconPath, backdrop, onClick);
-        }
-
-        /// <summary>Grid refresh no longer feeds Plugins float (independent catalog).</summary>
         internal void NotifyPluginsFloatAfterGridReady()
         {
             // Intentionally empty — float must not depend on gallery category snapshot.

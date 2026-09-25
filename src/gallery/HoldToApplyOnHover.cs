@@ -7,10 +7,7 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>
-    /// Hold-to-apply timer that triggers the panel's apply/launch logic after a delay.
-    /// Requires pointer button/trigger held down (same as drag); duration from <see cref="VPBConfig.HoldToLaunchHoldSeconds"/>.
-    /// </summary>
+    /// <summary>Hold-to-apply timer that triggers the panel's apply/launch logic after a delay.</summary>
     public class HoldToApplyOnHover : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
     {
         public GalleryPanel panel;
@@ -144,7 +141,7 @@ namespace VPB
             _fill = UI.AddImage(fillGO, new Color(0.15f, 0.75f, 0.2f, 0.85f));
             _fill.type = Image.Type.Filled;
             _fill.fillMethod = Image.FillMethod.Radial360;
-            _fill.fillOrigin = 2; // Top
+            _fill.fillOrigin = 2;
             _fill.fillClockwise = true;
             _fill.fillAmount = 0f;
             _fill.raycastTarget = false;
@@ -153,4 +150,3 @@ namespace VPB
         }
     }
 }
-

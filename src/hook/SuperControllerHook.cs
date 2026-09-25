@@ -20,14 +20,10 @@ namespace VPB
         private static readonly Regex s_HubResourcePathRegex =
             new Regex(@"^/resources/(?<id>\d+)(/|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // Registry of confirmed simulation texture paths extracted from preset files
         private static HashSet<string> simTextureRegistry = new HashSet<string>();
         private static HashSet<string> simTexturePatchedThisLoad = new HashSet<string>();
         private static readonly object registryLock = new object();
 
-        /// <summary>
-        /// Registers a texture path as a simulation texture based on preset parsing
-        /// </summary>
         public static void RegisterSimTexture(string path)
         {
             RegisterSimTexture(path, null);
@@ -46,9 +42,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Clears the sim texture registry when loading a new scene
-        /// </summary>
         public static void ClearSimTextureRegistry()
         {
             lock (registryLock)
@@ -58,9 +51,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Parses a clothing preset (.vaj/.vap) to find sim-enabled textures
-        /// </summary>
         public static void ParsePresetForSimTextures(string presetPath)
         {
             if (string.IsNullOrEmpty(presetPath)) return;
@@ -111,17 +101,11 @@ namespace VPB
                         if (VPBLogger.Verbose) LogUtil.Log($"[VPB SIM] Registered sim texture from key '{key}': {textureUrl}");
                     }
 
-                    // Check if this entry has simEnabled="true"
                     if (key.Equals("simEnabled", StringComparison.OrdinalIgnoreCase))
                     {
                         string valStr = value != null ? value.Value?.ToLowerInvariant() : null;
                         if (valStr == "true" || valStr == "1")
                         {
-                            // Look for texture URL in the parent or sibling nodes
-                            // The structure is typically: { "id": "...", "simEnabled": "true", "textureUrl": "..." }
-                            // Or: { "id": "...Sim", "simEnabled": "true", ... }
-                            
-                            // Try to find a texture URL in the same object
                             string textureUrl = FindTextureUrlInObject(obj);
                             if (!string.IsNullOrEmpty(textureUrl))
                             {
@@ -131,7 +115,6 @@ namespace VPB
                         }
                     }
 
-                    // Recurse into child nodes
                     ParseNodeForSimTexturesRecursive(value, presetPath);
                 }
             }
@@ -150,7 +133,6 @@ namespace VPB
         {
             if (obj == null) return null;
 
-            // Common keys for texture URLs in clothing presets
             string[] urlKeys = new[] { "simTexture", "SimTexture", "simulationTexture", "SimulationTexture",
                                        "stimulationTexture", "StimulationTexture", "physicsTexture", "PhysicsTexture",
                                        "url", "Url", "textureUrl", "TextureUrl",
@@ -168,14 +150,11 @@ namespace VPB
                 }
             }
 
-            // Also check "id" field which often contains the texture reference
             if (obj["id"] != null)
             {
                 string id = obj["id"].Value;
-                // If id ends with "Sim" and there's a nearby texture reference
                 if (id.EndsWith("Sim", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Try to find any URL field
                     foreach (KeyValuePair<string, JSONNode> kv in obj)
                     {
                         if (kv.Key.IndexOf("Url", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -324,8 +303,6 @@ namespace VPB
             if (tex == null) return false;
             try
             {
-                // Unity versions used by VaM may not expose Texture2D.isReadable.
-                // Probe via GetPixel, which throws when the texture is non-readable.
                 tex.GetPixel(0, 0);
                 return true;
             }
@@ -335,11 +312,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// <see cref="DAZCharacterTextureControl"/> queues nested <c>CharacterQueuedImage</c>.
-        /// Auto genital blend (<c>BlendGenitalTexture</c>) needs CPU <c>GetPixels</c> on torso/genital maps.
-        /// Native <c>ImageLoaderThreaded.Finish</c> uses <c>Apply()</c> (keeps readable); VPB zstd serve must match.
-        /// </summary>
         internal static bool IsCharacterTextureQueuedImage(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null) return false;
@@ -362,7 +334,6 @@ namespace VPB
             return IsSimulationTexturePath(qi.imgPath);
         }
 
-        /// <summary>GPU blit → readable RGBA32 copy. Caller owns destroy of returned texture when different from <paramref name="src"/>.</summary>
         internal static Texture2D EnsureCpuReadableTexture(Texture2D src, bool linear, bool createMipMaps, string logTag)
         {
             if (src == null) return null;
@@ -438,13 +409,9 @@ namespace VPB
             if (string.IsNullOrEmpty(path)) return false;
             string lower = path.ToLowerInvariant();
 
-            // First check the registry of confirmed sim textures from preset parsing.
-            // Many VaM clothing presets use neutral names for their sim/heat maps, so
-            // preset keys are more reliable than filename heuristics when available.
             if (RegistryContainsSimulationTexture(lower))
                 return true;
 
-            // Fall back to heuristic detection
             if (lower.Contains("phys")) return true;
             if (lower.Contains("simulation")) return true;
 
@@ -464,12 +431,9 @@ namespace VPB
             if (IsClothingSimulationMapName(lower, filename)) return true;
 
             // Conservative fallback only: match "sim" as a token to avoid false positives like "simone".
-            // Accepted examples: sim_foo, foo_sim, foo-sim1, sim1, phys_foo, physics-2
             if (Regex.IsMatch(filename, @"(^|[_\-])sim([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
             if (Regex.IsMatch(filename, @"(^|[_\-])phys(ics)?([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
 
-            // Some clothing packages use names like "pnt3lsim1" without delimiters.
-            // Treat a trailing "sim<digits>" / "phys<digits>" as SIM to prevent non-readable loads.
             if (Regex.IsMatch(filename, @"sim\d+$", RegexOptions.IgnoreCase)) return true;
             if (Regex.IsMatch(filename, @"phys(ics)?\d+$", RegexOptions.IgnoreCase)) return true;
 
@@ -480,7 +444,6 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(path)) return false;
             string lower = path.ToLowerInvariant();
-            // LUT (Look-Up Table) textures for color grading
             if (lower.Contains("lut")) return true;
             if (lower.Contains("lensdirt")) return true;
             if (lower.IndexOf("lens dirt", StringComparison.OrdinalIgnoreCase) >= 0) return true;
@@ -575,16 +538,7 @@ namespace VPB
             PatchGetFiles(harmony);
         }
 
-        // VaM's FileManager.GetFiles THROWS "Attempted to get files at non-existent path" when the
-        // directory is not present in its registered (simulated) filesystem, instead of returning an
-        // empty array like standard .NET enumeration. With the scan whitelist enabled, package-content
-        // directories are only registered on demand, so plugins that enumerate a directory of a
-        // not-yet-registered package (e.g. MacGruber PostMagic's UserLUT enumerating its LUT folder
-        // inside a deferred image callback) crash the throw straight through their own callback.
-        //
-        // PREFIX: register package for uid:/ paths; for bare Custom/ dirs pre-register owners via VPB index.
-        // FINALIZER: on non-existent path, enumerate from VPB package index (PoseMe ExpressionSets live in
-        //            BodyLanguage_Resources) instead of returning empty — empty kills HUD pose thumbs.
+        // GetFiles throws on unregistered dirs: prefix registers owning packages, finalizer enumerates from VPB index instead.
         static void PatchGetFiles(Harmony harmony)
         {
             var fm = typeof(MVR.FileManagement.FileManager);
@@ -618,7 +572,6 @@ namespace VPB
                 if (VamOnDemandLoader.s_InOnDemand) return;
                 if (string.IsNullOrEmpty(__0)) return;
 
-                // Fast reject — most GetFiles calls are uid:/ or Saves/ (not bare Custom/).
                 if (!PathLooksLikeBareOrBrokenCustom(__0))
                 {
                     if (ScanWhitelistManager.Instance == null || !ScanWhitelistManager.Instance.IsEnabled) return;
@@ -630,8 +583,7 @@ namespace VPB
                     return;
                 }
 
-                // Rewrite bare Custom/ → uid:/Custom/... only when not present on disk
-                // (session/loose Custom/Scripts must stay bare — see TryRewriteBareCustomPath).
+                // Rewrite bare Custom/ to uid:/Custom/ only when absent on disk.
                 string bareBefore = __0;
                 TryRewriteBareCustomPath(ref __0);
 
@@ -640,7 +592,6 @@ namespace VPB
                 string uid = VamOnDemandLoader.UidFromEntryPath(__0);
                 if (string.IsNullOrEmpty(uid))
                 {
-                    // Local disk already satisfies this path — skip package-owner scan (warm path).
                     string localCheck = NormalizeBareCustomInternalPath(bareBefore);
                     if (string.IsNullOrEmpty(localCheck) || !LocalCustomPathExistsOnDisk(localCheck))
                         TryRegisterOwnersForBareCustomDir(__0);
@@ -657,13 +608,11 @@ namespace VPB
         public static Exception FinalizeGetFiles(Exception __exception, string __0, ref string[] __result)
         {
             if (__exception == null) return null;
-            // Only neutralize the specific "directory does not exist in the simulated filesystem"
-            // throw; let any other failure (IO errors, etc.) propagate unchanged.
+            // Only neutralize the specific "directory does not exist in the simulated filesystem" throw.
             string msg = __exception.Message ?? string.Empty;
             if (msg.IndexOf("non-existent path", StringComparison.OrdinalIgnoreCase) < 0)
                 return __exception;
 
-            // Always "*" — GetFiles(string) overloads have no pattern arg; injecting __1 breaks that patch.
             string[] fromPkgs;
             if (TryGetFilesFromPackageIndex(__0, "*", out fromPkgs) && fromPkgs != null && fromPkgs.Length > 0)
             {
@@ -717,21 +666,16 @@ namespace VPB
             catch { return true; }
         }
 
-        /// <summary>True for bare Custom/... or broken ":/Custom/..." (null packageUid concat).</summary>
         static bool PathLooksLikeBareOrBrokenCustom(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
             // Cheap reject before slash normalize.
             if (path.IndexOf("Custom", StringComparison.OrdinalIgnoreCase) < 0) return false;
             int colon = path.IndexOf(":/", StringComparison.Ordinal);
-            if (colon > 0) return false; // package-qualified
-            return true; // bare Custom or ":/Custom"
+            if (colon > 0) return false;
+            return true;
         }
 
-        /// <summary>
-        /// Normalize bare / broken-null Custom path to internal form (forward slashes, no leading /).
-        /// Returns null when not a Custom/ path.
-        /// </summary>
         static string NormalizeBareCustomInternalPath(string path)
         {
             if (string.IsNullOrEmpty(path)) return null;
@@ -739,7 +683,6 @@ namespace VPB
             if (p.IndexOf('\\') >= 0) p = p.Replace('\\', '/');
             if (p.Length > 0 && p[0] == '/') p = p.Substring(1);
 
-            // Heal BodyLanguage null+":/" → ":/Custom/..."
             int colon = p.IndexOf(":/", StringComparison.Ordinal);
             if (colon == 0)
                 p = p.Substring(2);
@@ -750,22 +693,12 @@ namespace VPB
             return p;
         }
 
-        /// <summary>
-        /// True when <paramref name="normalizedCustomPath"/> exists as a real file or directory
-        /// under the VaM game root (process CWD). Does not call FileManager (avoids hook recursion).
-        /// </summary>
         static bool LocalCustomPathExistsOnDisk(string normalizedCustomPath)
         {
             if (string.IsNullOrEmpty(normalizedCustomPath)) return false;
             return LocalDiskEntryCache.Exists(normalizedCustomPath);
         }
 
-        /// <summary>
-        /// Bare Custom/... → first VPB-indexed uid:/Custom/... (registers owner). Used by load/exists/open.
-        /// Prefers on-disk Custom/ (session plugins, loose Scripts) over package remap so FileExists
-        /// does not steer away from local files into an unregistered/wrong VAR (ac9b50f9 / #77).
-        /// Package-only bare paths (PoseMe ExpressionSets, BodyLanguage) still remap.
-        /// </summary>
         static bool TryRewriteBareCustomPath(ref string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
@@ -774,7 +707,6 @@ namespace VPB
             string p = NormalizeBareCustomInternalPath(path);
             if (string.IsNullOrEmpty(p)) return false;
 
-            // Session / loose Custom/Scripts (and any other on-disk Custom/) win over VAR index.
             if (LocalCustomPathExistsOnDisk(p)) return false;
 
             string uidPath;
@@ -860,7 +792,6 @@ namespace VPB
             p = p.Trim().TrimEnd('/');
             if (p.Length > 0 && p[0] == '/') p = p.Substring(1);
 
-            // Accept uid:/Custom/..., bare Custom/..., and broken ":/Custom/..." (null+":/" packageUid).
             string internalDir = p;
             int colon = p.IndexOf(":/", StringComparison.Ordinal);
             if (colon >= 0)
@@ -1029,9 +960,6 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "NormalizeLoadPath", new Type[] { typeof(string) })]
         public static void PreNormalizeLoadPath(ref string path)
         {
-            // Defense in depth: NormalizeLoadPath is on the trigger-action restore path. Any
-            // exception escaping this prefix unwinds out of MacGruber's per-state loop in
-            // LateRestoreFromJSON and silently drops every state after the throw point.
             try
             {
                 string rewritten = RewriteVdsPathIfNeeded(path);
@@ -1040,7 +968,6 @@ namespace VPB
                     path = rewritten;
                 }
 
-                // Bare Custom/ (PoseMe ExpressionSets, BodyLanguage audiobundles) → owning package UID.
                 TryRewriteBareCustomPath(ref path);
 
                 string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
@@ -1078,9 +1005,6 @@ namespace VPB
                 return false;
             }
 
-            // Same defensive wrap as PreNormalizeLoadPath: FileExists is on the trigger restore
-            // path too, and an unguarded throw breaks MacGruber-style per-state JSON loops.
-            // Must use ref __0 — non-ref rewrites were no-ops (Harmony only rebinds ref args).
             try
             {
                 string rewritten = RewriteVdsPathIfNeeded(__0);
@@ -1163,8 +1087,7 @@ namespace VPB
                         return;
                     }
 
-                    // VaM may check FileExists against a *.latest:/... plugin path even
-                    // after the package registered under its concrete UID.
+                    // VaM may check FileExists on *.latest:/ paths after concrete UID registration.
                     string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
                     if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
                     {
@@ -1173,8 +1096,7 @@ namespace VPB
                             result = true;
                     }
 
-                    // VaM may also request a specific version that isn't installed anymore
-                    // (e.g. Author.Pkg.11), while a newer version exists (e.g. .14).
+                    // VaM may also request a specific version that isn't installed anymore (e.g. Author.Pkg.11).
                     if (result) return;
                     string rewrittenBest = VamOnDemandLoader.TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
                     if (!string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
@@ -1263,7 +1185,6 @@ namespace VPB
             LogUtil.RecordOpenStreamResult(__result != null);
         }
 
-        // Click "Return To Scene View"
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "DeactivateWorldUI")]
         public static void PostDeactivateWorldUI(SuperController __instance)
@@ -1272,12 +1193,7 @@ namespace VPB
             LogUiStateChange("DeactivateWorldUI");
         }
 
-        /// <summary>
-        /// Dev-mode only: name whoever closes the VaM UI or flips Edit/Play. VaM changes gameMode from exactly
-        /// four places (LoadInternal / LoadFromJSONEmbed with editMode:false, the P key, the HUD mode toggles),
-        /// and none of them are obvious from a user report of "the UI vanished and it went to Play mode".
-        /// Costs a cached-bool read when dev mode is off; these are cold paths, never per-frame.
-        /// </summary>
+        /// <summary>Dev-mode only: name whoever closes the VaM UI or flips Edit/Play.</summary>
         private static bool IsUiStateTraceEnabled()
         {
             try { return VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode; }
@@ -1383,7 +1299,6 @@ namespace VPB
             LogUtil.EndSceneLoadTotal("WorldUI.Activate");
         }
 
-        /// <summary>Gallery VR pointer over pane: thumbstick scroll consumes forward navigate axis.</summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "GetFreeNavigateVector")]
         public static void PostGetFreeNavigateVector(ref Vector4 __result)
@@ -1416,11 +1331,8 @@ namespace VPB
             }
             catch { return true; }
 
-            // Redirect Hub web opens to VPB's in-game Hub browser ("Hook Hub").
-            // This catches buttons/links anywhere in VaM that open hub.virtamate.com pages.
             if (!string.Equals(uri.Host, "hub.virtamate.com", StringComparison.OrdinalIgnoreCase)) return true;
 
-            // Always open the Hook Hub UI; optionally jump to a resource detail.
             try { VamHookPlugin.singleton.OpenHubBrowse(); } catch { return true; }
 
             string resourceId = null;
@@ -1439,7 +1351,6 @@ namespace VPB
             }
             catch { return true; }
 
-            // Skip the original browser-open.
             return false;
         }
 
@@ -1447,7 +1358,6 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.Hub.HubBrowse), "Show")]
         public static bool PreVamNativeHubShow()
         {
-            // Redirect VaM's native Hub UI to VPB "Hook Hub".
             var plugin = VamHookPlugin.singleton;
             if (plugin == null) return true;
 
@@ -1568,11 +1478,9 @@ namespace VPB
             LogUtil.BeginSceneLoad(saveName);
             LogUtil.MarkScenePhasePreLoadInternal();
             try { ThirdPartyFixHook.TryClearInGameLogsOnSceneLaunch(__instance, loadMerge); } catch { }
-            // Scene Loader / VAM Browser / triggers all funnel here — record History outside VPB gallery UI.
             try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "scene"); } catch { }
             try
             {
-                // Clear sim texture registry for new scene
                 ClearSimTextureRegistry();
                 ParsePresetForSimTextures(saveName);
 
@@ -1595,8 +1503,7 @@ namespace VPB
 
                 if (!string.IsNullOrEmpty(saveName))
                 {
-                    // Track current scene package UID / save path for delete warnings
-                    int idx = saveName.IndexOf(":/");
+                    int idx = saveName.IndexOf(":/", StringComparison.Ordinal);
                     if (idx >= 0)
                     {
                         VamHookPlugin.CurrentScenePackageUid = saveName.Substring(0, idx);
@@ -1639,22 +1546,14 @@ namespace VPB
             try { SceneLoadingUtils.ScheduleGalleryTargetListRefresh(); } catch { }
         }
 
-        /// <summary>
-        /// Keep gallery target picker in sync when an atom is removed (no polling).
-        /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "RemoveAtom", new Type[] { typeof(Atom) })]
         public static void PostRemoveAtom(SuperController __instance, Atom atom)
         {
-            // Bulk strip suppresses per-atom gallery sync (one notify at end).
             if (GalleryPanel.SuppressAtomRemovedGalleryNotify) return;
             try { GalleryPanel.NotifyAllPanelsSceneTargetsChanged(); } catch { }
         }
 
-        /// <summary>
-        /// Always set Allow Always
-        /// </summary>
-        /// <param name="__instance"></param>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.VarPackage), "LoadUserPrefs")]
         public static void PostLoadUserPrefs(MVR.FileManagement.VarPackage __instance)
@@ -1811,7 +1710,6 @@ namespace VPB
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return true;
 
-            // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
             try
@@ -1832,13 +1730,12 @@ namespace VPB
                 return true;
             }
 
-            if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
-            if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
+            if (qi.imgPath.EndsWith(".jpg", StringComparison.Ordinal)) qi.textureFormat = TextureFormat.RGB24;
+            if (qi.imgPath.EndsWith(".png", StringComparison.Ordinal)) qi.textureFormat = TextureFormat.RGBA32;
 
             qi.isThumbnail = true;
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                // Served from VPB cache: ensure VaM's thumbnail cache is populated.
                 try
                 {
                     var thumbCache = Traverse.Create(__instance).Field("thumbnailCache").GetValue() as Dictionary<string, Texture2D>;
@@ -1915,7 +1812,6 @@ namespace VPB
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return true;
 
-            // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
             try
@@ -1934,7 +1830,6 @@ namespace VPB
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                // Served from VPB cache: ensure VaM's thumbnail cache is populated.
                 try
                 {
                     var thumbCache = Traverse.Create(__instance).Field("thumbnailCache").GetValue() as Dictionary<string, Texture2D>;
@@ -1969,12 +1864,9 @@ namespace VPB
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return true;
 
-            // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
             // Robust SIM detection: do not rely on filename heuristics.
-            // If this request's callback is VaM's sim-texture handler, register the exact path as SIM now.
-            // This makes the rest of VPB treat it as readable and purge any corrupted .zvamcache before use.
             try
             {
                 var cb = qi.callback;
@@ -2014,8 +1906,8 @@ namespace VPB
 
             if (ImageLoadingMgr.singleton == null) return true;
 
-            if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
-            if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
+            if (qi.imgPath.EndsWith(".jpg", StringComparison.Ordinal)) qi.textureFormat = TextureFormat.RGB24;
+            if (qi.imgPath.EndsWith(".png", StringComparison.Ordinal)) qi.textureFormat = TextureFormat.RGBA32;
 
             if (NativeImageCacheHasLive(__instance, qi, "textureCache")) return true;
 
@@ -2074,7 +1966,6 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(__instance.imgPath) || __instance.imgPath == "NULL") return;
 
-            // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
             if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null)
@@ -2088,12 +1979,8 @@ namespace VPB
                 return;
             }
 
-
-
-            // Ignore hub browse
             if (__instance.tex != null)
             {
-                // Sim maps + DAZCharacterTextureControl maps: VaM needs CPU read (sim plugins / auto genital blend).
                 if (NeedsCpuReadableTexture(__instance))
                 {
                     try
@@ -2139,9 +2026,7 @@ namespace VPB
 
             if (ImageLoadingMgr.singleton != null)
                 ImageLoadingMgr.singleton.ReleaseCandidate(__instance);
-
         }
-
     }
 
     class PatchAssetLoader
@@ -2167,39 +2052,24 @@ namespace VPB
             return true;
         }
 
-        // --- Scan Whitelist Patches ---
-
-        /// <summary>
-        /// Blocks VaM from registering non-whitelisted packages during its startup scan.
-        /// PREFIX patch so VaM never opens the .var zip or reads the manifest for excluded
-        /// packages — the expensive I/O is skipped entirely, not just cleaned up afterward.
-        /// On-demand registration (via VamOnDemandLoader) bypasses this via s_AllowRegistration.
-        /// </summary>
+        /// <summary>Blocks VaM from registering non-whitelisted packages during its startup scan.</summary>
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "RegisterPackage")]
         public static bool PreRegisterPackageScanFilter(string __0)
         {
             try
             {
-                if (VamOnDemandLoader.s_AllowRegistration) return true;
-                if (string.IsNullOrEmpty(__0)) return true;
-
-                string norm = __0.Replace('\\', '/');
-                if (!norm.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) return true;
-
-                if (!ScanWhitelistManager.Instance.IsEnabled) return true;
-
-                string uid = System.IO.Path.GetFileNameWithoutExtension(norm);
-                if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid))
+                switch (VamScanFilter.ClassifyNativeRegistration(__0))
                 {
-                    VamScanFilter.RecordScanAllowed();
-                    return true;
+                    case VamScanFilter.NativeRegistrationGate.Allowed:
+                        VamScanFilter.RecordScanAllowed();
+                        return true;
+                    case VamScanFilter.NativeRegistrationGate.Blocked:
+                        VamScanFilter.RecordScanBlocked();
+                        return false;
+                    default:
+                        return true;
                 }
-
-                bool allowed = ScanWhitelistManager.Instance.IsPathWhitelisted(norm);
-                if (allowed) VamScanFilter.RecordScanAllowed();
-                else VamScanFilter.RecordScanBlocked();
-                return allowed;
             }
             catch (Exception ex)
             {
@@ -2246,12 +2116,7 @@ namespace VPB
             return __exception;
         }
 
-        /// <summary>
-        /// After VaM's GetVarFileEntry returns null for a scan-excluded package,
-        /// register the package on-demand in VaM's FileManager and retry.
-        /// This ensures MVRScript plugins can still load dependencies from
-        /// non-whitelisted packages without requiring a full scan.
-        /// </summary>
+        /// <summary>After VaM's GetVarFileEntry returns null for a scan-excluded package.</summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetVarFileEntry", new Type[] { typeof(string) })]
         public static void PostGetVarFileEntryOnDemand(string path, ref MVR.FileManagement.VarFileEntry __result)
@@ -2291,8 +2156,6 @@ namespace VPB
                     if (VamOnDemandLoader.TryNativeGetVarFileEntryWithRegisteredUid(path, ref __result))
                         return;
 
-                    // Some VaM call sites pass *.latest:/... and do not resolve aliases
-                    // after registration. Retry with a concrete UID path when possible.
                     string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
                     if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
                     {
@@ -2300,7 +2163,6 @@ namespace VPB
                         __result = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
                     }
 
-                    // Also handle versioned UIDs where the requested version doesn't exist.
                     if (__result != null) return;
                     string rewrittenBest = VamOnDemandLoader.TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
                     if (!string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
@@ -2380,7 +2242,6 @@ namespace VPB
             catch { }
         }
 
-        /// </summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetPackage", new Type[] { typeof(string) })]
         public static void PostGetPackageOnDemand(string packageUidOrPath, ref MVR.FileManagement.VarPackage __result)
@@ -2397,9 +2258,6 @@ namespace VPB
 
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
-                // Native Refresh / pre-first-Refresh: leave miss as null. Do NOT enqueue —
-                // VaM walks every package and GetPackage/IsPackage miss thousands of times;
-                // enqueue+promote caused RegisterNow zip-scan storm + crash (log 22).
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
                     return;
 
@@ -2416,7 +2274,6 @@ namespace VPB
                     if (VamOnDemandLoader.TryNativeGetPackageWithRegisteredUid(packageUidOrPath, ref __result))
                         return;
 
-                    // Native .latest resolves via package group — ensure a concrete version is registered.
                     if (packageUidOrPath.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                     {
                         string best = VamOnDemandLoader.TryGetNewestInstalledUid(packageUidOrPath);
@@ -2457,7 +2314,6 @@ namespace VPB
 
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
-                // Same as GetPackage: no enqueue during Refresh (probe noise → register storm).
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
                     return;
 
@@ -2481,7 +2337,6 @@ namespace VPB
                             && !string.Equals(best, packageUidOrPath, StringComparison.OrdinalIgnoreCase))
                         {
                             VamOnDemandLoader.TryRegisterPackageOnDemand(best);
-                            // .latest is not itself a packagesByUid key — true if concrete version registered.
                             __result = MVR.FileManagement.FileManager.IsPackage(best);
                         }
                     }
@@ -2497,9 +2352,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Issue #12: <c>GetPackageGroup</c> after on-demand register so <c>.latest</c>/<c>.minN</c> resolve.
-        /// </summary>
+        /// <summary>Issue #12: GetPackageGroup after on-demand register so .latest/.minN resolve.</summary>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetPackageGroup", new Type[] { typeof(string) })]
         public static void PostGetPackageGroupOnDemand(string packageGroupUid, ref MVR.FileManagement.VarPackageGroup __result)
@@ -2515,7 +2368,6 @@ namespace VPB
 
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
 
-                // Same as GetPackage: no enqueue during Refresh.
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
                     return;
 
@@ -2546,5 +2398,4 @@ namespace VPB
             }
         }
     }
-
 }

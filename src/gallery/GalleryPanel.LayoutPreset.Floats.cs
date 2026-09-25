@@ -6,12 +6,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>
-        /// Float windows a layout restores. Transient popups (quick-tag menu, Remap Atom UIDs,
-        /// command palette) are deliberately absent — restoring a modal is never what "my layout" means.
-        /// Strip Scene is a mode, not an arrangement, and the quick-menu assign float belongs to the
-        /// quick menu rather than to a gallery pane.
-        /// </summary>
         private static readonly LayoutFloatKind[] LayoutCapturedFloatKinds =
         {
             LayoutFloatKind.Settings,
@@ -137,7 +131,6 @@ namespace VPB
             if (f.Open) PlaceLayoutFloatFromConfig(kind, hasPos, hasSize);
         }
 
-        /// <summary>Re-reads the per-mode config slot into the float's in-memory saved geometry.</summary>
         private void SyncLayoutFloatFromConfig(LayoutFloatKind kind)
         {
             switch (kind)
@@ -177,15 +170,10 @@ namespace VPB
                     try { SyncQuickFilterToggleState(); } catch { }
                     break;
                 case LayoutFloatKind.ImportSidebar:
-                    // Open state is carried by the pane's own import fields; nothing extra to toggle.
                     break;
             }
         }
 
-        /// <summary>
-        /// Writes the restored geometry onto a float that is already on screen. Without this, a float
-        /// open before the apply would keep its old position until closed and reopened.
-        /// </summary>
         private void PlaceLayoutFloatFromConfig(LayoutFloatKind kind, bool hasPos, bool hasSize)
         {
             switch (kind)
@@ -221,7 +209,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Floats store a centre; their RectTransform pivots top-left.</summary>
         private static void PlaceFloatPanelFromCenter(RectTransform rt, Vector2? savedCenter)
         {
             if (rt == null || !savedCenter.HasValue) return;

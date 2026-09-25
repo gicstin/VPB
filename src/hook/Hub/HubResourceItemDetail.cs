@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-
 namespace VPB
 {
     public class HubResourceItemDetail : HubResourceItem
@@ -167,8 +166,6 @@ namespace VPB
                     downloadPackage.Refresh();
                 }
             }
-            // Keep dependency thumbnails progressing across refresh ticks in case some
-            // requests were dropped/stale during initial page construction.
             KickDependencyThumbnailLoadsOnDetailOpen();
             SyncDownloadAvailable();
         }
@@ -286,7 +283,7 @@ namespace VPB
                 if (!string.Equals(text.text.Trim(), "License", StringComparison.OrdinalIgnoreCase)) continue;
 
                 licenseCategoryHeaderText = text;
-                licenseCategoryHeaderText.text = "Category/License";
+                licenseCategoryHeaderText.text = VPBTranslation.T("hub.detail.category_license", "Category/License");
                 licenseCategoryHeaderText.raycastTarget = true;
 
                 Button button = licenseCategoryHeaderText.GetComponent<Button>();
@@ -478,8 +475,6 @@ namespace VPB
                     }
                     SyncDownloadAvailable();
                     SyncLicenseCategoryColumnMode();
-                    // Force dependency preview loads when detail page opens, so they do not
-                    // depend solely on later UI visibility/scroll lifecycle events.
                     KickDependencyThumbnailLoadsOnDetailOpen();
                 }
             }

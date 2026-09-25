@@ -718,7 +718,7 @@ namespace VPB
             inf.onEndEdit.AddListener(txt =>
             {
                 float f;
-                if (float.TryParse(txt, out f)) set(f);
+                if (VpbNumberText.TryParseFloat(txt, out f)) set(f);
             });
             AddTooltipPlain(fieldGO, VPBTranslation.T("outliner.xform.type_value", "Type an exact value"));
             return inf;
@@ -959,7 +959,7 @@ namespace VPB
                 Vector3 now = OutlinerEdits.ControlTransform(atom).position;
                 if ((now - _outlinerSpringBasePos).sqrMagnitude > 1e-12f)
                     _outlinerUndo.Push(atom.uid + "|xform|pos", "Position",
-                        _outlinerSpringBasePos.ToString(), now.ToString());
+                        FormatOutlinerVector3(_outlinerSpringBasePos), FormatOutlinerVector3(now));
             }
             else if (_outlinerSpringKind == OutlinerSpringAxis.Kind.Rotation)
             {
@@ -967,14 +967,14 @@ namespace VPB
                 StoreOutlinerUiEuler(atom, now);
                 if ((now - _outlinerSpringBaseUiEuler).sqrMagnitude > 1e-6f)
                     _outlinerUndo.Push(atom.uid + "|xform|rot", "Rotation",
-                        _outlinerSpringBaseUiEuler.ToString(), now.ToString());
+                        FormatOutlinerVector3(_outlinerSpringBaseUiEuler), FormatOutlinerVector3(now));
             }
             else
             {
                 JSONStorableFloat p = OutlinerScaleParam(atom);
                 if (p != null && Mathf.Abs(p.val - _outlinerSpringBaseScale) > 1e-6f)
                     _outlinerUndo.Push(atom.uid + "|" + _outlinerSpringScaleStorable + "|scale", "Scale",
-                        _outlinerSpringBaseScale.ToString("0.###"), p.val.ToString("0.###"));
+                        FormatOutlinerFloat(_outlinerSpringBaseScale), FormatOutlinerFloat(p.val));
             }
             RefreshOutlinerTransformFields(atom);
         }
@@ -1101,7 +1101,7 @@ namespace VPB
             if (linked && before > 0f) _outlinerGroup.ApplyScaleRatio(next / before);
             PulseOutlinerTargets();
             _outlinerUndo.Push(atom.uid + "|" + storable + "|scale", "Scale",
-                before.ToString("0.###"), next.ToString("0.###"));
+                FormatOutlinerFloat(before), FormatOutlinerFloat(next));
             _outlinerLastFocused = true;
             SetOutlinerFieldText(_outlinerScaleField, next, OutlinerScaleFormat);
         }
@@ -1188,7 +1188,7 @@ namespace VPB
             }
             if (linked) ApplyOutlinerGroupFromPrimary(atom);
             PulseOutlinerTargets();
-            _outlinerUndo.Push(atom.uid + "|xform|pos", "Position", before.ToString(), next.ToString());
+            _outlinerUndo.Push(atom.uid + "|xform|pos", "Position", FormatOutlinerVector3(before), FormatOutlinerVector3(next));
             _outlinerLastFocused = true;
             RefreshOutlinerTransformFields(atom);
         }
@@ -1223,7 +1223,7 @@ namespace VPB
             StoreOutlinerUiEuler(atom, nextEuler);
             PulseOutlinerTargets();
             _outlinerUndo.Push(atom.uid + "|xform|rot", "Rotation",
-                beforeEuler.ToString(), nextEuler.ToString());
+                FormatOutlinerVector3(beforeEuler), FormatOutlinerVector3(nextEuler));
             _outlinerLastFocused = true;
             RefreshOutlinerTransformFields(atom);
         }

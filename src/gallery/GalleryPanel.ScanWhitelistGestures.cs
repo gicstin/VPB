@@ -7,11 +7,6 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
-        /// <summary>
-        /// Desktop grid/list: right-click toggles persistent scan-whitelist UID override.
-        /// Ctrl+right-click or middle-click toggles session-only temporary override.
-        /// Applies to current selection when the clicked row was already selected, otherwise to the clicked row only.
-        /// </summary>
         private void HandleDesktopScanWhitelistClickGesture(FileEntry clickedFile, bool applyToExistingSelection, bool temporary)
         {
             if (clickedFile == null) return;

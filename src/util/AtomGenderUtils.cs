@@ -28,7 +28,6 @@ namespace VPB.src.util
             return true;
         }
 
-        // selectedCharacter is VaM's authoritative gender; GetComponentInChildren<DAZCharacter>() returns the first active child, which AltFuta makes ambiguous.
         static DAZCharacter GetSelectedCharacter(Atom atom)
         {
             try

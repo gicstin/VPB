@@ -6,8 +6,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Empty grid state when filters/search hide all rows.
-
         private GameObject _emptyGridStateGO;
         private Text _emptyGridStateMessage;
         private GameObject _emptyGridStateActionBtn;
@@ -71,7 +69,6 @@ namespace VPB
             posePeopleFilter = PosePeopleFilter.All;
             _clothingGenderUserOverride = false;
             _hairGenderUserOverride = false;
-            // Include/exclude filter sets always clear — armed independent of F/T work mode.
             try { activeUserTags?.Clear(); } catch { }
             try { excludedUserTags?.Clear(); } catch { }
             _userTagShowUnusedBucket = false;
@@ -79,7 +76,6 @@ namespace VPB
             _userTagShowLooksBucket = false;
             _userTagShowHubCatBucket = false;
             ClearPackBucketCollapseOverrides();
-            // Not tagged owned by title-bar Filter (ClearTitleBarBrowseFilters).
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
         }
 
@@ -92,7 +88,6 @@ namespace VPB
             bool baseOk = hasLoadedContent
                 && !settingsListViewActive;
 
-            // BusyChrome owns refresh feedback — hide empty chrome while refreshing (no duplicate "Updating…").
             bool show = baseOk && emptyFiles && !refreshing;
             _emptyGridStateGO.SetActive(show);
             if (!show) return;
@@ -127,10 +122,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Title search is always the gallery grid find.
-        /// Settings / side lists use the side-rail filter field — never hijack this chrome.
-        /// </summary>
         public void SyncTitleSearchChromeForActiveMode()
         {
             if (titleSearchInput == null) return;
@@ -159,5 +150,4 @@ namespace VPB
             }
         }
     }
-
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using SimpleJSON;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -153,6 +154,32 @@ namespace VPB.Tests
                     HarmonyPatchTargetTests.Bullets(lost) + Environment.NewLine + Environment.NewLine +
                     "If the value is deliberately re-derived or clamped back on load, add the field name to" + Environment.NewLine +
                     "tests/known-normalized-config-fields.txt with a reason.");
+            }
+        }
+
+        [Fact]
+        public void EveryAutomaticallySerializedSettingIsWrittenToTheFile()
+        {
+            using (var install = new TempInstall("keys"))
+            {
+                VPBConfig cfg = VPBConfig.Instance;
+                cfg.Save();
+                JSONNode saved = JSON.Parse(File.ReadAllText(cfg.ConfigPathForDebug));
+
+                var hand = (HashSet<string>)typeof(VPBConfig)
+                    .GetField("s_HandSerializedFields", BindingFlags.NonPublic | BindingFlags.Static)
+                    .GetValue(null);
+                var automaticTypes = new HashSet<Type> { typeof(bool), typeof(int), typeof(float), typeof(string), typeof(JSONClass) };
+
+                List<string> missing = PublicFields()
+                    .Where(f => automaticTypes.Contains(f.FieldType) && !hand.Contains(f.Name))
+                    .Where(f => f.GetValue(cfg) != null && saved[f.Name] == null)
+                    .Select(f => f.Name)
+                    .ToList();
+
+                Assert.True(missing.Count == 0,
+                    "These settings are never written to VPB.cfg, so whatever the user picks is back to the default on the next launch:" +
+                    Environment.NewLine + HarmonyPatchTargetTests.Bullets(missing));
             }
         }
 

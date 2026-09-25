@@ -13,7 +13,6 @@ namespace VPB
         internal const string ItemFirstRoot = "items";
         internal const string CategoriesRoot = "categories";
 
-        /// <summary>One named color category plus the tags assigned to it (US-02 round-trip).</summary>
         internal struct GalleryUserTagCategoryYaml
         {
             public string Name;
@@ -153,8 +152,7 @@ namespace VPB
             }
         }
 
-        /// <summary>Pulls a top-level <c>categories:</c> block (if present) out of the text into <paramref name="catsOut"/>,
-        /// returning the remaining text so the existing tag/item parsers see an unchanged layout.</summary>
+        /// <summary>Pulls a top-level categories: block (if present) out of the text into catsOut.</summary>
         private static string ExtractCategoriesBlock(string text, List<GalleryUserTagCategoryYaml> catsOut)
         {
             var lines = SplitLines(text);
@@ -227,7 +225,6 @@ namespace VPB
             return sb.ToString();
         }
 
-        /// <summary>Returns normalized tag → item-keys and item-key → tags from one YAML file. Sniffs tag-first vs item-first.</summary>
         internal static bool TryParseImport(
             string yamlText,
             out Dictionary<string, List<string>> tagToItemKeys,
@@ -491,7 +488,6 @@ namespace VPB
         }
 
         /// <summary>At column 0: "Key:" or "key: rest" — onlyKey true when nothing after colon.</summary>
-        /// <summary>First top-level ':' outside quotes — so key can be "a:b:c". Cave fix old naive IndexOf(':').</summary>
         private static int IndexOfYamlKeyValueColon(string s)
         {
             if (string.IsNullOrEmpty(s)) return -1;
@@ -537,7 +533,7 @@ namespace VPB
         {
             payload = null;
             string t = ln.TrimStart();
-            if (!t.StartsWith("-")) return false;
+            if (!t.StartsWith("-", StringComparison.Ordinal)) return false;
             payload = t.Substring(1).Trim();
             return true;
         }
@@ -636,6 +632,5 @@ namespace VPB
             sb.Append('"');
             return sb.ToString();
         }
-
     }
 }

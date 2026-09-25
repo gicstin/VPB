@@ -33,7 +33,6 @@ namespace VPB
         Replace,
         Merge,
         ClothingOnly,
-        /// <summary>Keep body/skin/hair; merge selected clothing items from appearance onto current outfit.</summary>
         MergeOutfit
     }
 
@@ -44,7 +43,6 @@ namespace VPB
         Skin = 2
     }
 
-    /// <summary>One item listed from an appearance preset for the Merge Outfit picker.</summary>
     internal sealed class AppearanceOutfitPickItem
     {
         public string Uid;
@@ -89,6 +87,7 @@ namespace VPB
             }
             catch { }
 
+            bool referrerPushed = BeginForceLatestReferrer(sourceEntry);
             try
             {
                 LoadPresetCore(sourceEntry, targetAtom, resourceType, clothingMode, presetJC,
@@ -97,10 +96,30 @@ namespace VPB
             }
             finally
             {
+                if (referrerPushed)
+                {
+                    try { PackageReferenceVersionResolver.EndReferrerContext(); } catch { }
+                }
                 if (enteredBlocking)
                 {
                     try { VpbProgressService.ExitBlocking(); } catch { }
                 }
+            }
+        }
+
+        private static bool BeginForceLatestReferrer(FileEntry sourceEntry)
+        {
+            if (sourceEntry == null || !FileManager.IsForceLatestAllEnabled()) return false;
+            try
+            {
+                string uid = PackageReferenceVersionResolver.TryExtractPackageUid(sourceEntry.Uid ?? sourceEntry.Path);
+                if (string.IsNullOrEmpty(uid)) return false;
+                PackageReferenceVersionResolver.BeginReferrerContext(uid);
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -236,8 +255,7 @@ namespace VPB
                 }
             }
 
-            // Must run after prewarm and before LoadPresetFromJSON. VaM batches the package-index
-            // refresh; if it lands after the apply, dependent storables silently drop.
+            // Must run after prewarm and before LoadPresetFromJSON.
             if (!skipDependencyPrewarm)
             {
                 try
@@ -256,15 +274,12 @@ namespace VPB
             }
 
             // Appearance / Morphs: ensure package morphs are in DAZ banks before LoadPresetFromJSON.
-            // Clothing/hair-only coalesced refresh may have skipped RefreshPackageMorphs.
             if (resourceType == VpbResourceType.Appearance || resourceType == VpbResourceType.Morphs)
             {
                 try
                 {
                     if (probe) AppearanceApplyProbe.Phase("morph_ingest_start",
                         VamOnDemandLoader.DescribePendingCatalogRefreshForProbe());
-                    // Pass preset text so Ensure can mark morph package UIDs even when catalog
-                    // classification missed Morphs/ (incomplete manifest) or pending was cleared.
                     string morphProbeJson = null;
                     if (preset != null)
                     {
@@ -294,14 +309,12 @@ namespace VPB
 
             switch (resourceType)
             {
-                #region Slice A + Slice C owns: Appearance
                 case VpbResourceType.Appearance:
                 {
                     try
                     {
                         if (probe) AppearanceApplyProbe.Phase("appearance_dispatch", "clothingMode=" + clothingMode);
 
-                        // Caller (e.g. import sidebar) can override the global config flag per-apply via suppressScaleChange.
                         bool doSuppressScale = suppressScaleChange ?? (VPBConfig.Instance != null && VPBConfig.Instance.SuppressAppearanceScaleChange);
                         if (doSuppressScale)
                         {
@@ -311,7 +324,6 @@ namespace VPB
                         }
 
                         // Keep live pose: snapshot → strip look pose/controllers → restore after load.
-                        // No embed of FreeControllers into JSON (that made AppearancePresets apply crawl).
                         List<JSONClass> livePoseSnap = null;
                         bool fullLookApply = clothingMode != ClothingApplyMode.ClothingOnly
                             && clothingMode != ClothingApplyMode.MergeOutfit;
@@ -355,8 +367,7 @@ namespace VPB
                         string psNamePre = psName != null ? psName.val : "";
                         if (lpos != null) lpos.val = false;
 
-                        // Also suppress PosePresets loadPresetOnSelect — appearance loads can poke it
-                        // and re-apply a browse-path pose (log: Girl1 PosePresets after AppearancePresets).
+                        // Suppress PosePresets loadPresetOnSelect so appearance loads do not re-apply a browse-path pose.
                         JSONStorable poseStorable = targetAtom.GetStorableByID("PosePresets");
                         JSONStorableBool poseLpos = poseStorable != null ? poseStorable.GetBoolJSONParam("loadPresetOnSelect") : null;
                         bool poseLposPre = poseLpos != null ? poseLpos.val : false;
@@ -367,8 +378,6 @@ namespace VPB
                         if (clothingMode == ClothingApplyMode.MergeOutfit)
                         {
                             if (probe) AppearanceApplyProbe.Phase("merge_outfit_start");
-                            // Merge Outfit without a picker selection merges every enabled clothing item
-                            // from the appearance. Prefer GalleryPanel.ShowMergeOutfitPicker for choose-what.
                             MergeAppearanceOutfitItems(sourceEntry, targetAtom, selectedUids: null, presetJC: preset);
                             if (lpos != null) lpos.val = lposPre;
                             if (psName != null) psName.val = psNamePre;
@@ -380,7 +389,6 @@ namespace VPB
                         if (clothingMode == ClothingApplyMode.ClothingOnly)
                         {
                             if (probe) AppearanceApplyProbe.Phase("clothing_only_start");
-                            // ClothingPresets preserves item material binding while replacing garments and retaining target cosmetics.
                             JSONClass keepCosmetics = null;
                             try
                             {
@@ -461,7 +469,6 @@ namespace VPB
                         }
 
                         // Keep: lock ClothingPresets PMC so VaM's preset loader skips clothing storables during the load.
-                        // Always lock PosePresets so appearance does not re-trigger pose browse/load.
                         PresetLockStore lockStore = null;
                         List<JSONClass> keepClothingMaterialSnapshots = null;
                         lockStore = new PresetLockStore();
@@ -479,7 +486,6 @@ namespace VPB
                         bool mergeLoad = clothingMode == ClothingApplyMode.Merge;
                         MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
-                        // Repeated package refreshes can leave morph values from earlier looks when ingest no-ops.
                         if (!mergeLoad)
                         {
                             try
@@ -504,8 +510,6 @@ namespace VPB
                             InvokeLoadPresetFromJSON(presetManager, preset, mergeLoad);
                             if (probe) AppearanceApplyProbe.Phase("LoadPresetFromJSON_done");
 
-                            // Drop inactive demand morphs from prior looks (Yuna Body/Head etc.) so banks
-                            // do not keep formula-heavy character morphs loaded for the next replace.
                             if (!mergeLoad)
                             {
                                 try
@@ -555,7 +559,6 @@ namespace VPB
                             catch (Exception ex) { LogUtil.LogWarning("VpbImport: deferred pose restore failed: " + ex.Message); }
                         }
 
-                        // Keep mode already restored materials, so rebinding would requeue every garment texture.
                         if (clothingMode != ClothingApplyMode.Keep)
                         {
                             try { DAZClothingHook.ScheduleAtomCustomTextureResync(targetAtom); }
@@ -577,90 +580,14 @@ namespace VPB
                     }
                     break;
                 }
-                #endregion
 
-                #region Slice A owns: Clothing
                 case VpbResourceType.Clothing:
                 {
                     try
                     {
-                        string storableName = "ClothingPresets";
-
-                        JSONStorable presetStorable = targetAtom.GetStorableByID(storableName);
-                        if (presetStorable == null)
-                        {
-                            LogUtil.LogWarning($"VpbImport: ClothingPresets storable not found on target atom; aborting.");
+                        if (!ApplyPresetToStorable(targetAtom, "ClothingPresets", "ClothingPresets", "Clothing preset", preset,
+                            clothingMode == ClothingApplyMode.Merge, sourceEntry, updateLastRestoredData))
                             return;
-                        }
-
-                        MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
-                        if (presetManager == null)
-                        {
-                            LogUtil.LogWarning($"VpbImport: PresetManager not found in ClothingPresets storable; aborting.");
-                            return;
-                        }
-
-                        bool mergeLoad = false;
-                        if (clothingMode == ClothingApplyMode.Merge)
-                        {
-                            mergeLoad = true;
-                        }
-
-                        string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
-
-                        // Native preset load overwrites lock and selection metadata that must survive resource-only apply.
-                        PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
-
-                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
-
-                        try
-                        {
-                            if (!string.IsNullOrEmpty(sourcePath))
-                            {
-                                MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
-                            }
-
-                            Exception bridgeError = null;
-                            MethodInfo loadMethod = typeof(MeshVR.PresetManager).GetMethod(
-                                "LoadPresetFromJSON",
-                                BindingFlags.Public | BindingFlags.Instance,
-                                null,
-                                new Type[] { typeof(JSONClass), typeof(bool) },
-                                null);
-
-                            if (loadMethod != null)
-                            {
-                                bool bridgeSuccess = PluginSignatureBridge.TryInvoke(
-                                    loadMethod,
-                                    presetManager,
-                                    new object[] { preset, mergeLoad },
-                                    out bridgeError,
-                                    PluginSignatureBridge.DefaultFakeAssemblyName,
-                                    PluginSignatureBridge.DefaultFakePluginHash);
-
-                                if (bridgeSuccess)
-                                {
-                                    LogUtil.Log($"[VpbImport] Clothing preset applied via bridge (mergeLoad={mergeLoad}).");
-                                }
-                                else
-                                {
-                                    LogUtil.LogWarning($"VpbImport: Bridge invoke failed: {(bridgeError != null ? bridgeError.Message : "unknown error")}");
-                                }
-                            }
-                            else
-                            {
-                                LogUtil.LogWarning("VpbImport: LoadPresetFromJSON method not found on PresetManager.");
-                            }
-                        }
-                        finally
-                        {
-                            if (!string.IsNullOrEmpty(sourcePath))
-                            {
-                                MVR.FileManagement.FileManager.PopLoadDir();
-                            }
-                        }
-
-                        RestorePresetParamsSnapshot(targetAtom, snap);
 
                         try { DAZClothingHook.ScheduleAtomCustomTextureResync(targetAtom); }
                         catch (Exception ex) { LogUtil.LogWarning($"VpbImport: clothing custom texture resync schedule failed: {ex.Message}"); }
@@ -671,14 +598,11 @@ namespace VPB
                     }
                     break;
                 }
-                #endregion
 
-                #region Slice D owns: Pose
                 case VpbResourceType.Pose:
                 {
                     try
                     {
-                        // Extract scene-atom dump if needed (step 5)
                         if (preset["atoms"] != null)
                         {
                             JSONClass extracted = ExtractAtomFromSceneHelper(preset, "Person");
@@ -689,101 +613,18 @@ namespace VPB
                             }
                         }
 
-                        // Optional suppressRoot JSON patch (step 6)
                         if (suppressRoot)
                         {
                             CleanPresetsHelper(preset);
                             if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VpbImport] Pose dispatch: suppressRoot stripping applied.");
                         }
 
-                        // Pin the primary body controls On when the pose omits their state (see helper). Without this,
-                        // merge-load leaves pre-existing Off/Comply foot/hip states → feet unpinned → toes curl.
                         EnsurePrimaryPoseControlStatesHelper(preset);
 
-                        // Diagnostics: snapshot exactly what we hand to VaM's native pose loader so Ctrl+Shift+P can
-                        // compare the source foot/toe/hand control specs against the live applied state.
                         VPB.src.util.PoseImportDiagnostics.CaptureSource(preset, targetAtom != null ? targetAtom.uid : null);
 
-                        // Resolve target storable and PresetManager (steps 7-8)
-                        string storableName = "PosePresets";
-
-                        JSONStorable presetStorable = targetAtom.GetStorableByID(storableName);
-                        if (presetStorable == null)
-                        {
-                            LogUtil.LogWarning($"VpbImport: PosePresets storable not found on target atom; aborting.");
-                            return;
-                        }
-
-                        MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
-                        if (presetManager == null)
-                        {
-                            LogUtil.LogWarning($"VpbImport: PresetManager not found in PosePresets storable; aborting.");
-                            return;
-                        }
-
-                        // mergeLoad from clothingMode: Merge -> true, all others -> false (step 9)
-                        bool mergeLoad = false;
-                        if (clothingMode == ClothingApplyMode.Merge)
-                        {
-                            mergeLoad = true;
-                        }
-
-                        string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
-
-                        // PresetManager.LoadPresetFromJSON overwrites the storable's "storable" lock-state
-                        // child plus loadPresetOnSelect/presetName. Snapshot before, re-apply after.
-                        PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
-
-                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
-
-                        try
-                        {
-                            if (!string.IsNullOrEmpty(sourcePath))
-                            {
-                                MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
-                            }
-
-                            Exception bridgeError = null;
-                            MethodInfo loadMethod = typeof(MeshVR.PresetManager).GetMethod(
-                                "LoadPresetFromJSON",
-                                BindingFlags.Public | BindingFlags.Instance,
-                                null,
-                                new Type[] { typeof(JSONClass), typeof(bool) },
-                                null);
-
-                            if (loadMethod != null)
-                            {
-                                bool bridgeSuccess = PluginSignatureBridge.TryInvoke(
-                                    loadMethod,
-                                    presetManager,
-                                    new object[] { preset, mergeLoad },
-                                    out bridgeError,
-                                    PluginSignatureBridge.DefaultFakeAssemblyName,
-                                    PluginSignatureBridge.DefaultFakePluginHash);
-
-                                if (bridgeSuccess)
-                                {
-                                    LogUtil.Log($"[VpbImport] Pose preset applied via bridge (mergeLoad={mergeLoad}).");
-                                }
-                                else
-                                {
-                                    LogUtil.LogWarning($"VpbImport: Bridge invoke failed: {(bridgeError != null ? bridgeError.Message : "unknown error")}");
-                                }
-                            }
-                            else
-                            {
-                                LogUtil.LogWarning("VpbImport: LoadPresetFromJSON method not found on PresetManager.");
-                            }
-                        }
-                        finally
-                        {
-                            if (!string.IsNullOrEmpty(sourcePath))
-                            {
-                                MVR.FileManagement.FileManager.PopLoadDir();
-                            }
-                        }
-
-                        RestorePresetParamsSnapshot(targetAtom, snap);
+                        ApplyPresetToStorable(targetAtom, "PosePresets", "PosePresets", "Pose preset", preset,
+                            clothingMode == ClothingApplyMode.Merge, sourceEntry, updateLastRestoredData);
                     }
                     catch (Exception ex)
                     {
@@ -791,91 +632,13 @@ namespace VPB
                     }
                     break;
                 }
-                #endregion
 
-                #region Slice E owns: Hair
                 case VpbResourceType.Hair:
                 {
                     try
                     {
-                        string storableName = "HairPresets";
-
-                        JSONStorable presetStorable = targetAtom.GetStorableByID(storableName);
-                        if (presetStorable == null)
-                        {
-                            LogUtil.LogWarning($"VpbImport: HairPresets storable not found on target atom; aborting.");
-                            return;
-                        }
-
-                        MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
-                        if (presetManager == null)
-                        {
-                            LogUtil.LogWarning($"VpbImport: PresetManager not found in HairPresets storable; aborting.");
-                            return;
-                        }
-
-                        bool mergeLoad = false;
-                        if (clothingMode == ClothingApplyMode.Merge)
-                        {
-                            mergeLoad = true;
-                        }
-
-                        string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
-
-                        // PresetManager.LoadPresetFromJSON overwrites the storable's "storable" lock-state
-                        // child plus loadPresetOnSelect/presetName. Snapshot before, re-apply after.
-                        PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
-
-                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
-
-                        try
-                        {
-                            if (!string.IsNullOrEmpty(sourcePath))
-                            {
-                                MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
-                            }
-
-                            Exception bridgeError = null;
-                            MethodInfo loadMethod = typeof(MeshVR.PresetManager).GetMethod(
-                                "LoadPresetFromJSON",
-                                BindingFlags.Public | BindingFlags.Instance,
-                                null,
-                                new Type[] { typeof(JSONClass), typeof(bool) },
-                                null);
-
-                            if (loadMethod != null)
-                            {
-                                bool bridgeSuccess = PluginSignatureBridge.TryInvoke(
-                                    loadMethod,
-                                    presetManager,
-                                    new object[] { preset, mergeLoad },
-                                    out bridgeError,
-                                    PluginSignatureBridge.DefaultFakeAssemblyName,
-                                    PluginSignatureBridge.DefaultFakePluginHash);
-
-                                if (bridgeSuccess)
-                                {
-                                    LogUtil.Log($"[VpbImport] Hair preset applied via bridge (mergeLoad={mergeLoad}).");
-                                }
-                                else
-                                {
-                                    LogUtil.LogWarning($"VpbImport: Bridge invoke failed: {(bridgeError != null ? bridgeError.Message : "unknown error")}");
-                                }
-                            }
-                            else
-                            {
-                                LogUtil.LogWarning("VpbImport: LoadPresetFromJSON method not found on PresetManager.");
-                            }
-                        }
-                        finally
-                        {
-                            if (!string.IsNullOrEmpty(sourcePath))
-                            {
-                                MVR.FileManagement.FileManager.PopLoadDir();
-                            }
-                        }
-
-                        RestorePresetParamsSnapshot(targetAtom, snap);
+                        ApplyPresetToStorable(targetAtom, "HairPresets", "HairPresets", "Hair preset", preset,
+                            clothingMode == ClothingApplyMode.Merge, sourceEntry, updateLastRestoredData);
                     }
                     catch (Exception ex)
                     {
@@ -883,35 +646,27 @@ namespace VPB
                     }
                     break;
                 }
-                #endregion
 
-                #region Slice E owns: ClothingItem
                 case VpbResourceType.ClothingItem:
                 {
                     // Item-level paths convert .vam/.vab to preset JSON before apply; use Clothing branch instead.
                     LogUtil.LogWarning("VpbImport: ClothingItem not yet implemented");
                     return;
                 }
-                #endregion
 
-                #region Slice E owns: HairItem
                 case VpbResourceType.HairItem:
                 {
                     // Item-level paths convert .vam/.vab to preset JSON before apply; use Hair branch instead.
                     LogUtil.LogWarning("VpbImport: HairItem not yet implemented");
                     return;
                 }
-                #endregion
 
-                #region Slice E owns: Morphs
                 case VpbResourceType.Morphs:
                 {
                     LogUtil.LogWarning("VpbImport: Morphs not yet implemented");
                     return;
                 }
-                #endregion
 
-                #region Generic: any PresetManager-backed storable by name (Skin, Morphs, Animation, BreastPhysics, Plugins, ...)
                 case VpbResourceType.General:
                 {
                     try
@@ -922,82 +677,8 @@ namespace VPB
                             return;
                         }
 
-                        string storableName = storableNameOverride;
-
-                        JSONStorable presetStorable = targetAtom.GetStorableByID(storableName);
-                        if (presetStorable == null)
-                        {
-                            LogUtil.LogWarning($"VpbImport: '{storableName}' storable not found on target atom; aborting.");
-                            return;
-                        }
-
-                        MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
-                        if (presetManager == null)
-                        {
-                            LogUtil.LogWarning($"VpbImport: PresetManager not found in '{storableName}' storable; aborting.");
-                            return;
-                        }
-
-                        bool mergeLoad = false;
-                        if (clothingMode == ClothingApplyMode.Merge)
-                        {
-                            mergeLoad = true;
-                        }
-
-                        string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
-
-                        PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
-
-                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
-
-                        try
-                        {
-                            if (!string.IsNullOrEmpty(sourcePath))
-                            {
-                                MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
-                            }
-
-                            Exception bridgeError = null;
-                            MethodInfo loadMethod = typeof(MeshVR.PresetManager).GetMethod(
-                                "LoadPresetFromJSON",
-                                BindingFlags.Public | BindingFlags.Instance,
-                                null,
-                                new Type[] { typeof(JSONClass), typeof(bool) },
-                                null);
-
-                            if (loadMethod != null)
-                            {
-                                bool bridgeSuccess = PluginSignatureBridge.TryInvoke(
-                                    loadMethod,
-                                    presetManager,
-                                    new object[] { preset, mergeLoad },
-                                    out bridgeError,
-                                    PluginSignatureBridge.DefaultFakeAssemblyName,
-                                    PluginSignatureBridge.DefaultFakePluginHash);
-
-                                if (bridgeSuccess)
-                                {
-                                    LogUtil.Log($"[VpbImport] Generic '{storableName}' preset applied via bridge (mergeLoad={mergeLoad}).");
-                                }
-                                else
-                                {
-                                    LogUtil.LogWarning($"VpbImport: Bridge invoke failed: {(bridgeError != null ? bridgeError.Message : "unknown error")}");
-                                }
-                            }
-                            else
-                            {
-                                LogUtil.LogWarning("VpbImport: LoadPresetFromJSON method not found on PresetManager.");
-                            }
-                        }
-                        finally
-                        {
-                            if (!string.IsNullOrEmpty(sourcePath))
-                            {
-                                MVR.FileManagement.FileManager.PopLoadDir();
-                            }
-                        }
-
-                        RestorePresetParamsSnapshot(targetAtom, snap);
+                        ApplyPresetToStorable(targetAtom, storableNameOverride, "'" + storableNameOverride + "'", "Generic '" + storableNameOverride + "' preset", preset,
+                            clothingMode == ClothingApplyMode.Merge, sourceEntry, updateLastRestoredData);
                     }
                     catch (Exception ex)
                     {
@@ -1005,7 +686,6 @@ namespace VPB
                     }
                     break;
                 }
-                #endregion
 
                 default:
                 {
@@ -1015,9 +695,47 @@ namespace VPB
             }
         }
 
-        #region Slice C helpers: appearance preset helpers (PresetLockStore-based)
-        // Bridge required: VaM's FileManagerSecure rejects the BepInEx assembly name on its call-stack check.
-        private static void InvokeLoadPresetFromJSON(MeshVR.PresetManager presetManager, JSONClass preset, bool mergeLoad)
+        private static bool ApplyPresetToStorable(Atom targetAtom, string storableName, string storableLabel, string appliedLabel,
+            JSONClass preset, bool mergeLoad, FileEntry sourceEntry, bool updateLastRestoredData)
+        {
+            JSONStorable presetStorable = targetAtom.GetStorableByID(storableName);
+            if (presetStorable == null)
+            {
+                LogUtil.LogWarning($"VpbImport: {storableLabel} storable not found on target atom; aborting.");
+                return false;
+            }
+
+            MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
+            if (presetManager == null)
+            {
+                LogUtil.LogWarning($"VpbImport: PresetManager not found in {storableLabel} storable; aborting.");
+                return false;
+            }
+
+            string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
+
+            // PresetManager.LoadPresetFromJSON overwrites the storable's "storable" lock-state child plus loadPresetOnSelect/presetName.
+            PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
+
+            MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
+
+            try
+            {
+                if (!string.IsNullOrEmpty(sourcePath))
+                    MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
+                InvokeLoadPresetFromJSON(presetManager, preset, mergeLoad, appliedLabel);
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(sourcePath))
+                    MVR.FileManagement.FileManager.PopLoadDir();
+            }
+
+            RestorePresetParamsSnapshot(targetAtom, snap);
+            return true;
+        }
+
+        private static void InvokeLoadPresetFromJSON(MeshVR.PresetManager presetManager, JSONClass preset, bool mergeLoad, string appliedLabel = "Preset")
         {
             if (presetManager == null || preset == null) return;
             MethodInfo loadMethod = typeof(MeshVR.PresetManager).GetMethod(
@@ -1040,7 +758,7 @@ namespace VPB
                 PluginSignatureBridge.DefaultFakeAssemblyName,
                 PluginSignatureBridge.DefaultFakePluginHash);
             if (ok)
-                LogUtil.Log($"[VpbImport] Preset applied via bridge (mergeLoad={mergeLoad}).");
+                LogUtil.Log($"[VpbImport] {appliedLabel} applied via bridge (mergeLoad={mergeLoad}).");
             else
                 LogUtil.LogWarning($"VpbImport: Bridge invoke failed: {(bridgeError != null ? bridgeError.Message : "unknown error")}");
         }
@@ -1065,8 +783,6 @@ namespace VPB
 
             JSONClass geometry = null;
             List<JSONClass> allStorables = new List<JSONClass>();
-            // Older/alternate presets customize via positional clothingItem#N or url-keyed material
-            // storables. Keep those as a fallback binding path.
             Dictionary<int, JSONClass> positional = new Dictionary<int, JSONClass>();
             Dictionary<string, JSONClass> materialByUrl = new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase);
             foreach (JSONNode node in storables)
@@ -1089,7 +805,6 @@ namespace VPB
                     continue;
                 }
 
-                // uid/asset-path clothing material storable (exclude hair).
                 if (IsClothingRelatedStorableId(id) && id.IndexOf("hair", StringComparison.OrdinalIgnoreCase) < 0)
                 {
                     if (seenUidMat.Add(id)) uidMaterials.Add(s);
@@ -1099,8 +814,6 @@ namespace VPB
             if (geometry == null || geometry["clothing"] == null || geometry["clothing"].AsArray == null) return;
             JSONArray clothing = geometry["clothing"].AsArray;
 
-            // Normalized internalIds of ALL enabled clothing items in this source, for longest-match
-            // disambiguation (a shorter internalId that prefixes a longer one must not steal storables).
             List<string> allWornNorm = new List<string>();
             for (int j = 0; j < clothing.Count; j++)
             {
@@ -1120,7 +833,6 @@ namespace VPB
                 JSONClass entry = clothing[i].AsObject;
                 if (entry == null) continue;
 
-                // Skip items that are present-but-off.
                 if (entry["enabled"] != null
                     && string.Equals(entry["enabled"].Value, "false", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -1138,7 +850,6 @@ namespace VPB
                 if (string.IsNullOrEmpty(internalId)) internalId = ClothingInternalIdFromUid(uid);
 
                 ClothingSliceItem item = new ClothingSliceItem { Entry = entry, InternalId = internalId, ItemStorables = new List<JSONClass>() };
-                // Saved customization IDs append arbitrary suffixes to separator-normalized runtime store IDs.
                 string normInternal = NormalizeStorablePrefix(internalId);
                 if (!string.IsNullOrEmpty(normInternal))
                 {
@@ -1149,7 +860,6 @@ namespace VPB
                         if (StorableBelongsToItem(sid, normInternal, allWornNorm)) item.ItemStorables.Add(s);
                     }
                 }
-                // Fallback for presets that customize via positional/url material storables.
                 if (item.ItemStorables.Count == 0)
                 {
                     JSONClass mat = null;
@@ -1179,8 +889,6 @@ namespace VPB
             return true;
         }
 
-        // Strip spaces and underscores to compare against VaM's runtime clothing storeId, which drops
-        // those separators from the item internalId.
         private static string NormalizeStorablePrefix(string s)
         {
             if (string.IsNullOrEmpty(s)) return "";
@@ -1189,8 +897,6 @@ namespace VPB
             return sb.ToString();
         }
 
-        // Derive an item's internalId from its uid when the geometry entry omits it: the file name
-        // without directory or extension. Modern presets carry internalId explicitly.
         private static string ClothingInternalIdFromUid(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return "";
@@ -1215,7 +921,6 @@ namespace VPB
             return int.TryParse(id.Substring(p, end - p), out n) ? n : -1;
         }
 
-        /// <summary>Synthetic uid for the appearance skin package in the Merge Outfit picker.</summary>
         public const string MergeOutfitSkinUid = "__vpb_merge_skin__";
 
         public static List<AppearanceOutfitPickItem> ListAppearanceOutfitItems(
@@ -1325,7 +1030,6 @@ namespace VPB
 
             if (wantSkin)
             {
-                // SkinPresets merge of the appearance package — applies skin textures from the look.
                 any |= TryMergePresetSlice(targetAtom, "SkinPresets", preset, sourcePath);
             }
 
@@ -1471,7 +1175,6 @@ namespace VPB
             if (emitted.Count == 0) return null;
             geomSlice["hair"] = hairOut;
 
-            // Include hair-related customization storables whose id matches a selected hair item.
             JSONArray storablesOut = new JSONArray();
             storablesOut.Add(geomSlice);
             JSONArray allStorables = preset["storables"].AsArray;
@@ -1530,14 +1233,12 @@ namespace VPB
         }
 
         // ClothingPresets merge slice: only selected (or all) clothing from the appearance, additive.
-        // setUnlistedParamsToDefault=false so existing worn items stay.
         private static JSONClass BuildSelectedClothingMergeSlice(JSONClass preset, HashSet<string> onlyUids)
         {
             List<ClothingSliceItem> items = new List<ClothingSliceItem>();
             List<JSONClass> uidMaterials = new List<JSONClass>();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // Garments + accessories, then face cosmetics — picker can include either.
             CollectClothingSliceItems(preset, false, items, uidMaterials, seen, onlyUids);
             CollectClothingSliceItems(preset, true, items, uidMaterials, seen, onlyUids);
 
@@ -1551,10 +1252,8 @@ namespace VPB
             List<JSONClass> uidMaterials = new List<JSONClass>();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // Keep the target's current makeup/skin-overlay clothing (honors "keep face").
             if (keepCosmeticsSource != null)
                 CollectClothingSliceItems(keepCosmeticsSource, true, items, uidMaterials, seen);
-            // Add the preset's real garments (the outfit being applied).
             CollectClothingSliceItems(preset, false, items, uidMaterials, seen);
 
             if (items.Count == 0) return null;
@@ -1634,7 +1333,6 @@ namespace VPB
                 if (id.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) continue;
 
                 string url = ExtractClothingUrlFromStorableJsonStatic(s);
-                // List the customization keys present (what makes RedTexture differ from base).
                 System.Text.StringBuilder keys = new System.Text.StringBuilder();
                 foreach (string k in s.Keys)
                 {
@@ -1676,8 +1374,7 @@ namespace VPB
             LogUtil.Log($"[VPB OutfitDiag] {label} ALLIDS=[{allIds}]");
         }
 
-        // Filter a wrapped appearance slice to the source's non-real (Cosmetic) clothing only, for the
-        // only-suppress-real reinject. Returns null when there is none. Fed to the Clothing dispatch.
+        // Filter a wrapped appearance slice to the source's non-real (Cosmetic) clothing only, for the only-suppress-real reinject.
         internal static JSONClass BuildNonRealClothingSlice(JSONClass preset)
         {
             if (preset == null || preset["storables"] == null) return null;
@@ -1714,8 +1411,7 @@ namespace VPB
             return anyNonReal ? clone : null;
         }
 
-        // PluginPresets slice for a chosen subset: PluginManager "plugins" pruned to selected plugin#N keys + each
-        // selected plugin's "plugin#N_*" param storable kept verbatim (RestoreFromLast binds settings via the pre-merge id).
+        // PluginPresets subset: keep only selected plugin#N entries and their param storables.
         internal static JSONClass BuildSelectedPluginsSlice(JSONClass preset, ICollection<string> selectedPluginKeys)
         {
             if (preset == null || preset["storables"] == null) return null;
@@ -1755,7 +1451,6 @@ namespace VPB
             return clone;
         }
 
-        // Existing URLs retain live slots, while new URLs need free slots so parameter storables bind correctly.
         internal static void MergePluginSliceKeys(JSONClass slice, int startNumber, Dictionary<string, string> targetUrlToExistingKey)
         {
             if (slice == null) return;
@@ -1804,10 +1499,8 @@ namespace VPB
                     rebuilt[nk] = plugins[ok];
                 }
             }
-            // Dropping matched plugins from the dict is itself a change even when no key was renumbered.
             pmStorable["plugins"] = rebuilt;
 
-            // Two-phase sentinels prevent overlapping plugin slot ranges from corrupting remaps.
             List<string> changed = new List<string>();
             foreach (string ok in oldKeys)
                 if (map[ok] != ok) changed.Add(ok);
@@ -1821,7 +1514,6 @@ namespace VPB
                 JSONExtensions.ReplacePluginKeyTokenMutable(slice, sentPrefix + i + sentSuffix, map[changed[i]]);
         }
 
-        // Numeric slot of a "plugin#N" key, or int.MaxValue if unparseable (sorts such keys last).
         private static int PluginSlotNumber(string key)
         {
             int h = key != null ? key.IndexOf('#') : -1;
@@ -1829,7 +1521,6 @@ namespace VPB
             return (h >= 0 && int.TryParse(key.Substring(h + 1), out n)) ? n : int.MaxValue;
         }
 
-        // A plugin's param storable id is "<plugin#N>_<ClassName>"; keep it when plugin#N is selected.
         private static bool IsSelectedPluginParamStorable(string id, ICollection<string> selectedPluginKeys)
         {
             foreach (string key in selectedPluginKeys)
@@ -1918,8 +1609,6 @@ namespace VPB
             return null;
         }
 
-        #endregion
-
         private static bool IsClothingAssetPathInUidStatic(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return false;
@@ -1930,7 +1619,6 @@ namespace VPB
             return false;
         }
 
-        #region Slice D helpers
         private static JSONClass ExtractAtomFromSceneHelper(JSONClass sceneJSON, string atomType)
         {
             if (sceneJSON == null || sceneJSON["atoms"] == null) return null;
@@ -1958,7 +1646,6 @@ namespace VPB
         {
             if (preset == null) return;
 
-            // Strip position/rotation from control storable
             JSONArray storables = preset["storables"] != null ? preset["storables"].AsArray : null;
             if (storables != null)
             {
@@ -1973,7 +1660,6 @@ namespace VPB
                         if (s.HasKey("rotation")) s.Remove("rotation");
                     }
 
-                    // Clean presets arrays in PosePresets or control
                     if ((s["id"] != null && (s["id"].Value == "PosePresets" || s["id"].Value == "control"))
                         && s["presets"] != null)
                     {
@@ -2026,9 +1712,7 @@ namespace VPB
                 }
             }
         }
-        #endregion
 
-        #region Scene-atom helpers
         internal static JSONClass WrapAtomNodeAsPreset(JSONClass atomNode)
         {
             if (atomNode == null) return null;
@@ -2043,7 +1727,6 @@ namespace VPB
             }
             return preset;
         }
-        #endregion
 
         static void MaybeSetLastRestoredData(Atom atom, JSONClass preset, bool updateLastRestoredData)
         {
@@ -2051,7 +1734,6 @@ namespace VPB
             try { atom.SetLastRestoredData(preset, true, true); } catch { }
         }
 
-        #region Slice G helpers — preset-params snapshot for non-Appearance branches
         // Native preset load mutates lock and selection state as a side effect.
         internal sealed class PresetParamsSnapshot
         {
@@ -2120,6 +1802,5 @@ namespace VPB
                 LogUtil.LogWarning($"[VpbImport] RestorePresetParamsSnapshot failed for {snap.StorableName}: {ex.Message}");
             }
         }
-        #endregion
     }
 }

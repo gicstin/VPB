@@ -153,7 +153,6 @@ namespace VPB
 
         private IEnumerator CoRestoreUserTagAvailScroll(bool isLeft, float offsetPx)
         {
-            // Empty virt list: no content height to stabilize — one apply, skip 4-frame ForceRebuild thrash.
             if (_userTagVirtView == null || _userTagVirtView.Count == 0)
             {
                 try { ApplyUserTagAvailScrollOffsetPx(isLeft, offsetPx); } catch { }

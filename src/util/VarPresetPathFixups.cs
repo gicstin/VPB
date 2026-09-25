@@ -4,11 +4,6 @@ using SimpleJSON;
 
 namespace VPB.src.util
 {
-    /// <summary>
-    /// Rewrites VaM preset JSON path references (SELF:, ./, unprefixed Custom/) to absolute
-    /// package UIDs so deferred texture loads after PopLoadDir still resolve to the preset
-    /// source package instead of the target atom's base package.
-    /// </summary>
     internal static class VarPresetPathFixups
     {
         sealed class OwnerlessMorphReference

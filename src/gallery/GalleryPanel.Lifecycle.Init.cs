@@ -18,7 +18,6 @@ namespace VPB
             try { VpbSimilarIndexBuilder.EnsureBuiltInBackground(); } catch { }
             try { InsightsInitialize(); } catch { }
 
-            // Subscribe to config changes
             if (VPBConfig.Instance != null)
             {
                 try
@@ -46,7 +45,6 @@ namespace VPB
                 }
                 catch { }
 
-                // Seed this pane from last-used default. Layout apply overwrites per pane.
                 try
                 {
                     int cols = VPBConfig.Instance.GridColumnCount;
@@ -61,7 +59,6 @@ namespace VPB
                     isCollapsed = true;
                 }
 
-                // Fixed panes should start with side tab lists collapsed
                 if (isFixedLocally)
                 {
                     leftActiveContent = null;
@@ -80,7 +77,6 @@ namespace VPB
                 SubscribeGalleryPanelToVpBConfigChanged();
             }
 
-            // Persisted per-session toggles (shared across panes)
             try
             {
                 if (VPBConfig.Instance != null)
@@ -92,10 +88,8 @@ namespace VPB
             }
             catch { }
 
-            // ... standard Init code follows ...
-            // string nameSuffix = isUndocked ? "_Undocked" : "";
             GameObject canvasGO = new GameObject("VPB_GalleryCanvas");
-            canvasGO.layer = 5; // UI layer
+            canvasGO.layer = 5;
             canvas = canvasGO.AddComponent<Canvas>();
             RectTransform canvasRT = canvasGO.GetComponent<RectTransform>();
             canvasRT.sizeDelta = new Vector2(1200, 800);
@@ -115,7 +109,6 @@ namespace VPB
                 // Overlay hit-tests require null cam; keep worldCamera only for WorldSpace.
                 canvas.worldCamera = isFixedLocally ? null : Camera.main;
                 canvas.sortingOrder = DockBaseSortingOrder;
-                // Position will be set in Show()
                 if (isFixedLocally)
                     canvas.transform.localScale = Vector3.one;
                 else
@@ -124,7 +117,7 @@ namespace VPB
                     ResetWorldSpaceCanvasScaleSync();
                     ApplyWorldSpaceCanvasScale();
                 }
-                canvasGO.layer = 5; // UI layer
+                canvasGO.layer = 5;
             }
             else
             {
@@ -134,19 +127,16 @@ namespace VPB
             CanvasScaler scaler = canvasGO.AddComponent<CanvasScaler>();
             scaler.dynamicPixelsPerUnit = 4;
 
-            // Background
             backgroundBoxGO = UI.AddChildGOImage(canvasGO, new Color(0.1f, 0.1f, 0.1f, 0.9f), AnchorPresets.centre, 1200, 800, Vector2.zero);
             backgroundCanvasGroup = backgroundBoxGO.AddComponent<CanvasGroup>();
-            backgroundCanvasGroup.ignoreParentGroups = true; // Ensure we control our own opacity separately if needed
+            backgroundCanvasGroup.ignoreParentGroups = true;
             
-            // Add UIHoverColor (This handles hover/drag color changes AND sets raycast target properly)
             UIHoverColor bgHover = backgroundBoxGO.AddComponent<UIHoverColor>();
             backgroundHoverColor = bgHover;
             bgHover.targetImage = backgroundBoxGO.GetComponent<Image>();
             bgHover.normalColor = GalleryBackgroundTinted;
             bgHover.hoverColor = GalleryBackgroundTinted;
             
-            // AddHoverDelegate
             AddHoverDelegate(backgroundBoxGO);
 
             if (isFixedLocally)
@@ -174,7 +164,6 @@ namespace VPB
                 };
             }
 
-            // Collapse Trigger Areas (Right/Left/Top) — separate GOs so chamfer always correct
             collapseTriggerGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchRight, FixedCollapseTriggerThickness, 0, Vector2.zero, FixedCollapseTriggerChamferSize);
             InitCollapseTrigger(
                 collapseTriggerGO,
@@ -214,7 +203,6 @@ namespace VPB
                 ChamferedRect.ChamferSide.Bottom
             );
 
-            // Active in fixed mode; runtime selects which one based on dock side
             collapseTriggerGO.SetActive(false);
             if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(false);
             if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(false);
@@ -227,20 +215,17 @@ namespace VPB
                 {
                     canvasGO.SetActive(false);
                     canvasGO.SetActive(true);
-
                 }
                 MarkSessionArrangementDirty();
             };
 
             quickFiltersUI = new QuickFiltersUI(this, backgroundBoxGO);
 
-            // Register Panel
             if (Gallery.singleton != null)
             {
                 Gallery.singleton.AddPanel(this);
             }
 
-            // Dock claim needs the stable panel id AddPanel just assigned.
             try
             {
                 GalleryDockLayout.SelfHeal();
@@ -259,7 +244,6 @@ namespace VPB
             }
             catch { }
 
-            // Title Bar
             GameObject titleBarGO = new GameObject("TitleBar");
             titleBarGO.transform.SetParent(backgroundBoxGO.transform, false);
             RectTransform titleBarRT = titleBarGO.AddComponent<RectTransform>();
@@ -308,7 +292,6 @@ namespace VPB
             _titleBarSearchOnValueChanged = (val) => {
                 if (_suppressTitleBarSearchValueChanged) return;
                 // Title search is ALWAYS the grid find — settings uses side-rail list filter only.
-                // Chip mode: field is draft only — filter updates on Enter / chip toggle.
                 if (HasTitleSearchChips())
                 {
                     try { SyncTitleBarSearchBackdrop(); } catch { }
@@ -343,7 +326,6 @@ namespace VPB
             SetupTitleSearchCompactControl(titleBarGO);
             try { SyncTitleBarSearchBackdrop(); } catch { }
 
-            // Creator filter dropdown button (between Filter Presets and Search)
             SetupTitleCreatorFilterDropdown(titleBarGO, backgroundBoxGO);
             SetupGlobalSourceFilterDropdown(titleBarGO, backgroundBoxGO);
             try { EnsureTitleBarOverflowChrome(titleBarGO); } catch { }
@@ -355,7 +337,6 @@ namespace VPB
             const float fileSortChip = 40f;
             const float fileSortGap = 8f;
 
-            // File sort: type button (abbrev + type menu / RMB cycle); separate direction button (↑/↓ icon)
             GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, VPBTranslation.T("gallery.sort.az", "Az"), 16, 0, 0, AnchorPresets.middleCenter, null);
             fileSortTypeBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             fileSortTypeBtn.GetComponentInChildren<Text>().color = Color.white;
@@ -424,10 +405,8 @@ namespace VPB
             AddTooltip(fileSortDirBtn, "gallery.tooltip.sort_toggle_dir", "Toggle sort direction (↑/↓)");
             SetupFileSortTypeMenu();
 
-            // Keep fileSortBtnText for compatibility with existing code
             fileSortBtnText = fileSortTypeText;
 
-            // Init File Sort State
             try { SyncBrowseFilterCyclesFromMirroredSettings(); } catch { }
             try { SyncHideOldVersionsFromCycle(); } catch { }
             try { MigrateLegacyExclusiveFileSortIfNeeded(); } catch { }
@@ -462,7 +441,6 @@ namespace VPB
             SeedRatingPresenceFilterFromConfig();
             SyncRatingSortToggleState();
 
-            // Refresh Button (to the right of Star) — square icon button
             GameObject refreshBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, VPBTranslation.T("gallery.title.refresh", "Refresh"), 16, 0, 0, AnchorPresets.middleCenter, null);
             refreshBtn.GetComponent<Image>().color = GalleryUiColorTokens.ChromeIconWell;
             refreshBtn.GetComponentInChildren<Text>().color = Color.white;
@@ -470,7 +448,7 @@ namespace VPB
             refreshRT.anchorMin = new Vector2(0.5f, 0.5f);
             refreshRT.anchorMax = new Vector2(0.5f, 0.5f);
             refreshRT.pivot = new Vector2(0.5f, 0.5f);
-            refreshRT.anchoredPosition = new Vector2(245, 0); // adjusted for narrower width
+            refreshRT.anchoredPosition = new Vector2(245, 0);
             _titleBarRefreshBtnRT = refreshRT;
 
             Button refreshButton = refreshBtn.GetComponent<Button>();
@@ -494,7 +472,6 @@ namespace VPB
             AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Rescan packages from disk — picks up .var files added or renamed outside VaM (right-click: VaM file list only)");
             { var s = UI.LoadIconSprite("refresh", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(refreshBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
 
-            // Settings (title bar, left of filter presets; side rails no longer host Settings)
             GameObject titleBarSettingsBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, " ", 16, 0, 0, AnchorPresets.middleCenter, () => {
                 try { OpenSettingsSideTab(); } catch { }
             });
@@ -508,13 +485,11 @@ namespace VPB
             titleBarSettingsRT.anchorMin = new Vector2(0.5f, 0.5f);
             titleBarSettingsRT.anchorMax = new Vector2(0.5f, 0.5f);
             titleBarSettingsRT.pivot = new Vector2(0.5f, 0.5f);
-            // Keep clear of language button (-276): push Settings further left.
             titleBarSettingsRT.anchoredPosition = new Vector2(-324, 0);
             _titleBarSettingsBtnRT = titleBarSettingsRT;
             VPBUiFont.ApplyTo(titleBarSettingsBtnText);
             AddDynamicTooltip(titleBarSettingsBtn, BuildPluginInfoTooltip);
 
-            // Filter Presets Button (match Creator dropdown chrome)
             GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, " ", 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
             qfToggleBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             quickFiltersToggleBtnText = qfToggleBtn.GetComponentInChildren<Text>();
@@ -528,8 +503,6 @@ namespace VPB
             qfToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
             qfToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
             qfToggleRT.pivot = new Vector2(0.5f, 0.5f);
-            // Make room for Creator button between P and search:
-            // search left = -160; 4px gap; Creator 40x40 centered -184; 4px gap; P centered -228
             qfToggleRT.anchoredPosition = new Vector2(-228, 0);
             _titleBarQfToggleBtnRT = qfToggleRT;
             VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
@@ -579,10 +552,8 @@ namespace VPB
             }
             AddTooltip(layoutPresetsBtn, "gallery.tooltip.layout_presets", "Layout presets — save and restore window arrangements{hint:layout_presets}");
 
-            // Register inner pane button scale actions (title bar)
             { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.TitleBarHeightRef * s); }); }
-            // Title lives inside CategoryQuickSwitch chrome (stretch + MiddleLeft) — do not re-apply
-            // legacy free-float (60,10)/(300×40); that top-shifts "Scenes" when pane goes wide.
+            // Title lives inside CategoryQuickSwitch chrome (stretch + MiddleLeft) — do not re-apply legacy free-float (60,10)/(300×40).
             { var rt = fpsRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(100f * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
             { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) { var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); } if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * s); t.resizeTextMinSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontMinRef * s); } }); }
             { var rt = titleSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
@@ -595,7 +566,6 @@ namespace VPB
             { var rt = layoutPresetsRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
             { var go = titleCreatorBtn; innerPaneScaleActions.Add(s => { if (go) go.GetComponent<RectTransform>().sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
 
-            // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
             {
                 float tabAreaWidth = 220f;
@@ -611,7 +581,6 @@ namespace VPB
                     };
                 }
                 
-                // 1. Right Tab Area
                 rightTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero);
                 RectTransform rightTabRT = rightTabScrollGO.GetComponent<RectTransform>();
                 rightTabRT.anchorMin = new Vector2(1, 0);
@@ -656,11 +625,10 @@ namespace VPB
                     rightUserTagsAvailFooterGO.transform.SetAsLastSibling();
                 }
 
-                // 1b. Right Sub Tab Area (For Tags split view)
                 rightSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero, 15f, 0f, false);
                 RectTransform rightSubTabRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                 rightSubTabRT.anchorMin = new Vector2(1, 0);
-                rightSubTabRT.anchorMax = new Vector2(1, 0.5f); // Bottom half default
+                rightSubTabRT.anchorMax = new Vector2(1, 0.5f);
                 rightSubTabRT.offsetMin = new Vector2(-tabAreaWidth - GalleryUiDesignTokens.SideTabSideMarginRef, 68);
                 rightSubTabRT.offsetMax = new Vector2(-GalleryUiDesignTokens.SideTabSideMarginRef, -45);
                 
@@ -671,7 +639,7 @@ namespace VPB
                     vlg.padding = UI.ScrollEndsPad();
                     innerPaneScaleActions.Add(s => SyncSideTabScrollContentVerticalLayoutOn(vlg, s));
                 }
-                rightSubTabScrollGO.SetActive(false); // Hidden by default
+                rightSubTabScrollGO.SetActive(false);
                 {
                     Transform vp = rightSubTabScrollGO.transform.Find("Viewport");
                     _rightSubTabViewportRT = vp != null ? vp.GetComponent<RectTransform>() : null;
@@ -691,7 +659,6 @@ namespace VPB
                     rightUserTagsAppliedStickyGO.transform.SetAsLastSibling();
                 }
 
-                // Right Sub Sort Button (tags split: same 35² icon cycle as upper row)
                 {
                     Color sortBackdropCol = UI.ChromeDark;
                     rightSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topRight, null);
@@ -737,7 +704,6 @@ namespace VPB
                     rightSubSceneSortBtn.SetActive(false);
                 }
 
-                // Right Sub Search
                 rightSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 60f, (val) => {
                     bool utAppliedPane = rightActiveContent == ContentType.UserTags && rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf;
                     if (utAppliedPane)
@@ -773,13 +739,12 @@ namespace VPB
                     });
                 }
                 
-                // Right Sub Clear Button
                 rightSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomRight, () => {
                     activeTags.Clear();
                     RefreshFiles();
                     UpdateTabs();
                 });
-                rightSubClearBtn.GetComponent<Image>().color = UI.AccentRed; // Dark Red
+                rightSubClearBtn.GetComponent<Image>().color = UI.AccentRed;
                 rightSubClearBtnText = rightSubClearBtn.GetComponentInChildren<Text>();
                 rightSubClearBtnText.color = Color.white;
                 
@@ -794,7 +759,6 @@ namespace VPB
                 rightSubSortBtn.SetActive(false);
                 rightSubSearchInput.gameObject.SetActive(false);
 
-                // Right Sort Button (upper pane: same icon + 4-mode cycle as scene row)
                 {
                     Color sortBackdropCol = UI.ChromeDark;
                     rightSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topRight, null);
@@ -821,7 +785,6 @@ namespace VPB
                     });
                 }
 
-                // Right Refresh Button (to the right of Sort, still left of Search)
                 rightRefreshBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.icon.refresh", "⟳"), 18, 0, 0, AnchorPresets.topRight, null);
                 rightRefreshBtn.GetComponent<Image>().color = UI.ChromeDark;
                 rightRefreshBtn.GetComponentInChildren<Text>().color = Color.white;
@@ -829,7 +792,7 @@ namespace VPB
                 rrRT.anchorMin = new Vector2(1, 1);
                 rrRT.anchorMax = new Vector2(1, 1);
                 rrRT.pivot = new Vector2(1, 1);
-                rrRT.anchoredPosition = new Vector2(-145, -65); // Between Sort and Search
+                rrRT.anchoredPosition = new Vector2(-145, -65);
 
                 rightRefreshBtnText = rightRefreshBtn.GetComponentInChildren<Text>();
                 Button rightRefreshButton = rightRefreshBtn.GetComponent<Button>();
@@ -925,7 +888,6 @@ namespace VPB
                 rSearchRT.anchoredPosition = new Vector2(-10, -65);
                 innerPaneScaleActions.Add(s => ApplyMainSideSearchRowLayout(false, s));
 
-                // 2. Left Tab Area
                 leftTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero);
                 RectTransform leftTabRT = leftTabScrollGO.GetComponent<RectTransform>();
                 leftTabRT.anchorMin = new Vector2(0, 0);
@@ -940,7 +902,7 @@ namespace VPB
                     vlg.padding = UI.ScrollEndsPad();
                     innerPaneScaleActions.Add(s => SyncSideTabScrollContentVerticalLayoutOn(vlg, s));
                 }
-                leftTabScrollGO.SetActive(false); // Hidden by default
+                leftTabScrollGO.SetActive(false);
                 try { EnsureUserTagAvailScrollTrackingHooks(); } catch { }
                 {
                     Transform vp = leftTabScrollGO.transform.Find("Viewport");
@@ -971,11 +933,10 @@ namespace VPB
                     leftUserTagsAvailFooterGO.transform.SetAsLastSibling();
                 }
 
-                // 2b. Left Sub Tab Area (For Tags split view)
                 leftSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero, 15f, 0f, false);
                 RectTransform leftSubTabRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                 leftSubTabRT.anchorMin = new Vector2(0, 0);
-                leftSubTabRT.anchorMax = new Vector2(0, 0.5f); // Bottom half default
+                leftSubTabRT.anchorMax = new Vector2(0, 0.5f);
                 leftSubTabRT.offsetMin = new Vector2(GalleryUiDesignTokens.SideTabSideMarginRef, 68);
                 leftSubTabRT.offsetMax = new Vector2(tabAreaWidth + GalleryUiDesignTokens.SideTabSideMarginRef, -45);
                 
@@ -986,7 +947,7 @@ namespace VPB
                     vlg.padding = UI.ScrollEndsPad();
                     innerPaneScaleActions.Add(s => SyncSideTabScrollContentVerticalLayoutOn(vlg, s));
                 }
-                leftSubTabScrollGO.SetActive(false); // Hidden by default
+                leftSubTabScrollGO.SetActive(false);
                 {
                     Transform vp = leftSubTabScrollGO.transform.Find("Viewport");
                     _leftSubTabViewportRT = vp != null ? vp.GetComponent<RectTransform>() : null;
@@ -1006,7 +967,6 @@ namespace VPB
                     leftUserTagsAppliedStickyGO.transform.SetAsLastSibling();
                 }
 
-                // Left Sub Sort Button (tags split: same 35² icon cycle as upper row)
                 {
                     Color sortBackdropCol = UI.ChromeDark;
                     leftSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topLeft, null);
@@ -1028,7 +988,6 @@ namespace VPB
                     leftSubSortButton.onClick.AddListener(OnLeftSubSortButtonClicked);
                 }
 
-                // Scene sub-pane: one square button cycling 4 file-sort modes
                 {
                     Color backdrop = UI.ChromeDark;
                     leftSubSceneSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topLeft, null);
@@ -1053,7 +1012,6 @@ namespace VPB
                     leftSubSceneSortBtn.SetActive(false);
                 }
 
-                // Left Sub Search
                 leftSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 60f, (val) => {
                     bool utAppliedPane = leftActiveContent == ContentType.UserTags && leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf;
                     if (utAppliedPane)
@@ -1090,13 +1048,12 @@ namespace VPB
                     });
                 }
 
-                // Left Sub Clear Button
                 leftSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomLeft, () => {
                     activeTags.Clear();
                     RefreshFiles();
                     UpdateTabs();
                 });
-                leftSubClearBtn.GetComponent<Image>().color = UI.AccentRed; // Dark Red
+                leftSubClearBtn.GetComponent<Image>().color = UI.AccentRed;
                 leftSubClearBtnText = leftSubClearBtn.GetComponentInChildren<Text>();
                 leftSubClearBtnText.color = Color.white;
                 
@@ -1111,7 +1068,6 @@ namespace VPB
                 leftSubSortBtn.SetActive(false);
                 leftSubSearchInput.gameObject.SetActive(false);
 
-                // Left Sort Button (upper pane: same icon + 4-mode cycle as scene row)
                 {
                     Color sortBackdropCol = UI.ChromeDark;
                     leftSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topLeft, null);
@@ -1215,24 +1171,20 @@ namespace VPB
 
                 try { SyncSideTabColumnHorizontalInsets(1f); } catch { }
 
-                // Right Button Container
                 rightSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.middleRight, 130, 700, new Vector2(140, 0));
                 sideButtonGroups.Add(rightSideContainer.AddComponent<CanvasGroup>());
                 AddHoverDelegate(rightSideContainer);
                 AddSubmenuSideHoverTrigger(rightSideContainer, false);
 
-                // Full-height hover strip to cover top/bottom gaps outside the 700px side container
                 rightSideHoverStrip = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.vStretchRight, GallerySideHoverStripWidth, 0, new Vector2(GallerySideHoverStripOffset, 0));
                 AddHoverDelegate(rightSideHoverStrip);
                 AddSubmenuSideHoverTrigger(rightSideHoverStrip, false);
                 try
                 {
-                    // Ensure it doesn't intercept clicks on actual buttons (place behind container)
                     rightSideHoverStrip.transform.SetAsFirstSibling();
                 }
                 catch { }
 
-                // Right Toggle Buttons — sizes/spacing match GalleryUiDesignTokens (ApplySideButtonScale / UpdateSideButtonPositions).
                 int btnFontSize = GalleryUiDesignTokens.FontBodyRef;
                 float btnWidth = GalleryUiDesignTokens.SideButtonWidthRef;
                 float btnHeight = GalleryUiDesignTokens.SideButtonHeightRef;
@@ -1273,7 +1225,6 @@ namespace VPB
                         ?? galleryRemoveSprite;
                 }
 
-                // Dock + Follow on rail. Desktop Dock menu also clones; VR Dock chip clones.
                 float deskW = galleryDockAnchorSprite != null ? sideIconBtn : btnWidth;
                 float deskH = galleryDockAnchorSprite != null ? sideIconBtn : btnHeight;
                 GameObject rightDesktopBtn = UI.CreateUIButton(rightSideContainer, deskW, deskH, " ", 8, 0, startY, AnchorPresets.centre,
@@ -1339,7 +1290,6 @@ namespace VPB
                 rightSideButtons.Add(rightFollowBtn.GetComponent<RectTransform>());
                 AddTooltip(rightFollowBtn, "gallery.tooltip.follow_mode", "Toggle camera follow for the panel.");
 
-                // Category (Red) — below Tags
                 {
                     float cW = galleryCategorySprite != null ? sideIconBtn : btnWidth;
                     float cH = galleryCategorySprite != null ? sideIconBtn : btnHeight;
@@ -1370,7 +1320,6 @@ namespace VPB
                     AddTooltip(rightCatBtn, "gallery.tooltip.category_list", "Browse all categories. Title = quick switch.");
                 }
 
-                // Scene Import — above Tags (sidebar toggle; layout positions dynamically)
                 {
                     Color colorSceneImportRail = ColorSceneImport;
                     float impW = sideIconBtn;
@@ -1399,7 +1348,6 @@ namespace VPB
                     AddTooltip(rightSceneImportBtn, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
                 }
 
-                // User-defined tags (SQLite) — above Category
                 {
                     Color colorUserTagRail = ColorUserTagFilter;
                     float utW = sideIconBtn;
@@ -1435,7 +1383,6 @@ namespace VPB
                     CreateRightCreatorSideRailButton();
                 CreateRightLookFacetSideRailButton();
 
-                // Path (Blue)
                 {
                     float pW = galleryPathSprite != null ? sideIconBtn : btnWidth;
                     float pH = galleryPathSprite != null ? sideIconBtn : btnHeight;
@@ -1556,19 +1503,16 @@ namespace VPB
                     AddTooltip(rightSaveBtnGO, "gallery.tooltip.save_pane", "Save presets and related actions.");
                 }
 
-                // Left Button Container
                 leftSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.middleLeft, 130, 700, new Vector2(-140, 0));
                 sideButtonGroups.Add(leftSideContainer.AddComponent<CanvasGroup>());
                 AddHoverDelegate(leftSideContainer);
                 AddSubmenuSideHoverTrigger(leftSideContainer, true);
 
-                // Full-height hover strip to cover top/bottom gaps outside the 700px side container
                 leftSideHoverStrip = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.vStretchLeft, GallerySideHoverStripWidth, 0, new Vector2(-GallerySideHoverStripOffset, 0));
                 AddHoverDelegate(leftSideHoverStrip);
                 AddSubmenuSideHoverTrigger(leftSideHoverStrip, true);
                 try
                 {
-                    // Ensure it doesn't intercept clicks on actual buttons (place behind container)
                     leftSideHoverStrip.transform.SetAsFirstSibling();
                 }
                 catch { }
@@ -1634,7 +1578,6 @@ namespace VPB
                 leftSideButtons.Add(leftFollowBtn.GetComponent<RectTransform>());
                 AddTooltip(leftFollowBtn, "gallery.tooltip.follow_mode", "Toggle camera follow for the panel.");
 
-                // Category (Red) — below Tags
                 {
                     float cW = galleryCategorySprite != null ? sideIconBtn : btnWidth;
                     float cH = galleryCategorySprite != null ? sideIconBtn : btnHeight;
@@ -1663,7 +1606,6 @@ namespace VPB
                     AddTooltip(leftCatBtn, "gallery.tooltip.category_list", "Browse all categories. Title = quick switch.");
                 }
 
-                // Scene Import — above Tags (sidebar toggle; layout positions dynamically)
                 {
                     Color colorSceneImportRailL = ColorSceneImport;
                     float impW = sideIconBtn;
@@ -1692,7 +1634,6 @@ namespace VPB
                     AddTooltip(leftSceneImportBtn, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
                 }
 
-                // User-defined tags (SQLite) — above Category
                 {
                     Color colorUserTagRailL = ColorUserTagFilter;
                     float utW = sideIconBtn;
@@ -1725,7 +1666,6 @@ namespace VPB
                     CreateLeftCreatorSideRailButton();
                 CreateLeftLookFacetSideRailButton();
 
-                // Path (Blue)
                 {
                     float pW = galleryPathSprite != null ? sideIconBtn : btnWidth;
                     float pH = galleryPathSprite != null ? sideIconBtn : btnHeight;
@@ -1852,7 +1792,6 @@ namespace VPB
                 try { UpdateApplyModeButtonState(); } catch { }
             }
 
-            // Main Content Area
             GameObject scrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
             // Tab scroll panels must render above the image grid so their VR scroll buttons aren't covered.
             if (leftTabScrollGO != null) leftTabScrollGO.transform.SetAsLastSibling();
@@ -1863,20 +1802,16 @@ namespace VPB
             try { GalleryViewportCtrlScrollColumns.TryAttach(this, scrollRect); } catch { }
             contentScrollRT = scrollGO.GetComponent<RectTransform>();
             contentScrollRT.offsetMin = new Vector2(0, 110);
-            contentScrollRT.offsetMax = new Vector2(-230, -65); // Default top margin (Quick Filters hidden)
+            contentScrollRT.offsetMax = new Vector2(-230, -65);
             lastScrollTime = Time.unscaledTime;
             if (scrollRect != null)
             {
                 scrollRect.onValueChanged.AddListener((v) => { 
                     lastScrollTime = Time.unscaledTime;
                     // Do not auto-close toolbox rating selector on scroll changes.
-                    // Scroll value can change due to layout rebuilds / content refresh (not user intent),
-                    // which makes the selector unusable in some modes (e.g. Custom Scenes).
-                    // LogUtil.Log("Scroll changed: " + v.y);
                 });
             }
 
-            // Spring drag scroll button (WorldSpace and ScreenSpaceOverlay).
             try
             {
                 if (scrollRect != null)
@@ -1884,7 +1819,6 @@ namespace VPB
                     Transform sb = scrollGO.transform.Find("Scrollbar");
                     if (sb != null)
                     {
-                        // Parent to the scrollbar so it follows layout/offsets.
                         float w = isFixedLocally
                             ? GalleryUiDesignTokens.SpringScrollBtnWidthFixedRef
                             : GalleryUiDesignTokens.SpringScrollBtnWidthFloatRef;
@@ -1894,18 +1828,15 @@ namespace VPB
                         // Ensure it doesn't block other interactions outside its square.
                         springBtn.transform.SetAsLastSibling();
 
-                        // Lower sensitivity for big-button spring scrolling in VR.
                         SpringScrollButton ssb = springBtn.GetComponent<SpringScrollButton>();
                         if (ssb != null)
                         {
-                            // Retuned for practical hand movement: reach high speed without huge drags.
                             ssb.deadzoneFraction = 0.10f;
                             ssb.maxViewportHeightsPerSecond = 2.25f;
                             ssb.speedSmoothing = 12f;
                             ssb.responsePower = 2.0f;
                         }
 
-                        // Icon: scroll
                         try
                         {
                             Sprite icon = UI.LoadIconSprite("caret-up-down", UI.SideRailIconGlyphTint);
@@ -1927,14 +1858,12 @@ namespace VPB
                         }
                         catch { }
 
-                        // Tooltip: teach the gesture (localized)
                         try
                         {
                             AddTooltip(springBtn, "gallery.tooltip.spring_scroll_drag", "Hold and drag up/down to scroll (farther = faster). Release to stop.");
                         }
                         catch { }
 
-                        // Track + apply default ON/OFF state (footer toggle updates this too).
                         springScrollButtonGO = springBtn;
                         ApplySpringScrollButtonScale(ChromeScale);
                         springScrollButtonGO.SetActive(springScrollButtonEnabled);
@@ -1954,7 +1883,6 @@ namespace VPB
             CreateEmptyGridStateOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
             try { CreateModeSemanticsBanner(backgroundBoxGO != null ? backgroundBoxGO : scrollGO); } catch { }
 
-            // Clean up legacy layout components that interfere with virtualization
             var legacyGLG = contentGO.GetComponent<GridLayoutGroup>();
             if (legacyGLG != null) DestroyImmediate(legacyGLG);
             var legacyCSF = contentGO.GetComponent<ContentSizeFitter>();
@@ -1962,21 +1890,17 @@ namespace VPB
             var legacyVLG = contentGO.GetComponent<VerticalLayoutGroup>();
             if (legacyVLG != null) DestroyImmediate(legacyVLG);
 
-            // Initialize RecyclingGridView immediately instead of legacy layout components
             recyclingGrid = contentGO.AddComponent<RecyclingGridView>();
             recyclingGrid.scrollRect = scrollRect;
             recyclingGrid.content = contentGO.GetComponent<RectTransform>();
             
-            // Set initial adaptive config (square thumb + font-tight caption chrome).
             ApplyGridRecyclingLayoutConfig(recyclingGrid, gridColumnCount, deferRefresh: false);
 
-            // Pagination Controls (Bottom Left)
             CreatePaginationControls();
             try { CreateTitleSearchChipHost(); } catch { }
             try { CreateActiveFilterChipBar(); } catch { }
             try { RefreshFooterPerfChrome(); } catch { }
 
-            // Status Bar (Now shares the hoverPathRT container)
             GameObject statusBarGO = new GameObject("StatusBar");
             statusBarGO.transform.SetParent(hoverPathRT.transform, false);
             statusBarText = statusBarGO.AddComponent<Text>();
@@ -1993,7 +1917,6 @@ namespace VPB
             statusBarText.raycastTarget = false;
             
             RectTransform statusRT = statusBarGO.GetComponent<RectTransform>();
-            // Bottom-row anchor: same as hoverPathText and tboxLabelLayer
             statusRT.anchorMin        = new Vector2(0f, 0f);
             statusRT.anchorMax        = new Vector2(1f, 0f);
             statusRT.pivot            = new Vector2(0.5f, 0f);
@@ -2006,7 +1929,6 @@ namespace VPB
 
             CreateResizeHandles();
 
-            // Follow — title window cluster (high-frequency VR; hidden while docked).
             {
                 GameObject followBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, " ", 16, 0, 0, AnchorPresets.middleCenter, ToggleFollowMode);
                 followBtn.name = "TitleBarFollowBtn";
@@ -2034,7 +1956,6 @@ namespace VPB
                 { var rt = followRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
             }
 
-            // Minimize button (title bar icon row)
             GameObject minimizeBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, "_", 30, 0, 0, AnchorPresets.middleCenter, () => {
                 Hide();
             });
@@ -2048,7 +1969,6 @@ namespace VPB
             AddHoverDelegate(minimizeBtn);
             { var s = UI.LoadIconSprite("window-minimize", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(minimizeBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
 
-            // Close button (title bar icon row) - rendered last to be on top
             GameObject closeBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, "X", 30, 0, 0, AnchorPresets.middleCenter, () => {
                 Close();
             });
@@ -2062,7 +1982,6 @@ namespace VPB
             AddHoverDelegate(closeBtn);
             { var s = UI.LoadIconSprite("door-exit", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s, 4f, GalleryUiColorTokens.ChromeIconWell); }
 
-            // Register inner pane button scale actions (close/minimize — X anchored by ApplyTitleBarResponsiveLayout)
             { var rt = minRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
             { var rt = closeRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
 
@@ -2089,20 +2008,13 @@ namespace VPB
             SubscribeLocaleChanged();
             RefreshLocalizedUi();
 
-            // Kill ColorTint on all Selectables + border on buttons; enforcer re-runs on a throttle
-            // so UI rebuilt after init cannot restore default hover fill. Enforcer must not rewrite
-            // existing UIHoverBorder.hoverColor (side-rail selected tints) or rims pulse / cost FPS.
+            // Kill ColorTint on all Selectables + border on buttons.
             UI.ApplyGalleryPaneHoverPolicy(backgroundBoxGO);
             if (backgroundBoxGO.GetComponent<GalleryPaneChromeEnforcer>() == null)
                 backgroundBoxGO.AddComponent<GalleryPaneChromeEnforcer>();
 
             try { ApplyGalleryTransparencyVisuals(); } catch { }
 
-            // Default lastAppliedPackageRefreshTime was DateTime.MinValue, so the first Show() always saw
-            // pkgRefreshTime > lastApplied, set packagesChanged, cleared creator/category caches, and
-            // UpdateLayout rebuilt them synchronously on the main thread (~seconds). Align to the current
-            // FileManager baseline so only real refreshes invalidate caches (RefreshFilesRoutine already
-            // rebuilds counts on a worker thread when needed).
             try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
             try { CreateTitleSearchChipHost(); } catch { }

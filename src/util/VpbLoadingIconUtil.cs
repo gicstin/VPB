@@ -7,11 +7,7 @@ using UnityEngine;
 
 namespace VPB.src.util
 {
-    /// <summary>
-    /// Recover VaM hourglass / frozen sim when AsyncFlags were orphaned
-    /// (e.g. atom destroyed mid JSONStorableDynamic load, or catalog-refresh pause).
-    /// Cold/warm path only — never call from Update.
-    /// </summary>
+    /// <summary>Recover frozen sim when AsyncFlags are orphaned; never call from Update.</summary>
     public static class VpbLoadingIconUtil
     {
         private static FieldInfo s_LoadingIconFlagsField;
@@ -203,7 +199,6 @@ namespace VPB.src.util
             LogUtil.LogWarning("[VPB] RecoverAfterBulkAtomTeardown end: " + (reason ?? ""));
         }
 
-        /// <summary>Diagnose current flag state without mutating (unless raise=true).</summary>
         public static void LogFlagSnapshot(string reason, bool raise = false)
         {
             EnsureFields();

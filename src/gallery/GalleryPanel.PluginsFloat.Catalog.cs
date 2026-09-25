@@ -18,10 +18,7 @@ namespace VPB
         private bool _pluginsFloatCatalogReady;
         private int _pluginsFloatRefsWarmGen;
 
-        /// <summary>
-        /// Grid-parity load: cat_mem JOIN pkg on ThreadPool.
-        /// Never wait on cslist-ref LIKE (contends with deferred Persist → stuck "Loading…").
-        /// </summary>
+        /// <summary>Grid-parity load: cat_mem JOIN pkg on ThreadPool.</summary>
         private void RequestPluginsFloatCatalog(bool force)
         {
             DateTime pkgTime = DateTime.MinValue;
@@ -164,7 +161,6 @@ namespace VPB
         private int _pluginsFloatRefsRefreshPending;
         private int _pluginsFloatRefsRefreshCatalogGen;
 
-        /// <summary>Called from Update when refs warm finishes — refresh orphan leaves.</summary>
         private void TickPluginsFloatRefsRefresh()
         {
             if (Interlocked.Exchange(ref _pluginsFloatRefsRefreshPending, 0) == 0) return;
@@ -201,7 +197,6 @@ namespace VPB
 
         private void StopPluginsFloatTreePopulate()
         {
-            // Legacy no-op — tree is virtualized (pool rebind), no populate coroutine.
         }
 
         private void StopPluginsFloatCatalogLoad()

@@ -9,14 +9,8 @@ using ZstdNet;
 
 namespace VPB
 {
-    /// <summary>
-    /// Background zstd compress + disk write for on-demand cache builds.
-    /// Keeps Unity Finish on main thread; overlaps CPU compress/IO with next decode.
-    /// Shares busy-path registration with <see cref="ImageLoadingMgr"/> so runtime loads wait for .tmp.
-    /// </summary>
     internal static class OnDemandZstdWriteQueue
     {
-        // One route owns its future scratch too, so decoded producers cannot starve writers.
         internal sealed class Reservation
         {
             internal long Bytes;
@@ -117,7 +111,6 @@ namespace VPB
         {
             public Reservation Memory;
             public string ZstdPath;
-            /// <summary>In-memory DXT/raw payload. Null when <see cref="NativeSourcePath"/> set.</summary>
             public byte[] Payload;
             /// <summary>Stream-compress existing .vamcache (avoids GetRawTextureData LOH copy).</summary>
             public string NativeSourcePath;
@@ -242,7 +235,6 @@ namespace VPB
             try { ZstdCompressor.KillActiveProcesses(); } catch { }
         }
 
-        /// <summary>Enqueue payload ownership transfer. Returns false if path busy/cancel/invalid.</summary>
         internal static bool TryEnqueue(
             string zstdPath,
             byte[] payload,
@@ -288,10 +280,6 @@ namespace VPB
             return EnqueueJob(job);
         }
 
-        /// <summary>
-        /// Stream-compress native .vamcache → .zvamcache on worker (same as Settings Compress Cache).
-        /// Prefer this over memory Wrap — no GetRawTextureData, lower GC, external zstd can use multi-core.
-        /// </summary>
         internal static bool TryEnqueueFromNativeFile(
             string zstdPath,
             string nativePath,
@@ -404,7 +392,6 @@ namespace VPB
             {
                 int p = Environment.ProcessorCount;
                 if (p < 1) p = 1;
-                // Keep several compress+write cores busy while main Finishes next textures.
                 int n = (p * 3) / 4;
                 if (n < 4) n = 4;
                 if (n > 12) n = 12;
@@ -483,7 +470,6 @@ namespace VPB
                 {
                     NativeTextureOnDemandCache.NotifyZstdWriteFailed();
                 }
-
             }
             catch
             {
@@ -508,7 +494,6 @@ namespace VPB
             string zstdPath = job.ZstdPath;
             if (string.IsNullOrEmpty(zstdPath)) return false;
 
-            // Prefer streaming native file → zstd (Bulk Compress Cache path).
             if (!string.IsNullOrEmpty(job.NativeSourcePath))
             {
                 try

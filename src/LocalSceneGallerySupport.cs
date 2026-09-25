@@ -4,10 +4,6 @@ using System.IO;
 
 namespace VPB
 {
-    /// <summary>
-    /// Shared rules for on-disk <c>Saves/scene/*.json</c> rows (not <see cref="VarFileEntry"/>).
-    /// Used by delete, hide sidecars, and toolbox copy.
-    /// </summary>
     public static class LocalSceneGallerySupport
     {
         /// <summary>Prefix for keys in <see cref="FileEntry.AutoInstallLookup"/> / AutoInstall.txt so local scenes never collide with package UIDs.</summary>
@@ -20,10 +16,6 @@ namespace VPB
         /// <summary>Gallery path → AutoInstall lookup key (empty string = known non-scene / miss).</summary>
         private static Dictionary<string, string> s_autoInstallKeyByPath;
 
-        /// <summary>
-        /// True for Windows rooted drive paths (<c>C:/...</c>). These contain <c>:/</c> and must not be
-        /// treated as VaM <c>pkg:/internal</c> VFS paths on scroll/thumb hot paths.
-        /// </summary>
         public static bool IsWindowsDriveAbsolutePath(string path)
         {
             if (string.IsNullOrEmpty(path) || path.Length < 3) return false;
@@ -60,9 +52,6 @@ namespace VPB
             s_autoInstallKeyByPath = null;
         }
 
-        /// <summary>
-        /// True if <paramref name="fileFullPath"/> is a file path inside <paramref name="directoryFullPath"/> (resolved).
-        /// </summary>
         public static bool IsStrictFilePathInsideDirectory(string fileFullPath, string directoryFullPath)
         {
             if (string.IsNullOrEmpty(fileFullPath) || string.IsNullOrEmpty(directoryFullPath)) return false;
@@ -97,12 +86,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Recursive listing rule for on-disk <c>Saves/scene</c> scenes: any real <c>.json</c> under
-        /// <c>Saves/scene</c> (incl. nested subfolders), excluding subscenes and VPB-generated scenes.
-        /// Unlike VaM's native browser, a sibling <c>.jpg</c> preview is NOT required \u2014 preview-less
-        /// scenes are listed and render with the gallery's thumbnail placeholder.
-        /// </summary>
         public static bool IsVaMLocalSceneListingCandidate(string jsonPath)
         {
             if (string.IsNullOrEmpty(jsonPath)) return false;
@@ -132,8 +115,6 @@ namespace VPB
             string lower = norm.ToLowerInvariant();
             if (lower.Contains("/subscene/") || lower.Contains("/subscenedata/")) return false;
 
-            // A sibling .jpg is intentionally NOT required: preview-less scenes (and scenes in subfolders
-            // that lack a preview) still list and fall back to the gallery thumbnail placeholder.
             return true;
         }
 
@@ -182,10 +163,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Resolves a gallery <see cref="FileEntry"/> to a real <c>Saves/scene</c> JSON file on disk.
-        /// </summary>
-        /// <param name="logTraversalWarning">If true, logs when the path resolves outside <c>Saves/scene</c>.</param>
         public static bool TryResolveSavesSceneJson(FileEntry f, out string absoluteJsonPath, out string galleryRelativePath, bool logTraversalWarning)
         {
             absoluteJsonPath = null;
@@ -197,9 +174,7 @@ namespace VPB
             if (string.IsNullOrEmpty(p)) return false;
             p = p.Replace('\\', '/');
 
-            // IMPORTANT: On Windows, absolute disk paths like "C:/.../Saves/scene/foo.json" contain ":/" and can be
-            // misclassified as a package path by VaM helpers that treat any ":/" as "pkg:/internalPath".
-            // Treat rooted drive-letter paths as local disk paths, not package refs.
+            // Windows drive paths contain ":/" and must not be misread as package paths.
             if (!IsWindowsDriveAbsolutePath(p))
             {
                 try
@@ -248,7 +223,6 @@ namespace VPB
             }
 
             absoluteJsonPath = full;
-            // Normalize to a VaM-relative path ("Saves/scene/...") so FileManager.ReadAllText can open it.
             try
             {
                 string rootFull = Path.GetFullPath(sceneRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -262,7 +236,6 @@ namespace VPB
                 }
                 else
                 {
-                    // Fallback: keep the original path as provided by the gallery.
                     galleryRelativePath = p.TrimStart('/');
                 }
             }
@@ -273,10 +246,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Gallery-relative <c>Saves/scene/...</c> from a listed row path — path math only (no <c>File.Exists</c>).
-        /// Scroll/badge hot path: gallery already listed the JSON.
-        /// </summary>
+        /// <summary>Gallery-relative Saves/scene path from row path; path math only, no File.Exists.</summary>
         public static bool TryBuildGalleryRelativeScenePathNoDisk(string rawPath, out string galleryRelativePath)
         {
             galleryRelativePath = null;
@@ -297,7 +267,6 @@ namespace VPB
                 return true;
             }
 
-            // Absolute under cached Saves/scene root → strip prefix.
             try
             {
                 string sceneRoot = GetSavesSceneDirectoryFullPath();
@@ -331,10 +300,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Builds the AutoInstall.txt key for this local scene row.
-        /// Uses path-only resolve + cache — no per-bind <c>File.Exists</c> (scroll-hot badge path).
-        /// </summary>
+        /// <summary>Builds the AutoInstall.txt key for this local scene row.</summary>
         public static bool TryGetLocalSceneAutoInstallLookupKey(FileEntry f, out string key)
         {
             key = null;
@@ -352,7 +318,6 @@ namespace VPB
             string rel;
             if (!TryBuildGalleryRelativeScenePathNoDisk(p, out rel) || string.IsNullOrEmpty(rel))
             {
-                // Fall back to full resolve once (security / odd paths), then cache.
                 if (!TryResolveSavesSceneJson(f, out _, out rel, false) || string.IsNullOrEmpty(rel))
                 {
                     CacheAutoInstallKey(p, string.Empty);
@@ -382,9 +347,7 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>
-        /// For a disk scene JSON, runs <see cref="VarPackage.InstallSelf"/> on each extracted package UID (scene file is not moved).
-        /// </summary>
+        /// <summary>For a disk scene JSON, runs InstallSelf on each extracted package UID (scene file is not moved).</summary>
         public static bool InstallDependenciesForSceneJsonFile(string absoluteJsonPath)
         {
             bool dirty = false;
@@ -415,9 +378,7 @@ namespace VPB
             return dirty;
         }
 
-        /// <summary>
-        /// Startup pass: every <see cref="AutoInstallLookupKeyPrefix"/> entry in AutoInstall.txt gets dependency packages installed from AllPackages.
-        /// </summary>
+        /// <summary>Startup pass: every AutoInstallLookupKeyPrefix entry in AutoInstall.txt gets dependency packages installed from AllPackages.</summary>
         public static bool InstallDependenciesForAllAutoMarkedLocalScenes()
         {
             bool anyDirty = false;

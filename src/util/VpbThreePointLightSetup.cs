@@ -5,18 +5,12 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Spawns a MeshedVR-default-equivalent 3-point <c>InvisibleLight</c> rig relative to a Person.
-    /// Warm/cold path only (user-initiated spawn) — not for Update.
-    /// Values taken from VaM <c>Saves/scene/MeshedVR/default.json</c> LightBack / LightFrontLeft / LightFrontRight.
-    /// </summary>
     public static class VpbThreePointLightSetup
     {
         public const string KeyUid = "VPB_KeyLight";
         public const string FillUid = "VPB_FillLight";
         public const string RimUid = "VPB_RimLight";
 
-        // Local offsets from MeshedVR default (Person at origin).
         private static readonly Vector3 KeyLocal = new Vector3(-0.5187473f, 1.361399f, 0.6727902f);
         private static readonly Vector3 FillLocal = new Vector3(0.29f, 1.833f, 0.6092629f);
         private static readonly Vector3 RimLocal = new Vector3(0.499617f, 1.349904f, -0.7464932f);
@@ -41,9 +35,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Spawn key / fill / rim when scene has no lights. Clears and fills <paramref name="outUids"/> with live UIDs.
-        /// </summary>
         public static IEnumerator SpawnAroundPerson(Atom person, List<string> outUids)
         {
             if (outUids != null) outUids.Clear();
@@ -63,10 +54,6 @@ namespace VPB
             yield return SpawnRig(sc, root, outUids);
         }
 
-        /// <summary>
-        /// Appearance-import 3P rig for Strip Scene: first Person if any, else world origin.
-        /// Skips when scene already has lights. Cold/warm path only.
-        /// </summary>
         public static IEnumerator SpawnForCreatorStrip(List<string> outUids)
         {
             if (outUids != null) outUids.Clear();
@@ -88,7 +75,6 @@ namespace VPB
             }
             if (root == null)
             {
-                // No Person — place rig at origin (same local offsets as MeshedVR default).
                 tempRoot = new GameObject("VPB_Strip3P_Anchor");
                 tempRoot.hideFlags = HideFlags.HideAndDontSave;
                 root = tempRoot.transform;
@@ -290,7 +276,6 @@ namespace VPB
                 catch { }
             }
 
-            // InvisibleLight defaults often leave halo/dust on — quiet for appearance preview.
             WriteBool(light, "showHalo", false);
             WriteBool(light, "showDust", false);
             WriteBool(light, "on", true);

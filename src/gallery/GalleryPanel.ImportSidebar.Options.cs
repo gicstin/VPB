@@ -17,8 +17,7 @@ namespace VPB
             = new Dictionary<VpbResourceType, GameObject>();
         private readonly Dictionary<VpbResourceType, Text> importSidebarTypeRadioLabels
             = new Dictionary<VpbResourceType, Text>();
-        // Per-type item count parsed from the selected source atom (only for introspectable types:
-        // Clothing/Hair/Morphs/Plugins). Absence of a key = "always available, count unknown".
+        // Per-type item count parsed from the selected source atom (only for introspectable types: Clothing/Hair/Morphs/Plugins).
         private readonly Dictionary<VpbResourceType, int> importSidebarSourceTypeCounts
             = new Dictionary<VpbResourceType, int>();
         private Button importSidebarApplyButton;
@@ -30,13 +29,11 @@ namespace VPB
         private readonly List<VpbResourceType> _importSidebarPausedScratch = new List<VpbResourceType>(8);
         private readonly System.Text.StringBuilder _importSidebarStatusSb = new System.Text.StringBuilder(96);
 
-        // Plugin picker: a caption + a pooled list of checkbox rows, rebuilt from the source atom's plugins.
         private GameObject importSidebarPluginChecklistRoot;
         // ContentSizeFitter collapses flexible-only height, so reserve space from live row count.
         private LayoutElement importSidebarPluginChecklistLe;
         // How many rows are visible before the checklist starts to scroll (drives the reserved height).
         private const int ImportSidebarVisiblePluginRows = 8;
-        // Select All / Clear All bulk row above the checklist (visibility tracks the checklist root).
         private GameObject importSidebarPluginBulkRow;
         private const int ImportSidebarMaxPluginRows = 24;
         private readonly List<GameObject> importSidebarPluginRowPool = new List<GameObject>(ImportSidebarMaxPluginRows);
@@ -45,14 +42,12 @@ namespace VPB
 
         private sealed class ImportPluginEntry
         {
-            public string Key;      // plugin#N
-            public string Name;     // parsed from the plugin url
-            public string Label;    // author's pluginLabel, or "" when none was set
-            public bool OnTarget;   // an identical plugin url is already on the target atom
+            public string Key;
+            public string Name;
+            public string Label;
+            public bool OnTarget;
         }
 
-        // CUA picker: same pooled-row scaffold as the plugin picker, listing every CustomUnityAsset in the source.
-        // Two instances — Appearance panel (optional add-on) and standalone CUA type panel — share selection state.
         private sealed class ImportCUAChecklistHandles
         {
             public GameObject ChecklistRoot;
@@ -66,17 +61,15 @@ namespace VPB
         private readonly ImportCUAChecklistHandles importSidebarAppearanceCUAUi = new ImportCUAChecklistHandles();
         private readonly ImportCUAChecklistHandles importSidebarCuaOnlyCUAUi = new ImportCUAChecklistHandles();
         private List<ImportCUAEntry> importSidebarCUAEntries = new List<ImportCUAEntry>();
-        // Checked CUA atom ids to import; per source-atom (sig tracks scene+atom so switching source reseeds to "all").
         private readonly HashSet<string> importSidebarSelectedCUAKeys = new HashSet<string>(StringComparer.Ordinal);
         private string importSidebarCUASelectionSig;
 
         private sealed class ImportCUAEntry
         {
-            public string Id;            // CUA atom id
-            public bool LinksToPerson;   // reaches the selected source person (tagged "on person")
+            public string Id;
+            public bool LinksToPerson;
         }
 
-        // Two-line rows keep unique leaf names visible within 220px dock width.
         private const int ImportSidebarVisibleSceneAtomRows = 6;
         private const float ImportSidebarSceneAtomRowHeightMul = 1.5f;
         private const int ImportSidebarMaxSceneAtomRows = 256;
@@ -100,12 +93,10 @@ namespace VPB
             public string[] SubSceneDescendantIds;
         }
 
-        // Appearance conditional rows (visibility driven by the suppress-clothing toggle).
         private GameObject importSidebarOnlySuppressRealRow;
         private GameObject importSidebarImportCUARow;
         private GameObject importSidebarCUARelativeRow;
 
-        // Re-reads each option toggle's checkbox text on demand so external changes (toolbox Suppress-scale) sync in.
         private readonly List<System.Action> importSidebarOptionToggleRefreshers = new List<System.Action>();
 
         private static readonly VpbResourceType[] ImportSidebarTypeOrder = new VpbResourceType[]
@@ -124,8 +115,6 @@ namespace VPB
             VpbResourceType.General,
         };
 
-        // Adds the type-radio grid + per-type option-panel host into the single body-scroll content (Apply is a
-        // separate pinned button). Host height is set per active type in OnImportSidebarTypeChosen.
         private void BuildImportSidebarOptionsRows(Transform content)
         {
             if (content == null) return;
@@ -140,7 +129,6 @@ namespace VPB
 
         private void BuildImportSidebarTypeRadio(Transform parent)
         {
-            // Bulk-select controls: Select All / Clear All / Multi (chips accumulate when on, single-select when off).
             GameObject bulkRow = new GameObject("BulkSelectRow");
             bulkRow.transform.SetParent(parent, false);
             LayoutElement bulkLe = UI.AddLE(bulkRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
@@ -273,8 +261,6 @@ namespace VPB
             return btnGO;
         }
 
-        // Short label for the current type selection: the single type's name, an "N types" count for several,
-        // or a dash for none.
         private string ImportSidebarSelectedTypesSummary()
         {
             int n = importSidebarMultiSelectedTypes.Count;
@@ -307,7 +293,6 @@ namespace VPB
             }
         }
 
-        // True when the selected type is present on the current source (or count unknown).
         private bool IsImportTypeAvailable(VpbResourceType t)
         {
             int c;
@@ -344,7 +329,6 @@ namespace VPB
             RectTransform rt = host.AddComponent<RectTransform>();
             importSidebarOptionsPanelHost = rt;
             LayoutElement le = UI.AddLE(host, flexibleWidth: 1f);
-            // Stack active panels vertically; ContentSizeFitter drives the host height to match content.
             VerticalLayoutGroup hostVlg = UI.AddVLG(host, spacing: 0f);
             ContentSizeFitter hostCsf = host.AddComponent<ContentSizeFitter>();
             hostCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -377,7 +361,6 @@ namespace VPB
             VerticalLayoutGroup vlgCaptured = vlg;
             innerPaneScaleActions.Add(s => { if (vlgCaptured != null) vlgCaptured.spacing = ImportSidebarBaseRowSpacing * s; });
 
-            // Caption so stacked panels read as distinct groups (which options belong to which type).
             AddOptionGroupHeader(panel.transform, DisplayNameForType(t));
 
             switch (t)
@@ -597,7 +580,6 @@ namespace VPB
             }
         }
 
-        // One-line summary of what importing a given resource type does, shown in the status bar on hover.
         private static string DescribeImportType(VpbResourceType t)
         {
             switch (t)
@@ -618,7 +600,6 @@ namespace VPB
             }
         }
 
-        // Status-bar tooltip for a type radio cell: name + what it imports + whether clicking adds or removes it.
         private string BuildImportTypeTooltip(VpbResourceType t)
         {
             bool available = IsImportTypeAvailable(t);
@@ -641,8 +622,6 @@ namespace VPB
             return DisplayNameForType(t) + ": " + DescribeImportType(t) + "  \u2014  " + action;
         }
 
-        // Pooled checklist rows are re-skinned per entry and their labels are visually truncated, so the tooltip
-        // reads the row's live label text (full, untruncated) at hover time and drops the "[x]/[ ]" checkbox glyph.
         private static string ImportChecklistRowTooltip(Text label)
         {
             if (label == null) return null;
@@ -653,7 +632,6 @@ namespace VPB
             return s + "  \u2014  " + VPBTranslation.T("gallery.import.pick_row_tip", "click to include/exclude from import");
         }
 
-        // Status-bar tooltip for a source/target atom row: full (untruncated) uid + the role clicking it assigns.
         private string ImportAtomRowTooltip(Text label, bool isSource)
         {
             if (label == null) return null;
@@ -684,8 +662,6 @@ namespace VPB
             UI.EnsureFloatChromeHoverBorder(row, inward: true);
             UI.SetControlSelectedRim(row, get());
 
-            // labelColor stays an override for the destructive "Delete target linked CUAs" row,
-            // which must visibly stand out from neutral toggles.
             Color tc = labelColor ?? UI.PopupText;
             Text t = AddSimpleLabelText(row.transform, "", ImportSidebarBaseFontSize, tc);
             t.text = (get() ? "[x] " : "[ ] ") + label;
@@ -742,8 +718,6 @@ namespace VPB
 
         private void BuildImportSidebarPluginChecklist(Transform parent)
         {
-            // Select All / Clear All bulk row: a fixed peer above the scroll so the user can include/exclude every
-            // source plugin in one click, then refine per-row. Its visibility tracks the checklist (gate ON).
             importSidebarPluginBulkRow = BuildImportSidebarSelectClearBulkRow(
                 parent, "PluginBulkRow",
                 VPBTranslation.T("gallery.import.select_all_plugins", "Select All"),
@@ -798,11 +772,9 @@ namespace VPB
             if (importSidebarPluginChecklistLe == null) return;
             int visibleRows = Mathf.Min(importSidebarPluginEntries.Count, ImportSidebarVisiblePluginRows);
             float s = ChromeScale;
-            // +1 for the "Plugins in source" caption row; 2px inter-row spacing matches the scroll's VLG spacing.
             importSidebarPluginChecklistLe.preferredHeight = (visibleRows + 1) * (ImportSidebarBaseRowHeight + 2f) * s;
         }
 
-        // Skins the pooled rows from the already-enumerated entries; no atom re-parse (the toggle path uses this).
         private void RenderPluginChecklistRows()
         {
             for (int i = 0; i < importSidebarPluginRowPool.Count; i++)
@@ -842,8 +814,6 @@ namespace VPB
             RefreshApplyButtonEnabled();
         }
 
-        // Check every source plugin (import all). Operates on the enumerated entries so it covers rows beyond the
-        // visible pool too. The selection sig is left intact so a later source-atom change still re-seeds normally.
         private void ImportSidebarSelectAllPlugins()
         {
             importSidebarSelectedPluginKeys.Clear();
@@ -852,15 +822,12 @@ namespace VPB
             RefreshApplyButtonEnabled();
         }
 
-        // Uncheck every source plugin (exclude all). With the gate on, an empty selection imports no plugins.
         private void ImportSidebarClearAllPlugins()
         {
             importSidebarSelectedPluginKeys.Clear();
             RenderPluginChecklistRows();
             RefreshApplyButtonEnabled();
         }
-
-        // ---- CUA picker (mirrors the plugin picker; lists every CustomUnityAsset in the source scene) ----
 
         private void BuildImportSidebarCUAChecklist(Transform parent, ImportCUAChecklistHandles ui)
         {
@@ -925,8 +892,6 @@ namespace VPB
             return row;
         }
 
-        // Rebuilds the CUA checklist from the source scene. Appearance shows picker only with import+picked gates;
-        // standalone CUA type shows picker when "Pick CUAs" is on. Both lists share the same checked ids.
         private void RefreshCUAChecklist()
         {
             bool showAppearance = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
@@ -945,7 +910,6 @@ namespace VPB
             string sig = (importSidebarSourceScene != null ? importSidebarSourceScene.Uid : "") + "|" + (importSidebarSourceAtomId ?? "");
             if (sig != importSidebarCUASelectionSig)
             {
-                // Opting into "Pick CUAs" starts with nothing checked (see RefreshPluginChecklist rationale).
                 importSidebarSelectedCUAKeys.Clear();
                 importSidebarCUASelectionSig = sig;
             }
@@ -1031,8 +995,6 @@ namespace VPB
             RenderCUAChecklistRows();
             RefreshApplyButtonEnabled();
         }
-
-        // ---- Scene atom picker (every non-Person atom in the source scene) ----
 
         private void BuildImportSidebarSceneAtomSearchRow(Transform parent)
         {
@@ -1193,8 +1155,7 @@ namespace VPB
                 importSidebarSceneAtomSearchRow.SetActive(showPicker);
             SetCUAChecklistVisible(importSidebarSceneAtomUi, showPicker);
 
-            // Only build/enumerate when the picker is actually shown (matches the plugin/CUA pickers, which bail
-            // before parsing when their gate is off — avoids an unnecessary scene parse on the gate-off path).
+            // Build only when picker is shown, avoiding a scene parse when gated off.
             if (!showPicker) return;
 
             importSidebarSceneAtomEntries = BuildSourceSceneAtomEntries();
@@ -1202,7 +1163,6 @@ namespace VPB
             string sig = (importSidebarSourceScene != null ? importSidebarSourceScene.Uid : "") + "|" + (importSidebarSourceAtomId ?? "");
             if (sig != importSidebarSceneAtomSelectionSig)
             {
-                // Opting into "Pick atoms" starts with nothing checked (see RefreshPluginChecklist rationale).
                 importSidebarSelectedSceneAtomKeys.Clear();
                 importSidebarSceneAtomSelectionSig = sig;
                 importSidebarSceneAtomSearchFilter = string.Empty;
@@ -1263,7 +1223,6 @@ namespace VPB
             }
         }
 
-        // Leaf-first labels preserve unique text when dock width clips shared parent prefixes.
         private static void SplitSceneAtomUid(string id, out string leaf, out string parent)
         {
             parent = null;
@@ -1446,7 +1405,6 @@ namespace VPB
             return result;
         }
 
-        // Free-standing CUAs are outside Person JSON, so discovery waits for cached full-scene JSON.
         private List<ImportCUAEntry> BuildSourceCUAEntries()
         {
             var result = new List<ImportCUAEntry>();
@@ -1458,8 +1416,6 @@ namespace VPB
             return result;
         }
 
-        // Returns cached source scene JSON, or starts a background load and returns null until ready.
-        // Apply paths that cannot wait keep their own sync fallback (see StartImportSelectedSceneAtoms).
         private JSONClass EnsureLoadedSceneJSON()
         {
             if (importSidebarLoadedSceneJSON != null) return importSidebarLoadedSceneJSON;
@@ -1491,7 +1447,6 @@ namespace VPB
         private List<ImportPluginEntry> BuildSourcePluginEntries()
         {
             var result = new List<ImportPluginEntry>();
-            // Scene memory can provide atom JSON without a FileEntry, so either source keeps picker available.
             if (importSidebarSourceScene == null && importSidebarLoadedSceneJSON == null) return result;
             JSONClass preset = BuildPresetJSONForCurrentSelection();
             JSONArray storables = (preset != null && preset["storables"] != null) ? preset["storables"].AsArray : null;
@@ -1532,7 +1487,6 @@ namespace VPB
                     OnTarget = !string.IsNullOrEmpty(url) && targetUrls.Contains(url.Trim())
                 });
             }
-            // Matching plugins first, then by slot number.
             result.Sort((a, b) =>
             {
                 if (a.OnTarget != b.OnTarget) return a.OnTarget ? -1 : 1;
@@ -1541,7 +1495,6 @@ namespace VPB
             return result;
         }
 
-        // Every plugin#N key in the source preset's PluginManager storable (used when "Pick plugins" is off).
         private static List<string> AllSourcePluginKeys(JSONClass preset)
         {
             var keys = new List<string>();
@@ -1590,7 +1543,6 @@ namespace VPB
             return (h >= 0 && int.TryParse(key.Substring(h + 1), out n)) ? n : int.MaxValue;
         }
 
-        // First existing URL slot wins so merge updates one live plugin instead of appending a duplicate.
         private Dictionary<string, string> GetTargetPluginUrlToKey()
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -1616,7 +1568,6 @@ namespace VPB
             return map;
         }
 
-        // VaM compacts plugin slots during merge, so appended sources start at target count rather than highest slot.
         private int GetTargetPluginCount()
         {
             if (importSidebarTargetAtom == null) return 0;
@@ -1645,8 +1596,7 @@ namespace VPB
             return string.IsNullOrEmpty(f) ? "(plugin)" : f;
         }
 
-        // "only suppress real" is meaningful only while clothing is locked (suppress-clothing ON). "import linked CUAs"
-        // applies as a separate additive clothing merge after the appearance load, so it is valid in either mode.
+        // "only suppress real" is meaningful only while clothing is locked (suppress-clothing ON).
         private void RefreshAppearanceConditionalRows()
         {
             if (importSidebarOnlySuppressRealRow != null)
@@ -1667,7 +1617,6 @@ namespace VPB
 
         private void BuildImportSidebarApplyButton(Transform parent)
         {
-            // Reason strip (above Apply) — shows why Apply is disabled.
             GameObject reasonGO = new GameObject("ApplyReason");
             reasonGO.transform.SetParent(parent, false);
             importSidebarApplyReasonRT = reasonGO.AddComponent<RectTransform>();
@@ -1727,7 +1676,6 @@ namespace VPB
         private void OnImportSidebarMultiSelectClicked()
         {
             importSidebarMultiSelectTypes = !importSidebarMultiSelectTypes;
-            // Leaving multi-select with several types picked: collapse to the active (last-clicked) type.
             if (!importSidebarMultiSelectTypes && importSidebarMultiSelectedTypes.Count > 1)
             {
                 importSidebarMultiSelectedTypes.Clear();
@@ -1793,7 +1741,6 @@ namespace VPB
         {
             foreach (var kv in importSidebarOptionPanels)
             {
-                // Hide options for paused (unavailable) types — nothing useful to configure.
                 bool show = importSidebarMultiSelectedTypes.Contains(kv.Key) && IsImportTypeAvailable(kv.Key);
                 kv.Value.SetActive(show);
             }
@@ -1857,7 +1804,6 @@ namespace VPB
                     atomCount++;
                 importSidebarSourceTypeCounts[VpbResourceType.Atoms] = atomCount;
             }
-            // else: CUA/Atoms counts stay unknown (chips remain selectable) until async JSON arrives.
 
             FillPersonDerivedTypeCounts();
 
@@ -1890,8 +1836,6 @@ namespace VPB
             try { RefreshImportSidebarWizardHeader(); } catch { }
         }
 
-        // Clothing/Hair/Morphs/Plugins counts from the selected Person atom — prefer DB cache / in-memory
-        // scene node; never trigger a full-scene parse just for chip labels.
         private void FillPersonDerivedTypeCounts()
         {
             if (string.IsNullOrEmpty(importSidebarSourceAtomId)) return;
@@ -1969,7 +1913,6 @@ namespace VPB
             foreach (JSONNode item in arr)
             {
                 JSONClass o = item as JSONClass;
-                // Items stored with enabled:"false" are inactive and would import nothing visible.
                 if (o != null && o["enabled"] != null
                     && string.Equals(o["enabled"].Value, "false", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -2087,7 +2030,6 @@ namespace VPB
             if (!onlyAtoms)
                 return true;
 
-            // Person-linked CUAs in the scene-atom picker still route through CUAAtomImporter.
             if (importSidebarPickSceneAtoms && importSidebarSelectedSceneAtomKeys.Count > 0
                 && importSidebarSceneAtomEntries != null)
             {
@@ -2139,8 +2081,6 @@ namespace VPB
             string sourceHostUid = (importSidebarSourceScene is VarFileEntry sceneVar && sceneVar.Package != null)
                 ? sceneVar.Package.Uid : null;
 
-            // Apply each selected AVAILABLE type in sequence, EXCEPT Pose. Paused (0-count) types are skipped.
-            // Pose deferred until other types settle (scale/morphs).
             bool hasPose = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Pose)
                 && IsImportTypeAvailable(VpbResourceType.Pose);
             foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
@@ -2150,8 +2090,6 @@ namespace VPB
                 ApplyOneTypeImport(t, sourceHostUid);
             }
 
-            // CUA import runs from Appearance (optional add-on) or the standalone CUA type. Must run AFTER pose
-            // so anchors land on the final posed skeleton. When Atoms is also selected it supersedes standalone CUA.
             bool importCUAsFromAppearance = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
                 && IsImportTypeAvailable(VpbResourceType.Appearance)
                 && importSidebarImportLinkedCUAs;
@@ -2186,8 +2124,7 @@ namespace VPB
             return ClothingApplyMode.Replace;
         }
 
-        // Deletes target-linked CUAs when only the standalone CUA type is selected (Appearance path deletes during
-        // its own apply). Then spawns the chosen source CUAs as native atoms.
+        // Deletes target-linked CUAs when only the standalone CUA type is selected (Appearance path deletes during its own apply).
         private void RunCUAImportWithOptionalDelete(bool standaloneCuaType)
         {
             bool appearanceWillDelete = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
@@ -2200,8 +2137,6 @@ namespace VPB
             StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
         }
 
-        // Applies the pose once the target skeleton has settled from the appearance load (scale/morphs settle over
-        // several frames), then runs CUA / scene-atom spawns so they anchor to the final pose.
         private IEnumerator ApplyDeferredPoseThenSpawnImports(string sourceHostUid, bool importCUAs, bool importSceneAtoms)
         {
             yield return VPB.src.util.CUAAtomImporter.WaitForPersonSettled(importSidebarTargetAtom);
@@ -2246,10 +2181,7 @@ namespace VPB
                 mode = ClothingApplyMode.Replace;
             }
 
-            // LoadPreset has no subToggles param: prune opted-out sub-trees here, on the fresh deep copy
-            // from BuildPresetJSONForCurrentSelection (never the cached scene JSON).
             presetJSON = VpbImportSubToggleFilter.FilterForType(presetJSON, type, importSidebarSubToggles);
-            // A null here would make LoadPreset fall through to reading the whole scene file and applying every atom.
             if (presetJSON == null)
             {
                 LogUtil.LogWarning("[VPB import] Sub-toggle filter returned null for type " + type + "; skipping.");
@@ -2288,8 +2220,7 @@ namespace VPB
                     VpbImport.MergePluginSliceKeys(presetJSON, startNumber, GetTargetPluginUrlToKey());
                 }
 
-                // Issue #66: rewrite plugin self-references (e.g. trigger receiverAtom) from the source
-                // atom uid to the target atom uid so they don't break when the names differ. Opt-in.
+                // Issue #66: rewrite plugin self-references from source to target atom uid (opt-in).
                 if (importSidebarMigratePluginUIDs
                     && importSidebarTargetAtom != null
                     && !string.IsNullOrEmpty(importSidebarSourceAtomId))
@@ -2299,8 +2230,6 @@ namespace VPB
                 }
             }
 
-            // BreastPhysics / Glute / Plugins / Skin lack a dedicated dispatch case: route them through General
-            // by their storable name (General aborts loud if the storable is missing).
             VpbResourceType dispatchType = type;
             if (storableOverride != null
                 && (dispatchType == VpbResourceType.BreastPhysics
@@ -2312,13 +2241,9 @@ namespace VPB
                 dispatchType = VpbResourceType.General;
             }
 
-            // Rewrite SELF: refs (e.g. clothing material customTexture_*Tex) to the source package uid: untouched,
-            // VaM resolves SELF: against the loaded (target) scene's package and the texture fails as "not valid".
             if (!string.IsNullOrEmpty(sourceHostUid))
                 VPB.src.util.JSONExtensions.ReplaceSelfPrefixWithPackageUidMutable(presetJSON, sourceHostUid);
 
-            // Scope dep prep to this slice (not the 190-dep whole scene). StringBuilder serializer:
-            // SimpleJSON .ToString() is O(N^2) and heap-bombs a multi-MB person atom.
             string sliceJson = VPB.src.util.JsonSerializationUtil.Serialize(presetJSON, 1 << 20);
 
             // Clear old look values before bank rebuild because RefreshPackageMorphs restores non-default snapshots.
@@ -2347,11 +2272,8 @@ namespace VPB
                 LogUtil.LogWarning("[VPB import] Slice dependency prep failed: " + ex.Message);
             }
 
-            // Registration alone doesn't rebuild VaM's clothing/hair catalog, so newly-prewarmed item packages
-            // would report "is missing"; rebuild the target's catalogs before apply.
             RefreshTargetClothingAndHairCatalog(importSidebarTargetAtom);
 
-            // Clothing suppression keeps target garments but imports source cosmetics so appearance layers are not lost.
             if (dispatchType == VpbResourceType.Appearance
                 && importSidebarSuppressClothingLoad
                 && importSidebarOnlySuppressRealClothing)
@@ -2383,13 +2305,10 @@ namespace VPB
                 skipDependencyPrewarm: true,
                 suppressScaleChange: importSidebarSuppressScale);
 
-            // Delete-then-import = replace: removing the target's existing CUAs before spawning the new ones means
-            // delete only catches pre-existing atoms, and import + delete compose into "replace".
             if (type == VpbResourceType.Appearance && importSidebarDeleteTargetCUAs)
                 DeleteTargetLinkedCUAs(importSidebarTargetAtom);
         }
 
-        // Reads the whole source scene (CUAs are separate atoms) and spawns each person-linked CUA as a native atom.
         private void StartImportLinkedCUAs(FileEntry source, string sourceAtomId, Atom target, string sourceHostUid)
         {
             if (source == null || string.IsNullOrEmpty(sourceAtomId) || target == null) return;
@@ -2416,14 +2335,11 @@ namespace VPB
                 }
             }
             if (scene == null) return;
-            // Picker on -> import exactly the checked CUAs; off -> all person-linked CUAs (legacy behavior).
             bool pickerActive = importSidebarPickCUAs
                 && (importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA)
                     || (importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance) && importSidebarImportLinkedCUAs));
             HashSet<string> selectedIds = pickerActive
                 ? new HashSet<string>(importSidebarSelectedCUAKeys, StringComparer.Ordinal) : null;
-            // Match the plugin/scene-atom pickers: with the picker on and nothing checked, skip CUA import
-            // (and say so) rather than silently importing zero.
             if (pickerActive && selectedIds.Count == 0)
             {
                 LogUtil.LogWarning("[VPB][CUA] picker on but nothing checked; skipping CUA import.");
@@ -2434,7 +2350,6 @@ namespace VPB
                 importSidebarCUARelativeToPerson, replaceExisting: !importSidebarCuaMergeLoad));
         }
 
-        // Spawns the checked non-Person atoms from the source scene (CUAs delegate to CUAAtomImporter).
         private void StartImportSelectedSceneAtoms(string sourceHostUid)
         {
             if (importSidebarSourceScene == null)
@@ -2493,7 +2408,6 @@ namespace VPB
                 = SceneAtomImporter.FilterUidRefsNeedingAttention(broken);
             if (needsAttention.Count == 0 && !importSidebarAlwaysShowRemapPrompt)
             {
-                // Identity destinations need no uid map, but their auto-matched plugin slot moves do.
                 Dictionary<string, Dictionary<string, string>> autoReceiverRemap
                     = SceneAtomImporter.BuildAutoReceiverRemapByUid(broken);
                 int autoRecv = 0;
@@ -2515,13 +2429,10 @@ namespace VPB
             LogUtil.Log("[VPB][Atoms][import] " + needsAttention.Count + " of " + broken.Count
                 + " external UID ref(s) need attention — showing Remap Atom UIDs modal"
                 + (importSidebarAlwaysShowRemapPrompt ? " (always-show on)." : "."));
-            // Show every ref, not just the unresolvable ones: the resolved rows arrive pre-filled and give
-            // the user the context to re-point them, and the header states how many actually need a choice.
             ContinueImportSelectedSceneAtomsAfterRemap(
                 scene, sourceHostUid, selectedIds, null, null, broken, null, 1);
         }
 
-        /// <summary>Safety stop for the remap re-scan loop (co-import chains are shallow in practice).</summary>
         private const int RemapAtomUidsMaxPasses = 8;
 
         // Settled UIDs survive re-scan because no-op answers would otherwise reopen same modal.
@@ -2587,8 +2498,7 @@ namespace VPB
                     more = remaining;
                 }
 
-                // Same rule as the first gate: new refs that land on their own never reopen the prompt,
-                // but their auto receiver remaps still have to be carried into the import.
+                // Same rule as the first gate: new refs that land on their own never reopen the prompt.
                 if (more != null && more.Count > 0 && !importSidebarAlwaysShowRemapPrompt
                     && SceneAtomImporter.FilterUidRefsNeedingAttention(more).Count == 0)
                 {
@@ -2695,8 +2605,6 @@ namespace VPB
                 uidRemap, receiverRemapByUid));
         }
 
-        // Removes live CustomUnityAsset atoms whose control links (transitively through CUA chains) to the target
-        // person. Collect-then-remove so we don't mutate the atom list mid-enumeration.
         private void DeleteTargetLinkedCUAs(Atom target)
         {
             if (target == null || SuperController.singleton == null) return;
@@ -2729,8 +2637,6 @@ namespace VPB
             return false;
         }
 
-        // Rebuild the target Person's clothing + hair catalogs so items from packages the slice prewarm just
-        // registered (and loose CUA-converted clothing) resolve on apply instead of reporting "is missing".
         private void RefreshTargetClothingAndHairCatalog(Atom target)
         {
             if (target == null) return;
@@ -2757,15 +2663,12 @@ namespace VPB
 
         private JSONClass BuildPresetJSONForCurrentSelection()
         {
-            // A selected source atom must resolve to exactly that one atom, never the whole scene: a stale
-            // cache hit or read failure here must not fall through to applying every atom to the target.
+            // A selected source atom must resolve to exactly that one atom, never the whole scene.
             if (!string.IsNullOrEmpty(importSidebarSourceAtomId))
             {
-                // Parsed this click (cache miss): slice from the in-memory scene.
                 if (importSidebarLoadedSceneJSON != null)
                     return WrapSourceAtomFromScene(importSidebarLoadedSceneJSON, importSidebarSourceAtomId);
 
-                // Cache hit: fetch just the selected atom's JSON (sig-guarded so an edited scene reads null).
                 string atomJson = VpbLocalDatabase.TryReadSceneAtomJson(importSidebarSourceScene, importSidebarSourceAtomId);
                 if (!string.IsNullOrEmpty(atomJson))
                 {
@@ -2789,7 +2692,6 @@ namespace VPB
                 }
             }
 
-            // No selected source atom (non-person preset file): apply the file as-is.
             try
             {
                 using (FileEntryStreamReader r = importSidebarSourceScene.OpenStreamReader())
@@ -2814,11 +2716,9 @@ namespace VPB
             {
                 JSONClass a = atoms[i].AsObject;
                 if (a == null) continue;
-                // Match the picker's id derivation so the "Person_"+i fallback resolves too.
                 string pid = (a["id"] != null && !string.IsNullOrEmpty(a["id"].Value)) ? a["id"].Value : ("Person_" + i);
                 if (pid != atomId) continue;
-                // Deep-copy so the filter / WrapAtomNodeAsPreset don't mutate the cached scene. StringBuilder
-                // serializer: SimpleJSON .ToString() is O(N^2) and heap-bombs a multi-MB atom.
+                // Deep-copy so the filter / WrapAtomNodeAsPreset don't mutate the cached scene.
                 JSONClass fresh = JSON.Parse(VPB.src.util.JsonSerializationUtil.Serialize(a, 1 << 20)).AsObject;
                 return VpbImport.WrapAtomNodeAsPreset(fresh);
             }

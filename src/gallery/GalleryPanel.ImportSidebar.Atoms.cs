@@ -30,18 +30,14 @@ namespace VPB
         private readonly List<ImportSidebarGenderSlot> importSidebarTargetRowGenderSlots =
             new List<ImportSidebarGenderSlot>(ImportSidebarMaxRowsPerList);
 
-        // SubScene / bulk atom spawn fires onAtomAdded per atom. Coalesce to one rebuild/frame.
         private bool importSidebarTargetRefreshQueued;
         private Coroutine importSidebarTargetRefreshCo;
         private int importSidebarLastLoggedPersonCount = -1;
 
-        // Adds the Source/Target captions + atom row pools directly into the single body-scroll content (which already
-        // carries a VerticalLayoutGroup + ContentSizeFitter from CreateVScrollableContent). Rows toggle active to show.
         private void BuildImportSidebarAtomRows(Transform content)
         {
             if (content == null) return;
 
-            // Random Scene button — same width/accent as the bulk-select row so it reads as a peer action.
             GameObject rndRow = new GameObject("RandomSceneRow");
             rndRow.transform.SetParent(content, false);
             LayoutElement rndLe = UI.AddLE(rndRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
@@ -79,7 +75,6 @@ namespace VPB
             foreach (GameObject go in importSidebarTargetRowPool) go.SetActive(false);
         }
 
-        // Caption row sized by LayoutElement (so the content VLG places it) with a scaled height + font.
         private void AddImportListCaption(Transform parent, string label)
         {
             Text t = UI.CreateLabel(parent.gameObject, label, ImportSidebarBaseFontSize, UI.PopupMutedText, TextAnchor.MiddleLeft, raycastTarget: false, name: "Caption");
@@ -98,8 +93,6 @@ namespace VPB
             GameObject row = new GameObject("AtomRow_" + index);
             row.transform.SetParent(parent, false);
 
-            // Row height matches the sidebar's tab-derived row convention so atoms read
-            // at the same visual weight as Creator/Category rows on a normal panel.
             LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
 
             Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
@@ -120,8 +113,6 @@ namespace VPB
             Text atomTipLabel = label;
             AddDynamicTooltip(row, () => ImportAtomRowTooltip(atomTipLabel, capturedIsSource));
 
-            // Track inner-pane scale: row height + font use the same scale+localScale trick
-            // GalleryPanel.Tabs.cs uses, so the sidebar visually tracks the UI scale slider.
             LayoutElement leCaptured = le;
             Text txtCaptured = label;
             innerPaneScaleActions.Add(s => {
@@ -209,13 +200,10 @@ namespace VPB
         {
             if (SuperController.singleton == null)
             {
-                // Early startup (build before SuperController exists): can't subscribe yet, so the very first scene
-                // load would be missed. The activate path re-ensures, but log the gap so it isn't a silent miss.
+                // Early startup (build before SuperController exists): can't subscribe yet, so the very first scene load would be missed.
                 LogUtil.Log("[VPB import][diag] SubscribeToAtomEvents skipped: SuperController.singleton null");
                 return;
             }
-            // Idempotent (-= then +=) so re-ensuring on every sidebar open can't double-subscribe. A full scene load
-            // swaps the atom set without reliable per-atom callbacks, so onSceneLoaded is the catch-all refresh.
             SuperController.singleton.onAtomAddedHandlers -= OnImportSidebarAtomAdded;
             SuperController.singleton.onAtomAddedHandlers += OnImportSidebarAtomAdded;
             SuperController.singleton.onAtomRemovedHandlers -= OnImportSidebarAtomRemoved;
@@ -237,9 +225,7 @@ namespace VPB
 
         private System.Collections.IEnumerator DeferredTargetRefreshAfterSceneLoad()
         {
-            // VaM may not expose the new scene's atoms via GetAtoms() immediately after
-            // onSceneLoaded fires.  Retry every 5 frames until we find at least one person
-            // atom, giving up after ~3 s so we don't run indefinitely in empty scenes.
+            // VaM may not expose the new scene's atoms via GetAtoms() immediately after onSceneLoaded fires.
             for (int attempt = 0; attempt < 36; attempt++)
             {
                 for (int f = 0; f < 5; f++) yield return null;
@@ -264,8 +250,7 @@ namespace VPB
 
         private void OnImportSidebarAtomAdded(Atom a)
         {
-            // Target list is Person-only. SubScene/CUA bulk adds would otherwise rebuild UI
-            // dozens of times per second (log: RefreshTargetCandidates spam).
+            // Target list is Person-only.
             if (!importSidebarBuilt) return;
             if (a != null && a.type != "Person") return;
             ScheduleRefreshTargetCandidates();
@@ -290,7 +275,6 @@ namespace VPB
 
         private System.Collections.IEnumerator CoalescedRefreshTargetCandidates()
         {
-            // Wait end of frame so a burst of Person add/remove collapses to one rebuild.
             yield return new WaitForEndOfFrame();
             importSidebarTargetRefreshQueued = false;
             importSidebarTargetRefreshCo = null;
@@ -324,7 +308,6 @@ namespace VPB
             RenderTargetList();
         }
 
-        // Auto-select a target when none is chosen: prefer a name-matched candidate, else the sole candidate.
         private void TryAutoSelectTargetIfUnset()
         {
             if (importSidebarTargetAtom != null) return;
@@ -370,7 +353,7 @@ namespace VPB
                 }
             }
             RefreshTargetSelectionVisual();
-            RebuildImportSidebarContent();  // row count changed -> recompute scroll content height
+            RebuildImportSidebarContent();
         }
 
         partial void RefreshTargetSelectionVisual()
@@ -422,7 +405,6 @@ namespace VPB
                 }
             }
             RefreshApplyButtonEnabled();
-            // Source change reselects which plugins exist; target change re-evaluates the on-target sort.
             RefreshPluginChecklist();
             RefreshCUAChecklist();
             RefreshSceneAtomChecklist();
@@ -433,11 +415,9 @@ namespace VPB
         {
             int n = importSidebarSourcePersonIds.Count;
 
-            // Auto-select: when there is exactly one source atom and nothing is chosen yet, pick it.
             if (n == 1 && string.IsNullOrEmpty(importSidebarSourceAtomId))
                 importSidebarSourceAtomId = importSidebarSourcePersonIds[0];
 
-            // Match set: source IDs that share a name with a live target atom uid.
             var targetUids = new HashSet<string>(StringComparer.Ordinal);
             foreach (Atom a in importSidebarTargetCandidates)
                 if (a != null) targetUids.Add(a.uid);
@@ -462,9 +442,8 @@ namespace VPB
                     row.SetActive(false);
                 }
             }
-            // The container is the shared body-scroll content, so never SetActive(false) it (that would hide the
-            // target list + options too). Inactive source rows already collapse out of the VLG.
-            RebuildImportSidebarContent();  // row count changed -> recompute scroll content height
+            // The container is the shared body-scroll content, so never SetActive(false) it (that would hide the target list + options too).
+            RebuildImportSidebarContent();
         }
 
         partial void LoadSourceScene(FileEntry entry)
@@ -496,8 +475,6 @@ namespace VPB
                 return;
             }
 
-            // Cache HIT: person ids from SQLite — UI opens without full-scene parse. Full JSON loads in
-            // background for CUA/Atoms chip counts + pickers (Warm path: defer heavy work off the click frame).
             if (VpbLocalDatabase.TryReadSceneAtomIds(entry, importSidebarSourcePersonIds, importSidebarSourceGenders))
             {
                 if (importSidebarSourcePersonIds.Count > 0)
@@ -538,11 +515,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Warm-path scene JSON: yield one frame so Import UI paints, read bytes on main (ZipFile unsafe
-        /// off-thread), parse on ThreadPool, apply on main if generation still matches.
-        /// Caller must CancelImportSceneJsonLoad (or bump gen) before changing source.
-        /// </summary>
+        /// <summary>Warm-path scene JSON: yield one frame so Import UI paints, read bytes on main (ZipFile unsafe off-thread), parse on ThreadPool.</summary>
         private void BeginImportSceneJsonLoad(FileEntry entry, bool writePersonCache)
         {
             if (entry == null) return;
@@ -702,12 +675,10 @@ namespace VPB
             RefreshPluginChecklist();
             RefreshCUAChecklist();
             RefreshSceneAtomChecklist();
-            // Full refresh so CUA/Atoms chip counts appear once scene JSON is ready.
             RefreshSourceTypeAvailability();
             try { RebuildImportSidebarContent(); } catch { }
         }
 
-        /// <summary>Yield until background scene JSON (and person ids on cache-miss) finish or cancel.</summary>
         private IEnumerator WaitForImportSourceSceneReady(float timeoutSec)
         {
             float t = 0f;
@@ -718,7 +689,6 @@ namespace VPB
             }
         }
 
-        // Random Scene: needs Scenes pool. Outside Scenes while floating → navigate first.
         private void OnImportSidebarRandomSceneClicked()
         {
             if (ImportSidebarSourceEditsLocked())
@@ -757,7 +727,6 @@ namespace VPB
             if (pick == null) yield break;
             LoadSourceScene(pick);
 
-            // Sync sidebar selection to the picked scene (mirrors the grid single-click path).
             selectedFiles.Clear();
             selectedFilePaths.Clear();
             selectionAnchorPath = null;
@@ -775,7 +744,6 @@ namespace VPB
                 yield break;
             }
 
-            // Auto-apply immediately — one-click random import.
             OnImportSidebarApplyClicked();
         }
 

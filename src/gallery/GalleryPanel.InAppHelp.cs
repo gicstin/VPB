@@ -653,7 +653,6 @@ namespace VPB
             Color col = subheading ? new Color(0.78f, 0.90f, 1f, 1f) : new Color(0.94f, 0.96f, 0.98f, 1f);
             string body = richText ?? "";
             if (bullet) body = (string.IsNullOrEmpty(prefix) ? "  \u2022 " : prefix + " ") + body;
-            // fontSize is set later by ApplyInAppHelpTypography (registered via _inAppHelpBodyTexts); 14 = Unity default until then.
             Text txt = UI.CreateLabel(parent.gameObject, body, 14, col, TextAnchor.UpperLeft,
                 HorizontalWrapMode.Wrap, VerticalWrapMode.Overflow,
                 name: subheading ? "Subheading" : (bullet ? "Bullet" : "Text"));
@@ -687,9 +686,6 @@ namespace VPB
             SetInAppHelpOpen(!_inAppHelpOpen);
         }
 
-        /// <summary>
-        /// Recognition path for gallery shortcuts: open Help on Hotkeys, or close if already there.
-        /// </summary>
         private void ToggleGalleryShortcutHelp()
         {
             if (_inAppHelpOpen
@@ -702,10 +698,6 @@ namespace VPB
             ScrollInAppHelpToSection("hotkeys");
         }
 
-        /// <summary>
-        /// Esc closes help. Help / HelpAlt bindings toggle the Hotkeys sheet. Returns true if consumed.
-        /// Call Esc/Help before InputField gate; call HelpAlt after gate so typing is not stolen.
-        /// </summary>
         private bool TryHandleInAppHelpKeyboard(bool allowQuestionKey)
         {
             if (Input.GetKeyDown(KeyCode.Escape) && _inAppHelpOpen)

@@ -3,11 +3,6 @@ using System.Collections.Generic;
 
 namespace VPB
 {
-    /// <summary>
-    /// Reuses the sorted file list for a gallery category view across panels when filters/sort match,
-    /// avoiding a full package + disk rescan (often multiple seconds).
-    /// Cleared when the package library changes.
-    /// </summary>
     internal static class GalleryFileListSnapshotCache
     {
         private static readonly object s_Lock = new object();
@@ -17,10 +12,7 @@ namespace VPB
 
         private static int s_Epoch;
 
-        /// <summary>
-        /// Bumped whenever the cached lists are dropped (package library changed). Consumers that keep
-        /// their own derived snapshots — quick-menu random preview reels — compare it to detect staleness.
-        /// </summary>
+        /// <summary>Bumped whenever the cached lists are dropped (package library changed).</summary>
         public static int Epoch { get { return s_Epoch; } }
 
         public static void Clear()
@@ -45,10 +37,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Copy cached snapshot into <paramref name="dest"/> (Clear + AddRange). Prefer over <see cref="TryGet"/>
-        /// when caller reuses a scratch list across refreshes.
-        /// </summary>
         public static bool TryCopyInto(string key, List<FileEntry> dest)
         {
             if (dest == null || string.IsNullOrEmpty(key)) return false;

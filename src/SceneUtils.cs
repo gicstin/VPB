@@ -18,7 +18,6 @@ namespace VPB
         static int lastScheduledSceneLoadSerial;
 
         // Gallery PrepareSceneEntry already applied temp WL + prewarm; LoadInternal must not redo.
-        // Armed-flag (not path match): gallery may rewrite SELF→temp JSON so LoadInternal path ≠ note path.
         static bool s_GalleryScenePrepArmed;
         static float s_GalleryScenePrepRealtime;
         const float GalleryScenePrepSkipSeconds = 45f;
@@ -53,7 +52,6 @@ namespace VPB
 
             try
             {
-                // Prefer public LoadMerge when present.
                 if (s_LoadMergeMethod == null)
                 {
                     s_LoadMergeMethod = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
@@ -90,24 +88,18 @@ namespace VPB
                 if (!merge)
                 {
                     try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
-                    // Prefer direct public API.
                     sc.Load(normalizedPath);
                     return true;
                 }
 
                 // Merge load: prefer public LoadMerge when available, otherwise fallback to LoadInternal.
-                // LoadInternal's editMode flag is not "should I merge in edit mode" — it assigns gameMode
-                // outright, and both LoadMerge and the literal `false` below force Play. A merge adds to the
-                // session the user is already editing, so keep whatever mode they were in; otherwise a merge
-                // silently drops them from Edit to Play (targets vanish, atom UI closes).
                 bool wasEditMode = false;
                 try { wasEditMode = sc.gameMode == SuperController.GameMode.Edit; } catch { }
 
                 if (s_LoadMergeMethod != null)
                 {
                     s_LoadMergeMethod.Invoke(sc, new object[] { normalizedPath });
-                    // LoadInternal assigns gameMode synchronously before starting LoadCo, so this lands before
-                    // the coroutine's first frame.
+                    // LoadInternal assigns gameMode synchronously before starting LoadCo, so this lands before the coroutine's first frame.
                     if (wasEditMode)
                     {
                         try { sc.gameMode = SuperController.GameMode.Edit; } catch { }
@@ -121,7 +113,6 @@ namespace VPB
                     return true;
                 }
 
-                // Last resort fallback (might not merge).
                 sc.Load(normalizedPath);
                 return true;
             }
@@ -138,20 +129,15 @@ namespace VPB
 
         private static readonly WaitForEndOfFrame s_WaitEndOfFrame = new WaitForEndOfFrame();
 
-        // Pending rewrite/filter temps: one coordinator, watches VaM isLoading + VPB scene-load flag.
-        // Avoids per-file coroutines + per-frame yield for up to 180s (old DeleteTempSceneAfterLoadSettles).
         static readonly object s_PendingTempSceneLock = new object();
         static readonly List<string> s_PendingTempSceneDeletes = new List<string>(8);
         static bool s_TempSceneDeleteCoordinatorRunning;
         const float TempSceneDeleteMinAliveSeconds = 5f;
         const float TempSceneDeleteFallbackSeconds = 180f;
         const int TempSceneDeleteSettleFrames = 30;
-        const int TempSceneDeletePollFrames = 15; // ~0.25–0.5s at 30–60fps; reuse WaitForEndOfFrame
+        const int TempSceneDeletePollFrames = 15;
         const int TempScenePendingCap = 64;
 
-        /// <summary>
-        /// Called from <see cref="LogUtil.EndSceneLoadTotal"/> — restart coordinator if pending and idle.
-        /// </summary>
         public static void NotifySceneLoadTotalEndedForTempScenes()
         {
             try
@@ -303,10 +289,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Delete leftover gallery undo snapshot JSON under Saves/ (written for undo, deleted only when undo runs).
-        /// Call once at process launch while undo stacks are empty.
-        /// </summary>
+        /// <summary>Delete leftover gallery undo snapshot JSON under Saves/ (written for undo, deleted only when undo runs).</summary>
         public static void CleanupOrphanUndoTempFiles()
         {
             string savesDir = null;
@@ -449,7 +432,6 @@ namespace VPB
             }
         }
 
-
         private static void RewriteCustomPathsRecursive(JSONNode node, List<string> unresolved, ref int replaced, string hostUid, string hostSceneDir, ICollection<string> sceneDeps)
         {
             if (node == null) return;
@@ -459,27 +441,21 @@ namespace VPB
                 string v = jd.Value;
                 if (!string.IsNullOrEmpty(v))
                 {
-                    // Packaged scenes commonly reference their own assets via SELF:/ — once the scene
-                    // is extracted to a loose temp file there is no host-package context, so SELF:/
-                    // no longer resolves. Heal it to the concrete host package UID.
+                    // Packaged scenes commonly reference their own assets via SELF:/.
                     if (!string.IsNullOrEmpty(hostUid)
                         && v.Replace('\\', '/').StartsWith("SELF:/", StringComparison.OrdinalIgnoreCase))
                     {
                         string rest = v.Replace('\\', '/').Substring("SELF:/".Length);
-                        if (rest.StartsWith("/")) rest = rest.Substring(1);
+                        if (rest.StartsWith("/", StringComparison.Ordinal)) rest = rest.Substring(1);
                         jd.Value = hostUid + ":/" + rest;
                         replaced++;
                         return;
                     }
 
                     string candidate = v;
-                    if (candidate.StartsWith("/")) candidate = candidate.Substring(1);
+                    if (candidate.StartsWith("/", StringComparison.Ordinal)) candidate = candidate.Substring(1);
                     if (candidate.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase))
                     {
-                        // For a packaged scene, its own assets live in the host package. Resolve against
-                        // the known host package FIRST so the loose temp rewrite keeps a valid,
-                        // fully-qualified reference even when the global internal-path index is
-                        // incomplete (e.g. the package was scan-excluded and only registered on demand).
                         if (!string.IsNullOrEmpty(hostUid))
                         {
                             string hostCandidate = hostUid + ":/" + candidate;
@@ -495,18 +471,12 @@ namespace VPB
                             catch { }
                         }
 
-                        // A loose file on disk always wins over a VAR copy with the same internal path.
-                        // The rewrite only heals references whose loose target is missing.
                         string loosePath = Path.Combine(Directory.GetCurrentDirectory(), candidate);
                         if (File.Exists(loosePath))
                         {
                             return;
                         }
 
-                        // Prefer the scene's own declared dependencies over the global internal-path
-                        // index. The index is first-writer-wins, so a bare reference whose internal
-                        // path collides across multiple packages could otherwise resolve to an
-                        // unrelated package. The scene's dependency packages are the intended source.
                         if (sceneDeps != null && sceneDeps.Count > 0)
                         {
                             foreach (string depUid in sceneDeps)
@@ -553,7 +523,6 @@ namespace VPB
             {
                 foreach (string k in jc.Keys)
                 {
-                    // SceneLoader resolves bare sibling paths against temp CurrentLoadDir; restore original package directory.
                     if (!string.IsNullOrEmpty(hostSceneDir)
                         && string.Equals(k, "sceneFilePath", StringComparison.OrdinalIgnoreCase)
                         && jc[k] is JSONData sfp)
@@ -625,28 +594,16 @@ namespace VPB
 
             if (root == null) return false;
 
-            // When the scene is loaded out of a .var, its own assets resolve against the host
-            // package. Extract that UID (Author.Name[.ver]) so the rewrite can re-qualify the
-            // scene's own SELF:/ and bare Custom/ references — the loose temp file has no package
-            // context, so unqualified references would otherwise fail to load (e.g. assetbundles).
             string hostUid = null;
             try
             {
                 string up = uidOrPath.Replace('\\', '/');
-                int ci = up.IndexOf(":/");
-                // ci > 1 excludes absolute Windows paths (E:/...); require a dot so it is a package UID.
+                int ci = up.IndexOf(":/", StringComparison.Ordinal);
                 if (ci > 1 && up.Substring(0, ci).IndexOf('.') > 0)
                     hostUid = up.Substring(0, ci);
             }
             catch { hostUid = null; }
 
-            // Package-backed scenes: load uid:/path directly. Writing a loose temp JSON clears
-            // FileManager.CurrentPackageUid (SetLoadDirFromFilePath on Saves/scene/VPB_TempScenes/...),
-            // which breaks PoseMe/BodyLanguage GetFiles("Custom/...") and audiobundle opens that
-            // rely on package context / merged var FS. Bare Custom/ at access time is healed by
-            // SuperControllerHook path rewrite + GetFiles package enumeration instead.
-            // Any package-qualified UID path skips rewrite — not only VarFileEntry (gallery may
-            // pass SystemFileEntry.isVar with the same uid:/ scene path).
             if (!string.IsNullOrEmpty(hostUid))
             {
                 if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB] Scene rewrite skipped for package scene (keep load context): " + hostUid);
@@ -662,10 +619,6 @@ namespace VPB
                 if (ls > 0) hostSceneDir = up2.Substring(0, ls);
             }
 
-            // Collect the scene's de-facto dependency packages from its fully-qualified
-            // (Author.Name.version) references. Bare Custom/ paths are resolved against these
-            // before the global first-writer-wins index, so a reference whose internal path
-            // collides across packages resolves to the package the scene actually depends on.
             var sceneDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
@@ -711,7 +664,6 @@ namespace VPB
             return EnsureInstalled(entry, null);
         }
 
-        /// <param name="outMovedPackageUids">When non-null, receives UIDs for packages whose .var was moved during this call.</param>
         public static bool EnsureInstalled(FileEntry entry, List<string> outMovedPackageUids)
         {
             EnsureInstalledResult result = EnsureInstalledDetailed(entry, outMovedPackageUids);
@@ -739,7 +691,6 @@ namespace VPB
                         : sysEntry.package.InstallRecursive();
                 }
 
-                // Scan for internal dependencies if it's a JSON-like file
                 if (!string.IsNullOrEmpty(entry.Path))
                 {
                     string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
@@ -784,8 +735,7 @@ namespace VPB
                                         }
                                         if (missing > 0)
                                         {
-                                            // Listing only the missing keys (not all parsed deps) so the warning
-                                            // line is actionable: each entry is one package the user needs.
+                                            // Listing only the missing keys (not all parsed deps) so the warning line is actionable: each entry is one package the user needs.
                                             string list = missingKeys != null ? string.Join("; ", missingKeys.ToArray()) : "";
                                             LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}: {list}");
                                         }
@@ -812,10 +762,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Time-sliced variant of <see cref="EnsureInstalledDetailed"/> for gallery scene-load coroutines.
-        /// Dependency JSON parse runs on a thread-pool worker; installs stay on the main thread.
-        /// </summary>
+        /// <summary>Time-sliced variant of EnsureInstalledDetailed for gallery scene-load coroutines.</summary>
         public static IEnumerator EnsureInstalledDetailedCoroutine(FileEntry entry, List<string> outMovedPackageUids, Action<EnsureInstalledResult> onComplete)
         {
             EnsureInstalledResult result = default(EnsureInstalledResult);
@@ -945,18 +892,11 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Collects package UIDs needed by this entry's load path:
-        /// host package UID (when entry is from a var) plus dependency references in JSON-like content.
-        /// Always keeps raw VarNameParser UIDs even when VPB FM cannot resolve them yet — scan-whitelist
-        /// temp allow + on-demand register need those strings (e.g. CheesyFX.BodyLanguage for PoseMe HUD).
-        /// </summary>
         public static HashSet<string> CollectReferencedPackageUids(FileEntry entry)
         {
             return CollectReferencedPackageUids(entry, null);
         }
 
-        /// <param name="pluginHostUids">Optional sink for packages referenced via :/Custom/Scripts/.</param>
         public static HashSet<string> CollectReferencedPackageUids(FileEntry entry, HashSet<string> pluginHostUids)
         {
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -992,10 +932,6 @@ namespace VPB
             return result;
         }
 
-        /// <summary>
-        /// One-pass scan of scene/preset text: raw package UIDs + optional plugin-host UIDs.
-        /// Avoids a second full ReadToEnd on large scenes (Enjoying Joy ~6MB).
-        /// </summary>
         static void CollectPackageUidsFromContent(string content, HashSet<string> result, HashSet<string> pluginHostUids)
         {
             if (string.IsNullOrEmpty(content) || result == null) return;
@@ -1011,7 +947,6 @@ namespace VPB
 
             if (result.Count == 0) return;
 
-            // Snapshot — may mutate result while expanding resolved groups.
             var snapshot = new List<string>(result.Count);
             foreach (string dep in result)
             {
@@ -1025,17 +960,11 @@ namespace VPB
                 try { pkg = FileManager.GetPackageForDependency(dep, false); } catch { pkg = null; }
                 if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) continue;
                 result.Add(pkg.Uid);
-                // Register every installed version of the referenced group, matching stock VaM
-                // (which registers all versions on disk). Needed when .latest resolves to a build
-                // that renamed/replaced an item still referenced by internalId in scene JSON.
+                // Register every installed version of the referenced group, matching stock VaM (which registers all versions on disk).
                 AddAllGroupVersionUids(pkg, result);
             }
         }
 
-        /// <summary>
-        /// Packages that own plugin scripts in this JSON (BodyLanguage/PoseMe, Embody, …).
-        /// Linear scan — no regex alloc.
-        /// </summary>
         static void CollectPluginHostUidsFromContent(string content, HashSet<string> pluginHostUids)
         {
             if (string.IsNullOrEmpty(content) || pluginHostUids == null) return;
@@ -1088,11 +1017,7 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Pre-register host/dependency packages in VaM's FileManager before a preset load pass.
-        /// This avoids one-shot missing item failures where VaM does not retry lookups after an initial miss.
-        /// Returns the number of unique UID candidates attempted.
-        /// </summary>
+        /// <summary>Pre-register host/dependency packages in VaM's FileManager before a preset load pass.</summary>
         public static int PrewarmOnDemandPackagesForEntry(FileEntry entry, string pathHint = null, bool queueCoalescedRefresh = true)
         {
             return PrewarmOnDemandPackagesForEntry(entry, pathHint, queueCoalescedRefresh, null);
@@ -1107,9 +1032,6 @@ namespace VPB
             return PrewarmOnDemandPackagesForEntry(entry, pathHint, queueCoalescedRefresh, pluginHostUids, null);
         }
 
-        /// <param name="precollectedUids">
-        /// When non-null, skip re-reading scene JSON (caller already ran CollectReferencedPackageUids).
-        /// </param>
         public static int PrewarmOnDemandPackagesForEntry(
             FileEntry entry,
             string pathHint,
@@ -1138,7 +1060,6 @@ namespace VPB
             catch { }
 
             var uidCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            // Own plugin-host set when caller did not collect (single scene ReadToEnd).
             HashSet<string> localPluginHosts = pluginHostUids;
             bool skipContentCollect = precollectedUids != null && precollectedUids.Count > 0;
             if (localPluginHosts == null && entry != null && !skipContentCollect)
@@ -1186,8 +1107,6 @@ namespace VPB
                 }
             }
 
-            // SQLite transitive dependency lookup — resolves full dep tree for the host package(s)
-            // without requiring deps to already be registered in VaM's FileManager.
             if (uidCandidates.Count > 0)
             {
                 var sqlDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1220,8 +1139,7 @@ namespace VPB
             {
                 try
                 {
-                    // Plugin hosts: persist UID override so LateRestore/script compile still finds the package
-                    // after temp allow-list cleanup (PoseMe HUD lives under BodyLanguage).
+                    // Plugin hosts: persist UID override so LateRestore still finds the package after temp allow-list cleanup.
                     bool isPluginHost = localPluginHosts != null && localPluginHosts.Contains(uid);
                     string result = VamOnDemandLoader.TryRegisterPackageOnDemand(uid, persistUidOverride: isPluginHost);
                     if (result != null) newlyRegistered++;
@@ -1246,11 +1164,6 @@ namespace VPB
             }
             catch { }
 
-            // In whitelist mode, VaM's clothing catalog (geometry 'clothing:*' bool params) is only
-            // populated during a full FileManager.Refresh(). Without this, on-demand registered packages
-            // have their files accessible but their clothing items are invisible to VaM's clothing system,
-            // causing 'Param not found' / 'Clothing item missing' errors.
-            // This mirrors what EnsureInstalled + Refresh() does in non-whitelist mode.
             if (queueCoalescedRefresh
                 && VamOnDemandLoader.ShouldRequestCoalescedNativeRefreshForUids(uidCandidates, newlyRegistered))
             {
@@ -1265,8 +1178,6 @@ namespace VPB
             return uidCandidates.Count;
         }
 
-        // Scoped dependency prep for one import-sidebar slice: register only the slice's refs (plus the
-        // source host package for SELF:) and their transitive deps, not the source scene's full closure.
         public static int PrewarmAndEnsureForPresetSlice(string sliceJson, string hostUid)
         {
             if (!ScanWhitelistManager.Instance.IsEnabled) return 0;
@@ -1279,8 +1190,7 @@ namespace VPB
             if (!string.IsNullOrEmpty(hostUid)) directDeps.Add(hostUid.Trim());
             if (directDeps.Count == 0) return 0;
 
-            // Install only the slice's own refs. InstallRecursive on the source scene package re-walks
-            // the whole closure, which is the multi-minute cost this scoped path exists to avoid.
+            // Install only the slice's own refs.
             try { FileButton.EnsureInstalledBySet(directDeps); }
             catch (Exception ex) { LogUtil.LogWarning($"[VPB import] Slice EnsureInstalledBySet failed: {ex.Message}"); }
 
@@ -1297,9 +1207,7 @@ namespace VPB
                 catch { }
             }
 
-            // A clothing/morph package the slice names declares its own deps (textures, resource packs)
-            // in meta.json that the scene JSON never mentions; pull them or the apply hits the one-shot
-            // missing-item failure the prewarm prevents.
+            // Pull meta.json deps of slice packages the scene JSON never names, or apply hits missing-item failure.
             foreach (string host in new List<string>(uidCandidates))
             {
                 try
@@ -1318,8 +1226,6 @@ namespace VPB
                 catch { }
             }
 
-            // Appearance/Morphs slices: keep morph-ingest pending even when packages were already
-            // registered under a prior clothing/hair-only skip refresh (newlyRegistered==0).
             try { VamOnDemandLoader.NoteMorphIngestPendingForSlice(uidCandidates, sliceJson); }
             catch { }
 
@@ -1330,8 +1236,7 @@ namespace VPB
             }
             catch { }
 
-            // Same gate as the entry path: refresh VaM's clothing catalog only when the slice actually
-            // registers clothing-bearing packages, so a morphs/plugins slice triggers no clothing sim work.
+            // Same gate as the entry path: refresh VaM's clothing catalog only when the slice actually registers clothing-bearing packages.
             if (VamOnDemandLoader.ShouldRequestCoalescedNativeRefreshForUids(uidCandidates, newlyRegistered))
             {
                 try { VamOnDemandLoader.RequestCoalescedVamRefresh("vpb_import_slice_prewarm"); }
@@ -1341,10 +1246,7 @@ namespace VPB
             return uidCandidates.Count;
         }
 
-        /// <summary>
-        /// Copies the preset file's host .var from AllPackages to AddonPackages (if applicable) without scanning file contents for dependency VARs.
-        /// Used for appearance "clothes only", where dependency install runs on garment-filtered JSON only (not the full .vap text).
-        /// </summary>
+        /// <summary>Copies host .var to AddonPackages without dependency scan (appearance "clothes only").</summary>
         public static bool InstallHostPackageRecursive(FileEntry entry)
         {
             return InstallHostPackageRecursive(entry, null);
@@ -1383,10 +1285,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Gallery scene prep already ran temp whitelist + prewarm.
-        /// Arms one-shot skip for next LoadInternal (path may differ after SELF→temp rewrite).
-        /// </summary>
         public static void NoteGallerySceneLoadPrep(string saveName)
         {
             s_GalleryScenePrepArmed = true;
@@ -1394,9 +1292,6 @@ namespace VPB
             catch { s_GalleryScenePrepRealtime = 0f; }
         }
 
-        /// <summary>
-        /// Consumes gallery prep arm if still fresh. Path-agnostic — rewrite/temp loads must skip.
-        /// </summary>
         static bool TryConsumeGallerySceneLoadPrep()
         {
             if (!s_GalleryScenePrepArmed) return false;
@@ -1429,8 +1324,6 @@ namespace VPB
             }
             catch { }
 
-            // VaM Browser / Scene Loader / triggers hit LoadInternal without GalleryUIUtils prep.
-            // Under scan whitelist those packages never enter VaM unless we temp-allow + prewarm here.
             try
             {
                 EnsureNativeSceneLoadWhitelistAndPrewarm(saveName, loadMerge);
@@ -1441,10 +1334,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Scan-whitelist: temp-allow host + SQL transitive deps and prewarm on-demand registration
-        /// for scene loads that did not go through the VPB gallery prepare path.
-        /// </summary>
         static void EnsureNativeSceneLoadWhitelistAndPrewarm(string saveName, bool loadMerge)
         {
             if (string.IsNullOrEmpty(saveName)) return;
@@ -1459,7 +1348,6 @@ namespace VPB
             if (!string.IsNullOrEmpty(hostUid))
                 needed.Add(hostUid);
 
-            // Host may be scan-excluded: register it first so GetFileEntry / scene parse can run.
             if (!string.IsNullOrEmpty(hostUid))
             {
                 try
@@ -1532,7 +1420,6 @@ namespace VPB
             try
             {
                 // Always queue coalesced refresh when needed — cleanup drains before removing temp UIDs.
-                // Pass needed + pluginHosts so Prewarm does not re-ReadToEnd the scene JSON.
                 PrewarmOnDemandPackagesForEntry(entry, saveName, queueCoalescedRefresh: true, pluginHosts, needed);
             }
             catch (Exception ex)
@@ -1733,9 +1620,7 @@ namespace VPB
             if (serial != sceneLoadSerial) yield break;
         }
 
-        /// <summary>
-        /// After LoadInternal returns, atoms may still be spawning for a few frames — defer so the target list matches the new scene.
-        /// </summary>
+        /// <summary>After LoadInternal returns, atoms may still be spawning for a few frames — defer so the target list matches the new scene.</summary>
         public static void ScheduleGalleryTargetListRefresh()
         {
             try
@@ -1755,9 +1640,6 @@ namespace VPB
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
 
-            // LoadInternal has returned, but VPB may still set IsLoadingScene until WorldUI / idle completion.
-            // GetAtoms() often does not yet list Person targets during that window — refreshing then leaves "None"
-            // until some later UI pass (e.g. category change). Wait for the load flag to clear first.
             float loadWaitStart = Time.realtimeSinceStartup;
             while (VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene
                    && (Time.realtimeSinceStartup - loadWaitStart) < 45f)
@@ -1774,7 +1656,5 @@ namespace VPB
                 GalleryPanel.NotifyAllPanelsSceneTargetsChanged();
             }
         }
-
-
     }
 }

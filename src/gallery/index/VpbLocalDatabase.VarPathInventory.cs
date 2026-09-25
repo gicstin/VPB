@@ -6,9 +6,6 @@ using System.Threading;
 
 namespace VPB
 {
-    /// <summary>
-    /// Persists last-known .var paths so startup can skip recursive directory walks when files unchanged.
-    /// </summary>
     internal static partial class VpbLocalDatabase
     {
         const string MetaVarPathInventoryCountKey = "var_path_inventory_count_v1";
@@ -37,10 +34,6 @@ namespace VPB
             new Dictionary<string, KeyValuePair<long, ScanRootSignature>>(StringComparer.OrdinalIgnoreCase);
         static readonly long ScanRootSigCacheTtlTicks = TimeSpan.FromSeconds(3).Ticks;
 
-        /// <summary>
-        /// Drops the in-process scan-root signature and deep-mtime TTL caches so a user-forced rescan
-        /// re-probes the filesystem instead of replaying a value sampled seconds before their file drop.
-        /// </summary>
         internal static void InvalidateScanRootSignatureCaches()
         {
             lock (s_ScanRootSigLock) { s_ScanRootSigCache.Clear(); }
@@ -64,13 +57,6 @@ namespace VPB
                 "mtime_ticks INTEGER NOT NULL);");
         }
 
-        /// <summary>
-        /// Deep max directory mtime PLUS live .var count for a scan root. The mtime alone cannot be trusted
-        /// as an addition detector: a junctioned/symlinked root reports the link node's frozen timestamp, and
-        /// timestamp-preserving copy tools, network shares and exFAT granularity all defeat it. The count is
-        /// what actually catches "a file appeared"; the walk enumerates directories only, so it costs far less
-        /// than the per-file stat pass the cache exists to avoid.
-        /// </summary>
         static bool TryComputeScanRootSignature(string root, out ScanRootSignature sig)
         {
             sig = new ScanRootSignature();
@@ -284,7 +270,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Load cached paths and validate size/mtime in parallel (no recursive directory walk).</summary>
         internal static bool TryRestoreVarPathInventory(out List<string> paths)
         {
             paths = null;
@@ -414,9 +399,6 @@ namespace VPB
                     return false;
                 }
 
-                // Reached here only because TryFastRejectVarPathInventory returned false (root mtime
-                // changed) AND no existing rows failed validation. The only remaining cause is file
-                // additions, which the cached row list cannot reflect. Force disk enum to pick them up.
                 try
                 {
                     LogUtil.Log("Var path inventory cache MISS additions_likely rows=" + rows.Count
@@ -555,7 +537,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Fast root-mtime check — true when cached inventory likely still valid (no recursive walk).</summary>
         internal static bool IsVarPathInventoryUnchangedFast()
         {
             if (!VpbSqlite3.IsAvailable || !VamStartupOptimizations.UseCachedVarPathInventory)
@@ -591,12 +572,7 @@ namespace VPB
         static readonly object s_MissingVarPathLock = new object();
         static List<string> s_MissingVarPaths;
 
-        /// <summary>
-        /// Records a cached inventory path whose .var file is gone (moved to InvalidPackages / deleted
-        /// after the inventory was saved). Callable from scan worker threads; SQLite work happens in
-        /// <see cref="FlushMissingVarPathPrune"/>. Without this the stale row is restored on every launch,
-        /// registers a ghost package that can never be classified, and keeps the gallery index incomplete.
-        /// </summary>
+        /// <summary>Records a cached inventory path whose .var file is gone (moved to InvalidPackages / deleted after the inventory was saved).</summary>
         internal static void NoteMissingVarPath(string path)
         {
             if (string.IsNullOrEmpty(path)) return;
@@ -607,7 +583,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Deletes noted dead paths from <c>pkg_var_path</c> and resyncs the cached row count. Returns rows removed.</summary>
         internal static int FlushMissingVarPathPrune()
         {
             List<string> pending;
@@ -629,8 +604,6 @@ namespace VPB
                     conn.ExecUtf8("BEGIN IMMEDIATE;");
                     try
                     {
-                        // Inventory rows keep the raw enumeration path (backslashes on Windows) while
-                        // VarPackage.Path is cleaned to forward slashes — match both spellings.
                         using (var del = conn.Prepare("DELETE FROM pkg_var_path WHERE path = ? OR path = ?"))
                         {
                             for (int i = 0; i < pending.Count; i++)
@@ -720,7 +693,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Warm-restore sig: dedicated meta first, else last gallery rebuild fingerprint.</summary>
         internal static bool TryLoadPackageInventorySignatureForWarmRestore(out string signature)
         {
             if (TryLoadRegistryWarmInventorySignature(out signature)) return true;

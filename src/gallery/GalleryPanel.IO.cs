@@ -31,7 +31,6 @@ namespace VPB
             _paneLoadTimingKind = null;
         }
 
-        // Shared creator/category side-tab metadata: identical for any panel with the same filters + category list while package scan is unchanged.
         private static readonly object s_SharedSideMetaLock = new object();
         private static DateTime s_SharedSideMetaPackageStamp = DateTime.MinValue;
         private static readonly Dictionary<string, SharedSideMetaSnapshot> s_SharedSideMetaByKey =
@@ -158,20 +157,15 @@ namespace VPB
         private Stack<FilterFrame> _filterStack = new Stack<FilterFrame>();
 
         private List<FileEntry> currentFilteredFiles = new List<FileEntry>();
-        private string filterBaseAnchorKey = null; // Scroll anchor captured when first entering filter mode
-        private string currentFilterDesc = null; // Description of active filter (e.g., "Dependents of X.var")
+        private string filterBaseAnchorKey = null;
+        private string currentFilterDesc = null;
         private PackageFilterMode currentPackageFilterMode = PackageFilterMode.None;
         private string currentPackageFilterMasterUid = null;
         private int currentPackageFilterCount = 0;
-        private List<FileEntry> filterSearchBaseFiles = null; // Base list for search within filter mode
+        private List<FileEntry> filterSearchBaseFiles = null;
         private string filterSearchLower = "";
-        private List<FileEntry> topSearchBaseFiles = null; // Base list for top search (non-filter mode)
+        private List<FileEntry> topSearchBaseFiles = null;
         private bool _topSearchBaseIsClean = false; // true only when topSearchBaseFiles was captured from an unfiltered load
-        /// <summary>
-        /// RefreshFiles builds the non-search filtered list, then applies title search via
-        /// <see cref="ApplyTitleSearchToBaseListInMemory"/> (same path as live keystrokes).
-        /// Avoids SQL/PassesFilters search diverging from live in-memory results.
-        /// </summary>
         private bool _refreshDeferNameFilterToInMemory;
         private RecyclingGridView recyclingGrid;
         private string filterRestoreAnchorKey = null;
@@ -193,9 +187,7 @@ namespace VPB
             return null;
         }
 
-        /// <summary>
-        /// After AllPackages ↔ AddonPackages moves, sync <see cref="FileEntry.Path"/> only for rows whose package UID is in <paramref name="packageUids"/>.
-        /// </summary>
+        /// <summary>After AllPackages ↔ AddonPackages moves, sync Path only for rows whose package UID is in packageUids.</summary>
         internal void RefreshDisplayedVarPathsAfterPackageMoves(HashSet<string> packageUids)
         {
             if (packageUids == null || packageUids.Count == 0) return;
@@ -341,7 +333,6 @@ namespace VPB
             if (string.IsNullOrEmpty(uid)) return null;
             try
             {
-                // VarPackage UID format: Author.Name.Version (Version may be numeric or a constraint like latest/minX)
                 int firstDot = uid.IndexOf('.');
                 if (firstDot < 0) return null;
                 int secondDot = uid.IndexOf('.', firstDot + 1);
@@ -356,8 +347,6 @@ namespace VPB
             if (string.IsNullOrEmpty(depUidOrPath) || string.IsNullOrEmpty(targetUid)) return false;
             try
             {
-                // Normalize common inputs:
-                // - Some dependency strings may include ".var" or a full path; strip to filename if so.
                 string d = depUidOrPath.Replace('\\', '/');
                 int lastSlash = d.LastIndexOf('/');
                 if (lastSlash >= 0 && lastSlash + 1 < d.Length) d = d.Substring(lastSlash + 1);
@@ -367,10 +356,6 @@ namespace VPB
                 if (string.Equals(d, targetUid, StringComparison.OrdinalIgnoreCase)) return true;
                 if (string.IsNullOrEmpty(targetShort)) return false;
 
-                // Accept any dependency that targets the same package group (Author.Name.*), including:
-                // - Author.Name.1
-                // - Author.Name.latest
-                // - Author.Name.min3
                 if (d.Length > targetShort.Length + 1 &&
                     d.StartsWith(targetShort, StringComparison.OrdinalIgnoreCase) &&
                     d[targetShort.Length] == '.')
@@ -396,10 +381,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Package deps/dependents/missing filter enter/leave: title + side chrome only.
-        /// Never rebuilds side-tab button lists (see <see cref="UpdateTabs"/>).
-        /// </summary>
+        /// <summary>Package deps/dependents/missing filter enter/leave: title + side chrome only.</summary>
         private void RefreshChromeAfterPackageFilterListChange()
         {
             if (titleText != null)
@@ -424,10 +406,6 @@ namespace VPB
             MarkGalleryPaneChromeDirty();
         }
 
-        /// <summary>
-        /// Rebind currently visible rows without rebuilding filters/sort/list contents.
-        /// Used when badge-only state changes (e.g. temporary scan-whitelist UID overrides).
-        /// </summary>
         internal void RefreshVisibleGridVisualsOnly()
         {
             if (!HasLoadedContent || !IsVisible) return;
@@ -437,7 +415,6 @@ namespace VPB
             try { UpdateEmptyGridState(); } catch { }
         }
 
-        /// <summary>Scene category or already showing package-level rows — use package list for deps/dependents filter.</summary>
         private bool PackageFilterUsesPackageListRows()
         {
             string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
@@ -454,7 +431,6 @@ namespace VPB
             var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (pkg == null) return uids;
             if (!string.IsNullOrEmpty(pkg.Uid)) uids.Add(pkg.Uid);
-            // Prefer SQLite transitive dependency edges when available (matches RecursivePackageDependencies behavior).
             try
             {
                 var fromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -485,7 +461,6 @@ namespace VPB
             }
             if (string.IsNullOrEmpty(targetUid)) return uids;
 
-            // Prefer SQLite reverse edges when available (same source as count when ready).
             try
             {
                 var fromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -537,7 +512,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Same dependency matching as package-list dependents path (exact UID + version-group / path forms).</summary>
         private static void AddVarFileEntriesThatDependOnPackageUid(List<FileEntry> filtered, FileEntry master, IList<FileEntry> source, string targetUid, string targetShort)
         {
             if (filtered == null || source == null || string.IsNullOrEmpty(targetUid)) return;
@@ -598,12 +572,10 @@ namespace VPB
                 filterBaseAnchorKey = filterRestoreAnchorKey;
             }
 
-            // Initialise filter-mode search base from the current list
             filterSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
             filterSearchLower = "";
         }
 
-        // Legacy alias – callers will be migrated to PushFilterFrame directly.
         private void EnsureFilterBaseCaptured() => PushFilterFrame();
 
         private void ApplyFilteredList(List<FileEntry> filtered, string desc)
@@ -615,11 +587,9 @@ namespace VPB
             {
                 filterSearchBaseFiles = new List<FileEntry>(filtered);
                 // Don't carry the active top search into filter mode — show all deps immediately.
-                // The search box is repurposed for searching within the dep list.
                 filterSearchLower = "";
                 filtered = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
 
-                // Clear the top search box so it's ready for in-filter searching
                 try
                 {
                     ClearNameFilterState();
@@ -642,7 +612,6 @@ namespace VPB
             catch { }
 
             // Package filter only changes the file grid + title/footer chrome.
-            // Full UpdateTabs() rebuilds every side-tab button list (can take seconds) — avoid here.
             try { RefreshChromeAfterPackageFilterListChange(); } catch { }
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
@@ -671,7 +640,6 @@ namespace VPB
             catch { }
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
-            // Filter-mode search should also start at top of the narrowed results.
             ScrollGalleryToTop();
         }
 
@@ -710,7 +678,6 @@ namespace VPB
                 switch (currentPackageFilterMode)
                 {
                     case PackageFilterMode.Dependencies:
-                        // Check if this is a missing dependencies filter
                         if (currentFilteredFiles != null && currentFilteredFiles.Count > 0 && currentFilteredFiles[0] is VirtualFileEntry)
                             return "Missing";
                         return "Dependencies";
@@ -734,7 +701,6 @@ namespace VPB
                     return string.Equals(ple.Package.Uid, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
                 if (entry is MissingPackageListEntry mpe)
                     return string.Equals(mpe.RequestedUid, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
-                // Handle scene files (generic FileEntry with .Path)
                 if (entry.Path != null)
                     return string.Equals(entry.Path, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
             }
@@ -779,8 +745,6 @@ namespace VPB
             var result = new List<FileEntry>();
             if (uids == null || uids.Count == 0) return result;
 
-            // Mirror the category/prefix/extension matching logic used in RefreshFilesRoutine / ApplyPackageDelta,
-            // but restrict the package set to the UID list.
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             bool hasExt = !Gallery.IsEverythingCategoryExtension(currentExtension)
                 && extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
@@ -796,7 +760,6 @@ namespace VPB
                 try { pkg = FileManager.GetPackage(uid, ensureInstalled: false); } catch { pkg = null; }
                 if (pkg == null) continue;
 
-                // Respect creator filter if set
                 try
                 {
                     if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
@@ -818,7 +781,6 @@ namespace VPB
                     string ip = names[i];
                     if (string.IsNullOrEmpty(ip)) continue;
 
-                    // Extension filter
                     if (hasExt)
                     {
                         string entryExt = System.IO.Path.GetExtension(ip);
@@ -836,7 +798,6 @@ namespace VPB
                         if (Gallery.IsEverythingExcludedPreviewExtension(pe.Substring(1))) continue;
                     }
 
-                    // Path prefix filter (normalize slashes so VAR entries like Custom\Scripts\ match Custom/Scripts/)
                     bool pathOk = true;
                     if (currentPaths != null && currentPaths.Count > 0)
                     {
@@ -872,19 +833,16 @@ namespace VPB
                     }
                     if (!pathOk) continue;
 
-                    // Name filter
                     if (hasNameFilt && !MatchesPackageFallbackSearch(searchQ, pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip)) continue;
 
                     var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
 
-                    // Apply the rest of the active filters (tags/rating/size/scene source/etc)
                     if (!PassesFilters(entry, true)) continue;
 
                     result.Add(entry);
                 }
             }
 
-            // Keep display stable
             try
             {
                 var sortState = GetSortState("Files");
@@ -900,8 +858,6 @@ namespace VPB
             var result = new List<FileEntry>();
             if (uids == null || uids.Count == 0) return result;
 
-            // Defensive: callers sometimes hand us a set built from mixed sources; avoid double-adds
-            // if enumeration includes duplicates due to comparer mismatches or intermediate list reuse.
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Prefer SQLite package rows when available to avoid per-UID package resolution.
@@ -983,7 +939,6 @@ namespace VPB
                 }
             }
 
-            // Stable sort by display name
             try
             {
                 result.Sort((a, b) => string.Compare(a != null ? a.Name : "", b != null ? b.Name : "", StringComparison.OrdinalIgnoreCase));
@@ -1085,16 +1040,12 @@ namespace VPB
                     try { UpdateTabs(); } catch { }
                 }
 
-                // Save occasionally
                 if (sinceSave >= 100)
                 {
                     sinceSave = 0;
                     try { PosePeopleCountIndex.Instance.Save(); } catch { }
                 }
 
-                // If filtering by Dual/Single, re-run refresh sometimes so list becomes accurate as we learn counts.
-                // NOTE: don't call RefreshFiles() here; it resets currentLoadingGroupId and would cancel this coroutine.
-                // We instead just refresh the tab labels and let the user trigger a refresh if needed.
                 if (posePeopleFilter != PosePeopleFilter.All && (processed % 250) == 0)
                 {
                     if (Time.realtimeSinceStartup - lastRefresh > 1.0f)
@@ -1104,7 +1055,6 @@ namespace VPB
                     }
                 }
 
-                // Yield every few items to keep UI responsive.
                 if ((processed % 10) == 0) yield return null;
             }
 
@@ -1158,7 +1108,6 @@ namespace VPB
             try { key = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path; } catch { key = entry.Path; }
             if (string.IsNullOrEmpty(key)) return 1;
 
-            // Persistent index for .var (and any UID-based entries)
             try
             {
                 int persisted;
@@ -1198,7 +1147,6 @@ namespace VPB
                     {
                         bool haveValue = false;
 
-                        // If stream is seekable (local files), read the tail where PeopleCount typically lives.
                         try
                         {
                             using (var stream = entry.OpenStream())
@@ -1246,12 +1194,10 @@ namespace VPB
 
                         if (haveValue)
                         {
-                            // fall through to cache write
                         }
                         else
                         {
                         // Stream scan for "PeopleCount" to avoid reading entire file into memory.
-                        // This is a simple state machine that matches the exact key (case-sensitive as stored).
                         const string needle = "\"PeopleCount\"";
                         int match = 0;
                         bool foundKey = false;
@@ -1310,11 +1256,9 @@ namespace VPB
                                                 parsed = (c - '0');
                                                 continue;
                                             }
-                                            // Unexpected token; stop trying.
                                             break;
                                         }
 
-                                        // parsingDigits
                                         if (char.IsDigit(c))
                                         {
                                             int d = (c - '0');
@@ -1323,7 +1267,6 @@ namespace VPB
                                             continue;
                                         }
 
-                                        // End of digits
                                         if (parsed > 0)
                                         {
                                             count = parsed;
@@ -1332,17 +1275,14 @@ namespace VPB
                                         break;
                                     }
 
-                                    // Early exit once we got a value.
                                     if (haveValue2) break;
                                 }
 
-                                // Handle case where digits end at EOF
                                 if (!haveValue2 && foundKey && afterColon && parsingDigits && parsed > 0) count = parsed;
                             }
                         }
                         catch
                         {
-                            // ignore
                         }
                         }
                     }
@@ -1362,7 +1302,6 @@ namespace VPB
 
             try
             {
-                // Persist discovered counts so VAR pose browsing doesn't need rescans next time.
                 PosePeopleCountIndex.Instance.Set(key, count);
             }
             catch { }
@@ -1407,10 +1346,8 @@ namespace VPB
             if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
             if (wantsCustom) { if (!isCustomItem) return false; }
             if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
-            // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
             if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
             if ((f & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
-            // If gender unknown, keep visible under either toggle (VaM content often not in gendered folders).
             if ((f & ClothingSubfilter.Male) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Male && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
             if ((f & ClothingSubfilter.Female) != 0) { if (gender != ClothingLoadingUtils.ResourceGender.Female && gender != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
 
@@ -1462,10 +1399,6 @@ namespace VPB
                 clothingSubfilter, isPreset, isDecal, isCustomItem, isCustomPresetLoose, g);
         }
 
-        /// <summary>
-        /// Hair path gate (classify + subfilters) for <see cref="VarFileEntry.Path"/> or loose file path form.
-        /// Mirrors Clothing preset-hiding behavior from Issue #101.
-        /// </summary>
         internal static bool PassesHairGalleryFiltersForPath(string path, HairSubfilter hairSubfilter, bool isVarPackageEntry)
         {
             string p = path ?? "";
@@ -1506,8 +1439,6 @@ namespace VPB
         {
             if (entry == null) return false;
 
-            // History: skip size/source category filters; keep path, search, tags, and live ★ filters
-            // (presence + star-count) so title-bar ★ matches visible History rows.
             if (activeContentType == ContentType.History)
             {
                 if (!string.IsNullOrEmpty(currentPackagePathFilter))
@@ -1556,10 +1487,8 @@ namespace VPB
             if (!HubItemScopeAllowsEntry(entry)) return false;
 
             // Hide filtering and sort-only narrowing run in PostFilesListHideAndSortFollowupRoutine after the grid is shown.
-            // to avoid per-entry FileManager.FileExists calls blocking the scan drain loop.
 
-            // Clothing subfilter (Gallery left Tags panel)
-            // Applies only when browsing Clothing category.
+            // Clothing subfilter (Gallery left Tags panel) Applies only when browsing Clothing category.
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
             string cp = currentPath ?? "";
             bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
@@ -1573,8 +1502,6 @@ namespace VPB
                     return false;
             }
 
-            // Hair subfilter gate. Shares skipClothingGalleryFilters with clothing: when set, both
-            // subfilter gates are bypassed because the subfilter was applied upstream (SQL for VAR rows).
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || cp.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || cp.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -1586,7 +1513,6 @@ namespace VPB
                     return false;
             }
 
-            // Pose subfilter (Single vs Dual)
             bool isPose = title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0;
             if (!ignorePosePeopleFilter && isPose && posePeopleFilter != PosePeopleFilter.All)
             {
@@ -1615,11 +1541,9 @@ namespace VPB
                 }
             }
 
-            // Appearance subfilter (Gallery left Tags panel)
-            // Applies only when browsing Appearance category.
+            // Appearance subfilter (Gallery left Tags panel) Applies only when browsing Appearance category.
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            // Global source filter (early gate). Cheap type check, runs first.
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
             {
                 bool isVarBackedForGate = IsVarBacked(entry);
@@ -1636,7 +1560,6 @@ namespace VPB
                 string ext = (lastDot >= 0 && lastDot < norm.Length - 1) ? norm.Substring(lastDot + 1) : "";
                 bool isVap = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
 
-                // Global Local + Appearance folder browse: keep path-scope gate (was under legacy Local toggle).
                 if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local
                     && AppearanceGenderClassifier.IsAppearanceFolderBrowsePath(cp)
                     && !AppearanceGenderClassifier.EntryMatchesAppearanceBrowseScope(entry, cp, currentPaths))
@@ -1668,7 +1591,6 @@ namespace VPB
                 }
             }
 
-            // Rating: star-count tab + title-bar ★ presence (one GetRating).
             if (!PassesLiveStarFilters(entry))
                 return false;
 
@@ -1677,7 +1599,6 @@ namespace VPB
 
             if (!string.IsNullOrEmpty(currentSizeFilter))
             {
-                // Size filter when status is NOT set
                 long size = entry.Size;
                 long mb = 1024 * 1024;
                 if (currentSizeFilter == "Tiny (< 10MB)") { if (size >= 10 * mb) return false; }
@@ -1687,11 +1608,6 @@ namespace VPB
                 else if (currentSizeFilter == "Very Large (> 1GB)") { if (size < 1024 * mb) return false; }
             }
 
-            // Scene Local is global Source Local (early gate). No per-category override.
-
-            // Name Filter (bare terms OR user tags OR Look-A-Pedia subject; tag:/creator:/looks:/hubcat:/status structured).
-            // Only skip SQL-owned time/loaded/tagged for VAR index rows — loose files need in-memory time match.
-            // When deferring, RefreshFiles applies the same in-memory pass as live SetNameFilter after the list builds.
             if (HasActiveNameFilter() && !_refreshDeferNameFilterToInMemory)
             {
                 bool skipSqlOwned = nameFilterQuery.RequiresSqlRefresh && IsGallerySqlIndexedSearchEntry(entry);
@@ -1700,20 +1616,17 @@ namespace VPB
                     return false;
             }
 
-            // Tag Filter
             if (activeTags != null && activeTags.Count > 0)
             {
                 bool tagMatch = false;
                 foreach (var tag in activeTags)
                 {
-                    // Check path-based tags (original logic)
                     if (entry.Path.IndexOf(tag, StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         tagMatch = true;
                         break;
                     }
 
-                    // Check user-defined tags
                     if (TagsManager.Instance.HasTag(entry.Uid, tag))
                     {
                         tagMatch = true;
@@ -1723,9 +1636,6 @@ namespace VPB
                 if (!tagMatch) return false;
             }
 
-            // Gallery SQLite user tags. Include/exclude filter always live (orthogonal to F/T work mode).
-            // FilterUntagged / FilterTaggedOnly browse is exclusive. VAR rows from SQLite bulk query already match tags;
-            // loose Custom/Saves files merged afterward must still be checked (same keys as gallery_item_user_tag).
             if (activeContentType == ContentType.Category && VpbSqlite3.IsAvailable
                 && (_userTagAvailMode == UserTagAvailMode.FilterUntagged
                     || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly
@@ -1779,7 +1689,6 @@ namespace VPB
 
         private IEnumerator RetryRefreshAfterNoCacheDelay()
         {
-            // No fixed delay. Wait until FileManager scan likely finished, with bounded backoff.
             float start = Time.realtimeSinceStartup;
             float nextWait = 0.05f;
             int polls = 0;
@@ -1794,7 +1703,6 @@ namespace VPB
                 float elapsed = Time.realtimeSinceStartup - start;
                 if (elapsed >= 2.5f) break;
 
-                // Backoff up to 0.5s between polls.
                 float wait = Mathf.Clamp(nextWait, 0.02f, 0.5f);
                 nextWait = Mathf.Min(nextWait * 1.7f, 0.5f);
                 yield return new WaitForSecondsRealtime(wait);
@@ -1815,28 +1723,21 @@ namespace VPB
                     catch { }
                 }
                 if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB] RetryRefreshAfterNoCacheDelay: retrying refresh for packages with missing cache.");
-                // isRetry=true keeps _cacheRetryPending=true so this retry cannot spawn another retry.
                 RefreshFiles(false, false, isRetry: true);
             }
             else
             {
-                // Refresh was skipped; clear the flag so future user-triggered loads can retry.
                 _cacheRetryPending = false;
             }
         }
 
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false, bool isRetry = false, string refreshDebugSource = null)
         {
-            // Category switch / full reload owns this refresh — kill keystroke debounce so it cannot
-            // start a second RefreshFiles after we begin loading.
             try { CancelTitleSearchSqlDebounce(); } catch { }
             try { CancelTitleSearchInMemoryDebounce(); } catch { }
             _refreshDeferNameFilterToInMemory = false;
 
-            // Clear any active dependency filter when refreshing
             ClearPackageFilter();
-            // Reset in-memory top search base; RefreshFiles rebuilds the list.
-            // Title-bar SQL search may keep the snapshot so clear-search stays instant.
             if (_keepTopSearchBaseAcrossRefresh)
             {
                 _keepTopSearchBaseAcrossRefresh = false;
@@ -1847,7 +1748,6 @@ namespace VPB
                 _topSearchBaseIsClean = false;
             }
 
-            // Inactive parent → recycling grid viewport 0. Defer until Show.
             if (_floatsOnly)
             {
                 refreshOnNextShow = true;
@@ -1855,7 +1755,6 @@ namespace VPB
                 return;
             }
 
-            // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
             {
                 if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || LogGalleryRefreshDeepTiming) LogUtil.Log("[VPB] GalleryPanel.RefreshFiles: SKIPPED (suppressed)");
@@ -1869,9 +1768,6 @@ namespace VPB
                 return;
             }
 
-            // Reset the retry guard on user-triggered refreshes so future loads can retry again.
-            // When called from RetryRefreshAfterNoCacheDelay (isRetry=true) we intentionally keep
-            // _cacheRetryPending=true so that the retry run does NOT spawn yet another retry.
             if (!isRetry)
                 _cacheRetryPending = false;
 
@@ -1888,9 +1784,6 @@ namespace VPB
             // Quiet background refresh keeps visible thumbs; do not cancel the active image group.
             if (!_quietGalleryRefresh)
             {
-                // Rotate the group ID here (synchronously) so that any in-flight thumbnail callbacks
-                // from the old category fail the capturedGroupId == currentLoadingGroupId guard and
-                // don't pollute the new session. The coroutine's yield-return-null would be too late.
                 if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
                     CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
                 currentLoadingGroupId = Guid.NewGuid().ToString();
@@ -1906,16 +1799,6 @@ namespace VPB
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
 
-        /// <summary>
-        /// Incrementally updates the gallery when only a subset of packages changed.
-        /// Removes entries from <paramref name="removed"/> packages and inserts entries from
-        /// <paramref name="added"/> packages that pass the current filters, then re-sorts and
-        /// restores the scroll position using a UID anchor so the viewport doesn't jump.
-        ///
-        /// Falls back to a full <see cref="RefreshFiles"/> when the gallery hasn't loaded yet
-        /// or the delta lists are null/empty (which shouldn't normally happen, but is safe).
-        /// </summary>
-        /// <returns>True when the grid or side metadata was updated.</returns>
         public bool ApplyPackageDelta(List<VarPackage> added, List<VarPackage> removed)
         {
             lastPackageDeltaChangedGrid = false;
@@ -1935,7 +1818,6 @@ namespace VPB
                 return false;
             }
 
-            // Path filter folder deleted in Explorer — incremental delta cannot rebuild loose Custom/Saves.
             if (TryClearStalePackagePathFilter())
             {
                 try
@@ -1948,8 +1830,6 @@ namespace VPB
                 return true;
             }
 
-            // If we have never loaded, the scan just completed and we have a full PackagesByUid
-            // for the first time – do a clean initial load now.
             if (!hasLoadedContent || recyclingGrid == null || scrollRect == null)
             {
                 try
@@ -1962,10 +1842,6 @@ namespace VPB
                 return true;
             }
 
-            // If neither list has entries the package set didn't change at all.
-            // Just sync the timestamp so future notifications aren't treated as "new" and return
-            // without touching the grid – this is the key guard that prevents a spurious full
-            // refresh (and scroll-to-top) when the initial scan finds no package delta.
             bool hasRemovals  = removed != null && removed.Count > 0;
             bool hasAdditions = added   != null && added.Count   > 0;
             if (!hasRemovals && !hasAdditions)
@@ -1986,15 +1862,10 @@ namespace VPB
             }
             catch { }
 
-            // If the refresh coroutine is still running (shouldn't normally happen after the
-            // !init||flag gate, but be defensive) cancel it so we work on a stable list.
             StopCo(ref refreshCoroutine);
             StopCo(ref _earlyMetaApplyCoroutine);
 
-            // ── Scroll anchor ─────────────────────────────────────────────────────────────
-            // Save the UID of the item currently centred in the viewport so we can scroll
-            // back to it after the list is modified (indices shift when items are inserted or
-            // removed before the anchor position).
+            // Save UID of the centred item to restore scroll after list mutation.
             string anchorUid = null;
             int centerIdx = recyclingGrid.GetCenterItemIndex();
             if (centerIdx >= 0 && centerIdx < currentFilteredFiles.Count)
@@ -2003,7 +1874,6 @@ namespace VPB
             bool changed = false;
             bool skippedForNoCache = false;
 
-            // ── Remove ────────────────────────────────────────────────────────────────────
             if (removed != null && removed.Count > 0)
             {
                 var removedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2025,7 +1895,6 @@ namespace VPB
                 if (currentFilteredFiles.Count != before) changed = true;
             }
 
-            // ── Add ───────────────────────────────────────────────────────────────────────
             if (added != null && added.Count > 0)
             {
                 string[] extensions = string.IsNullOrEmpty(currentExtension)
@@ -2049,7 +1918,6 @@ namespace VPB
                 {
                     if (pkg == null) continue;
 
-                    // Package-level creator filter
                     if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
 
                     List<string> names; List<long> ticks; List<long> sizes;
@@ -2067,7 +1935,6 @@ namespace VPB
                     {
                         string ip = names[i];
 
-                        // Extension filter
                         if (hasExt)
                         {
                             string entryExt = System.IO.Path.GetExtension(ip);
@@ -2121,7 +1988,6 @@ namespace VPB
                         }
                         if (!pathOk) continue;
 
-                        // Name filter
                         if (hasNameFilt && !MatchesPackageFallbackSearch(searchQ, pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip)) continue;
 
                         DateTime entryTime = pkg.LastWriteTime;
@@ -2136,7 +2002,6 @@ namespace VPB
 
                         var entry = new VarFileEntry(pkg, ip, entryTime, entrySize);
 
-                        // Full filter check (clothing/appearance subfilters, tags, rating, size, scene source …)
                         if (!PassesFilters(entry, true)) continue;
                         if (!existingUids.Add(entry.Uid)) continue;
 
@@ -2182,7 +2047,6 @@ namespace VPB
                     var sortState = GetSortState("Files");
                     if (activeContentType != ContentType.History)
                     {
-                        // SortFiles applies hide-old unless SQL already filtered via pkg.is_newest.
                         GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState, _fileListHadSqlPkgVersionFilter);
                         GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState, _fileListHadSqlPkgVersionFilter);
                         if (_browseOldVersionsCycle == BrowseFilterCycle.Only && !_fileListHadSqlPkgVersionFilter)
@@ -2205,7 +2069,6 @@ namespace VPB
 
             if (!changed)
             {
-                // Nothing actually changed – keep gallery exactly as-is.
                 lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
                 refreshOnNextShow = false;
                 try
@@ -2217,18 +2080,13 @@ namespace VPB
                 return false;
             }
 
-            // Grid mutated in place: bump the sub-pane session so the clothing chip-count memo
-            // (keyed on _deferredSubPaneSessionId) recomputes against the already-updated cat_mem
-            // index instead of returning its pre-change cache.
             unchecked { _deferredSubPaneSessionId++; }
 
             InvalidateGalleryPreHideFileListSnapshot();
 
-            // ── Update grid ───────────────────────────────────────────────────────────────
             recyclingGrid.SetItemCount(currentFilteredFiles.Count);
             try { recyclingGrid.Refresh(); } catch { }
 
-            // ── Restore scroll via UID anchor ─────────────────────────────────────────────
             if (anchorUid != null)
             {
                 int newIdx = -1;
@@ -2293,11 +2151,9 @@ namespace VPB
         {
             yield return null;
             _packageDeltaSideTabsCoroutine = null;
-            // Reopen can already have refreshed counts during this yield.
             EnsureSideTabsFreshForPackageScan();
         }
 
-        /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>
         private bool TryBuildFileListSnapshotCacheKey(out string key)
         {
             key = null;
@@ -2386,8 +2242,7 @@ namespace VPB
                     }
                 }
                 sb.Append('\u001E');
-                // Excluded (none-of) user tags must vary the key too, else toggling an exclude reuses the
-                // previously cached, unfiltered list and the exclusion appears to do nothing.
+                // Excluded (none-of) user tags must vary the key too, else toggling an exclude reuses the previously cached.
                 if (IsUserTagExcludeFilterArmed())
                 {
                     var xarr = new List<string>(excludedUserTags);
@@ -2413,10 +2268,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// When true, SQLite bulk rows need no per-item work on the main thread (filters/ratings/pose are default),
-        /// so <see cref="List{T}.AddRange"/> is equivalent to the drain loop.
-        /// </summary>
+        /// <summary>When true, SQLite bulk rows need no per-item work on the main thread (filters/ratings/pose are default).</summary>
         private bool RefreshFilesRoutineCanFastAppendSqliteBulkList(bool wantsPoseCountsLocal)
         {
             if (HasRatingPresenceFilter()) return false;
@@ -2424,12 +2276,9 @@ namespace VPB
             // License filter is applied in SQL (pkg.license); in-memory PassesLicenseFilter no-ops when flag set.
             if (HasLicenseFilter() && !_fileListHadSqlLicenseFilter) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
-            // bulk (cat_mem, VAR-only) is fast-appended without per-entry PassesFilters, where the source gate lives;
-            // a bulk AddRange under Source:Local would leak every var row, so force the gated drain when it's active.
+            // bulk (cat_mem, VAR-only) is fast-appended without per-entry PassesFilters, where the source gate lives.
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return false;
-            // Title search: SQL PathAndName is a pre-filter only. Live typing uses MatchesFileEntryBySearchQuery
-            // (scope + creator/uid/user-tag + exclude). Fast-append skipped PassesFilters → preset restore
-            // showed more hits than when the filter was saved. Always re-check via drain.
+            // Title search: SQL PathAndName is a pre-filter only.
             if (HasActiveNameFilter()) return false;
             // activeTags still applied in SQL; keep fast-append when tags-only.
             if (wantsPoseCountsLocal || posePeopleFilter != PosePeopleFilter.All) return false;
@@ -2444,10 +2293,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// One step of RefreshFilesRoutine main-thread drain: filters, pose/rating side effects, append to <paramref name="targetFiles"/>.
-        /// Returns true when <paramref name="yieldWatch"/> has exceeded <paramref name="maxMsBudget"/> after a successful add (caller should yield).
-        /// </summary>
+        /// <summary>One step of RefreshFilesRoutine main-thread drain: filters, pose/rating side effects, append to targetFiles.</summary>
         private bool RefreshFilesRoutineDrainProcessAndShouldYield(
             FileEntry entry,
             List<FileEntry> targetFiles,
@@ -2498,7 +2344,6 @@ namespace VPB
             return yieldWatch.ElapsedMilliseconds > maxMsBudget;
         }
 
-        /// <summary>Map SQLite History rows to <see cref="VarFileEntry"/>.</summary>
         private List<FileEntry> BuildHistoryBulkListFromRows(List<VpbLocalDatabase.Row> idxRows, string localLoadingGroupId, int wantsLoadedStateForIndexMain)
         {
             var bulk = new List<FileEntry>(idxRows != null && idxRows.Count > 0 ? idxRows.Count : 16);
@@ -2509,14 +2354,12 @@ namespace VPB
 
                 VpbLocalDatabase.Row r = idxRows[ri];
 
-                // Local (non-package) history row, e.g. a loose Saves/scene scene. These have no
-                // package UID, so build a loose SystemFileEntry directly from the recorded path.
                 if (string.IsNullOrEmpty(r.PackageUid))
                 {
                     string localPath = !string.IsNullOrEmpty(r.ListPath) ? r.ListPath : r.ItemUsageKey;
                     if (string.IsNullOrEmpty(localPath)) continue;
 
-                    if (wantsLoadedStateForIndexMain == 0) continue; // loose files are always "loaded"
+                    if (wantsLoadedStateForIndexMain == 0) continue;
 
                     SystemFileEntry sfe;
                     try { sfe = new SystemFileEntry(localPath); }
@@ -2586,7 +2429,6 @@ namespace VPB
             return bulk;
         }
 
-        /// <summary>Re-query History and rebind the grid (no full <see cref="RefreshFiles"/>).</summary>
         public void RefreshHistoryListInPlace(bool keepScroll = true)
         {
             if (Gallery.IsSuppressed()) return;
@@ -2819,7 +2661,6 @@ namespace VPB
             _refreshHistoryLightCo = null;
         }
 
-        /// <summary>Apply creator/category side-tab caches built during refresh (worker or shared snapshot). Does not run unless loading session still matches.</summary>
         private void ApplyEarlyMetaRefreshResults(
             string metaBuildGroupId,
             bool earlyBuildCreators,
@@ -2933,7 +2774,7 @@ namespace VPB
                 }
             }
 
-            yield return null; // Allow UI to render first — next MoveNext may wait while same click handler runs UpdateTabs() etc.
+            yield return null;
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_first_yield");
             if (swDeep != null)
             {
@@ -2941,34 +2782,24 @@ namespace VPB
                 stallUntilRoutineResumeMs = deepAfterFirstYieldMs - syncCpuBeforeFirstYieldMs;
             }
 
-            // Reset pose facet counts for this refresh
             posePeopleFacetCountSingle = 0;
             posePeopleFacetCountDual = 0;
             _refreshSqliteBulkIncludedUserTagGridFilter = false;
             System.Threading.Interlocked.Exchange(ref _refreshWorkerFallbackUserTagPrefilterFlag, 0);
 
-            // currentLoadingGroupId was already rotated synchronously in RefreshFiles()
-            // before this coroutine started; no need to rotate again here.
+            // currentLoadingGroupId was already rotated synchronously in RefreshFiles() before this coroutine started.
 
             // Determine scroll target before clearing the grid.
-            // Auto-refresh (keepScroll=true, content already loaded): capture the center item index now,
-            //   before SetItemCount(0) zeroes the content height and the ScrollRect clamps to top.
-            //   Using an item index (not a normalized float) keeps the same row visible even when the
-            //   column count or content height changes (e.g. side panel open/close).
-            // Category change or first load: use _pendingScrollRestore set by Show()
-            //   (either a persisted position from the cache, or 1f for top).
             bool useCenterItemRestore = keepScroll && hasLoadedContent;
             int savedCenterItemIndex = (useCenterItemRestore && recyclingGrid != null)
                 ? recyclingGrid.GetCenterItemIndex()
                 : -1;
             // Preserve normalized scroll only when we have already loaded content.
-            // Early refresh paths should use the pending restore target (top by default).
             float savedScrollNormalizedPos = useCenterItemRestore
                 ? (scrollRect != null ? scrollRect.verticalNormalizedPosition : 1f)
                 : _pendingScrollRestore;
 
-            // Configure grid immediately so it has correct dimensions even while loading
-            // Quiet mode: keep frozen display cells — SetItemCount(0) would blank the viewport.
+            // Configure grid immediately so it has correct dimensions even while loading Quiet mode: keep frozen display cells.
             if (!_quietGalleryRefresh && contentGO != null)
             {
                 if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
@@ -2990,10 +2821,6 @@ namespace VPB
             }
             
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
-            // Live keystrokes: in-memory filter on the non-search base list.
-            // Preset/RefreshFiles used to bake search into SQL — different (often looser) results.
-            // Defer normal title search to ApplyTitleSearchToBaseListInMemory after build (same matcher).
-            // Status windows (loaded/tagged) still need SQL (RequiresSqlRefresh).
             GallerySearchQuery searchQueryLive = nameFilterQuery ?? GallerySearchQuery.Empty;
             bool deferNameToInMemory = false;
             try
@@ -3021,7 +2848,6 @@ namespace VPB
                 catch { searchQuerySnap = searchQueryLive; }
             }
             string[] nameTerms = searchQuerySnap.BroadTermsArray();
-            // Worker fallback / diagnostics: live query still "has" a name filter when deferred.
             bool hasNameFilter = searchQueryLive != null && !searchQueryLive.IsEmpty
                 && !deferNameToInMemory;
 
@@ -3045,10 +2871,8 @@ namespace VPB
             }
 
             // Note: Show() calls RefreshFiles() before UpdateTabs(), so the split sub-pane may not be active yet.
-            // We still want counters to populate as soon as loading finishes.
             bool wantsPoseCounts = isPoseCategory;
 
-            // Reset progressive index queue when browsing Pose
             if (isPoseCategory)
             {
                 lock (posePeopleIndexLock)
@@ -3060,7 +2884,6 @@ namespace VPB
             }
             else
             {
-                // Cancel any outstanding pose indexing work when leaving Pose category.
                 posePeopleIndexGroupId = "";
                 StopCo(ref posePeopleIndexCoroutine);
                 lock (posePeopleIndexLock)
@@ -3073,15 +2896,11 @@ namespace VPB
             // Time-based yielding: first full load uses a larger per-frame budget so the list finishes in fewer frames (still yields to avoid long stalls).
             bool isColdGalleryContentLoad = !hasLoadedContent;
             var yieldWatch = new System.Diagnostics.Stopwatch();
-            // Prior default (22ms warm) makes refresh frame-rate bound on large libraries (can take 20s+).
-            // Bias toward faster refresh completion; UI still yields, but in larger chunks.
             long maxMsPerFrame = isColdGalleryContentLoad ? 120 : 120;
 
             yieldWatch.Start();
 
             int[] skippedForNoCache = { 0 };
-            // Sample of package UIDs missing cache, for diagnosing 3s retry loops.
-            // Single worker thread writes; main thread reads after drain completes.
             string[] skippedForNoCacheSample = new string[3];
             int skippedForNoCacheSampleCount = 0;
 
@@ -3141,7 +2960,6 @@ namespace VPB
             }
             else
             {
-                // Sibling/cache snapshot already matched browse Old-versions mode in cache key.
                 _fileListHadSqlPkgVersionFilter = _browseOldVersionsCycle != BrowseFilterCycle.Off
                     || (Settings.Instance != null && Settings.Instance.HideOldVersions != null
                         && Settings.Instance.HideOldVersions.Value);
@@ -3458,7 +3276,6 @@ namespace VPB
                         List<VpbLocalDatabase.Row> idxRows = new List<VpbLocalDatabase.Row>();
                         List<string> pathExclusions = null;
                         // SQLite index usage must not depend on snapshot-cache key availability.
-                        // Snapshot cache is an optimization; SQLite query is primary fast path.
                         if (VpbSqlite3.IsAvailable
                             && activeContentSnap == ContentType.History)
                         {
@@ -3474,8 +3291,6 @@ namespace VPB
                         else if (VpbSqlite3.IsAvailable
                             && activeContentSnap == ContentType.Category)
                         {
-                            // Package-level listing (ext=varpkg): not in cat_mem — skip category SQL.
-                            // Worker still uses TryQueryVarPackageRowsForList below.
                             if (string.Equals(extForIndexMain, "varpkg", StringComparison.OrdinalIgnoreCase))
                             {
                                 useSqliteIndex = false;
@@ -3573,8 +3388,6 @@ namespace VPB
                                             continue;
                                     }
 
-                                    // Appearance: always require look paths — even when skipPathMatch (non-Local).
-                                    // Else json|vap package fallback floods SubScene/Scene into Appearance grid.
                                     if (titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
                                     {
                                         if (IsForbiddenInAppearanceCategory(internalPath)
@@ -3638,8 +3451,6 @@ namespace VPB
                                         }
                                     }
 
-                                    // Hair: SQL narrows via BuildHairSubfilterSqlAnd when AppliedHairGallerySubfilter.
-                                    // Mirror Clothing — only C# gate when SQL miss, or active subfilter + missing cloth_attr.
                                     bool hairSqlApplied = sqlHairGalleryFilterAppliedFlag[0] != 0;
                                     if (sqliteDrainApplyHairGateOnMain)
                                     {
@@ -4145,28 +3956,18 @@ namespace VPB
             {
                 if (!HasCreatorFilter())
                 {
-                    // When file list came from GalleryFileListSnapshotCache, it already merged VAR index + loose files for this key.
-                    // Re-enumerating Saves/* (SafeGetFiles + PassesFilters per path) duplicates work and can burn 10s+ on large trees with sysAdded=0.
                     if (!fileListFromCache)
                     {
                     string titleForLooseSceneScan = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                     bool applyVaMLocalSceneLooseFilter =
                         titleForLooseSceneScan.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
                         && titleForLooseSceneScan.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) < 0;
-                    // Fast path: reuse SQLite-cached loose-file listings for this category/path/ext combo when unchanged.
                     string sysCacheKey = null;
                     string sysCacheSig = null;
                     List<VpbLocalDatabase.SystemFileRow> sysCachedRows = null;
                     bool sysCacheHit = false;
                     try
                     {
-                        // Cache key: format tag + category + extensions + search paths. The "sf5" tag marks resolved
-                        // disk roots + local-scene listing rules (any json under Saves/scene; sibling jpg NOT required).
-                        // Bumped sf3->sf4 so caches built under the old "jpg required" rule regenerate and pick up
-                        // preview-less scenes. Bumped sf4->sf5 so caches written under the OLD rule — where the live
-                        // filter state (user-tag "Untagged" mode, creator, source, pose, rating) was baked into cache
-                        // membership and silently hid tagged scenes next launch — are discarded and rebuilt with the
-                        // filter-independent membership rule (#64).
                         var sbKey = new System.Text.StringBuilder(256);
                         sbKey.Append("sf5|").Append(currentCategoryTitle ?? "").Append("|ext=");
                         if (extensions != null && extensions.Length > 0)
@@ -4193,9 +3994,6 @@ namespace VPB
                         }
                         sysCacheKey = sbKey.ToString();
 
-                        // Signature: deep max(mtime) per scan root. Top-level mtime alone misses additions in
-                        // subfolders, which kept the cache stale across sessions. DeepMaxDirMtimeBinary walks the dir tree and takes max mtime so
-                        // any subfolder change invalidates.
                         var sbSig = new System.Text.StringBuilder(256);
                         for (int i = 0; i < p2.Count; i++)
                         {
@@ -4250,14 +4048,10 @@ namespace VPB
                                 && !LocalSceneGallerySupport.IsVaMLocalSceneListingCandidate(r.Path))
                                 continue;
 
-                            // Loose scan roots are resolved to absolute disk paths; gallery classify/filter
-                            // logic keys off VaM-relative paths, so normalize the entry path back.
                             var sysEntryFast = new SystemFileEntry(FileManager.NormalizePath(r.Path), wt, sz, exists: true);
                             if (!PassesFilters(sysEntryFast, true)) continue;
 
-                            // Cache stores unfiltered candidates; pose people filter lives outside
-                            // PassesFilters and must be re-applied on cache hit (#64). Star presence /
-                            // star-count filters are inside PassesFilters above.
+                            // Cache stores unfiltered candidates; pose people filter lives outside PassesFilters and must be re-applied on cache hit (#64).
                             if (posePeopleFilter != PosePeopleFilter.All)
                             {
                                 int pcPoseRead = 1;
@@ -4329,17 +4123,8 @@ namespace VPB
                                     && !LocalSceneGallerySupport.IsVaMLocalSceneListingCandidate(sysPath))
                                     continue;
 
-                                // Loose scan roots are resolved to absolute disk paths; gallery classify/filter
-                                // logic keys off VaM-relative paths, so normalize the entry path back.
                                 var sysEntry = new SystemFileEntry(FileManager.NormalizePath(sysPath));
 
-                                // Cache membership = every valid loose-scene candidate, INDEPENDENT of the live
-                                // filter state. The sf5 cache key is category|ext|paths only (no filter signature),
-                                // so the read path (above) re-applies PassesFilters/pose/rating per row. Writing the
-                                // row here, before any filter `continue`, prevents a scan performed while a transient
-                                // filter was active (e.g. user-tag "Untagged" mode during the tag-a-scene workflow)
-                                // from baking that filtering into the persisted cache and silently hiding tagged
-                                // scenes on the next launch until a folder mtime change invalidates the cache (#64).
                                 try
                                 {
                                     var rr = new VpbLocalDatabase.SystemFileRow();
@@ -4353,7 +4138,6 @@ namespace VPB
                                 catch { }
 
                                 // From here down decides GRID membership only (cache row already written above).
-                                // The clothing/hair subfilter is skipped for the facet/pass gate and re-applied on read.
                                 if (!PassesFilters(sysEntry, true, true)) continue;
                                 bool gridOk = PassesFilters(sysEntry, true);
 
@@ -4448,7 +4232,6 @@ namespace VPB
                     try { LogUtil.Log("[VPB.Gallery.DeepTiming] Sort done ms=" + swSortMain.ElapsedMilliseconds); } catch { }
                 }
 
-                // Same finalize as live title search: filter the non-search base in memory.
                 if (_refreshDeferNameFilterToInMemory)
                 {
                     try
@@ -4492,7 +4275,6 @@ namespace VPB
                 yield break;
             }
 
-            // Cache the filtered list for selection operations (Select All, counts, etc)
             try { VpbProgressService.ReportBrowseRefreshPhase("Building grid"); } catch { }
             long deepGbListCopyStartMs = swDeep != null ? swDeep.ElapsedMilliseconds : 0;
             lastFilteredFiles.Clear();
@@ -4500,7 +4282,6 @@ namespace VPB
             {
                 if (lastFilteredFiles.Capacity < files.Count)
                     lastFilteredFiles.Capacity = files.Count;
-                // Reference copies are cheap; yielding here lets unrelated startup work stretch this phase by seconds.
                 lastFilteredFiles.AddRange(files);
             }
 
@@ -4518,12 +4299,9 @@ namespace VPB
                 galleryPreHideSnapshotValid = false;
             }
 
-            // Promote to class member for RecyclingGridView — one copy pass from lastFilteredFiles (same snapshot as files)
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(lastFilteredFiles);
             try { NotifyPluginsFloatAfterGridReady(); } catch { }
-            // If no name filter was active, the next SetNameFilter call can use currentFilteredFiles
-            // as a trustworthy unfiltered base for in-memory search.
             if (!HasActiveNameFilter())
                 _topSearchBaseIsClean = true;
 
@@ -4532,15 +4310,12 @@ namespace VPB
             // Setup Recycling Grid (skipped in quiet mode — keep frozen display cells bound to _quietDisplayFiles)
             if (!_quietGalleryRefresh && contentGO != null)
             {
-                // RecyclingGridView is already initialized in Init.cs, but ensure we have it
                 if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
                 if (recyclingGrid == null) recyclingGrid = contentGO.AddComponent<RecyclingGridView>();
                 
-                // Ensure correct component references
                 recyclingGrid.scrollRect = this.scrollRect;
                 recyclingGrid.content = contentGO.GetComponent<RectTransform>();
 
-                // Setup Callbacks
                 recyclingGrid.onCreateItem = () => {
                     var swC = System.Diagnostics.Stopwatch.StartNew();
                     var go0 = CreateNewFileButtonGO();
@@ -4552,11 +4327,9 @@ namespace VPB
                 recyclingGrid.onBindItem = (go, index) => {
                     if (index >= 0 && index < currentFilteredFiles.Count)
                     {
-                        // Use CachedCenterItemIndex (computed once per UpdateVisibleItems call)
-                        // instead of calling GetCenterItemIndex() per item — avoids N viewport.rect accesses.
                         int centerIdx = recyclingGrid != null ? recyclingGrid.CachedCenterItemIndex : 0;
                         int dist = Mathf.Abs(index - centerIdx);
-                        _nextThumbPriority = Mathf.Min(90, dist * 3); // center=0 (first), edges=higher (later)
+                        _nextThumbPriority = Mathf.Min(90, dist * 3);
                         var swB = System.Diagnostics.Stopwatch.StartNew();
                         BindFileButton(go, currentFilteredFiles[index]);
                         swB.Stop();
@@ -4565,13 +4338,10 @@ namespace VPB
                     }
                 };
                 
-                // Use Adaptive Config
                 int cols = GridColumnCount;
                 
-                // Initialize spacing and adaptive config
                 if (layoutMode == GalleryLayoutMode.List || settingsListViewActive)
                 {
-                    // List/Table mode: ALWAYS 1 column; +/- controls row height/thumb size.
                     recyclingGrid.fixedColumns = 1;
                     recyclingGrid.fixedBottomChromePx = 0f;
                     recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
@@ -4583,8 +4353,6 @@ namespace VPB
                 }
                 if (swDeep != null) deepGbConfigMs = swDeep.ElapsedMilliseconds;
 
-                // Set item count and pre-position scroll so the first UpdateVisibleItems
-                // binds the correct viewport items, not items at the top.
                 if (scrollToBottom)
                 {
                     recyclingGrid.SetItemCountAtScroll(currentFilteredFiles.Count, 0f);
@@ -4684,7 +4452,6 @@ namespace VPB
                 UpdateLayout(!suppressSyncCreatorCategoryCaches, true);
             if (swDeep != null) deepUpdateLayoutMs = swDeep.ElapsedMilliseconds;
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_UpdateLayout");
-            // Layout rebuild can clamp ScrollRect and undo the position we just set.
             if (!_quietGalleryRefresh && scrollRect != null && !scrollToBottom)
             {
                 if (savedCenterItemIndex >= 0 && recyclingGrid != null)
@@ -4696,8 +4463,7 @@ namespace VPB
                 }
             }
 
-            // Hide overlay and stop pane timing before full UpdateTabs(): side-tab rebuild (hundreds of buttons) is not the file grid
-            // and was inflating "until grid ready" by 1–2+ s. Thumbnails for visible rows use memory cache + threaded queue (BindFileButton/LoadThumbnail), not a full-grid decode here.
+            // Hide overlay and stop pane timing before full UpdateTabs().
             bool rebuildSideTabsAfterFirstLoad = _sideTabsNeedFullRebuildAfterFirstRefresh;
             _deferSideTabCountsForceRefresh = rebuildSideTabsAfterFirstLoad;
             if (_sideTabsNeedFullRebuildAfterFirstRefresh)
@@ -4731,20 +4497,15 @@ namespace VPB
             }
 
             // Show() used UpdateTabsImpl(false) while this coroutine ran, so category/creator/tag side lists stay stale until here.
-            // Defer one frame (same as first-load / Pose) so we do not block overlay hide; covers every category switch.
-            // Quiet background randomize: skip — side tabs + hide follow-up would thrash the frozen grid.
             if (!_quietGalleryRefresh)
             {
                 if (leftTabContainerGO != null || rightTabContainerGO != null)
                     _deferredGallerySideTabsCoroutine = StartCoroutine(DeferredGallerySideTabsAfterGridReady(navSessionForThisRun, _deferredSubPaneSessionId, tagParallelWaiterForThisRun, tagScanRefreshSeq));
 
                 // Defer hide filtering until after the grid is visible (prescan .hide markers then filter in a coroutine).
-                // Always run follow-up: hide strip (unless sort needs hidden rows), then Hidden-only / AutoInstall-only narrowing, then re-sort.
                 StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, scrollToBottom, savedScrollNormalizedPos));
             }
-            // (FileManager scan still in progress), schedule a single retry — but only
-            // if no retry is already pending/running. This prevents an infinite refresh
-            // loop where each retry finds uncached packages and spawns yet another retry.
+            // (FileManager scan still in progress), schedule a single retry — but only if no retry is already pending/running.
             if (!_quietGalleryRefresh && skippedForNoCache[0] > 0 && !Gallery.IsSuppressed() && !_cacheRetryPending)
             {
                 if (LogGalleryRefreshDeepTiming)
@@ -4771,7 +4532,6 @@ namespace VPB
             {
                 try { PosePeopleCountIndex.Instance.Save(); } catch { }
 
-                // Start background indexing for unknown pose json entries.
                 bool hasWork = false;
                 lock (posePeopleIndexLock) { hasWork = posePeopleIndexQueue.Count > 0; }
                 if (hasWork)
@@ -4865,8 +4625,6 @@ namespace VPB
                 bool primed = TryRecomputeAppearanceGenderFacetCountsScoped();
                 if (!primed)
                     primed = TryApplyAppearanceFacetCountsFromSql();
-                // Source:Local already scheduled sliced recount inside TryRecompute.
-                // Non-Local: merge loose counts onto SQL/VAR totals in slices.
                 if (primed && ShouldCountLooseAppearanceGenderFiles() && !IsAppearanceLooseScopedBrowsing())
                 {
                     IEnumerator looseMerge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, deferredSubPaneSessionWhenScheduled, resetCountsFirst: false);
@@ -4991,7 +4749,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>Removes non-matching rows for exclusive browse/sort modes (list is modified in place).</summary>
         private void ApplyFilesSortExclusiveFiltersInPlace(List<FileEntry> list, SortType type)
         {
             if (list == null) return;
@@ -5034,8 +4791,7 @@ namespace VPB
                     {
                         FileEntry e = list[i];
                         if (e == null) { list.RemoveAt(i); continue; }
-                        // IMPORTANT: Only check the package root (before ":/") so internal paths like
-                        // "...var:/Custom/..." don't incorrectly count as "loaded".
+                        // Check only the package root before ":/" so internal paths do not count as loaded.
                         string p = (e.Path ?? "").Replace('\\', '/');
                         int sep = p.IndexOf(":/", StringComparison.Ordinal);
                         string root = (sep >= 0) ? p.Substring(0, sep) : p;
@@ -5104,13 +4860,11 @@ namespace VPB
             }
         }
 
-        /// <summary>Call when <see cref="lastFilteredFiles"/> / grid list mutates without completing <see cref="RefreshFilesRoutine"/>.</summary>
         private void InvalidateGalleryPreHideFileListSnapshot()
         {
             galleryPreHideSnapshotValid = false;
         }
 
-        /// <summary>Rebuilds file list for show-hidden toggle from last full drain snapshot — skips package scan, sort on worker, and <see cref="UpdateLayout"/>.</summary>
         private bool TryFastApplyGalleryShowHiddenToggle(bool keepScroll)
         {
             try { if (Gallery.IsSuppressed()) return false; } catch { return false; }
@@ -5260,8 +5014,6 @@ namespace VPB
                         }
                     }
                     UpdatePaginationText();
-                    // Active chip reads currentFilteredFiles.Count; this pass just settled it (hide-strip +
-                    // hide-old-versions), so rebuild the sub-pane chips so the active chip shows the final count.
                     try { if (clothingSubfilter != 0 || hairSubfilter != 0) RebuildSubPaneSideTabListsOnly(); } catch { }
                 }
                 catch { }
@@ -5273,7 +5025,6 @@ namespace VPB
         {
             EnsureFilterBaseCaptured();
 
-            // Try to handle as VarPackage first
             if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
             {
                 try { DependencyGraph.EnsureForPackage(pkg.Uid); } catch { }
@@ -5300,8 +5051,7 @@ namespace VPB
                 currentPackageFilterMode = PackageFilterMode.Dependencies;
                 ApplyFilteredList(filtered, $"Dependencies of {label}");
             }
-            // Handle scene files
-            else if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
+            else if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json", StringComparison.Ordinal) ?? false))
             {
                 var deps = GallerySortManager.ExtractSceneDependencies(file);
                 if (deps != null && deps.Count > 0)
@@ -5313,8 +5063,6 @@ namespace VPB
                     List<FileEntry> filtered;
                     if (PackageFilterUsesPackageListRows())
                     {
-                        // In the Scene categories, show package-level rows so missing deps
-                        // use the same "Missing" styling as other dependency filters.
                         var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         foreach (var dep in deps)
                         {
@@ -5326,7 +5074,6 @@ namespace VPB
                     else
                     {
                         filtered = new List<FileEntry> { file };
-                        // Resolve each dependency to actual VarPackage and add as VarFileEntry
                         foreach (var dep in deps)
                         {
                             VarPackage depPkg = FileManager.GetPackageForDependency(dep, false);
@@ -5356,7 +5103,6 @@ namespace VPB
                             }
                             else
                             {
-                                // If package not found, use placeholder
                                 try
                                 {
                                     VirtualFileEntry vfe = new VirtualFileEntry(dep);
@@ -5424,7 +5170,6 @@ namespace VPB
             {
                 EnsureFilterBaseCaptured();
 
-                // Try to handle as VarPackage first
                 if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
                 {
                     try { DependencyGraph.EnsureForPackage(pkg.Uid); } catch { }
@@ -5434,7 +5179,6 @@ namespace VPB
                         return;
                     }
 
-                    // Build a list of missing dependency UIDs and create placeholder entries
                     List<string> missingUids = new List<string>();
                     List<FileEntry> filtered = new List<FileEntry>();
 
@@ -5473,8 +5217,7 @@ namespace VPB
                     currentPackageFilterMode = PackageFilterMode.Dependencies;
                     ApplyFilteredList(filtered, $"Missing Dependencies ({missingUids.Count})");
                 }
-                // Handle scene files
-                else if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
+                else if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json", StringComparison.Ordinal) ?? false))
                 {
                     var deps = GallerySortManager.ExtractSceneDependencies(file);
                     if (deps == null || deps.Count == 0)
@@ -5482,7 +5225,6 @@ namespace VPB
                         return;
                     }
 
-                    // Build a list of missing dependencies
                     List<string> missingDeps = new List<string>();
                     List<FileEntry> filtered = new List<FileEntry>();
 
@@ -5528,7 +5270,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Pop one filter level and return to the previous view.</summary>
         public void NavigateBack()
         {
             if (_filterStack.Count == 0) return;
@@ -5562,14 +5303,12 @@ namespace VPB
             try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
-        /// <summary>Clear all filter levels and restore the original unfiltered list.</summary>
         public void ClearPackageFilter()
         {
             if (_filterStack.Count == 0) return;
 
             InvalidateGalleryPreHideFileListSnapshot();
 
-            // Drain the stack; keep the bottom (outermost) frame for restoration
             FilterFrame bottom = _filterStack.Pop();
             while (_filterStack.Count > 0)
                 bottom = _filterStack.Pop();
@@ -5591,8 +5330,6 @@ namespace VPB
             filterBaseAnchorKey = null;
             ScrollGalleryToTop();
 
-            // If the user entered filter mode while a top search was active, clearing the filter
-            // should return to the full category list (not the search-limited snapshot).
             if (bottom.enteredFromTopSearch)
             {
                 try
@@ -5628,14 +5365,11 @@ namespace VPB
             try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
-        /// <summary>Returns whether a filter is currently active.</summary>
         public bool IsFilterActive => _filterStack.Count > 0;
 
-        /// <summary>Returns the description of the active filter, or null if none.</summary>
         public string GetFilterDescription => currentFilterDesc;
     }
 
-    /// <summary>Virtual/placeholder file entry for displaying missing dependencies.</summary>
     public class VirtualFileEntry : FileEntry
     {
         public VirtualFileEntry(string uid)
@@ -5649,12 +5383,12 @@ namespace VPB
 
         public override FileEntryStream OpenStream()
         {
-            return null; // Virtual entries cannot be opened
+            return null;
         }
 
         public override FileEntryStreamReader OpenStreamReader()
         {
-            return null; // Virtual entries cannot be read
+            return null;
         }
 
         public override string ToString() => $"[MISSING] {Name}";

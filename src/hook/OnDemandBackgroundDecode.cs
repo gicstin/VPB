@@ -5,9 +5,7 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// GDI+ / file read for on-demand cache prewarm off main thread; Unity compress + disk write stays on main thread.
-    /// </summary>
+    /// <summary>GDI+ / file read for on-demand cache prewarm off main thread; Unity compress + disk write stays on main thread.</summary>
     internal static class OnDemandBackgroundDecode
     {
         internal sealed class Job

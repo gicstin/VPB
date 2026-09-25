@@ -16,7 +16,7 @@ namespace VPB
         private const float QuickMenuGridButtonSize = 44f;
         private const float QuickMenuGridGap = 6f;
         private const float QuickMenuGridCell = QuickMenuGridButtonSize + QuickMenuGridGap;
-        internal static readonly Vector2 QuickMenuAnchorBaseline = new Vector2(-515f, -12f); // shown as (0,0) in the position UI
+        internal static readonly Vector2 QuickMenuAnchorBaseline = new Vector2(-515f, -12f);
         private static readonly Vector2 QuickMenuPopupOffset = new Vector2(260f, -20f);
 
         private static readonly Color QmBackdropAssignedTransparent = new Color(0f, 0f, 0f, 0.35f);
@@ -143,17 +143,17 @@ namespace VPB
         }
 
         private const int QuickMenuGridCols = 4;
-        private const int QuickMenuGridRows = 4; // 16 slots total (4 rows × 4 cols)
+        private const int QuickMenuGridRows = 4;
         private const int QuickMenuGridSlotCount = QuickMenuGridCols * QuickMenuGridRows;
-        private const int QuickMenuPageCount = 10; // pages 0..9
+        private const int QuickMenuPageCount = 10;
 
         private GameObject[] m_QuickMenuGridButtons;
         private Button[] m_QuickMenuGridUnityButtons;
         private Image[] m_QuickMenuGridBackdropImages;
         private RectTransform[] m_QuickMenuGridButtonRTs;
-        private QuickMenuAssignableAction[][] m_QuickMenuPageAssignments; // [page][slot]
+        private QuickMenuAssignableAction[][] m_QuickMenuPageAssignments;
         private int m_QuickMenuCurrentPage;
-        private int m_QuickMenuPageToggleSlotIdx = 15; // slot 16 (1-based)
+        private int m_QuickMenuPageToggleSlotIdx = 15;
 
         private GameObject m_QuickMenuAssignPopupRoot;
         private RectTransform m_QuickMenuAssignPopupRT;
@@ -229,8 +229,8 @@ namespace VPB
         private Sprite m_QmIconCategoryAppearance;
         private Sprite m_QmIconCategoryPlugins;
         private Sprite m_QmIconCategoryAll;
-        private Sprite[] m_QmIconPages; // 10 icons: page_0..page_9
-        private Sprite[] m_QmIconPerfLevels; // 10 icons: level_0..level_9
+        private Sprite[] m_QmIconPages;
+        private Sprite[] m_QmIconPerfLevels;
 
         private Sprite m_QmIconHexAppearance;
         private Sprite m_QmIconHexPose;
@@ -302,7 +302,6 @@ namespace VPB
         {
             if (m_QuickMenuGridButtonRTs == null) return;
 
-            // Root = top-left corner of the *old* Create Gallery button.
             Vector2 rootTopLeft = createCenter + new Vector2(-QuickMenuAnchorOldButtonW * 0.5f, QuickMenuAnchorOldButtonH * 0.5f);
             Vector2 slot0Center = new Vector2(rootTopLeft.x + (QuickMenuGridButtonSize * 0.5f),
                                               rootTopLeft.y - (QuickMenuGridButtonSize * 0.5f));
@@ -317,7 +316,6 @@ namespace VPB
                 rt.anchoredPosition = slot0Center + new Vector2(col * QuickMenuGridCell, -row * QuickMenuGridCell);
             }
 
-            // Tooltip bar centered above first row
             if (m_QmTooltipRT != null)
             {
                 float topEdge = slot0Center.y + QuickMenuGridButtonSize * 0.5f;
@@ -367,7 +365,6 @@ namespace VPB
             t.raycastTarget = false;
             m_QmTooltipText = t;
 
-            // Start fully hidden (no backdrop shown until we have a message).
             m_QmTooltipHidePending = false;
             QuickMenuUpdateTooltipVisual(forceHide: true);
         }
@@ -396,8 +393,6 @@ namespace VPB
             }
             m_QmTooltipText.enabled = true;
 
-            // Auto-size height to fit wrapped text.
-            // Width is set by layout; height is derived from preferredHeight + padding.
             try
             {
                 Canvas.ForceUpdateCanvases();
@@ -590,7 +585,6 @@ namespace VPB
                 if (Settings.Instance.QuickMenuCreateGalleryAnchorBaselineMigrated.Value)
                     return;
 
-                // Force everyone to the new baseline anchor once.
                 Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value = QuickMenuAnchorBaseline;
                 Settings.Instance.QuickMenuCreateGalleryPosVR.Value = QuickMenuAnchorBaseline;
                 if (Settings.Instance.QuickMenuCreateGalleryUseSameInVR != null)
@@ -602,7 +596,6 @@ namespace VPB
             catch { }
         }
 
-        // Called from Update() to provide live anchor preview without recreating buttons.
         private void QuickMenuUpdateGridLayoutLive()
         {
             if (m_QuickMenuCanvas == null) return;
@@ -611,8 +604,6 @@ namespace VPB
             bool isVR = QuickMenuIsVrActive();
             Vector2 center = QuickMenuGetAnchorCenter(isVR);
 
-            // If the Quick Menu position window is open, use its preview values (not saved Settings yet).
-            // Otherwise Update() would fight the preview and some slots would appear "stuck".
             try
             {
                 var panel = GalleryPanel.GetAnchoredInstance();
@@ -741,7 +732,7 @@ namespace VPB
                 case "hub": return QuickMenuAssignableAction.Hub;
                 case "cleanup": return QuickMenuAssignableAction.Cleanup;
                 case "creator_mode":
-                case "strip_scene": // legacy id from one-click Strip assignment
+                case "strip_scene":
                     return QuickMenuAssignableAction.CreatorMode;
                 case "replace_add_toggle": return QuickMenuAssignableAction.ReplaceAddToggle;
                 case "compress_cache": return QuickMenuAssignableAction.CompressCache;
@@ -779,8 +770,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Action this grid slot would run on click — None for the core edit / page slots, whose
-        /// clicks never reach <see cref="QuickMenuExecuteAssignment"/>.</summary>
         private QuickMenuAssignableAction QuickMenuGridSlotPreviewAction(int slotIdx)
         {
             if (m_QuickMenuEditMode) return QuickMenuAssignableAction.None;
@@ -795,7 +784,6 @@ namespace VPB
             if (slotIdx < 0 || slotIdx >= QuickMenuGridSlotCount) return QuickMenuAssignableAction.None;
             if (m_QuickMenuCurrentPage < 0) m_QuickMenuCurrentPage = 0;
             if (m_QuickMenuCurrentPage >= QuickMenuPageCount) m_QuickMenuCurrentPage = 0;
-            // First row (1-4) is shared across all pages: always read from page 0.
             if (slotIdx >= 0 && slotIdx <= 3) return m_QuickMenuPageAssignments[0][slotIdx];
             return m_QuickMenuPageAssignments[m_QuickMenuCurrentPage][slotIdx];
         }
@@ -806,8 +794,6 @@ namespace VPB
             if (slotIdx < 0 || slotIdx >= QuickMenuGridSlotCount) return;
             if (m_QuickMenuCurrentPage < 0) m_QuickMenuCurrentPage = 0;
             if (m_QuickMenuCurrentPage >= QuickMenuPageCount) m_QuickMenuCurrentPage = 0;
-            // First row shared across all pages. Page-nav buttons are global too: once placed they
-            // occupy that slot on every page, replacing whatever per-page action was there.
             bool global = (slotIdx >= 0 && slotIdx <= 3) ||
                           action == QuickMenuAssignableAction.PageNext ||
                           action == QuickMenuAssignableAction.PagePrev;
@@ -830,7 +816,6 @@ namespace VPB
             var cfg = VPBConfig.Instance;
             if (cfg == null) return;
 
-            // Core/global button slots (settings + page) are persisted separately from per-page actions.
             m_QuickMenuEditSlotIdx = Mathf.Clamp(cfg.QuickMenuEditSlotIdx, 4, QuickMenuGridSlotCount - 1);
             m_QuickMenuPageToggleSlotIdx = Mathf.Clamp(cfg.QuickMenuPageToggleSlotIdx, 4, QuickMenuGridSlotCount - 1);
             if (m_QuickMenuPageToggleSlotIdx == m_QuickMenuEditSlotIdx)
@@ -842,7 +827,6 @@ namespace VPB
             bool hasValid = cfg.QuickMenuButtonsPages != null && cfg.QuickMenuButtonsPages.Length > 0;
             if (hasValid)
             {
-                // Load into runtime pages
                 int loadPages = Mathf.Min(cfg.QuickMenuButtonsPages.Length, QuickMenuPageCount);
                 for (int p = 0; p < loadPages; p++)
                 {
@@ -859,7 +843,6 @@ namespace VPB
 
                 m_QuickMenuCurrentPage = Mathf.Clamp(cfg.QuickMenuButtonsCurrentPage, 0, QuickMenuPageCount - 1);
 
-                // Enforce shared first row from page 0 across all pages.
                 for (int s = 0; s <= 3; s++)
                 {
                     var a = m_QuickMenuPageAssignments[0][s];
@@ -869,7 +852,6 @@ namespace VPB
                 return;
             }
 
-            // First-time defaults: page 1 has 1-4 assigned L→R, settings on 13; slot16 is page toggle.
             for (int p = 0; p < QuickMenuPageCount; p++)
                 for (int s = 0; s < QuickMenuGridSlotCount; s++)
                     m_QuickMenuPageAssignments[p][s] = QuickMenuAssignableAction.None;
@@ -990,8 +972,6 @@ namespace VPB
                 catch { }
             }
 
-            // Deactivating the quick menu swallows OnPointerExit; a surviving pinned pick would then be
-            // launched by the next click on that button without ever being previewed.
             private void OnDisable()
             {
                 if (owner == null) return;
@@ -1048,8 +1028,6 @@ namespace VPB
             return true;
         }
 
-        // Resolve the drop-target slot under the pointer and assign to it. Needed because IDropHandler
-        // is not reliably invoked in VR; called from OnEndDrag while the drag is still active.
         private bool QuickMenuTryAssignDraggedActionAtPointer(PointerEventData eventData)
         {
             if (!m_QmAssignDragActive || eventData == null) return false;
@@ -1080,7 +1058,6 @@ namespace VPB
             int oldIdx = isSettings ? m_QuickMenuEditSlotIdx : m_QuickMenuPageToggleSlotIdx;
             if (oldIdx == targetIdx) return;
 
-            // Core buttons are unique/global and should free previous slot when moved.
             QuickMenuSetSlotAction(oldIdx, QuickMenuAssignableAction.None);
             QuickMenuSetSlotAction(targetIdx, QuickMenuAssignableAction.None);
 
@@ -1212,7 +1189,6 @@ namespace VPB
                     if (existingRT.sizeDelta != desiredSize) existingRT.sizeDelta = desiredSize;
                     return;
                 }
-                // Component shape doesn't match; fall through to rebuild.
                 try { DestroyImmediate(existingIconTr.gameObject); } catch { }
             }
 
@@ -1300,7 +1276,6 @@ namespace VPB
         {
             if (go == null) return false;
             QuickMenuEnsureSlotLabelCache();
-            // Throttle text refresh to max 2 Hz; slot visuals may update more frequently.
             const float interval = 0.5f;
             float now = 0f;
             try { now = Time.unscaledTime; } catch { now = 0f; }
@@ -1318,7 +1293,6 @@ namespace VPB
                 }
                 catch { fps = 0f; }
 
-                // Display as an integer 0..999 (no decimals), per quick-menu compact constraint.
                 if (fps > 999f) fps = 999f;
                 if (fps < 0f) fps = 0f;
                 m_QmFpsCachedLabel = ((int)(fps + 0.5f)).ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -1344,19 +1318,12 @@ namespace VPB
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.QmRefresh++;
             QuickMenuEnsureSlotLabelCache();
 
-            // Note: this quick-menu grid is built from scratch (no VaM prefab),
-            // so we must NOT blanket-hide Text components here. Some slots (e.g. FPS) are text-only.
+            // Note: this quick-menu grid is built from scratch (no VaM prefab), so we must NOT blanket-hide Text components here.
 
-            // Backdrop rules:
-            // - Assigned slots: permanent grey @ 50%
-            // - Unassigned slots: fully transparent (no backdrop)
-            // - Hover: highlight still shows (stronger for assigned, subtle for unassigned)
             bool isEditSlot = idx == m_QuickMenuEditSlotIdx;
 
-            // Special-case: edit toggle slot is not assignable.
             if (isEditSlot)
             {
-                // Settings slot reflects edit mode state.
                 QuickMenuSetIcon(go, m_QuickMenuEditMode ? m_QmIconEditOff : m_QmIconEditPlus, padding: 6f);
 
                 Image bg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
@@ -1378,7 +1345,6 @@ namespace VPB
                 return;
             }
 
-            // Page toggle slot (slot 16): always assigned
             if (idx == m_QuickMenuPageToggleSlotIdx)
             {
                 Sprite pageIcon = null;
@@ -1503,7 +1469,6 @@ namespace VPB
                     break;
                 }
                 case QuickMenuAssignableAction.FpsCounter:
-                    // No icon by request; label will be used (live FPS text).
                     icon = null;
                     break;
                 case QuickMenuAssignableAction.OpenCategoryScenes:
@@ -1684,7 +1649,6 @@ namespace VPB
                     var p = QuickMenuGetTargetPanel();
                     if (p != null)
                     {
-                        // Open save methods submenu (bottom-up) instead of executing directly.
                         int slotIdx = m_QuickMenuSavePopupTargetIdx;
                         Vector2 pos = Vector2.zero;
                         try
@@ -1697,7 +1661,6 @@ namespace VPB
                             }
                         }
                         catch { }
-                        // If we can't resolve the RT, fall back to current popup position.
                         if (pos == Vector2.zero && m_QuickMenuSavePopupRT != null) pos = m_QuickMenuSavePopupRT.anchoredPosition;
                         QuickMenuShowSavePopup(slotIdx, pos + QuickMenuPopupOffset, p);
                     }
@@ -1991,7 +1954,6 @@ namespace VPB
             if (string.IsNullOrEmpty(categoryName)) return;
             var p = QuickMenuGetTargetPanel();
             if (p == null) return;
-            // Hover preview pins the item the user saw; without one this falls back to a fresh draw.
             p.QuickMenu_LoadPickedFromCategory(categoryName, QuickMenuConsumeRandomPreviewPick(action),
                 preserveUi: preserveUi, preserveTarget: preservePersonTarget);
         }
@@ -2652,7 +2614,6 @@ namespace VPB
             if (next == null) return;
             try { p.QuickMenu_SetSelectedTargetPersonUid(next.uid); } catch { }
 
-            // If user still hovering TargetAtom slot, refresh tooltip text immediately.
             try
             {
                 int hoverIdx = m_QmTooltipHoverSlotIdx;
@@ -2704,14 +2665,14 @@ namespace VPB
 
         private static Color QuickMenuTargetAtomColorForPerson(Atom personOrNull)
         {
-            if (personOrNull == null) return new Color(1f, 0f, 0f, 0.9f); // red
+            if (personOrNull == null) return new Color(1f, 0f, 0f, 0.9f);
             switch (QuickMenuGetPersonGender(personOrNull))
             {
-                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return new Color(0.2f, 0.5f, 1f, 0.9f);  // blue
-                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return new Color(1f, 0.3f, 0.7f, 0.9f);  // pink
-                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return new Color(0.7f, 0.45f, 1f, 0.9f); // violet
+                case VPB.src.util.LooseVapGenderProbe.Gender.Male:   return new Color(0.2f, 0.5f, 1f, 0.9f);
+                case VPB.src.util.LooseVapGenderProbe.Gender.Female: return new Color(1f, 0.3f, 0.7f, 0.9f);
+                case VPB.src.util.LooseVapGenderProbe.Gender.Futa:   return new Color(0.7f, 0.45f, 1f, 0.9f);
             }
-            return new Color(1f, 0f, 0f, 0.9f); // red (unknown)
+            return new Color(1f, 0f, 0f, 0.9f);
         }
 
         private void QuickMenuTargetAtomDragUpdate(PointerEventData eventData)
@@ -2779,8 +2740,7 @@ namespace VPB
                 string label = (o != null && !string.IsNullOrEmpty(o.Label)) ? o.Label : ("Option " + (iCopy + 1));
                 bool enabled = (o != null) ? o.Enabled : false;
 
-                // Bottom-up coordinates: place option 0 at the top and the Cancel row at the
-                // bottom so the visual order matches the gallery Save popup (issue #62).
+                // Bottom-up: option 0 at top, Cancel at bottom, matching the gallery Save popup (#62).
                 var btnGo = UI.CreateUIButton(m_QuickMenuSavePopupRoot, w, h, label, font, 10f, y + gap * (n - i), AnchorPresets.bottomLeft, () =>
                 {
                     try
@@ -2791,7 +2751,6 @@ namespace VPB
                     QuickMenuHideSavePopup();
                 });
 
-                // Disabled visual (best-effort)
                 try
                 {
                     var b = btnGo != null ? btnGo.GetComponent<Button>() : null;
@@ -2867,8 +2826,7 @@ namespace VPB
             {
                 if (_cg != null) _cg.blocksRaycasts = true;
                 if (owner == null) return;
-                // Fallback: in VR the EventSystem doesn't reliably deliver IDropHandler.OnDrop, so the
-                // drop never lands. Resolve the slot under the pointer here and assign directly.
+                // Fallback: in VR the EventSystem doesn't reliably deliver IDropHandler.OnDrop, so the drop never lands.
                 owner.QuickMenuTryAssignDraggedActionAtPointer(eventData);
                 owner.m_QmAssignDragActive = false;
                 owner.QuickMenuEndAssignDragGhost();
@@ -2959,4 +2917,3 @@ namespace VPB
         }
     }
 }
-

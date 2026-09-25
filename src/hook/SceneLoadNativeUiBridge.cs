@@ -3,10 +3,7 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Shows VaM's native scene loading HUD before <c>SuperController.Load</c> returns into
-    /// <c>LoadCo</c>, so the VPB top banner can hand off without a blank gap.
-    /// </summary>
+    /// <summary>Shows VaM's native scene loading HUD before SuperController.Load returns into LoadCo.</summary>
     internal static class SceneLoadNativeUiBridge
     {
         internal static void ShowForSceneLoad(bool merge, string statusText = null)

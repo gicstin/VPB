@@ -5,18 +5,13 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Match Settings float shell. Role-split accents — not one green on every control.
         private static readonly Color ImportSidebarHeaderBg = GalleryUiColorTokens.SurfaceDark;
         private static readonly Color ImportSidebarStepHeaderBg = GalleryUiColorTokens.SurfaceDarker;
-        /// <summary>Selected type / atom / checklist — ActiveSelected fill + selected rim (not Apply green).</summary>
         internal static readonly Color ImportSidebarSelectedAccent = GalleryUiColorTokens.ActiveSelected;
-        // Bulk commands: secondary mid vs destroy.
         private static readonly Color ImportSidebarSelectAllBg = GalleryUiColorTokens.ActiveSecondary;
         private static readonly Color ImportSidebarClearAllBg = GalleryUiColorTokens.AccentDanger;
-        // Accumulate toggle: ON = ActiveOn; OFF = mid chrome.
         private static readonly Color ImportSidebarMultiToggleBg = GalleryUiColorTokens.ActiveOn;
         private static readonly Color ImportSidebarMultiToggleOffBg = GalleryUiColorTokens.SurfaceMid;
-        // Option group caption — quiet chrome.
         private static readonly Color ImportSidebarGroupHeaderBg = GalleryUiColorTokens.SurfacePanel;
         private static readonly Color ImportSidebarUnavailableRow = GalleryUiColorTokens.RowZero;
         private static readonly Color ImportSidebarUnavailableText = GalleryUiColorTokens.TextDim;
@@ -26,18 +21,15 @@ namespace VPB
         private static readonly Color ImportSidebarApplyReasonBg = GalleryUiColorTokens.ActiveWarnSurface;
         private static readonly Color ImportSidebarScenesLockedBanner = GalleryUiColorTokens.ModeApplyStripe;
         private static readonly Color ImportSidebarScenesLockedHeaderBg = GalleryUiColorTokens.ActiveWarnHeader;
-        // Match hint: cool facet, quieter than selected grey + rim.
         private static readonly Color ImportSidebarMatchHintColor = GalleryUiColorTokens.FacetSource;
         // Primary Apply CTA only — AccentConfirm reserved here.
         private static readonly Color ImportSidebarApplyBg = GalleryUiColorTokens.AccentConfirm;
-        // Float shell mirrors SettingsFloat*.
         private static readonly Color ImportSidebarFloatTitleBarBg = GalleryUiColorTokens.SurfaceDark;
         private static readonly Color ImportSidebarFloatFooterBarBg = GalleryUiColorTokens.SurfaceDarker;
         private static readonly Color ImportSidebarFloatPanelBg = GalleryUiColorTokens.SurfaceDeep;
         private static readonly Color ImportSidebarFloatChromeIconBg = GalleryUiColorTokens.ChromeIconWell;
         private static readonly Color ImportSidebarSecondaryActionBg = GalleryUiColorTokens.SurfaceMid;
 
-        /// <summary>Hide side-column filter/sort chrome on the edge replaced by the import sidebar.</summary>
         private void SuppressImportOccupiedSideColumnChrome()
         {
             if (!ImportSidebarOccupiesSideColumn) return;
@@ -72,7 +64,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Strip jump/step buttons if they were ever parented to this sidebar's scrollbar.</summary>
         private void SanitizeImportSidebarScrollChrome()
         {
             if (importSidebarBodyScrollRT == null) return;

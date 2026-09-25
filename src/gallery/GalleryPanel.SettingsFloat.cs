@@ -10,7 +10,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Neutral gallery greys — match main pane chrome (not blue title/chips).
         private static readonly Color SettingsFloatTitleBarBg = GalleryUiColorTokens.SurfaceDark;
         private static readonly Color SettingsFloatFooterBarBg = GalleryUiColorTokens.SurfaceDarker;
         private static readonly Color SettingsFloatPanelBg = GalleryUiColorTokens.SurfaceDeep;
@@ -32,11 +31,7 @@ namespace VPB
         private const float SettingsFloatRowsSpacingRef = GalleryUiDesignTokens.HairGapRef;
         private const float SettingsFloatRowsPadRef = GalleryUiDesignTokens.TightGapRef;
 
-        // Row build is windowed: the full list is ~165 definitions and a single row costs ~15 GameObjects
-        // (rounded backgrounds, mini buttons, slider parts, hover borders), so building them all in one
-        // frame is a multi-hundred-ms stall. Only rows covering the viewport are built synchronously;
-        // the rest stand in as exact-height empty placeholders so scroll range and position never shift,
-        // then stream in on a per-frame budget.
+        // Windowed row build: only viewport rows built synchronously, rest are placeholders.
         private const int SettingsFloatDeferredRowBudgetMs = 4;
         private const int SettingsFloatRowOverscan = 2;
 
@@ -220,10 +215,9 @@ namespace VPB
                 Vector2 center = _settingsFloatSavedPosCenter.HasValue
                     ? _settingsFloatSavedPosCenter.Value
                     : Vector2.zero;
-                _settingsFloatPanelRT.anchoredPosition = SettingsFloatCenterToTopLeft(center, _settingsFloatPanelRT.sizeDelta);
+                _settingsFloatPanelRT.anchoredPosition = FloatPanelCoords.CenterToTopLeft(center, _settingsFloatPanelRT.sizeDelta);
             }
 
-            // Title bar (drag)
             GameObject titleBar = UI.CreateChildRT(panel, "TitleBar", AnchorPresets.hStretchTop,
                 new Vector2(0f, titleH), Vector2.zero);
             Image titleBg = UI.AddImage(titleBar, SettingsFloatTitleBarBg);
@@ -258,7 +252,7 @@ namespace VPB
                 font, Color.white, TextAnchor.MiddleLeft, name: "Title");
             UI.AddLE(title.gameObject, flexibleWidth: 1f, minWidth: 60f * s);
 
-            _settingsFloatCollapseBtn = SettingsFloatSquareIconButton(
+            _settingsFloatCollapseBtn = UI.CreateFloatChromeIconButton(
                 titleBar.transform, chromeSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, ToggleSettingsFloatCollapsed);
             if (_settingsFloatCollapseBtn != null)
@@ -268,7 +262,7 @@ namespace VPB
                 _settingsFloatCollapseIcon = iconTr != null ? iconTr.GetComponent<Image>() : null;
             }
 
-            GameObject closeBtn = SettingsFloatSquareIconButton(
+            GameObject closeBtn = UI.CreateFloatChromeIconButton(
                 titleBar.transform, chromeSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, () => ExitInternalSettingsMode(true));
             if (closeBtn != null)
@@ -285,7 +279,6 @@ namespace VPB
             headerDrag.Target = _settingsFloatPanelRT;
             headerDrag.OnMoved = OnSettingsFloatMoved;
 
-            // Filter row
             _settingsFloatFilterRow = UI.CreateChildRT(panel, "FilterRow", AnchorPresets.hStretchTop,
                 new Vector2(0f, filterH), new Vector2(0f, -titleH));
             RectTransform filterRT = _settingsFloatFilterRow.GetComponent<RectTransform>();
@@ -318,7 +311,6 @@ namespace VPB
                 "SettingsFilter");
             if (_settingsFloatFilterInput != null)
             {
-                // Search glyph + left inset; reserve right for clear (X).
                 UI.LayoutChromeSearchIcon(_settingsFloatFilterInput.gameObject, s);
                 float clearSz = GalleryUiDesignTokens.SearchClearBtnSizeRef * s;
                 Transform textAreaTr = _settingsFloatFilterInput.transform.Find("TextArea");
@@ -447,7 +439,6 @@ namespace VPB
             sidebarVlg.childControlHeight = true;
             sidebarVlg.childAlignment = TextAnchor.UpperLeft;
 
-            // Footer
             _settingsFloatFooter = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
             UI.AddImage(_settingsFloatFooter, SettingsFloatFooterBarBg);
@@ -466,7 +457,6 @@ namespace VPB
             if (_settingsFloatFooter.GetComponent<RectMask2D>() == null)
                 _settingsFloatFooter.AddComponent<RectMask2D>();
 
-            // Full-footer drag hit (behind Revert/Close/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(_settingsFloatFooter);
             if (footerDragArea != null)
             {
@@ -533,7 +523,6 @@ namespace VPB
                 GalleryUiDesignTokens.SettingsFloatMaxHeightRef * _settingsFloatChromeScale);
             resizer.OnResized = OnSettingsFloatResized;
 
-            // Scroll list
             _settingsFloatScrollHost = UI.CreateChildRT(panel, "ScrollHost", AnchorPresets.stretchAll);
             RectTransform scrollRT = _settingsFloatScrollHost.GetComponent<RectTransform>();
             if (scrollRT != null)
@@ -622,16 +611,11 @@ namespace VPB
             _settingsFloatExpandHeightRef = panelHRef;
             try { SyncSettingsSideSearchInputFromFilter(); } catch { }
             RebuildSettingsFloatSidebar(font, s, chromeSz);
-            // Shell only — rows come from RefreshInternalSettingsListRows on open. Building them here
-            // too meant the whole list was constructed twice on first open (build, then destroy+rebuild).
+            // Shell only — rows come from RefreshInternalSettingsListRows on open.
             try { UI.ApplyFloatRootHoverPolicy(_settingsFloatRoot); } catch { }
             _settingsFloatRoot.SetActive(false);
         }
 
-        /// <summary>
-        /// Left atlas glyph beside chip label. Does not hide text (unlike <see cref="UI.AddIconToButton"/>).
-        /// No colored icon well — selected state stays the chip fill.
-        /// </summary>
         private static bool ApplySettingsGroupChipIcon(GameObject btn, string iconRole, float s)
         {
             if (btn == null || string.IsNullOrEmpty(iconRole) || s <= 0f) return false;
@@ -722,12 +706,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Rebuilds the settings list. Only the rows covering the viewport (plus a small overscan) are
-        /// built in this frame; everything above and below is a single exact-height placeholder so the
-        /// scroll range and position match a fully built list, and the remaining rows stream in over the
-        /// next frames. Every row click routes back through here, so this governs click latency too.
-        /// </summary>
         private void RebuildSettingsFloatRows(int font, float s, float rowH, bool keepScroll)
         {
             if (_settingsFloatRowsParent == null) return;
@@ -742,8 +720,6 @@ namespace VPB
             {
                 try
                 {
-                    // Destroy is deferred to end of frame — deactivate now so the layout pass this frame
-                    // does not size the content from old rows plus new ones.
                     GameObject old = _settingsFloatRowsParent.GetChild(c).gameObject;
                     old.SetActive(false);
                     UnityEngine.Object.Destroy(old);
@@ -821,7 +797,6 @@ namespace VPB
                 _settingsFloatRowsDeferCo = StartCoroutine(BuildSettingsFloatRowsDeferredCo());
         }
 
-        /// <summary>Height a row will occupy, resolved without building it (drives the placeholders).</summary>
         private float SettingsFloatRowHeight(InternalSettingRowEntry row, InternalSettingDefinition def, float rowH, float s)
         {
             if (row != null && row.IsHeader)
@@ -838,8 +813,6 @@ namespace VPB
             return rowH;
         }
 
-        /// <summary>Height of rows [fromIndex..toIndex] collapsed into one child: their own heights plus
-        /// the layout spacings between them (the spacing to the neighbouring child stays with the child).</summary>
         private float SettingsFloatRowsSpanHeight(int fromIndex, int toIndex)
         {
             float h = 0f;
@@ -889,7 +862,6 @@ namespace VPB
                 _settingsFloatRowsClock.Start();
                 while (_settingsFloatRowsClock.ElapsedMilliseconds < SettingsFloatDeferredRowBudgetMs)
                 {
-                    // Fill downward first (what the user scrolls into), then back up.
                     if (_settingsFloatRowsBuiltLast < n - 1) BuildSettingsFloatDeferredRow(true);
                     else if (_settingsFloatRowsBuiltFirst > 0) BuildSettingsFloatDeferredRow(false);
                     else break;
@@ -992,8 +964,7 @@ namespace VPB
             UI.AddLE(detailsRowGO, flexibleWidth: 0.55f, minHeight: effectiveRowH * 0.85f, preferredHeight: effectiveRowH * 0.85f);
 
             RebuildSettingsRowControls(rowGO, def, settleLayout: false);
-            // Per row — the root-wide pass walked every Selectable/UIHoverBorder in the whole float twice
-            // per rebuild, and deferred rows would miss it entirely.
+            // Per row — the root-wide pass walked every Selectable/UIHoverBorder in the whole float twice per rebuild.
             try { UI.ApplyFloatRootHoverPolicy(rowGO); } catch { }
             return rowGO;
         }
@@ -1159,10 +1130,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Live ChromeScale adapt — resize shell + rebuild rows once.
-        /// Never Destroy+Build (that recreated every row/hover rim and hitch on scale hotkeys).
-        /// </summary>
         private void RescaleSettingsFloatIfOpen(float chromeScale)
         {
             if (!IsSettingsPanelOpen()) return;
@@ -1296,7 +1263,6 @@ namespace VPB
             ApplySettingsFloatScrollHostInsets(s);
             SyncSettingsFloatCollapseChrome(titleH);
             try { SyncSettingsSideSearchInputFromFilter(); } catch { }
-            // One row/tab rebuild at new scale — shell reused.
             RefreshInternalSettingsListRows(true);
             // Refresh saved center from kept top-left + new size (warm path; no alloc).
             CaptureSettingsFloatGeometryToMemory();
@@ -1315,24 +1281,11 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (VPBConfig.Instance.GallerySettingsFloatPosSaved)
-                {
-                    _settingsFloatSavedPosCenter = new Vector2(
-                        VPBConfig.Instance.GallerySettingsFloatPosX,
-                        VPBConfig.Instance.GallerySettingsFloatPosY);
-                }
-                if (VPBConfig.Instance.GallerySettingsFloatSizeSaved)
-                {
-                    float w = VPBConfig.Instance.GallerySettingsFloatWidthRef;
-                    float h = VPBConfig.Instance.GallerySettingsFloatHeightRef;
-                    if (w >= GalleryUiDesignTokens.SettingsFloatMinWidthRef
-                        && h >= GalleryUiDesignTokens.SettingsFloatMinHeightRef)
-                    {
-                        _settingsFloatSavedSizeRef = new Vector2(
-                            Mathf.Clamp(w, GalleryUiDesignTokens.SettingsFloatMinWidthRef, GalleryUiDesignTokens.SettingsFloatMaxWidthRef),
-                            Mathf.Clamp(h, GalleryUiDesignTokens.SettingsFloatMinHeightRef, GalleryUiDesignTokens.SettingsFloatMaxHeightRef));
-                    }
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GallerySettingsFloatGeometry.Current;
+                _settingsFloatSavedPosCenter = slot.SavedPos;
+                _settingsFloatSavedSizeRef = slot.SavedSize(
+                    new Vector2(GalleryUiDesignTokens.SettingsFloatMinWidthRef, GalleryUiDesignTokens.SettingsFloatMinHeightRef),
+                    new Vector2(GalleryUiDesignTokens.SettingsFloatMaxWidthRef, GalleryUiDesignTokens.SettingsFloatMaxHeightRef));
             }
             catch { }
         }
@@ -1341,7 +1294,7 @@ namespace VPB
         {
             if (_settingsFloatPanelRT == null) return;
             float s = _settingsFloatChromeScale > 0f ? _settingsFloatChromeScale : 1f;
-            _settingsFloatSavedPosCenter = SettingsFloatTopLeftToCenter(
+            _settingsFloatSavedPosCenter = FloatPanelCoords.TopLeftToCenter(
                 _settingsFloatPanelRT.anchoredPosition, _settingsFloatPanelRT.sizeDelta);
             if (!_settingsFloatCollapsed)
             {
@@ -1356,18 +1309,9 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (_settingsFloatSavedPosCenter.HasValue)
-                {
-                    VPBConfig.Instance.GallerySettingsFloatPosSaved = true;
-                    VPBConfig.Instance.GallerySettingsFloatPosX = _settingsFloatSavedPosCenter.Value.x;
-                    VPBConfig.Instance.GallerySettingsFloatPosY = _settingsFloatSavedPosCenter.Value.y;
-                }
-                if (_settingsFloatSavedSizeRef.HasValue)
-                {
-                    VPBConfig.Instance.GallerySettingsFloatSizeSaved = true;
-                    VPBConfig.Instance.GallerySettingsFloatWidthRef = _settingsFloatSavedSizeRef.Value.x;
-                    VPBConfig.Instance.GallerySettingsFloatHeightRef = _settingsFloatSavedSizeRef.Value.y;
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GallerySettingsFloatGeometry.Current;
+                slot.StorePos(_settingsFloatSavedPosCenter);
+                slot.StoreSize(_settingsFloatSavedSizeRef);
             }
             catch { return; }
             try { ScheduleQuickFiltersConfigSave(); } catch { }
@@ -1387,16 +1331,6 @@ namespace VPB
             try { RelayoutSettingsFloatGroupTabs(s, chromeSz); } catch { }
             CaptureSettingsFloatGeometryToMemory();
             PersistSettingsFloatGeometry();
-        }
-
-        private static Vector2 SettingsFloatCenterToTopLeft(Vector2 center, Vector2 size)
-        {
-            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
-        }
-
-        private static Vector2 SettingsFloatTopLeftToCenter(Vector2 topLeft, Vector2 size)
-        {
-            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
         }
 
         /// <summary>Re-bind settings float chrome strings after locale change. Rows rebuild separately.</summary>
@@ -1438,12 +1372,6 @@ namespace VPB
             if (tr == null) return;
             Text t = tr.GetComponentInChildren<Text>(true);
             if (t != null) t.text = label ?? "";
-        }
-
-        private static GameObject SettingsFloatSquareIconButton(
-            Transform parent, float size, string iconPath, Color backdrop, UnityAction onClick)
-        {
-            return UI.CreateFloatChromeIconButton(parent, size, iconPath, backdrop, onClick);
         }
 
         private static GameObject SettingsFloatChromeButton(

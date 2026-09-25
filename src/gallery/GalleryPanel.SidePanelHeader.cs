@@ -76,8 +76,6 @@ namespace VPB
         internal float SidePanelFilterRowYForSide(bool isLeft, float paneScale)
         {
             float s = paneScale <= 0f ? 1f : paneScale;
-            // Side-rail chrome always sits below the full-width title bar (top dock included);
-            // TabScrollTopOffset reserves the same SideTabTopOffsetRef, so they must stay aligned.
             float rowTop = SidePanelFilterRowTopRef * s;
             return -(rowTop + SidePanelHeaderInsetForSide(isLeft, s));
         }
@@ -135,12 +133,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Flush scroll viewport left with column; reserve width on scrollbar side only.
-        /// Keeps pristine Def Y from init. Never re-bakes sticky-shrunk live Y into Def —
-        /// that compounded viewport height toward zero on every UpdateTabs while Tags open
-        /// (Tags (N) correct, rows only flicker then clip).
-        /// </summary>
+        /// <summary>Flush scroll viewport left with column; reserve width on scrollbar side only.</summary>
         private void AlignSideTabScrollViewport(GameObject scrollGO, float s, bool isLeft, bool isSub)
         {
             if (scrollGO == null) return;

@@ -51,6 +51,7 @@ namespace VPB
                 case "plugin_zstd": return VPBTranslation.T("settings.section.zstd", "Texture cache");
                 case "plugin_scan_whitelist": return VPBTranslation.T("settings.section.scan_whitelist", "Scan whitelist");
                 case "helpers": return VPBTranslation.T("settings.section.helpers", "Helpers");
+                case "pkg_versions": return VPBTranslation.T("settings.section.pkg_versions", "Package versions");
                 case "updater": return VPBTranslation.T("settings.section.updater", "Updater");
                 case "ba_migration": return VPBTranslation.T("settings.section.ba_migration", "BrowserAssistant");
                 case "pt_chroma": return VPBTranslation.T("settings.section.pt_chroma", "Key colour");

@@ -137,7 +137,6 @@ namespace VPB
             return "";
         }
 
-
         private Dictionary<string, HashSet<string>> _insightFileTermCache;
         private string _insightFileTermCacheFor;
 

@@ -1,6 +1,5 @@
 ﻿using System.IO;
 
-
 namespace VPB
 {
 	public class SystemFileEntryStream : FileEntryStream

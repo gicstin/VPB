@@ -4,46 +4,21 @@ using System.Collections.Generic;
 
 namespace VPB
 {
-    /// <summary>
-    /// Issue #80 (second half): last-writer-wins race on MaterialOptions custom texture slots.
-    ///
-    /// A dynamic garment restores its OWN baked customTexture_* urls from its .vaj
-    /// (MeshVR.DAZDynamic.Load -> RestoreStorables), then the preset overwrites the same slots with
-    /// the user's urls. Vanilla VaM is safe because ImageLoaderThreaded is a single FIFO worker, so
-    /// the preset's OnTexture*Loaded always lands last. VPB replaces that queue with an unordered
-    /// ThreadPool decompress + per-frame main-thread pump, so completion order follows payload size:
-    /// a small user texture finishes first and the garment's 4K factory texture lands after it and
-    /// overwrites the slot. The url JSON is never rewritten, so the UI still shows the correct path
-    /// while the GPU holds the default texture.
-    ///
-    /// Fix: make the url authoritative instead of arrival order. Record the url last queued for each
-    /// (MaterialOptions, slot) and drop any OnTexture*Loaded whose imgPath is no longer the expected
-    /// one. Restores exactly the guarantee FIFO used to provide, without serialising the loader.
-    ///
-    /// Fail-open by design: a slot with no recorded expectation always accepts its callback, so if a
-    /// patch fails to install nothing changes behaviourally.
-    /// </summary>
+    /// <summary>Issue #80: drops MaterialOptions texture callbacks whose url is no longer the last queued one (restores FIFO last-writer semantics); fail-open.</summary>
     public static class MaterialOptionsTextureGuard
     {
-        internal const int SlotCount = 7;   // customTexture1..6 + simTexture
+        internal const int SlotCount = 7;
         internal const int SimSlot = 6;
 
-        // Guard against unbounded growth if a reset is ever missed; clearing only costs a
-        // one-time fail-open window, never correctness of already-applied slots.
         const int MaxTrackedMaterialOptions = 4096;
 
         sealed class SlotState
         {
-            // Url last handed to QueueCustomTexture for this slot (what SHOULD win).
             public readonly string[] Expected = new string[SlotCount];
-            // Url of the callback we last let through (what the slot actually holds).
             public readonly string[] Applied = new string[SlotCount];
         }
 
-        // Keyed on MaterialOptions.GetInstanceID() — int keys compare far faster than
-        // UnityEngine.Object references on Mono. Written from QueueCustomTexture and read from the
-        // image callback; both are main-thread in practice, but ImageLoadingMgr has a
-        // Messager-is-null fallback that can call back off-thread, so keep the access locked.
+        // Keyed on MaterialOptions instance id; locked because a fallback path may call back off-thread.
         static readonly Dictionary<int, SlotState> s_slots = new Dictionary<int, SlotState>();
         static readonly object s_lock = new object();
 
@@ -64,7 +39,6 @@ namespace VPB
 
                 harmony.Patch(mQueue, prefix: new HarmonyMethod(typeof(MaterialOptionsTextureGuard), nameof(PreQueueCustomTexture)));
 
-                // One thin prefix per slot so the slot index is a compile-time constant.
                 PatchSlot(harmony, typeof(MaterialOptions), "OnTexture1Loaded", nameof(PreOnTexture1Loaded));
                 PatchSlot(harmony, typeof(MaterialOptions), "OnTexture2Loaded", nameof(PreOnTexture2Loaded));
                 PatchSlot(harmony, typeof(MaterialOptions), "OnTexture3Loaded", nameof(PreOnTexture3Loaded));
@@ -93,7 +67,6 @@ namespace VPB
             harmony.Patch(m, prefix: new HarmonyMethod(typeof(MaterialOptionsTextureGuard), prefixName));
         }
 
-        /// <summary>Drop every recorded expectation. Scene load start and plugin teardown.</summary>
         public static void Reset()
         {
             lock (s_lock)
@@ -102,13 +75,6 @@ namespace VPB
             }
         }
 
-        // ---- slot naming -------------------------------------------------------------------
-
-        /// <summary>
-        /// VaM registers the url params as "customTexture" + textureGroup1.&lt;name&gt;, i.e.
-        /// customTexture_MainTex / _SpecTex / _GlossTex / _AlphaTex / _BumpMap / _DecalTex — NOT
-        /// customTexture1Url. Only the tile/offset FLOAT params are numbered. Returns 0..5, or -1.
-        /// </summary>
         public static int GetCustomTextureSlotForUrlParam(MaterialOptions mo, string urlParamName)
         {
             if (mo == null || string.IsNullOrEmpty(urlParamName)) return -1;
@@ -121,8 +87,7 @@ namespace VPB
             string suffix = urlParamName.Substring("customTexture".Length);
             if (suffix.Length == 0) return -1;
 
-            // Checked in the same order SetStartingValues assigns them, so a group that repeats a
-            // texture name resolves to the same slot VaM itself would use.
+            // Checked in the same order SetStartingValues assigns them.
             if (string.Equals(suffix, tg.textureName, StringComparison.Ordinal)) return 0;
             if (string.Equals(suffix, tg.secondaryTextureName, StringComparison.Ordinal)) return 1;
             if (string.Equals(suffix, tg.thirdTextureName, StringComparison.Ordinal)) return 2;
@@ -160,22 +125,14 @@ namespace VPB
             }
         }
 
-        // ---- state -------------------------------------------------------------------------
-
         static bool SameUrl(string a, string b)
         {
-            // QueueCustomTexture(null) is how VaM clears a slot; treat null and "" as one value.
             bool aEmpty = string.IsNullOrEmpty(a);
             bool bEmpty = string.IsNullOrEmpty(b);
             if (aEmpty || bEmpty) return aEmpty && bEmpty;
             return string.Equals(a, b, StringComparison.Ordinal);
         }
 
-        /// <summary>
-        /// True when the slot currently holds the texture loaded for <paramref name="url"/>.
-        /// Lets the deferred resync skip re-queueing slots that are already correct, while still
-        /// re-queueing a slot whose newest url never arrived.
-        /// </summary>
         public static bool IsSlotAppliedForUrl(MaterialOptions mo, int slot, string url)
         {
             if (mo == null || slot < 0 || slot >= SlotCount) return false;
@@ -205,8 +162,7 @@ namespace VPB
                 {
                     if (s_slots.Count >= MaxTrackedMaterialOptions)
                     {
-                        // Never happens with a reset per scene load; bound it anyway rather than
-                        // grow a static forever (a stale entry can only ever fail open).
+                        // Bounded as a safeguard; stale entries only fail open.
                         s_slots.Clear();
                     }
                     st = new SlotState();
@@ -216,15 +172,11 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Accept only the callback for the url this slot is currently waiting on. Marks the slot
-        /// applied on accept. Unknown slot / no expectation recorded => accept.
-        /// </summary>
+        /// <summary>Accept only the callback for the url this slot is currently waiting on.</summary>
         static bool ShouldAccept(MaterialOptions mo, int slot, ImageLoaderThreaded.QueuedImage qi)
         {
             if (mo == null || qi == null || slot < 0 || slot >= SlotCount) return true;
 
-            // Let the original run so it emits VaM's own load-error message.
             if (qi.hadError) return true;
 
             int id;
@@ -267,8 +219,6 @@ namespace VPB
             }
             catch { }
         }
-
-        // ---- patches -----------------------------------------------------------------------
 
         public static void PreQueueCustomTexture(
             MaterialOptions __instance,

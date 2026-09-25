@@ -8,10 +8,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Strip Scene power-user chrome: filter, presets/recipes, keyboard, bulk rename.
-    /// Category keep picks live in list rows only.
-    /// </summary>
     public partial class GalleryPanel
     {
         private enum StripKeepViewFilter
@@ -511,7 +507,6 @@ namespace VPB
             CreatorStripKeepKind kind = e.Kind;
             if (!e.IsCategory)
             {
-                // Item focus: ← collapse parent, → expand parent.
             }
             int idx = StripKeepKindIndex(kind);
             if (idx < 0 || _stripKeepCounts[idx] <= 0) return;
@@ -538,16 +533,12 @@ namespace VPB
             OpenStripKeepRenameOverlay(e.Uid);
         }
 
-        /// <summary>
-        /// Keyboard path while keep selector open. Returns true if consumed.
-        /// </summary>
         private bool StripKeepHandleKeyboard()
         {
             if (!IsStripKeepSelectorOpen()) return false;
             if (_stripKeepRenameOverlayRoot != null) return false;
             if (IsStripKeepRecipeSaveInlineOpen()) return false;
 
-            // ? = shortcut sheet (recognition). / = filter focus.
             if (Input.GetKeyDown(KeyCode.Question)
                 || (Input.GetKeyDown(KeyCode.Slash)
                     && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))))
@@ -622,9 +613,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Scroll list fills leftover height. Panel size = saved/default — never auto-snug to row count.
-        /// </summary>
         private void ScheduleStripKeepSnugPanelHeight()
         {
             StripKeepEnsureScrollFlex();
@@ -642,7 +630,6 @@ namespace VPB
 
         private void BuildStripKeepToolbarRows(Transform panel, float btnH, int font, float s)
         {
-            // Filter + clear + expand/collapse + More
             GameObject filterRow = new GameObject("FilterRow");
             filterRow.transform.SetParent(panel, false);
             HorizontalLayoutGroup fh = UI.AddHLG(filterRow, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: false);
@@ -655,7 +642,6 @@ namespace VPB
             filterHost.transform.SetParent(filterRow.transform, false);
             UI.AddLE(filterHost, minHeight: btnH, preferredHeight: btnH, flexibleWidth: 1f, minWidth: 80f * s);
 
-            // Raised inset vs panel — looks like textbox, not section header.
             Color filterBg = GalleryUiColorTokens.SurfaceDarker;
             _stripKeepFilterInput = UI.CreateChromeLayoutInputField(
                 filterHost.transform, font, btnH, 1f, 8f * s, 4f * s,
@@ -664,7 +650,6 @@ namespace VPB
                 "StripFilter");
             if (_stripKeepFilterInput != null)
             {
-                // Stretch input inside host so clear button can pin right.
                 RectTransform inputRt = _stripKeepFilterInput.GetComponent<RectTransform>();
                 if (inputRt != null)
                 {
@@ -676,7 +661,6 @@ namespace VPB
                 LayoutElement inputLe = _stripKeepFilterInput.GetComponent<LayoutElement>();
                 if (inputLe != null) inputLe.ignoreLayout = true;
 
-                // Leave room for clear chip on right.
                 Transform textArea = _stripKeepFilterInput.transform.Find("TextArea");
                 if (textArea != null)
                 {
@@ -749,7 +733,6 @@ namespace VPB
             AddTooltipPlain(_stripKeepMoreToggleGo,
                 VPBTranslation.T("gallery.creator.strip_more_tip", "View filters, sort, possessable, rename modes"));
 
-            // Secondary tools — collapsed by default (Hick).
             _stripKeepMoreToolsHost = new GameObject("MoreTools");
             _stripKeepMoreToolsHost.transform.SetParent(panel, false);
             VerticalLayoutGroup moreV = UI.AddVLG(_stripKeepMoreToolsHost, spacing: 0f, padding: UI.Pad(0, 0, 0, 0));
@@ -797,7 +780,6 @@ namespace VPB
                     VPBTranslation.T("gallery.creator.strip_bulk_tip", "Rename selected Persons → Actor1, Actor2…"));
             }
 
-            // Possessable + rename mode (Session Plugins parity) — always under More.
             BuildStripKeepPossessOptionsSection(_stripKeepMoreToolsHost.transform, btnH, font, s);
 
             RefreshStripKeepViewChips();
@@ -854,9 +836,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Presets + Last + recipes in one wrap strip. Last sits with Default/+Save on row 1 when space.
-        /// </summary>
         private void BuildStripKeepPresetsCollapseSection(Transform body, float btnH, int font, float s)
         {
             _stripKeepPresetsHost = new GameObject("PresetsHost");
@@ -900,7 +879,6 @@ namespace VPB
             string presetInvert = VPBTranslation.T("gallery.creator.strip_preset_invert", "Invert");
             string saveLbl = VPBTranslation.T("gallery.creator.strip_recipe_save", "+Save");
 
-            // Fixed presets first — Last follows so it lands on row 1 when width allows.
             StripKeepChromeButton(_stripKeepRecipeChipRow, StripKeepChipWidth(presetDefault, font, s), btnH,
                 presetDefault, font, s,
                 new Color(0.22f, 0.38f, 0.52f, 1f), () => StripKeepApplyPreset(SceneUtils.CreatorStripKeepDefault));
@@ -1015,7 +993,6 @@ namespace VPB
                 ? _stripKeepRecipeRowHostH
                 : GalleryUiDesignTokens.ButtonSizeRef * s * 0.85f;
 
-            // Prefer panel width (stable during resize) — body pad 8+8.
             float availW = 0f;
             try
             {
@@ -1044,8 +1021,6 @@ namespace VPB
             StripKeepFlowWrapChips(
                 _stripKeepPresetChipContentRt, _stripKeepRecipeRowHostLe, rowH, s, availW);
         }
-
-        // --- Recipes ---
 
         private struct StripKeepRecipe
         {
@@ -1604,8 +1579,6 @@ namespace VPB
             _stripKeepShortcutHelpVisible = false;
         }
 
-        // Kept for API compatibility — redirects to inline.
-
         private void StripKeepBulkRenameSelectedPersons()
         {
             int n = 0;
@@ -1650,7 +1623,6 @@ namespace VPB
                 if (string.Equals(StripKeepFinalNameForUid(other.Uid), newName, StringComparison.Ordinal))
                     return true;
             }
-            // Also clash with Actor names we just assigned in renames map for other uids.
             Dictionary<string, string>.Enumerator en = _stripKeepRenames.GetEnumerator();
             while (en.MoveNext())
             {

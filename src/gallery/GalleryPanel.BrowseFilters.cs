@@ -4,7 +4,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>Non-title-bar browse filters (chips, side tabs, sub-panes).</summary>
         private bool HasActiveBrowseFiltersExcludingTitleSearch()
         {
             try
@@ -21,7 +20,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Clear title search + browse filters; keep current category path.</summary>
         public void ClearAllBrowseFiltersKeepCategory()
         {
             try { if (IsFilterActive) ClearPackageFilter(); } catch { }
@@ -69,7 +67,6 @@ namespace VPB
             try { UpdateEmptyGridState(); } catch { }
         }
 
-        /// <summary>Clear title search and refresh chip bar + empty state.</summary>
         private void ClearTitleBarSearchAndSyncChrome()
         {
             ClearTitleBarSearch();

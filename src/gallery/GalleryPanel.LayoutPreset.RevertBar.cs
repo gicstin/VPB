@@ -100,10 +100,7 @@ namespace VPB
             try { RevertLayoutToSnapshot(); } catch { }
         }
 
-        /// <summary>
-        /// One float compare when idle; the countdown text is written only when the whole second
-        /// changes, so an open bar costs nothing per frame.
-        /// </summary>
+        /// <summary>One float compare when idle; the countdown text is written only when the whole second changes.</summary>
         private void TickLayoutRevertBar()
         {
             if (_layoutRevertBarUntil <= 0f) return;

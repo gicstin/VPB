@@ -12,17 +12,10 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
-        /// <summary>
-        /// Path passed to <see cref="SuperController.LoadJSON"/> for a file inside a .var.
-        /// Must use the registered package UID from the VAR meta (same as <see cref="VarPackage.Uid"/>),
-        /// not the .var filename from disk — filenames can differ in casing/spelling from the UID.
-        /// </summary>
         private static string BuildVarScopedJsonLoadPath(FileEntry entry)
         {
             if (entry == null) return null;
 
-            // Prefer indexed Uid (packageUid:/exact/internal/path) — matches zip entry keys; rebuilding from Path
-            // can diverge when folders/files have irregular spaces (e.g. "12 05/ KM214" vs "12 05/KM214").
             if (!string.IsNullOrEmpty(entry.Uid))
             {
                 string u = entry.Uid.Replace('\\', '/');
@@ -46,7 +39,6 @@ namespace VPB
                 uid = TryGetPackageUidForEntry(entry);
 
             // Prefer manifest/index UID + path-after-colon from gallery Path (fixes UID vs .var filename mismatch).
-            // VaM virtual refs require ":/" after the UID (same as VarFileEntry), not "uid:Saves/..." alone.
             if (sep >= 0 && !string.IsNullOrEmpty(uid))
                 return uid + ":/" + NormalizeVarInternalPath(path.Substring(sep + 2));
 
@@ -60,10 +52,7 @@ namespace VPB
             return path;
         }
 
-        /// <summary>
-        /// Zip/gallery paths sometimes contain a stray space after '/' (e.g. Saves/scene/ Emilie.json).
-        /// VaM's LoadJSON is picky; collapse "/ " without stripping intentional spaces inside file names elsewhere.
-        /// </summary>
+        /// <summary>Zip/gallery paths sometimes contain a stray space after '/' (e.g. Saves/scene/ Emilie.json).</summary>
         private static string NormalizeVarInternalPath(string inner)
         {
             if (string.IsNullOrEmpty(inner)) return inner;
@@ -73,8 +62,6 @@ namespace VPB
             return inner;
         }
 
-        // Side-rail Scene Import button is the sidebar toggle: open (preselecting the picked scene + target)
-        // when closed, close on a second click. Docked: LMB=left column, RMB=right column. Floating: LMB follows clicked rail.
         private void OpenImportSidebarFromSideButton(bool fromLeftRailButton, bool rightClick)
         {
             if (!ImportSidebarCategoryAllowed())
@@ -130,6 +117,5 @@ namespace VPB
                 ? new Color(0.2f, 0.45f, 0.75f, 0.9f)
                 : GalleryUiColorTokens.ChromeIconWell;
         }
-
     }
 }

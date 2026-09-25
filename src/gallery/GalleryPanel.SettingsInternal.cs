@@ -6,8 +6,6 @@ using UnityEngine.EventSystems;
 
 namespace VPB
 {
-    /// <summary>Commits a deferred settings slider's value when the drag/click is released.
-    /// Lives on the slider host alongside the Slider so it receives the same pointer-up/end-drag events.</summary>
     internal sealed class SettingsSliderReleaseCommit : MonoBehaviour, IPointerUpHandler, IEndDragHandler
     {
         public Action OnRelease;
@@ -77,8 +75,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Pointer-down, not Button.onClick — VR laser + ScrollRect drag often cancels click.
-    /// Do not add IDragHandler: steals list drag and drops idle-rim restore on pointer-exit.</summary>
     internal sealed class SettingsPointerDownAction : MonoBehaviour, IPointerDownHandler
     {
         public Action OnDown;
@@ -108,9 +104,6 @@ namespace VPB
         {
             public string Key;
             public string GroupKey;
-            /// <summary>Authoring sub-classifier. After <c>RemapSettingDefinitionGroups</c> this holds the
-            /// fine-grained group key (e.g. <c>hover</c>) used for behavioural special-cases; the legacy
-            /// <c>categories</c> group also uses it pre-remap to pick <c>options</c> vs <c>visibility</c>.</summary>
             public string SubGroupKey;
             public string Label;
             public string Tooltip;
@@ -127,22 +120,17 @@ namespace VPB
             public int Decimals;
             public bool AllowNegative;
 
-            /// <summary>Slider only: when true, the live value is shown while dragging but
-            /// <see cref="SetFloat"/> is committed on pointer/drag release. Used by settings whose
-            /// change rebuilds the settings list rows (UI scale) — applying live would destroy the
-            /// slider mid-drag and drop the gesture.</summary>
+            /// <summary>Slider only: when true, the live value is shown while dragging but SetFloat is committed on pointer/drag release.</summary>
             public bool DeferLiveApply;
 
             public string[] Options;
             public Func<string> GetString;
             public Action<string> SetString;
 
-            /// <summary>When non-null and returns false, row omitted from settings list (e.g. slider hidden until parent toggle on).</summary>
             public Func<bool> RowVisible;
             public bool WrapValue;
             public bool SingleLine;
 
-            /// <summary>Fired when a Button-type row is clicked (primary or secondary click).</summary>
             public Action OnAction;
             public Func<bool> ActionEnabled;
 
@@ -151,7 +139,6 @@ namespace VPB
             public Func<Color> GetColor;
             public Action<Color> SetColor;
 
-            /// <summary>True when this row has a factory default and may show Reset.</summary>
             public bool HasDefault;
             public bool DefaultBool;
             public float DefaultFloat;
@@ -217,10 +204,6 @@ namespace VPB
             _internalSettingsDefsCacheSig = int.MinValue;
         }
 
-        // ── Settings group consolidation ──
-        // Each row's original fine-grained group key is mapped onto one of a small set of broad
-        // groups shown as a single layer of top-level settings tabs (no sub-tabs). row[0] is the
-        // displayed group key; row[1..] are the fine keys folded into it, in authoring order.
         private static readonly string[][] SettingsGroupStructure = new[]
         {
             new[] { "appearance",      "visuals", "hover" },
@@ -235,7 +218,7 @@ namespace VPB
             new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
             new[] { "troubleshooting", "diag_logs" },
             new[] { "updater",         "updater" },
-            new[] { "maintenance",     "helpers", "ba_migration", "plugin_insights" },
+            new[] { "maintenance",     "helpers", "pkg_versions", "ba_migration", "plugin_insights" },
         };
 
         private static Dictionary<string, string> _settingsFineToGroup;
@@ -275,7 +258,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Toggle chip label. Canonical ON/OFF stay as stored state; display follows locale.</summary>
         private static string FormatSettingsToggleLabel(bool on)
         {
             return on
@@ -283,8 +265,6 @@ namespace VPB
                 : VPBTranslation.T("settings.toggle.off", "OFF");
         }
 
-        /// <summary>Cycle chip label. Stored option strings stay English; display is translated.
-        /// English keeps compact uppercase chips; other locales use natural script (no forced caps).</summary>
         private static string FormatSettingsCycleOption(string value)
         {
             string display = TranslateSettingsCycleOption(value);
@@ -434,7 +414,6 @@ namespace VPB
             return value;
         }
 
-        /// <summary>Atlas role for settings group chips. Label stays primary; glyph is redundant landmark.</summary>
         private static string SettingsGroupIcon(string key)
         {
             switch (key)
@@ -476,17 +455,9 @@ namespace VPB
         }
 
 #if DEBUG
-        // Fine keys already flagged as unmapped, so the dev warning fires at most once per key
-        // (the remap runs on every settings-defs cache rebuild).
         private static HashSet<string> _settingsUnmappedFineWarned;
 #endif
 
-        /// <summary>Re-point each definition's GroupKey onto its single-layer display group. The fine
-        /// key is preserved in SubGroupKey (used only for the hover live-preview special-case). The
-        /// legacy two-level "categories" group is split into "cat_general" (-> Browsing) and
-        /// "cat_visibility" (-> its own tab). A missing/unmapped key falls back to "maintenance" so no
-        /// setting is ever left without a group; in DEBUG this is reported once per key so a new fine
-        /// group is added to <see cref="SettingsGroupStructure"/> rather than silently absorbed.</summary>
         private void RemapSettingDefinitionGroups(List<InternalSettingDefinition> defs)
         {
             if (defs == null) return;
@@ -775,6 +746,8 @@ namespace VPB
             public string PluginClearConsoleKey;
             public bool PluginDownscale8kTo4k;
             public bool PluginScanWhitelistEnabled;
+            public bool PluginForceLatestAllDependencies;
+            public bool PluginForceExactPackageVersions;
             public string[] ShortcutPatterns;
             public bool ShortcutsRequireWindowFocus;
             public bool ShortcutsNeedVisiblePane;
@@ -1576,6 +1549,7 @@ namespace VPB
                     try { UpdateTabs(); } catch { }
                 }
             });
+            AppendPackageVersionSettingDefinitions(defs);
             defs.Add(new InternalSettingDefinition {
                 Key = "helpers.hubFetchMissingMode", GroupKey = "helpers",
                 Label = VPBTranslation.T("settings.hub_fetch_missing_mode", "Fetch missing packages from the Hub"),
@@ -2280,11 +2254,7 @@ namespace VPB
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu
             });
 
-            // VR wrist watch rows deliberately do not TriggerChange: the watch re-reads every one of
-            // these from config each frame (QuickMenuPullWatchSettings), while a config-changed
-            // broadcast costs a full gallery chrome/layout pass on every panel — once per slider step
-            // while dragging, which is the watch-settings frame-rate collapse. Dependent RowVisible
-            // gates still re-evaluate via RefreshInternalSettingsListRows on the toggle/button paths.
+            // VR wrist watch rows deliberately do not TriggerChange.
             defs.Add(new InternalSettingDefinition {
                 Key = "vr.watchVisible", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_visible", "Show VR wrist watch"),
                 Tooltip = VPBTranslation.T("settings.tip.vr.watch_visible", "Wrist face: core HUD actions in the center, 8 assignable buttons on the sides, pager for watch pages only (HUD grid pages stay). Look at inner wrist to show (Glance)."),
@@ -2329,8 +2299,6 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchFaceUser = v; },
                 RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
             });
-            // Manual tilt sits directly under the toggle that reveals it: with billboarding off the
-            // face is welded to a fixed wrist rotation, and these three are the only way to aim it.
             defs.Add(new InternalSettingDefinition {
                 Key = "vr.watchRotX", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_rot_x", "Watch tilt X (pitch)"),
                 Tooltip = VPBTranslation.T("settings.tip.vr.watch_rotation", "Degrees added to the face's own axes on top of the wrist rotation. X tips the top toward or away from you, Y swings it left/right, Z rolls it. Not mirrored when the watch changes hands. Hidden while Watch faces player is on, which aims the face for you."),
@@ -2554,7 +2522,6 @@ namespace VPB
                 }
             }
 
-            // ── Auto-Updater ──
             var updater = VamHookPlugin.singleton != null ? VamHookPlugin.singleton.Updater : null;
             if (updater != null)
             {
@@ -2839,7 +2806,6 @@ namespace VPB
                 RefreshInternalSettingsListRows(true);
         }
 
-        /// <summary>Open gallery Settings floating window (title bar gear / shortcuts). Toggle: Save+close when already open.</summary>
         public void OpenSettingsSideTab()
         {
             if (IsSettingsPanelOpen())
@@ -2857,7 +2823,6 @@ namespace VPB
             try { TryShowBaMigrationPromptOnSettingsEnter(); } catch { }
         }
 
-        /// <summary>Open gallery Settings on a specific category tab (e.g. updater).</summary>
         public void OpenSettingsGroup(string groupKey)
         {
             _settingsGroupExplicit = true;
@@ -2949,10 +2914,6 @@ namespace VPB
             return _settingsFloatRoot != null && _settingsFloatRoot.activeInHierarchy;
         }
 
-        /// <summary>
-        /// Settings list filter: backing <see cref="settingsFilter"/> is source of truth.
-        /// Live side-rail field wins only while focused (typing). Title search never owns this.
-        /// </summary>
         private string CanonicalSettingsSideSearchText()
         {
             if (!IsSettingsPanelOpen())
@@ -2976,11 +2937,7 @@ namespace VPB
             ExitInternalSettingsMode(true);
         }
 
-        /// <summary>
-        /// Drop settings rows from the middle pane before any Grid restore / browse Refresh.
-        /// Prevents InternalSettingRowEntry cells painting as gallery tiles during the async handoff
-        /// (esp. VR, where browse Refresh can lag chrome/layout churn).
-        /// </summary>
+        /// <summary>Drop settings rows from the middle pane before any Grid restore / browse Refresh.</summary>
         private void ClearMiddlePaneOfSettingsRows()
         {
             try
@@ -3000,7 +2957,6 @@ namespace VPB
                 }
                 if (rgv != null)
                 {
-                    // Keep 1-col list config until browse Refresh commits real layout — empty grid is OK.
                     try { ApplyInternalSettingsListGridConfig(rgv, deferRefresh: true); } catch { }
                     rgv.SetItemCount(0, deferRefresh: false);
                 }
@@ -3095,7 +3051,6 @@ namespace VPB
             return rows;
         }
 
-        /// <summary>Show semi-transparent hover preview frame while adjusting hover settings (sliders update live).</summary>
         private void NotifyInternalSettingsHoverPreviewChanged()
         {
             if (!internalSettingsSessionActive || VPBConfig.Instance == null)
@@ -3191,10 +3146,6 @@ namespace VPB
             return s <= 0f ? 1f : s;
         }
 
-        /// <summary>
-        /// Step for slider nudge / −+ steppers. Prefer authored <see cref="InternalSettingDefinition.Step"/>;
-        /// else derive from decimals and span (0–100 → 1, 0.5–1.5 → 0.1, large spans → coarser).
-        /// </summary>
         private static float ResolveSettingsSliderStep(InternalSettingDefinition def)
         {
             if (def == null) return 1f;
@@ -3279,9 +3230,6 @@ namespace VPB
             catch { }
         }
 
-        /// <param name="settleLayout">Force the control row to lay out now. Needed when re-binding a row
-        /// that is already on screen (value changed, recycled row); wasted work on a freshly created row,
-        /// which the next normal layout pass sizes anyway.</param>
         private void RebuildSettingsRowControls(GameObject btnGO, InternalSettingDefinition def, bool settleLayout = true)
         {
             if (btnGO == null || def == null) return;
@@ -3306,8 +3254,6 @@ namespace VPB
             Transform detailsTr = listRowTr.Find("Details");
             if (detailsTr == null) return;
 
-            // Scale row label text ("ListRow/Name") for settings rows; base list UI scales elsewhere,
-            // but settings rows rebuild controls and were skipping label font scaling.
             try
             {
                 Transform nameTr = listRowTr.Find("Name");
@@ -3431,7 +3377,6 @@ namespace VPB
                     def.SetString(next);
                     try
                     {
-                        // Update label immediately; pooled list rows can keep old text until rebind.
                         var t = cycleBtn != null ? cycleBtn.GetComponentInChildren<Text>(true) : null;
                         if (t != null) t.text = FormatSettingsCycleOption(next);
                     }
@@ -3442,7 +3387,6 @@ namespace VPB
                 });
                 try
                 {
-                    // Ensure control row sizes settle immediately (prevents clipping when switching cycle values).
                     if (settleLayout)
                     {
                         LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
@@ -3504,9 +3448,6 @@ namespace VPB
                 float handleW = 20f * uiS;
                 float trackEndPad = handleW * 0.5f;
 
-                // Full-height transparent raycast target so the whole control row area (not just the
-                // thin bar) receives hover, click, and drag events. Pointer events bubble up to the
-                // Slider on sliderHost, which fixes click-drag being swallowed by the parent scroll view.
                 GameObject hitbox = new GameObject("Hitbox");
                 hitbox.transform.SetParent(sliderHost.transform, false);
                 var hitImg = UI.AddImage(hitbox, new Color(1f, 1f, 1f, 0f));
@@ -3554,7 +3495,6 @@ namespace VPB
 
                 GameObject stepperHost = new GameObject("SettingsValueStepper");
                 stepperHost.transform.SetParent(controls.transform, false);
-                // Gestalt: − field + read as one spin unit (Galitz spin + slider hybrid; Fitts square hits).
                 UI.AddHLG(stepperHost, spacing: UI.GapHair(uiS), childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
                 float stepBtnW = GalleryUiDesignTokens.ButtonSizeRef;
                 float inputW = 78f;
@@ -3622,8 +3562,7 @@ namespace VPB
                     v = SnapSettingsSliderValue(v, def.Min, def.Max, step, decimals);
                     if (input != null) input.text = v.ToString(fmt);
                     syncStepperEnabled();
-                    // Deferred sliders (e.g. UI scale) only show the live value while dragging; applying
-                    // would rebuild the settings list rows and destroy this slider mid-drag. Commit on release.
+                    // Deferred sliders (e.g. UI scale) only show the live value while dragging.
                     if (deferLive) return;
                     def.SetFloat(v);
                     if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
@@ -3637,8 +3576,6 @@ namespace VPB
                         def.SetFloat(slider.value);
                         if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                             NotifyInternalSettingsHoverPreviewChanged();
-                        // UI-scale sliders defer until release; ApplyInnerPaneScale → RescaleSettingsFloatIfOpen
-                        // already rebuilds rows once. Do not Refresh again (double Destroy+rebuild hitch).
                         try { ApplyInnerPaneScale(); } catch { }
                         syncStepperEnabled();
                     };
@@ -3646,7 +3583,7 @@ namespace VPB
                 input.onEndEdit.AddListener(s =>
                 {
                     float parsed;
-                    if (!float.TryParse(s, out parsed))
+                    if (!VpbNumberText.TryParseFloat(s, out parsed))
                     {
                         input.text = slider.value.ToString(fmt);
                         return;
@@ -3815,7 +3752,6 @@ namespace VPB
         {
             PersistSettingsLastGroup();
             settingsModifiedOnly = false;
-            // Live property sheet: Close / X / Esc keep current values. Revert is a separate footer action.
             SaveInternalSettingsSession();
 
             if (leftActiveContent == ContentType.Settings)
@@ -3825,17 +3761,13 @@ namespace VPB
 
             HideSettingsFloat();
 
-            // Do not ApplySidePanelDefaultsFromConfig here — that re-syncs Last*/Default side rails
-            // (incl. Import) and reopens Scene Import after Cancel/Save even when user closed it.
-            // Settings is a float; Default* still apply on cold pane open. Scale/chrome restore
-            // already ran in Cancel/Save session helpers; UpdateLayout below refreshes rails as-is.
+            // Do not ApplySidePanelDefaultsFromConfig here; it reopens closed side rails.
             try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
             try { UpdateLayout(); } catch { }
             try { UpdateTabs(); } catch { }
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
-        /// <summary>Restore snapshot from window-open, stay open, start a fresh revert baseline.</summary>
         private void RevertInternalSettingsSession()
         {
             if (!internalSettingsSessionActive || internalSettingsBackup == null) return;
@@ -3967,7 +3899,6 @@ namespace VPB
             VPBConfig.Instance.GalleryScanWlTempBorderColorB = b.GalleryScanWlTempBorderColorB;
             VPBConfig.Instance.GalleryScanWlTempBorderColorA = b.GalleryScanWlTempBorderColorA;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
-            // Live pane state — rewriting config alone would leave the gallery dark with the pref off.
             SetFloatsOnlyAllPanes(b.GalleryFloatsOnlyMode);
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
             VPBConfig.Instance.LayoutPresetRevertBarSeconds = b.LayoutPresetRevertBarSeconds;
@@ -3990,8 +3921,6 @@ namespace VPB
             {
                 ApplyInnerPaneScale();
                 categoriesCached = false;
-                // Layout restore + browse RefreshFiles owned by SyncInternalSettingsListView /
-                // ExitInternalSettingsMode — avoid Grid refresh while settings rows still bound.
                 try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
             }
             ApplyGalleryTransparencyToAllPanels();
@@ -4003,10 +3932,6 @@ namespace VPB
             internalSettingsBackup = null;
         }
 
-        /// <summary>
-        /// Shows a one-time BA migration prompt overlay on this panel.
-        /// Called by Gallery after initial FileManager refresh when BA data dir is detected.
-        /// </summary>
         internal void ShowBaMigrationPrompt()
         {
             if (this == null || gameObject == null) return;
@@ -4014,7 +3939,6 @@ namespace VPB
             {
                 if (backgroundBoxGO == null) return;
 
-                // Outer overlay — dims the gallery panel
                 GameObject overlay = new GameObject("BA_MigrationPrompt");
                 overlay.transform.SetParent(backgroundBoxGO.transform, false);
                 RectTransform overlayRt = overlay.AddComponent<RectTransform>();
@@ -4027,7 +3951,6 @@ namespace VPB
                 overlay.AddComponent<UnityEngine.UI.GraphicRaycaster>();
                 try { SetLayerRecursive(overlay, backgroundBoxGO.layer); } catch { }
 
-                // Dialog box
                 GameObject box = new GameObject("DialogBox");
                 box.transform.SetParent(overlay.transform, false);
                 RectTransform boxRt = box.AddComponent<RectTransform>();
@@ -4038,7 +3961,6 @@ namespace VPB
                 UnityEngine.UI.Image boxBg = box.AddComponent<UnityEngine.UI.Image>();
                 boxBg.color = UI.ChromeDark;
 
-                // Layout for text + buttons
                 UnityEngine.UI.VerticalLayoutGroup vl = box.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
                 vl.padding = new RectOffset(16, 16, 16, 16);
                 vl.spacing = 12f;
@@ -4046,14 +3968,12 @@ namespace VPB
                 vl.childForceExpandWidth = true;
                 vl.childForceExpandHeight = false;
 
-                // Message text
                 Text msg = UI.CreateLabel(box, VPBTranslation.T("ba.prompt.msg",
                     "BrowserAssist data detected.\nImport available in Settings.\nOpen Settings → BrowserAssist section."), GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, name: "Message");
                 UnityEngine.UI.LayoutElement textLe = msg.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
                 textLe.preferredHeight = 130f;
                 textLe.flexibleWidth = 1f;
 
-                // Button row
                 GameObject btnRow = new GameObject("BtnRow");
                 btnRow.transform.SetParent(box.transform, false);
                 UnityEngine.UI.LayoutElement rowLe = btnRow.AddComponent<UnityEngine.UI.LayoutElement>();
@@ -4073,7 +3993,6 @@ namespace VPB
                     catch { }
                 }
 
-                // TAKE ME THERE button
                 UI.CreateUIButton(btnRow, 240f, 44f, VPBTranslation.T("ba.prompt.take_me_there", "Take me there"),
                     18, -140f, 0f, AnchorPresets.middleCenter, () =>
                     {
@@ -4082,7 +4001,6 @@ namespace VPB
                         try { OpenSettingsGroup("ba_migration"); } catch { }
                     });
 
-                // OK button
                 UI.CreateUIButton(btnRow, 140f, 44f, VPBTranslation.T("ba.prompt.ok", "OK"),
                     18, 160f, 0f, AnchorPresets.middleCenter, () =>
                     {
@@ -4105,7 +4023,6 @@ namespace VPB
             ShowBaMigrationPrompt();
         }
 
-        // Canonical token <-> UI cycle label for the GallerySearchScope setting; keeps storage stable while letting localization tweak the label.
         private static string GallerySearchScopeToLabel(string canonical)
         {
             if (canonical == "NameOnly") return "Name only";

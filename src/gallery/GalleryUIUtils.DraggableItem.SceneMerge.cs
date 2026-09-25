@@ -23,7 +23,6 @@ namespace VPB
 
         private System.Collections.IEnumerator TeleportNewAtomsToPlayer(HashSet<string> atomsBefore)
         {
-            // Wait for merge to finish (usually synchronous for the structure, but some components might take a frame)
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
 
@@ -31,11 +30,9 @@ namespace VPB
             if (sc == null || sc.centerCameraTarget == null) yield break;
 
             Vector3 targetPos = sc.centerCameraTarget.transform.position + sc.centerCameraTarget.transform.forward * 1.5f;
-            // Keep height reasonable
             targetPos.y = sc.centerCameraTarget.transform.position.y;
             
             Quaternion targetRot = Quaternion.LookRotation(-sc.centerCameraTarget.transform.forward, Vector3.up);
-            // Level out the rotation
             Vector3 euler = targetRot.eulerAngles;
             euler.x = 0;
             euler.z = 0;
@@ -52,7 +49,6 @@ namespace VPB
                         atom.mainController.transform.position = targetPos;
                         atom.mainController.transform.rotation = targetRot;
                         lastAddedAtom = atom;
-                        // If we found a person, prioritize selecting them
                         if (atom.type == "Person")
                         {
                             atomToSelect = atom;
@@ -68,8 +64,6 @@ namespace VPB
 
             if (atomToSelect != null)
             {
-                // Use reflection for SelectAtom since it might be missing from the build-time references
-                // but is usually present in the VaM environment.
                 try
                 {
                     MethodInfo selectAtom = sc.GetType().GetMethod("SelectAtom", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -155,8 +149,6 @@ namespace VPB
 
             if (toRemove.Count <= 0) yield break;
 
-            // Anjbgo-style scenes are built from many SubScenes (.SELECTIONS, .BACKGROUND, …).
-            // Mass RemoveAtom there hard-hangs / crashes (log: crash mid RemoveAtom '.SELECTIONS').
             const int maxSafeSubSceneWipe = 3;
             const int maxSafeSceneAtoms = 40;
             if (toRemove.Count > maxSafeSubSceneWipe || totalAtoms > maxSafeSceneAtoms)
@@ -239,7 +231,7 @@ namespace VPB
             string normalizedPath = UI.NormalizePath(path);
 
             string legacyPath = normalizedPath;
-            int colonIndex = normalizedPath.IndexOf(":/");
+            int colonIndex = normalizedPath.IndexOf(":/", StringComparison.Ordinal);
             if (colonIndex >= 0)
             {
                 legacyPath = normalizedPath.Substring(colonIndex + 2);
@@ -339,17 +331,12 @@ namespace VPB
                     SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, normalizedPath);
                     if (ShouldForcePrewarmRefreshBeforeApply(itemType))
                     {
-                        // Clothing/hair: try light DAZ catalog rebuild on target first. If the item
-                        // param already exists, cancel pending native FileManager.Refresh (avoids
-                        // ~5–60s morph+clothing handler cost, esp. Naturalis TittyMagic banks).
                         if (TryLightClothingHairCatalogAndSkipNativeRefresh(atom, itemType, FileEntry, normalizedPath))
                         {
-                            // Pending native refresh cancelled; apply can proceed.
                         }
                         else
                         {
-                            // First-click reliability: if prewarm queued a coalesced refresh, run it now
-                            // before one-shot preset/material lookup work starts.
+                            // First-click reliability: if prewarm queued a coalesced refresh, run it now before one-shot preset/material lookup work starts.
                             VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("pre_apply_prewarm_flush");
                         }
                     }
@@ -382,7 +369,6 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] Merge Outfit: no gallery panel for picker; merging all clothing items.");
             }
 
-            // Capture state for Undo
             if (Panel != null)
             {
                 try
@@ -393,8 +379,6 @@ namespace VPB
                     }
                     catch { }
 
-                    // Appearance / Skin / Morphs: light appearance undo (geometry+skin+clothing/hair).
-                    // Clothing/Hair keep the clothing-hair-only snapshot (faster).
                     bool needsAppearanceUndo = itemType == ItemType.Appearance
                         || itemType == ItemType.Skin
                         || itemType == ItemType.Morphs;
@@ -491,12 +475,12 @@ namespace VPB
                          {
                              bool check = false;
                              string paramType = "";
-                             if (isHair && n.StartsWith("hair:"))
+                             if (isHair && n.StartsWith("hair:", StringComparison.Ordinal))
                              {
                                  check = true; 
                                  paramType = "hair";
                              }
-                             else if (isClothing && n.StartsWith("clothing:")) 
+                             else if (isClothing && n.StartsWith("clothing:", StringComparison.Ordinal)) 
                              {
                                  check = true;
                                  paramType = "clothing";
@@ -504,7 +488,7 @@ namespace VPB
 
                              if (check)
                              {
-                                 string itemName = n.Substring(paramType.Length + 1); // remove "hair:" or "clothing:"
+                                 string itemName = n.Substring(paramType.Length + 1);
                                  JSONStorableBool wornParam = geometry.GetBoolJSONParam(n);
                                  if (wornParam == null || !wornParam.val) continue;
 
@@ -523,7 +507,6 @@ namespace VPB
 
                                  VarFileEntry existingEntry = FileManager.GetVarFileEntry(itemName);
 
-
                                  HashSet<string> existingRegions;
                                  if (existingEntry != null)
                                  {
@@ -531,9 +514,7 @@ namespace VPB
                                  }
                                  else
                                  {
-                                     // Try heuristics on the param name
                                      existingRegions = isHair ? GetRegionsFromHeuristics(itemName) : GetClothingRegionsFromHeuristics(itemName);
-                                     // No default fallback for existing items - safer to NOT clear if unknown
                                  }
 
                                  if (isClothing)
@@ -570,13 +551,11 @@ namespace VPB
 
             if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
             {
-                // Clothing/Hair Item Presets (.vap)
                 LogUtil.LogVerbose($"[DragDropDebug] Applying {itemType}: {normalizedPath}");
                 ActivateClothingHairItemPreset(atom, FileEntry, itemType == ItemType.ClothingPreset);
                 return;
             }
 
-            // Try to load as preset first (standard for Clothing/Hair presets and Poses)
             ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
             if (ext == ".vap" || ext == ".json" || ext == ".vac")
             {
@@ -599,9 +578,8 @@ namespace VPB
                     }
 
                     bool presetLoaded = false;
-                    bool suppressRoot = isPose && !Input.GetKey(KeyCode.LeftShift); // Default to suppress root (In Place), hold Shift to move
+                    bool suppressRoot = isPose && !Input.GetKey(KeyCode.LeftShift);
                     
-                    // Capture state for restoration
                     JSONStorable presetStorable = atom.GetStorableByID(storableId);
                     JSONStorableBool loadOnSelectJSB = presetStorable != null ? presetStorable.GetBoolJSONParam("loadPresetOnSelect") : null;
                     bool loadOnSelectPreState = loadOnSelectJSB != null ? loadOnSelectJSB.val : false;
@@ -614,7 +592,6 @@ namespace VPB
 
                         LogUtil.LogVerbose($"[DragDropDebug] Loading preset type={itemType}, storableId={storableId}, path={normalizedPath}, SuppressRoot={suppressRoot}");
                         
-                        // Get the storable for this preset type
                         if (presetStorable != null)
                         {
                             MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
@@ -622,7 +599,6 @@ namespace VPB
                             {
                                 bool isVarPath = normalizedPath.Contains(":");
                                 bool isPosePath = normalizedPath.IndexOf("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0;
-                                // NEW: For .json legacy files, check if they are in Saves/Person/Pose too
                                 if (!isPosePath) 
                                 {
                                     isPosePath = normalizedPath.IndexOf("Saves/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -633,14 +609,10 @@ namespace VPB
                                     presetNameJSS.val = presetManager.GetPresetNameFromFilePath(SuperController.singleton.NormalizePath(normalizedPath));
                                 }
 
-                                // Standardizing on JSON loading for all presets to avoid "not compatible with store folder path" errors
-                                // This also ensures that VAR paths and loose files work identically.
-                                // Use LoadJSONWithFallback so packages with non-standard names (e.g. spaces) can be read via stream.
                                 JSONNode presetNode = UI.LoadJSONWithFallback(normalizedPath, FileEntry);
                                 JSONClass presetJSON = (presetNode != null) ? presetNode.AsObject : null;
                                 if (presetJSON != null)
                                 {
-                                    // Detect if this is a scene file and extract the appropriate atom data
                                     if (presetJSON["atoms"] != null)
                                     {
                                         JSONClass extracted = ExtractAtomFromScene(presetJSON, atom.type);
@@ -651,8 +623,7 @@ namespace VPB
                                         else
                                         {
                                             LogUtil.LogWarning($"[VPB] ApplyClothingToAtom: Scene file does not contain a {atom.type} atom.");
-                                            // Fallback: don't return, maybe it works anyway? No, if it has atoms it's a scene.
-                                            // But let's stay safe and just continue with extracted if possible.
+                                            // Fallback: don't return, maybe it works anyway?
                                         }
                                     }
 
@@ -694,7 +665,6 @@ namespace VPB
 
                                     LogUtil.LogVerbose($"[DragDropDebug] JSON loaded successfully from {normalizedPath}");
 
-                                    // Function to clean presets array (Shared logic)
                                         void CleanPresets(JSONArray presets)
                                         {
                                             if (presets == null) return;
@@ -703,8 +673,6 @@ namespace VPB
                                                 JSONClass p = presets[j] as JSONClass;
                                                 if (p != null && p["id"].Value == "control")
                                                 {
-                                                    // Instead of removing the node, we strip its position/rotation
-                                                    // This avoids invalidating the preset if 'control' is required
                                                     if (p.HasKey("position")) p.Remove("position");
                                                     if (p.HasKey("rotation")) p.Remove("rotation");
 
@@ -714,7 +682,6 @@ namespace VPB
                                             }
                                         }
 
-                                        // NEW: Suppress Root Node logic
                                         if (suppressRoot && itemType == ItemType.Pose)
                                         {
                                             try
@@ -727,7 +694,6 @@ namespace VPB
                                                         for (int i = 0; i < storables.Count; i++)
                                                         {
                                                             JSONClass s = storables[i] as JSONClass;
-                                                            // Check for PosePresets ID or any other that matches the target storableId
                                                             if (s != null && s["id"].Value == storableId)
                                                             {
                                                                 if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
@@ -737,8 +703,6 @@ namespace VPB
                                                 }
                                                 else if (presetJSON["presets"] != null)
                                                 {
-                                                    // Direct storable dump?
-                                                    // Verify ID if present, otherwise assume it's the right one
                                                     if (presetJSON["id"] == null || presetJSON["id"].Value == storableId)
                                                     {
                                                         CleanPresets(presetJSON["presets"] as JSONArray);
@@ -751,11 +715,8 @@ namespace VPB
                                             }
                                         }
 
-                                        // Simplified handling: Use direct PresetManager load
-                                        // This bypasses the complexity of storable actions + temp files
                                         try
                                         {
-                                            // VPB-refactor: native atom restore, deferred from import-unification
                                             if (itemType == ItemType.Pose)
                                             {
                                                 LogUtil.LogVerbose($"[DragDropDebug] Loading Pose via direct PresetManager injection (Bypassing temp files)");
@@ -763,7 +724,6 @@ namespace VPB
                                                 // Specific logging for .json files debugging
                                                 if (ext == ".json")
                                                 {
-                                                    // Convert Keys to array for string.Join compatibility in older .NET/Unity versions
                                                     string[] keys = new string[0];
                                                     if (presetJSON.Keys != null) keys = presetJSON.Keys.ToArray();
                                                     LogUtil.LogVerbose($"[DragDropDebug] .json Pose Debug: Keys in JSON: {string.Join(", ", keys)}");
@@ -776,13 +736,9 @@ namespace VPB
                                                 }
                                             }
 
-                                            // Ensure ID is correct (fixes "not a preset for current store" error)
-                                            // Only inject if it's NOT a container (no 'storables' array)
-                                            // If it has 'storables', we assume the ID is correct for the container (e.g. 'Person')
+                                            // Inject ID only for non-container presets (no 'storables' array).
                                             if (presetJSON["storables"] == null)
                                             {
-                                                // Handle 'atoms' root key (Legacy scene/person save used as pose)
-                                                // Optimized Native Loading: Use direct Atom.Restore for maximum performance and compatibility
                                                 if (presetJSON["atoms"] != null)
                                                 {
                                                     LogUtil.LogVerbose($"[DragDropDebug] 'atoms' root key detected. Using optimized Native Atom Restoration...");
@@ -790,7 +746,6 @@ namespace VPB
                                                     
                                                     if (atomsArray != null && atomsArray.Count > 0)
                                                     {
-                                                        // Find the target atom (usually "Person" or just the first one)
                                                         JSONClass targetAtom = null;
                                                         for(int i=0; i<atomsArray.Count; i++) 
                                                         {
@@ -807,7 +762,6 @@ namespace VPB
                                                         {
                                                             LogUtil.LogVerbose($"[DragDropDebug] Restoring atom data from '{targetAtom["id"]?.Value}' directly to '{atom.name}'");
 
-                                                            // Handle Suppress Root (Load in Place)
                                                             if (suppressRoot)
                                                             {
                                                                 // Strip control position/rotation from the source JSON before restoring
@@ -828,9 +782,7 @@ namespace VPB
                                                                 }
                                                             }
 
-                                                            // EXECUTE NATIVE RESTORE PIPELINE
-                                                            // We set restoreAppearance=false to ensure we only load the Pose (Physics/Transform)
-                                                            // We set restorePhysical=true
+                                                            // Native restore pipeline: pose only (restoreAppearance=false, restorePhysical=true).
                                                             
                                                             atom.PreRestore(true, false);
                                                             
@@ -840,7 +792,6 @@ namespace VPB
                                                                 atom.RestoreTransform(targetAtom);
                                                             }
                                                             
-                                                            // Restore(jc, restorePhysical, restoreAppearance, restoreParent)
                                                             atom.Restore(targetAtom, true, false, false);
                                                             
                                                             atom.LateRestore(targetAtom, true, false, false);
@@ -851,13 +802,12 @@ namespace VPB
                                                             // Post-fixup: sim clothing often needs a reset after pose/physics restore.
                                                             SceneLoadingUtils.SchedulePostPersonApplyFixup(atom);
                                                             presetLoaded = true;
-                                                            return; // Skip the rest of the PresetManager logic
+                                                            return;
                                                         }
                                                     }
                                                 }
 
-                                                // If we have a 'storables' root key now (either from conversion or original), 
-                                                // we don't need to inject ID. It's a Package-style preset.
+                                                // If we have a 'storables' root key now (either from conversion or original), we don't need to inject ID.
                                                 if (presetJSON["storables"] == null)
                                                 {
                                                     if (presetJSON["id"] == null || presetJSON["id"].Value != storableId)
@@ -876,15 +826,9 @@ namespace VPB
                                                 LogUtil.LogVerbose($"[DragDropDebug] 'storables' detected in JSON. Keeping existing ID '{presetJSON["id"]?.Value}' to preserve container structure.");
                                             }
 
-                                            // Special handling for legacy .json files:
-                                            // They might not have the "presets" array wrapper if they are direct dumps.
-                                            // But if they are direct dumps, they usually have "id" matched or null.
-                                            // The CleanPresets logic already handles "presets" vs "storables" vs direct.
-                                            
                                             bool ddReplaceMode = Panel != null && Panel.DragDropReplaceMode;
                                             bool isPersonClothingPreset = itemType == ItemType.Clothing && ext == ".vap" && storableId == "ClothingPresets";
                                             // Morph/skin/breast presets must REPLACE when toolbox Replace is on.
-                                            // Old default Merge + ReplaceMode=True appended morph banks and deformed persons.
                                             ClothingApplyMode mode = ResolvePresetMergeMode(itemType, ddReplaceMode);
                                             if (ddReplaceMode && isPersonClothingPreset)
                                             {
@@ -930,7 +874,6 @@ namespace VPB
                                             presetLoaded = true;
 
                                             // Post-fixup: after applying appearance/clothing/morph/pose presets, reset sim clothing.
-                                            // This helps ensure clothing respects updated body physics/colliders.
                                             SceneLoadingUtils.SchedulePostPersonApplyFixup(atom);
                                         }
                                         catch (Exception ex)
@@ -956,14 +899,12 @@ namespace VPB
                         catch (Exception ex)
                         {
                              LogUtil.LogError("[DragDropDebug] LoadPreset failed for " + normalizedPath + ": " + ex.Message);
-                             // Fallthrough to legacy toggle
                         }
                         finally
                         {
                             if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
                             if (presetNameJSS != null) presetNameJSS.val = initialPresetName;
 
-                            // Restore locks
                             if (atom.type == "Person")
                             {
                                 lockStore.RestorePresetLocks(atom);
@@ -985,7 +926,6 @@ namespace VPB
                     if (TryToggleLegacyClothingHairParam(geometry, normalizedPath, "[DragDropDebug]")) return;
                 }
 
-                // Try .vaj replacement for .vam (legacy handling)
                 if (ext == ".vam")
                 {
                     string vajPath = legacyPath.Substring(0, legacyPath.Length - 4) + ".vaj";
@@ -1000,9 +940,6 @@ namespace VPB
                     }
                 }
 
-                // On-demand registration can queue a delayed FileManager.Refresh; during that window
-                // geometry bools are not yet populated, so first click can miss.
-                // Retry briefly so the same click still succeeds once handlers finish.
                 if (ShouldRetryLegacyToggle(itemType) && SuperController.singleton != null && atom != null)
                 {
                     string atomUid = atom.uid;
@@ -1101,12 +1038,11 @@ namespace VPB
             }
 
             // Fallback: some VaM builds/store variants expose bool names that don't match the file path exactly.
-            // Best-effort scan for any bool whose suffix matches the provided path.
             try
             {
                 string p0 = path.Replace('\\', '/');
                 string p1 = p0;
-                while (p1.StartsWith("/")) p1 = p1.Substring(1);
+                while (p1.StartsWith("/", StringComparison.Ordinal)) p1 = p1.Substring(1);
                 foreach (var n in geometry.GetBoolParamNames())
                 {
                     if (string.IsNullOrEmpty(n)) continue;
@@ -1159,11 +1095,6 @@ namespace VPB
                 || itemType == ItemType.HairPreset;
         }
 
-        /// <summary>
-        /// Merge mode for PresetManager LoadPresetFromJSON.
-        /// Pose always replaces. Morphs/skin/breast always replace (merge appends banks → deform).
-        /// Clothing/hair follow toolbox Replace toggle (off = merge/add).
-        /// </summary>
         static ClothingApplyMode ResolvePresetMergeMode(ItemType itemType, bool dragDropReplaceMode)
         {
             if (itemType == ItemType.Pose)
@@ -1178,10 +1109,6 @@ namespace VPB
             return dragDropReplaceMode ? ClothingApplyMode.Replace : ClothingApplyMode.Merge;
         }
 
-        /// <summary>
-        /// Light clothing/hair catalog path: RefreshClothingItems/Hair on target; cancel native
-        /// FileManager.Refresh when the item UID is already visible to DAZ.
-        /// </summary>
         static bool TryLightClothingHairCatalogAndSkipNativeRefresh(
             Atom atom, ItemType itemType, FileEntry entry, string normalizedPath)
         {
@@ -1223,7 +1150,6 @@ namespace VPB
             var selector = atom.GetStorableByID("geometry") as DAZCharacterSelector;
             if (selector == null) return false;
 
-            // Prefer package UID from entry / path (clothing:PkgUid:/Custom/...).
             string pkgUid = null;
             try
             {
@@ -1258,7 +1184,6 @@ namespace VPB
                 catch { }
             }
 
-            // Fallback: any clothing:/hair: bool whose name contains package uid or leaf folder.
             try
             {
                 string prefix = hair ? "hair:" : "clothing:";
@@ -1299,7 +1224,6 @@ namespace VPB
              ghostBorder = null;
              _cuaGhostKey = null;
 
-             // 8b — resolve thumbnail texture; fall back to memory cache if async load is still pending
              Texture ghostTex = GetGhostTexture();
 
              bool fixedMode = false;
@@ -1307,7 +1231,6 @@ namespace VPB
 
              if (fixedMode)
              {
-                 // Fixed-mode ghost renders in world space.
                  CreateGhostUi(ghostTex, null, true);
                  if (ghostObject != null)
                  {
@@ -1322,7 +1245,6 @@ namespace VPB
                  CreateGhostUi(ghostTex, rootCanvas, false);
              }
 
-             // 8b — if texture was unavailable at drag start, poll until ThumbnailImage loads it
              if (ghostTex == null) StartCoroutine(UpdateGhostTextureFromThumbnail());
 
              planeDistance = Vector3.Dot(transform.position - cam.transform.position, cam.transform.forward);
@@ -1365,7 +1287,6 @@ namespace VPB
                 textRT.pivot = new Vector2(0.5f, 1);
                 textRT.anchoredPosition = new Vector2(0, -10);
                 textRT.sizeDelta = new Vector2(400, 60);
-                // Desktop: keep fontSize high for glyph detail, scale transform down for ~3x smaller label.
                 bool vr = VPB.src.util.XrUtils.IsVrActive();
                 if (!vr) textRT.localScale = new Vector3(0.3333f, 0.3333f, 1f);
 
@@ -1395,13 +1316,11 @@ namespace VPB
             }
         }
 
-        // 8b — returns the best available thumbnail texture at drag start
         private Texture GetGhostTexture()
         {
             if (ThumbnailImage != null && ThumbnailImage.texture != null)
                 return ThumbnailImage.texture;
 
-            // Thumbnail may not have loaded yet — check the memory cache directly
             if (CustomImageLoaderThreaded.singleton != null && FileEntry != null)
             {
                 string imgPath = GetThumbnailImgPath();
@@ -1414,7 +1333,6 @@ namespace VPB
             return null;
         }
 
-        // 8b — resolves the thumbnail image path for a FileEntry (mirrors GalleryPanel.Thumbnails.cs logic)
         private string GetThumbnailImgPath()
         {
             if (FileEntry == null) return null;
@@ -1427,7 +1345,6 @@ namespace VPB
             return null;
         }
 
-        // 8b — coroutine: watches ThumbnailImage until its texture arrives, then pushes it to the ghost
         private IEnumerator UpdateGhostTextureFromThumbnail()
         {
             float elapsed = 0f;
@@ -1450,7 +1367,7 @@ namespace VPB
                     yield break;
                 }
                 yield return null;
-                elapsed += Time.deltaTime;
+                elapsed += Time.unscaledDeltaTime;
             }
         }
         
@@ -1538,14 +1455,13 @@ namespace VPB
                      if (ghostText != null)
                      {
                          if (cuaChanged)
-                             ghostText.text = "Adding new CUA\n" + (FileEntry != null ? FileEntry.Name : "asset");
+                             ghostText.text = VPBTranslation.T("gallery.drag.ghost_new_cua", "Adding new CUA") + "\n" + (FileEntry != null ? FileEntry.Name : "asset");
                          ghostText.color = new Color(0.5f, 1f, 0.5f);
                      }
                  }
                  return;
              }
 
-             // Scripts: name the plugin (not generic "Item") — gulf of evaluation while aiming Person / session strip.
              if (itemType == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry))
              {
                  string pluginName = !string.IsNullOrEmpty(FileEntry.Name) ? FileEntry.Name : "plugin";
@@ -1575,7 +1491,7 @@ namespace VPB
                      if (ghostBorder != null) ghostBorder.color = new Color(0f, 1f, 0f, 0.4f);
                      if (ghostText != null)
                      {
-                         ghostText.text = "Adding " + pluginName + " to\n" + atom.name;
+                         ghostText.text = string.Format(VPBTranslation.T("gallery.drag.ghost_add_plugin", "Adding {0} to\n{1}"), pluginName, atom.name);
                          ghostText.color = new Color(0.5f, 1f, 0.5f);
                      }
                  }
@@ -1584,7 +1500,7 @@ namespace VPB
                      if (ghostBorder != null) ghostBorder.color = new Color(0.6f, 0.9f, 1f, 0.35f);
                      if (ghostText != null)
                      {
-                         ghostText.text = "Release for session\n" + pluginName;
+                         ghostText.text = VPBTranslation.T("gallery.drag.ghost_release_session", "Release for session") + "\n" + pluginName;
                          ghostText.color = new Color(0.6f, 0.9f, 1f);
                      }
                  }
@@ -1635,13 +1551,13 @@ namespace VPB
                                  replaceScope = " (cosmetics only)";
                          }
                          ghostText.text = $"Replacing {typeStr}{replaceScope} on\n" + atom.name;
-                         ghostText.color = new Color(1f, 0.5f, 0.5f); // Reddish
+                         ghostText.color = new Color(1f, 0.5f, 0.5f);
                      }
                      else
                      {
                          string action = GetDragActionVerb(itemType, false);
                          ghostText.text = $"{action} {typeStr} to\n" + atom.name;
-                         ghostText.color = new Color(0.5f, 1f, 0.5f); // Greenish
+                         ghostText.color = new Color(0.5f, 1f, 0.5f);
                      }
                  }
              }
@@ -1748,7 +1664,6 @@ namespace VPB
              }
              else
              {
-                 // In desktop, ensure it's at least 0.4m away so it doesn't fill the screen
                  if (!VPB.src.util.XrUtils.IsVrActive())
                  {
                      finalDist = Mathf.Max(distance, 0.4f);
@@ -1759,8 +1674,5 @@ namespace VPB
              ghostObject.transform.position = ray.GetPoint(finalDist);
              ghostObject.transform.rotation = cam.transform.rotation;
         }
-
-
     }
-
 }

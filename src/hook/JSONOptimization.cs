@@ -41,7 +41,7 @@ namespace VPB
                     JSONNode child = jclass[key];
                     ExtractVariableReferences(key, result.VariableReferences);
                     
-                    if (key == "id" && child.Value != null && child.Value.EndsWith(TIMELINE_PLUGIN_SUFFIX))
+                    if (key == "id" && child.Value != null && child.Value.EndsWith(TIMELINE_PLUGIN_SUFFIX, StringComparison.Ordinal))
                     {
                         result.HasTimeline = true;
                         result.TimelineCount++;
@@ -94,7 +94,7 @@ namespace VPB
                             JSONNode storable = storables[i];
                             JSONNode idNode = storable["id"];
 
-                            if (idNode == null || !idNode.Value.EndsWith(TIMELINE_PLUGIN_SUFFIX))
+                            if (idNode == null || !idNode.Value.EndsWith(TIMELINE_PLUGIN_SUFFIX, StringComparison.Ordinal))
                             {
                                 filteredArray.Add(storable);
                             }
@@ -131,7 +131,7 @@ namespace VPB
                             for (int i = 0; i < array.Count; i++)
                             {
                                 var idNode = array[i]["id"];
-                                if (idNode != null && idNode.Value != null && idNode.Value.EndsWith(TIMELINE_PLUGIN_SUFFIX))
+                                if (idNode != null && idNode.Value != null && idNode.Value.EndsWith(TIMELINE_PLUGIN_SUFFIX, StringComparison.Ordinal))
                                 {
                                     return true;
                                 }

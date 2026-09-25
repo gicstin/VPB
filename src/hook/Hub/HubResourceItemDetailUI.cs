@@ -65,5 +65,4 @@ namespace VPB
         public Button downloadAllButton;
         public GameObject downloadAvailableIndicator;
     }
-
 }

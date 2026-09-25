@@ -18,7 +18,6 @@ namespace VPB
         static readonly Color OutlinerRowIdle = GalleryUiColorTokens.RowIdle;
         static readonly Color OutlinerRowSelected = GalleryUiColorTokens.ActiveSelected;
 
-
         GameObject _outlinerRoot;
         RectTransform _outlinerPanelRT;
         RectTransform _outlinerTitleBarRT;
@@ -824,7 +823,7 @@ namespace VPB
                 _outlinerPanelRT.pivot = new Vector2(0f, 1f);
                 _outlinerPanelRT.sizeDelta = new Vector2(w, h);
                 Vector2 center = _outlinerSavedPosCenter.HasValue ? _outlinerSavedPosCenter.Value : new Vector2(40f, 40f);
-                _outlinerPanelRT.anchoredPosition = OutlinerFloatCenterToTopLeft(center, _outlinerPanelRT.sizeDelta);
+                _outlinerPanelRT.anchoredPosition = FloatPanelCoords.CenterToTopLeft(center, _outlinerPanelRT.sizeDelta);
             }
             ApplyOutlinerSplit();
             SyncOutlinerResizeMode();
@@ -1308,7 +1307,7 @@ namespace VPB
         void CaptureOutlinerGeometryToMemory()
         {
             if (_outlinerPanelRT == null || OutlinerIsRail()) return;
-            _outlinerSavedPosCenter = OutlinerFloatTopLeftToCenter(
+            _outlinerSavedPosCenter = FloatPanelCoords.TopLeftToCenter(
                 _outlinerPanelRT.anchoredPosition, _outlinerPanelRT.sizeDelta);
             float s = _outlinerChromeScale > 0.01f ? _outlinerChromeScale : 1f;
             _outlinerSavedSizeRef = _outlinerPanelRT.sizeDelta / s;

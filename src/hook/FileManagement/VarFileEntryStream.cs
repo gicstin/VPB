@@ -22,5 +22,4 @@ namespace VPB
 			base.Stream = zipFile.GetInputStream(zipEntry);
 		}
 	}
-
 }

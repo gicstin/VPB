@@ -5,24 +5,16 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
-        /// <summary>Gaps between neighbouring title-bar controls (× scale).</summary>
         private const float TitleBarChromeElementGapRef = GalleryUiDesignTokens.ControlGapRef;
-        /// <summary>Gap categoryΓåöcontrols and controlsΓåöfps pack.</summary>
         private const float TitleBarChromeSectionGapRef = GalleryUiDesignTokens.Space4Ref;
         /// <summary>Padding before close button hits window edge — same band pad as the leading edge.</summary>
         private const float TitleBarChromeEndMarginRef = GalleryUiDesignTokens.BandPadRef;
-        /// <summary>Usable inner width below this (├ù inner pane scale) switches to compact search icon.</summary>
         private const float TitleSearchCollapseWidthPx = 128f;
         private const float TitleBarCategoryClampMaxRef = 260f;
         private const float TitleBarCategoryClampMinRef = 120f;
-        /// <summary>Preferred labeled category width when space allows (no void-filling).</summary>
         private const float TitleBarCategoryPreferredRef = 168f;
         private const float TitleSearchFieldMaxWidthRef = 240f;
 
-        /// <summary>
-        /// Pin left group flush left (category · source · settings · language; overflow: category · settings · …).
-        /// Mid group (remaining filters · search · sort) centers between pin end and FPS/right pack.
-        /// </summary>
         private void ApplyTitleBarResponsiveLayout(float paneScale)
         {
             if (titleSearchInput == null || backgroundBoxGO == null) return;
@@ -154,7 +146,6 @@ namespace VPB
             if (languageSwitcherBtnGO != null)
                 langRT = languageSwitcherBtnGO.GetComponent<RectTransform>();
 
-            // ── Right pack (flush right) ──────────────────────────────────────
             float xRight = halfW - endM;
             float xc = xRight - halfChip;
             if (_titleBarCloseBtnRT != null)
@@ -195,8 +186,6 @@ namespace VPB
                 rightPackLeft = xRight;
             }
 
-            // ── Left pin flush left ───────────────────────────────────────────
-            // Normal: category · source · settings · language. Overflow: category · settings · …
             float xl = -halfW + leftInset;
             int pinned = 0;
             const int LeftPinCount = 4;
@@ -244,7 +233,6 @@ namespace VPB
                 if (pinned < LeftPinCount) xl += g;
             }
 
-            // Overflow “…” lives in the right window pack (Save / Flip always reachable).
             float leftPinEnd = xl;
             float midZoneLeft = leftPinEnd + sec;
             float midZoneRight = rightPackLeft - sec;
@@ -254,7 +242,6 @@ namespace VPB
             if (languagePinned && langRT != null && languageSwitcherBtnGO != null && languageSwitcherBtnGO.activeSelf)
                 langRT.anchoredPosition = new Vector2(languagePinX, 0f);
 
-            // ── Mid group width (filters after pin · search · sort) ───────────
             int midFilterCount = 0;
             if (!overflowMode)
             {
@@ -269,7 +256,6 @@ namespace VPB
             float midFiltersSpan = midFilterCount <= 0
                 ? 0f
                 : midFilterCount * chip + (midFilterCount - 1) * g;
-            // Source in mid (rare): replace one chip with sourceW.
             if (!overflowMode && !sourcePinned && hasSourceFilter)
                 midFiltersSpan += sourceW - chip;
 
@@ -404,7 +390,6 @@ namespace VPB
             try { SyncTitleBarSearchBackdrop(); } catch { }
         }
 
-        /// <summary>Title search field + compact icon: grey when empty; blue when query non-empty.</summary>
         private void SyncTitleBarSearchBackdrop()
         {
             try { SyncTitleSearchChromeForActiveMode(); } catch { }
@@ -594,21 +579,17 @@ namespace VPB
             FocusTitleSearchInputField(_titleSearchPopupField, selectAll);
         }
 
-        /// <summary>Ctrl+F: open/focus title search and select draft text.
-        /// Settings float owns Ctrl+F only while keyboard focus is already inside it (modeless).</summary>
         private void FocusTitleSearchFromHotkey()
         {
             if (!IsVisible || isCollapsed) return;
             if (cleanupModeActive) return;
 
-            // Expanded Settings float + focus already in float → settings filter (not title-search popup).
             if (IsSettingsPanelOpen() && !_settingsFloatCollapsed && IsKeyboardFocusInsideSettingsFloat())
             {
                 try { FocusSettingsSideSearchFromHotkey(); } catch { }
                 return;
             }
 
-            // Legacy middle-pane settings list (if ever re-enabled).
             if (settingsListViewActive)
             {
                 try { FocusSettingsSideSearchFromHotkey(); } catch { }
@@ -632,7 +613,6 @@ namespace VPB
 
         private bool _titleSearchInlineCueActive;
         private Color _titleSearchInlineCueIdle;
-        /// <summary>Cached title-search field Image for cue tick (no GetComponent per frame).</summary>
         private Image _titleSearchInlineCueImg;
         /// <summary>Main-thread scratch for GetWorldCorners — no per-call Vector3[4] alloc.</summary>
         private static readonly Vector3[] TitleSearchWorldCornersScratch = new Vector3[4];
@@ -644,7 +624,6 @@ namespace VPB
                 _titleSearchPopupPanelImg.color = TitleSearchPopupPanelCue;
         }
 
-        /// <summary>Brief backdrop flash when focusing expanded title search (Ctrl+F).</summary>
         private void PulseTitleSearchInlineFieldCue()
         {
             if (titleSearchInput == null) return;
@@ -766,19 +745,13 @@ namespace VPB
                    screenPoint.y >= minY - z && screenPoint.y <= maxY + z;
         }
 
-        /// <summary>
-        /// Dismiss only on explicit outside click (Jakob menu contract). Not proximity/focus-loss —
-        /// so Ctrl+F stays open until Esc, outside click, or compact toggle.
-        /// Compact click handled by <see cref="ToggleTitleSearchPopup"/> (skip here).
-        /// Chip host counts as inside (search chrome).
-        /// </summary>
+        /// <summary>Dismiss only on explicit outside click (Jakob menu contract).</summary>
         private void TickTitleSearchPopupOutsideClickDismiss()
         {
             if (!_titleSearchPopupOpen || _titleSearchPopupRootGO == null || !_titleSearchPopupRootGO.activeSelf)
                 return;
             if (!IsVisible || titleSearchInput == null)
                 return;
-            // Same-frame open: ignore (pointer may still be down from unrelated click).
             if (_titleSearchPopupOpenedFrame >= 0 && Time.frameCount <= _titleSearchPopupOpenedFrame + 1)
                 return;
 
@@ -805,7 +778,6 @@ namespace VPB
                 && ScreenPointInRectTransformExpanded(_titleSearchPopupPanelRT, ptr, 2f, cam))
                 return;
 
-            // Chip Include/Exclude host is part of search chrome — keep popup.
             if (_titleSearchChipHostVisible && _titleSearchChipHostRT != null
                 && ScreenPointInRectTransformExpanded(_titleSearchChipHostRT, ptr, 2f, cam))
                 return;

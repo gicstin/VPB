@@ -11,7 +11,6 @@ namespace VPB
         private readonly GameObject[] _importWizardStepHeaders = new GameObject[ImportWizardStepCount];
         private readonly GameObject[] _importWizardStepContents = new GameObject[ImportWizardStepCount];
         private readonly Text[] _importWizardStepHeaderLabels = new Text[ImportWizardStepCount];
-        // Bit i set = step i collapsed. Persisted as ImportSidebarPrefs.wizardCollapsedMask.
         private int _importWizardCollapsedMask;
         private Text _importWizardMultiSelectHint;
 
@@ -117,7 +116,6 @@ namespace VPB
                 Text t = _importWizardStepHeaderLabels[i];
                 if (t == null) continue;
                 string title = VPBTranslation.T(ImportWizardStepTitleKeys[i], ImportWizardStepTitleDefaults[i]);
-                // Types step: surface selection count on the accordion (was on removed summary strip).
                 if (i == 1)
                 {
                     int n = importSidebarMultiSelectedTypes != null ? importSidebarMultiSelectedTypes.Count : 0;
@@ -156,8 +154,7 @@ namespace VPB
         {
             if (importSidebarScrollContentRT == null) return;
 
-            // No separate "1✓ Atoms · 2✓ Types" strip — step headers are the sole progress chrome
-            // (Shneiderman: reduce STM load; Johnson: one locus for section state).
+            // Step headers are the only progress chrome.
             BuildImportWizardMultiSelectHint(importSidebarScrollContentRT);
 
             Transform stepAtoms = CreateImportWizardStep(
@@ -251,4 +248,3 @@ namespace VPB
         }
     }
 }
-

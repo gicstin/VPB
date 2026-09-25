@@ -356,7 +356,6 @@ namespace VPB
             return Build(verts, vi, proj, pi, gender);
         }
 
-
         private const string WrapStoreTag = "DAZSkinWrapStore";
         private const string WrapStoreSchema = "1.0";
         private const int WrapVertStride = 40;

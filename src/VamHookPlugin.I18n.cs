@@ -4,7 +4,6 @@ namespace VPB
 {
     public partial class VamHookPlugin
     {
-        // UIDynamicButton refs for Quick Menu buttons (Unity UI, need explicit refresh on locale change)
         private UIDynamicButton m_CreateGalleryButton;
         private UIDynamicButton m_BringFrontButton;
         private UIDynamicButton m_CloseAllButton;

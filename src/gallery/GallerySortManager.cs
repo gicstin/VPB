@@ -11,8 +11,6 @@ namespace VPB
 {
     public enum SortType
     {
-        // IMPORTANT: explicit integer values are persisted in cache files and are also used in
-        // snapshot-cache keys. Keep existing values stable and append new values at the end.
         Name = 0,
         Date = 1,
         Size = 2,
@@ -26,19 +24,15 @@ namespace VPB
         HiddenOnly = 10,
         AutoInstall = 11,
         AutoInstallOnly = 12,
-        /// <summary>File / package creation time (not last modified).</summary>
         DateCreated = 13,
         /// <summary>Show only loaded packages (AddonPackages/ + Custom/ + Saves/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
         LoadedOnly = 14,
         /// <summary>Show only unloaded packages (e.g. AllPackages/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
         UnloadedOnly = 15,
-        /// <summary>Local "used" counter (scene launches + clothing applies).</summary>
         UsageCount = 16,
         /// <summary>Show only items with zero local usage.</summary>
         UnusedOnly = 17,
-        /// <summary>Family first added: earliest first_scanned or NTFS creation time across all .var versions.</summary>
         DateAdded = 18,
-        /// <summary>Family last updated: earliest first_scanned or NTFS creation time for highest-N .var version.</summary>
         DateUpdated = 19,
         /// <summary>Random order (Fisher–Yates shuffle each time sort is applied).</summary>
         Random = 20,
@@ -88,14 +82,12 @@ namespace VPB
         private GallerySortCache cache;
 
         // Cache for scene dependencies to avoid re-parsing on every access.
-        // Bounded: clear-on-overflow (same pattern as GalleryFileListSnapshotCache).
         private static Dictionary<string, HashSet<string>> _sceneDependencyCache = new Dictionary<string, HashSet<string>>();
         private const int SceneDependencyCacheMaxEntries = 512;
         private static readonly object FamilyFirstScannedCacheLock = new object();
         private static Dictionary<string, long> _familyFirstScannedByUid;
         private static long _familyFirstScannedScanBinary = long.MinValue;
 
-        /// <summary>Drop in-memory scene-deps L1 cache (package refresh / soak-test bound).</summary>
         public static void ClearSceneDependencyCache()
         {
             _sceneDependencyCache.Clear();
@@ -110,16 +102,9 @@ namespace VPB
             _sceneDependencyCache[filePath] = deps;
         }
 
-        // Background warmer: at-most-one running task that pre-populates the SQLite loose-deps cache.
-        // Writes DB only — never touches _sceneDependencyCache — so it cannot race with main-thread binds.
         private static int _looseDepsWarmRunning;
         private static readonly string[] LooseDepsWarmRoots = { "Saves", "Custom" };
 
-        /// <summary>
-        /// Kick off (or skip-if-running) a background pass that fills <c>loose_deps</c> for every loose <c>.json</c>
-        /// under <c>Saves/</c> and <c>Custom/</c>. Bind reads stay O(1) after this finishes, even for Timeline-heavy
-        /// scene files. Safe to call from any thread; no-op when an extraction pass is already in flight.
-        /// </summary>
         public static void StartBackgroundWarmLooseDepsCache()
         {
             if (VpbShutdown.IsQuitting || VpbSqlite3.IsShutdownInterruptRequested) return;
@@ -178,7 +163,6 @@ namespace VPB
                             VpbLocalDatabase.WriteLooseSceneDeps(path, wt, sz, deps ?? new HashSet<string>());
                             written++;
 
-                            // Throttle so a Timeline-laden library doesn't burn a CPU core for minutes straight.
                             if ((written & 7) == 0) Thread.Sleep(10);
                         }
                         catch { reads.Dispose(); }
@@ -198,9 +182,6 @@ namespace VPB
             SortFiles(files, state, false);
         }
 
-        /// <param name="skipHideOldVersions">
-        /// True when gallery SQL already applied <c>pkg.is_newest</c> (or old-only) — avoid O(N) family re-scan.
-        /// </param>
         public void SortFiles(List<FileEntry> files, SortState state, bool skipHideOldVersions)
         {
             if (files == null || state == null) return;
@@ -307,7 +288,6 @@ namespace VPB
             VpbRandom.Shuffle(files);
         }
 
-        /// <summary>Triple-check logging for the new family-aware sorts. Flip to false to silence.</summary>
         private static bool LogFamilySortDiagnostics = false;
 
         private static void LogFamilyScanTimesSummary(string label, SortDirection dir, List<FileEntry> files, Dictionary<string, FamilyScanTimes> fam)
@@ -537,17 +517,12 @@ namespace VPB
                 files[i] = list[i].File;
         }
 
-        /// <summary>
-        /// Sort using only fields already on <see cref="FileEntry"/> / package metadata (no Unity singletons, no disk I/O).
-        /// Used from a background thread after SQLite bulk list build so the main thread can skip <see cref="SortFiles"/>.
-        /// </summary>
-        /// <returns><c>true</c> if the list was sorted (or trivially needs no sort); <c>false</c> if the caller must run <see cref="SortFiles"/> on the main thread.</returns>
+        /// <summary>Sort using only fields already on FileEntry / package metadata (no Unity singletons, no disk I/O).</summary>
         public static bool TrySortFilesEntryFieldsOnly(List<FileEntry> files, SortState state)
         {
             return TrySortFilesEntryFieldsOnly(files, state, false);
         }
 
-        /// <param name="skipHideOldVersions">True when SQL already filtered newest/old via <c>pkg.is_newest</c>.</param>
         public static bool TrySortFilesEntryFieldsOnly(List<FileEntry> files, SortState state, bool skipHideOldVersions)
         {
             if (files == null || state == null) return false;
@@ -656,7 +631,6 @@ namespace VPB
             public DateTime HighestVersionScanned;
         }
 
-        /// <summary>Family key "creator.packageName" derived from uid prefix (uid format: "Creator.Package.N").</summary>
         private static string ComputeFamilyKey(FileEntry file)
         {
             if (file == null) return null;
@@ -672,8 +646,6 @@ namespace VPB
             }
             else if (file is SystemFileEntry sfe)
             {
-                // Loose files have no version family. Treat each path as its own singleton family so
-                // DateAdded/DateUpdated key off the file's own date instead of collapsing to DateTime.MinValue.
                 string p = sfe.Path ?? "";
                 return p.Length == 0 ? null : "sys:" + p;
             }
@@ -688,11 +660,7 @@ namespace VPB
             return uid.Substring(0, lastDot);
         }
 
-        /// <summary>
-        /// Convert to UTC kind before sort. DateTime.CompareTo compares Ticks ignoring Kind, so a
-        /// Local-kind value sorts the local UTC offset ahead of any UTC-kind value at the same
-        /// wall-clock minute; converting realigns Ticks so the comparison reflects the actual moment.
-        /// </summary>
+        /// <summary>Convert to UTC kind before sort.</summary>
         private static DateTime NormalizeToUtcForCompare(DateTime dt)
         {
             if (dt == DateTime.MinValue) return dt;
@@ -701,7 +669,6 @@ namespace VPB
             return dt;
         }
 
-        /// <summary>Per-row indexed first_scanned, with VarPackage fallback. Returns DateTime.MinValue when unknown.</summary>
         private static DateTime GetIndexedFirstScannedForFile(FileEntry file)
         {
             if (file == null) return DateTime.MinValue;
@@ -729,9 +696,6 @@ namespace VPB
             }
             if (file is SystemFileEntry sfe)
             {
-                // No first_scanned persistence for loose files. Mirror BA's LocalRVGE: prefer ctime
-                // (when did this file land on disk), fall back to mtime. Gives loose .vap meaningful
-                // per-file dates instead of all collapsing to MinValue.
                 try
                 {
                     DateTime ct = FileStat.GetCreationTimeOrMin(sfe.Path);
@@ -759,7 +723,6 @@ namespace VPB
             return DateTime.MinValue;
         }
 
-        /// <summary>Highest VAR version (N from "Creator.Package.N") for this row's uid; 0 when unknown.</summary>
         private static int GetUidVersionNumber(FileEntry file)
         {
             if (file == null) return 0;
@@ -879,16 +842,12 @@ namespace VPB
                 string famKey = ComputeFamilyKey(f);
                 if (string.IsNullOrEmpty(famKey)) continue;
 
-                // Loose files are singleton families: ctime = DateAdded, mtime = DateUpdated.
-                // Without this split, re-saved scenes/presets wouldn't float to the top under DateUpdated.
                 if (f is SystemFileEntry sfe)
                 {
                     DateTime added = DateTime.MinValue;
                     try { added = FileStat.GetCreationTimeOrMin(sfe.Path); } catch { }
                     DateTime updated = sfe.LastWriteTime;
                     if (added == DateTime.MinValue) added = updated;
-                    // File timestamps come back as Local kind; normalize so loose-file families
-                    // sort against UTC-normalized VAR families on the same axis.
                     added = NormalizeToUtcForCompare(added);
                     updated = NormalizeToUtcForCompare(updated);
                     map[famKey] = new FamilyScanTimes { MinScanned = added, HighestVersion = 0, HighestVersionScanned = updated };
@@ -911,30 +870,15 @@ namespace VPB
             return fam.TryGetValue(k, out FamilyScanTimes fst) ? fst.MinScanned : DateTime.MinValue;
         }
 
-        /// <summary>
-        /// Date to render on the gallery row's Date subtitle. Prefers first_scanned (when VPB first indexed this uid,
-        /// i.e. when the user got this version of the package) over file mtime, because .var mtimes are commonly
-        /// preserved from the creator's original build date and don't reflect when the user actually obtained it.
-        /// Falls back to <see cref="FileEntry.LastWriteTime"/> when first_scanned is unknown.
-        /// </summary>
         public static DateTime ResolveDisplayDateForRow(FileEntry file)
         {
             if (file == null) return DateTime.MinValue;
             DateTime dt;
             if (file is VarFileEntry vfe && vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
             if (file is PackageListEntry ple && ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
-            // Loose files: show mtime (DateUpdated key). Reflects the user's most recent edit/resave,
-            // which is the date that's actually informative for a file the user iterates on.
             return file.LastWriteTime;
         }
 
-        /// <summary>
-        /// Drop VAR rows whose uid version is less than the family's highest version.
-        /// No-op when <c>Settings.HideOldVersions</c> is off. Mutates the list in place.
-        /// Non-VAR entries (scenes, JSONs) are left untouched.
-        /// Prefer SQL <c>pkg.is_newest</c> filter on gallery queries; this remains for non-SQL
-        /// fallback paths and package-delta appends (legacy cfg flag).
-        /// </summary>
         public static void ApplyHideOldVersionsFilter(List<FileEntry> files)
         {
             if (files == null || files.Count < 2) return;
@@ -942,7 +886,6 @@ namespace VPB
             try { enabled = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { enabled = false; }
             if (!enabled) return;
 
-            // First pass: per family, track the highest version number seen in this list.
             var highest = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < files.Count; i++)
             {
@@ -980,10 +923,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Keep only VAR rows whose uid version is less than the family's highest version (old versions).
-        /// Non-VAR entries removed. Mutates list in place.
-        /// </summary>
+        /// <summary>Keep only VAR rows whose uid version is less than the family's highest version (old versions).</summary>
         public static void ApplyOldVersionsOnlyFilter(List<FileEntry> files)
         {
             if (files == null || files.Count == 0) return;
@@ -1033,7 +973,6 @@ namespace VPB
             return fam.TryGetValue(k, out FamilyScanTimes fst) ? fst.HighestVersionScanned : DateTime.MinValue;
         }
 
-        /// <summary>Creation time for sorting: .var package time, on-disk file creation, or <see cref="DateTime.MinValue"/> if unknown.</summary>
         private static DateTime GetSortCreationTime(FileEntry file)
         {
             if (file == null) return DateTime.MinValue;
@@ -1070,7 +1009,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Shared by list UI and Deps sort — same rules for VarFileEntry and PackageListEntry.</summary>
         public static int GetDepsCount(FileEntry file)
         {
             try
@@ -1086,7 +1024,7 @@ namespace VPB
                     return deps != null ? deps.Count : 0;
                 }
                 // Handle scene files and other JSON files (only from Custom and Saves folders)
-                if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
+                if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json", StringComparison.Ordinal) ?? false))
                 {
                     string pathLower = file.Path.ToLowerInvariant();
                     if (pathLower.Contains("custom") || pathLower.Contains("saves"))
@@ -1142,7 +1080,6 @@ namespace VPB
             {
                 if (file is VarFileEntry vfe && vfe.Package != null)
                 {
-                    // Lazy cache: calculate on first access
                     if (vfe.Package.MissingDepsCount < 0)
                     {
                         vfe.Package.MissingDepsCount = CalculateMissingDeps(vfe.Package);
@@ -1151,7 +1088,6 @@ namespace VPB
                 }
                 if (file is PackageListEntry ple && ple.Package != null)
                 {
-                    // Lazy cache: calculate on first access
                     if (ple.Package.MissingDepsCount < 0)
                     {
                         ple.Package.MissingDepsCount = CalculateMissingDeps(ple.Package);
@@ -1159,7 +1095,7 @@ namespace VPB
                     return ple.Package.MissingDepsCount;
                 }
                 // Handle scene files and other JSON files (only from Custom and Saves folders)
-                if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
+                if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json", StringComparison.Ordinal) ?? false))
                 {
                     string pathLower = file.Path.ToLowerInvariant();
                     if (pathLower.Contains("custom") || pathLower.Contains("saves"))
@@ -1185,7 +1121,6 @@ namespace VPB
             return 0;
         }
 
-        /// <summary>Missing dependency package ids for a gallery row (same rules as <see cref="GetMissingDepsCount"/>).</summary>
         public static List<string> GetMissingDependencyIds(FileEntry file)
         {
             var missing = new List<string>();
@@ -1202,7 +1137,7 @@ namespace VPB
                     return missing;
                 }
 
-                if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
+                if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json", StringComparison.Ordinal) ?? false))
                 {
                     string pathLower = file.Path.ToLowerInvariant();
                     if (pathLower.Contains("custom") || pathLower.Contains("saves"))
@@ -1275,13 +1210,11 @@ namespace VPB
                     return null;
                 }
 
-                // L1: process-memory cache
                 if (_sceneDependencyCache.TryGetValue(filePath, out var cached))
                 {
                     return cached;
                 }
 
-                // L2: SQLite cache (survives VaM restart; keyed by mtime+size so Timeline writeback invalidates).
                 long wtBin = 0, sz = 0;
                 bool haveStat = false;
                 try
@@ -1306,7 +1239,6 @@ namespace VPB
                     }
                 }
 
-                // Miss: pay the stream scan once, then persist for future binds.
                 var deps = ExtractDependenciesStreaming(file);
 
                 if (deps != null && deps.Count > 0)
@@ -1334,7 +1266,6 @@ namespace VPB
             {
                 string filePath = file.Path;
 
-                // Stream-scan the file without loading it into memory.
                 if (!string.IsNullOrEmpty(filePath) && System.IO.File.Exists(filePath))
                 {
                     dependencies = DependencyExtractor.ExtractDependenciesFromFile(filePath, maxDependencies: 150, maxMilliseconds: 1500);
@@ -1453,14 +1384,13 @@ namespace VPB
         public static HashSet<string> DeduplicateDependenciesByLatestVersion(HashSet<string> deps)
         {
             var deduplicated = new HashSet<string>();
-            var byPackageName = new Dictionary<string, string>(); // key: "Author.Name", value: full "Author.Name.Version"
+            var byPackageName = new Dictionary<string, string>();
 
             foreach (var dep in deps)
             {
                 var parts = dep.Split('.');
                 if (parts.Length >= 3)
                 {
-                    // Extract Author.Name (first two parts)
                     string packageName = parts[0] + "." + parts[1];
 
                     if (!byPackageName.TryGetValue(packageName, out string existing))
@@ -1469,7 +1399,6 @@ namespace VPB
                     }
                     else
                     {
-                        // Keep the one with higher version
                         string existingVersion = existing.Split('.')[2];
                         string newVersion = parts[2];
 
@@ -1485,7 +1414,6 @@ namespace VPB
                 }
             }
 
-            // Add the deduplicated packages
             foreach (var kvp in byPackageName)
             {
                 deduplicated.Add(kvp.Value);
@@ -1496,17 +1424,14 @@ namespace VPB
 
         private static int CompareVersions(string v1, string v2)
         {
-            // "latest" is always newest
             if (v1 == "latest") return 1;
             if (v2 == "latest") return -1;
 
-            // Try numeric comparison
             if (int.TryParse(v1, out int v1Int) && int.TryParse(v2, out int v2Int))
             {
                 return v1Int.CompareTo(v2Int);
             }
 
-            // Fallback to string comparison
             return string.Compare(v1, v2, StringComparison.OrdinalIgnoreCase);
         }
     }
@@ -1572,7 +1497,7 @@ namespace VPB
                 using (var fs = new FileStream(cachePath, FileMode.Create, FileAccess.Write))
                 using (var writer = new BinaryWriter(fs))
                 {
-                    writer.Write(2); // Version
+                    writer.Write(2);
                     writer.Write(sortStates.Count);
                     foreach (var kvp in sortStates)
                     {

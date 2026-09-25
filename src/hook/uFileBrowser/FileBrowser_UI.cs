@@ -5,8 +5,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
-//using MVR.FileManagement;
-//using MVR.FileManagementSecure;
 using UnityEngine;
 using UnityEngine.UI;
 using System.Reflection;
@@ -14,27 +12,6 @@ namespace VPB
 {
     public partial class FileBrowser : MonoBehaviour
     {
-		//public UIDynamicPopup CreateFilterablePopup(JSONStorableStringChooser jsc, int yOffset)
-		//{
-		//	UIDynamicPopup uIDynamicPopup = null;
-
-		//	var manager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
-
-		//	if (manager != null && manager.configurableFilterablePopupPrefab != null && jsc.popup == null)
-		//	{
-		//		Transform transform = CreateUIElement(manager.configurableFilterablePopupPrefab.transform, yOffset);
-		//		if (transform != null)
-		//		{
-		//			uIDynamicPopup = transform.GetComponent<UIDynamicPopup>();
-		//			if (uIDynamicPopup != null)
-		//			{
-		//				uIDynamicPopup.label = jsc.name;
-		//				jsc.popup = uIDynamicPopup.popup;
-		//			}
-		//		}
-		//	}
-		//	return uIDynamicPopup;
-		//}
         protected RectTransform CreateUIContainer(int xOffset, int yOffset, int width, int height)
         {
 			var manager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
@@ -43,15 +20,13 @@ namespace VPB
 				RectTransform backgroundTransform = manager.configurableScrollablePopupPrefab.transform.Find("Background") as RectTransform;
 				RectTransform rectTransform = UnityEngine.Object.Instantiate(backgroundTransform, this.window.transform);
 
-				//RectTransform rectTransform = transform.GetComponent<RectTransform>();
 				rectTransform.localRotation = Quaternion.identity;
 				rectTransform.localPosition = new Vector3(-1725, 850, 0);
 				rectTransform.anchorMin = new Vector2(0, 1);
 				rectTransform.anchorMax = new Vector2(0, 1);
 				rectTransform.pivot = new Vector2(0, 1);
-				// yOffset grows toward negative values
 				rectTransform.anchoredPosition = new Vector2(xOffset, yOffset);
-				rectTransform.sizeDelta = new Vector2(width, height);// Size
+				rectTransform.sizeDelta = new Vector2(width, height);
 				rectTransform.localScale = Vector3.one;
 
 				var layout=	rectTransform.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -107,13 +82,6 @@ namespace VPB
 					FieldInfo fieldInfo = typeof(UIPopup).GetField("maxNumber", BindingFlags.NonPublic | BindingFlags.Instance);
 					fieldInfo.SetValue(popup, 999);
 				}
-				//var uIDynamicToggle = transform.GetComponent<UIDynamicToggle>();
-				//if (uIDynamicToggle != null)
-				//{
-				//	//toggleToJSONStorableBool.Add(uIDynamicToggle, jsb);
-				//	uIDynamicToggle.label = jsb.name;
-				//	jsb.toggle = uIDynamicToggle.toggle;
-				//}
 				return uIDynamicPopup;
 			}
 			return null;
@@ -129,7 +97,6 @@ namespace VPB
 				var uIDynamicToggle = transform.GetComponent<UIDynamicToggle>();
 				if (uIDynamicToggle != null)
 				{
-					//toggleToJSONStorableBool.Add(uIDynamicToggle, jsb);
 					uIDynamicToggle.label = jsb.name;
 					jsb.toggle = uIDynamicToggle.toggle;
 				}
@@ -137,7 +104,6 @@ namespace VPB
 			}
 			return null;
 		}
-
 
         protected Transform CreateUIElement(Transform prefab, int yOffset)
 		{
@@ -154,7 +120,6 @@ namespace VPB
 				rectTransform.anchorMin = new Vector2(0, 1);
 				rectTransform.anchorMax = new Vector2(0, 1);
 				rectTransform.pivot = new Vector2(0, 1);
-				// yOffset grows toward negative values
 				rectTransform.anchoredPosition = new Vector2(-500, yOffset);
 				rectTransform.sizeDelta = new Vector2(500, 120);
 				rectTransform.localScale = Vector3.one;
@@ -195,11 +160,9 @@ namespace VPB
 				rectTransform.anchorMin = new Vector2(1, 1);
 				rectTransform.anchorMax = new Vector2(1, 1);
 				rectTransform.pivot = new Vector2(0, 1);
-				// yOffset grows toward negative values
 				rectTransform.anchoredPosition = new Vector2(0, yOffset);
 				rectTransform.sizeDelta = new Vector2(200, 50);
 				rectTransform.localScale = Vector3.one;
-
 			}
 			return transform;
 		}
@@ -276,7 +239,5 @@ namespace VPB
 			text.fontStyle = FontStyle.Bold;
 			text.color = color;
 		}
-
-
 	}
 }

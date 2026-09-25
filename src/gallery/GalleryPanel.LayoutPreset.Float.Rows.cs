@@ -6,10 +6,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Child handles for one pooled layout-preset row. Rows re-bind whenever the visible window
-    /// moves, and <c>transform.Find</c> per child per bind is a needless string walk in VR.
-    /// </summary>
     internal class LayoutPresetRowRefs : MonoBehaviour
     {
         internal GalleryLayoutPreset Bound;
@@ -37,10 +33,7 @@ namespace VPB
         private static readonly StringBuilder s_layoutSubtitleSb = new StringBuilder(64);
         private static readonly StringBuilder s_layoutTooltipSb = new StringBuilder(192);
 
-        /// <summary>
-        /// Rebuilds the visible slice only. Row height is fixed, so the window is pure index maths and
-        /// a 200-preset list costs the same to open as a 5-preset one.
-        /// </summary>
+        /// <summary>Rebuilds the visible slice only.</summary>
         private void RefreshLayoutPresetsList(bool resetWindow)
         {
             if (_layoutFloatRoot == null || _layoutFloatRowsParent == null) return;
@@ -91,10 +84,7 @@ namespace VPB
             RebuildLayoutPresetWindow(false);
         }
 
-        /// <summary>
-        /// <paramref name="forceRebind"/> only for data changes — scrolling inside an unchanged window
-        /// must not re-bind rows, or every scroll tick pays for the whole visible slice.
-        /// </summary>
+        /// <summary>forceRebind only for data changes — scrolling inside an unchanged window must not re-bind rows.</summary>
         private void RebuildLayoutPresetWindow(bool forceRebind)
         {
             if (_layoutFloatRowsParent == null || _layoutFloatScrollRect == null) return;
@@ -247,9 +237,7 @@ namespace VPB
 
             BuildLayoutPresetRenameChrome(row, refs, s, chromeSz);
 
-            // Row body carries the detail on hover; applying stays on the explicit play button so a
-            // stray click never rearranges every pane. Hover tint rides UIHoverDelegate, not
-            // UIHoverColor — the latter handles drags and would eat the list's drag-to-scroll.
+            // Row body carries the detail on hover; applying stays on the explicit play button so a stray click never rearranges every pane.
             AddDynamicTooltip(row, () => BuildLayoutPresetRowTooltip(refs.Bound));
             UIHoverDelegate hover = row.GetComponent<UIHoverDelegate>();
             if (hover != null)
@@ -264,10 +252,6 @@ namespace VPB
             return row;
         }
 
-        /// <summary>
-        /// Framed schematic of the arrangement: dock edges and pane count as plain solid rectangles.
-        /// Cells are built once and only re-anchored on bind — recycled rows must not churn GameObjects.
-        /// </summary>
         private static void BuildLayoutPresetMiniMap(GameObject row, LayoutPresetRowRefs refs, float miniW, float miniH)
         {
             GameObject frame = UI.CreateChildRT(row, "MiniMap", AnchorPresets.middleCenter,
@@ -294,10 +278,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// In-row rename, matching the filter presets: the row turns into a field with confirm/cancel,
-        /// instead of borrowing the search box.
-        /// </summary>
         private void BuildLayoutPresetRenameChrome(GameObject row, LayoutPresetRowRefs refs, float s, float chromeSz)
         {
             GameObject confirmBtn = UI.CreateFloatChromeIconButton(
@@ -502,10 +482,7 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Shape of the arrangement, never a repeat of the name — the suggested name already carries
-        /// pane count and category, so a duplicated line would waste the only other text slot.
-        /// </summary>
+        /// <summary>Shape of the arrangement, never a repeat of the name.</summary>
         private string BuildLayoutPresetRowSubtitle(GalleryLayoutPreset preset, bool otherMode)
         {
             if (otherMode)
@@ -546,7 +523,6 @@ namespace VPB
             return s_layoutSubtitleSb.ToString();
         }
 
-        /// <summary>Full arrangement on hover — the row itself stays inert so nothing applies by accident.</summary>
         private string BuildLayoutPresetRowTooltip(GalleryLayoutPreset preset)
         {
             if (preset == null) return null;
@@ -615,7 +591,6 @@ namespace VPB
                     min = new Vector2(0f, 0.8f); max = new Vector2(1f, 1f); return;
             }
 
-            // Floating panes fan out across the middle band so pane count stays readable.
             float w = 0.24f;
             float x = 0.38f + (index % 3) * 0.02f;
             float y = 0.2f + (index % 3) * 0.14f;
@@ -651,7 +626,6 @@ namespace VPB
             GalleryLayoutPreset created = SaveCurrentLayoutAsPreset(null);
             if (created == null) return;
             RefreshLayoutPresetsList(true);
-            // Straight into rename: the suggested name is a starting point, not a decision.
             BeginLayoutPresetRename(created);
         }
 

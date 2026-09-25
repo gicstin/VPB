@@ -56,8 +56,6 @@ namespace VPB
             return s.Trim();
         }
 
-        // If val starts with a quote that isn't yet closed, consume additional args (space-joined)
-        // until the matching closing quote is found. Handles OS arg-splitting of quoted values with spaces.
         static string ConsumeQuotedContinuation(string val, string[] args, ref int i)
         {
             if (string.IsNullOrEmpty(val)) return val;
@@ -194,10 +192,8 @@ namespace VPB
             if (request == null) return;
 
             // Wait for FileManager to be fully indexed before executing VDS scene load.
-            // This ensures all package dependencies are known and can be installed if needed.
             if (!VamHookPlugin.IsFileManagerInited) return;
 
-            // Apply log-mode overrides even when VDS scene load isn't used.
             if (request.LogMode && !request.Enabled)
             {
                 if ((Time.frameCount - parseFrame) < 10) return;
@@ -256,10 +252,7 @@ namespace VPB
             }
             catch { }
 
-            // In whitelist mode, dependency install by text can still leave AddonPackages
-            // excluded from VaM registration. Prewarm on-demand registrations from scene
-            // metadata/dependency graph before invoking load so hair/morph entries resolve
-            // in the first scene bootstrap pass.
+            // In whitelist mode, dependency install by text can still leave AddonPackages excluded from VaM registration.
             try
             {
                 FileEntry entry = null;
@@ -270,8 +263,6 @@ namespace VPB
 
             try
             {
-                // In normal UI usage, VPB starts the "scene click" timer when the user clicks a scene file.
-                // For VDS launches there is no click, so start it here to keep timing/telemetry consistent.
                 LogUtil.BeginSceneClick(resolved);
                 if (!LogUtil.IsSceneLoadActive())
                 {
@@ -407,7 +398,6 @@ namespace VPB
                 if (Settings.Instance == null) return;
                 if (configFile == null)
                 {
-                    // Grab the ConfigFile from any ConfigEntry (all of these belong to the same config file).
                     var t = Settings.Instance.GetType();
                     var f = t.GetField("UIKey", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     if (f != null)
@@ -426,7 +416,6 @@ namespace VPB
 
                 if (configFile == null) return;
 
-                // Backup the config file once per session, best-effort.
                 if (!configBackupDone)
                 {
                     configBackupDone = true;
@@ -673,8 +662,6 @@ namespace VPB
                 {
                     try
                     {
-                        // VDS launches can start with a different working directory than normal UI loads.
-                        // VaM resolves relative paths like "Custom/..." relative to the VaM root, so force it here.
                         string dataPath = Application.dataPath;
                         if (!string.IsNullOrEmpty(dataPath))
                         {
@@ -684,20 +671,16 @@ namespace VPB
                             {
                                 Environment.CurrentDirectory = root;
                             }
-
                         }
                     }
                     catch { }
 
-                    // Ensure VaM's file load context is set so SELF:/ and relative paths inside the scene resolve correctly.
-                    // Normal UI scene loads establish this implicitly; VDS loads need to do it explicitly.
                     var vamAsm = typeof(SuperController).Assembly;
                     if (vamAsm != null)
                     {
                         var fmType = vamAsm.GetType("MVR.FileManagement.FileManager");
                         if (fmType != null)
                         {
-
                             // Ensure VaM considers the install root/Custom readable.
                             try
                             {
@@ -725,7 +708,6 @@ namespace VPB
 
                             try
                             {
-                                // Keep the load context on the stack so CurrentPackageUid remains available while textures are loaded.
                                 var pushLoadFrom = fmType.GetMethod("PushLoadDirFromFilePath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string), typeof(bool) }, null);
                                 if (pushLoadFrom != null)
                                 {
@@ -742,7 +724,6 @@ namespace VPB
 
                                 if (!string.IsNullOrEmpty(pkgUid))
                                 {
-                                    // Push a directory inside the package so FileManager.CurrentPackageUid is stable during load.
                                     var pushLoad = fmType.GetMethod("PushLoadDir", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string), typeof(bool) }, null);
                                     if (pushLoad != null)
                                     {
@@ -756,7 +737,6 @@ namespace VPB
                             {
                                 setSave.Invoke(null, new object[] { saveName, true });
                             }
-
                         }
                     }
                 }
@@ -785,6 +765,5 @@ namespace VPB
 
             return false;
         }
-
     }
 }

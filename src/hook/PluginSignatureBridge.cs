@@ -5,12 +5,6 @@ using System.Reflection.Emit;
 
 namespace VPB
 {
-    /// <summary>
-    /// VaM's secure file operations infer plugin signature from the call stack assembly name
-    /// (expects "MVRPlugin_*"). VPB runs as a BepInEx plugin, so direct calls can be rejected
-    /// with "Plugin did not have signature!" on some flows. This bridge builds tiny dynamic
-    /// wrapper methods inside a fake "MVRPlugin_*" assembly so calls pass the signature check.
-    /// </summary>
     internal static class PluginSignatureBridge
     {
         public const string DefaultFakeAssemblyName = "MVRPlugin_VPBBridge_1";
@@ -266,7 +260,6 @@ namespace VPB
         }
     }
 
-    // Backward-compatible alias for existing call sites.
     internal static class PluginSignatureSaveBridge
     {
         public static bool TrySaveScene(string path, out Exception error)

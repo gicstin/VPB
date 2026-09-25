@@ -203,7 +203,6 @@ namespace VPB
             else
             {
                 _currentCreatorSet.Add(creator);
-                // A picked creator implies .var content; force global filter to All so the user does not see a contradictory "Local + Creator: X" state.
                 if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
                 {
                     currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;

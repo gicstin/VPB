@@ -44,15 +44,24 @@ namespace VPB
 
         internal static SimilarIndexState GetSimilarIndexState()
         {
+            string stored, current;
+            return GetSimilarIndexState(out stored, out current);
+        }
+
+        internal static SimilarIndexState GetSimilarIndexState(out string stored, out string current)
+        {
+            stored = null;
+            current = null;
             if (!VpbSqlite3.IsAvailable) return SimilarIndexState.Missing;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSimilarSchema(conn);
-                    string stored = MetaGet(conn, SimilarSigMetaKey);
+                    stored = MetaGet(conn, SimilarSigMetaKey);
                     if (string.IsNullOrEmpty(stored)) return SimilarIndexState.Missing;
-                    return string.Equals(stored, ComputeSimilarSignature(conn), StringComparison.Ordinal)
+                    current = ComputeSimilarSignature(conn);
+                    return string.Equals(stored, current, StringComparison.Ordinal)
                         ? SimilarIndexState.Ready
                         : SimilarIndexState.Stale;
                 }

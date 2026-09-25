@@ -2,11 +2,6 @@ using System.Diagnostics;
 
 namespace VPB
 {
-    /// <summary>
-    /// Stopwatch-based navigation timing (not frame/coroutine based). Category-type clicks are tracked until
-    /// the view is interactively ready: Show + file grid refresh + deferred main side tabs (category/creator).
-    /// Tag / appearance-source sub-pane fill runs afterward and is logged separately as <c>subPane_async</c>.
-    /// </summary>
     public partial class GalleryPanel
     {
         private void BeginGalleryCategoryTypeNavigationTiming(string categoryName)

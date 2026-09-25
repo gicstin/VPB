@@ -32,14 +32,6 @@ namespace VPB
 
 		private FileBrowser browser;
 
-		//public void OnClick()
-		//{
-		//	if ((bool)browser)
-		//	{
-		//		browser.OnShortCutClick(id);
-		//	}
-		//}
-
 		public void Set(FileBrowser b, string pkg, string pkgFilter, bool flat, bool includeRegDirsInFlat, string txt, string path, int i)
 		{
 			browser = b;

@@ -6,7 +6,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>Modal RGB picker: full-gallery dim + centered panel, own Canvas sorting so it stacks above gallery grid.</summary>
     public class UIColorPicker : MonoBehaviour
     {
         private static UIColorPicker _instance;
@@ -41,13 +40,11 @@ namespace VPB
             Show(startColor, callback, null, null);
         }
 
-        /// <param name="modalHost">Typically gallery <see cref="GalleryPanel"/> background rect (full window card).</param>
         public void Show(Color startColor, Action<Color> callback, string optionalTitle, Transform modalHost)
         {
             Transform host = ResolveModalHost(modalHost);
             if (host == null) return;
 
-            // Old picker layout lacked separate window / overlay Canvas.
             if (panelGO == null || panelGO.transform.Find("ColorPickerWindow") == null)
                 BuildPanelUi(host);
 

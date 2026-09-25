@@ -7,10 +7,6 @@ using UnityEngine.Events;
 
 namespace VPB
 {
-    /// <summary>
-    /// VaM + VPB thumbnail caches and plugin save overwrite prompts.
-    /// Must target VaM's <c>Assembly-CSharp</c> <see cref="FileManager"/> — not VPB's hook copy (separate static state).
-    /// </summary>
     internal static class VpbSaveCacheSupport
     {
         private static readonly int[] ThumbnailScaleDenoms = { 1, 2, 4, 8 };
@@ -74,7 +70,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Register the target file's parent folder on VaM's FileManager (covers nested Saves/scene/... paths).</summary>
         internal static void RegisterPluginSaveWritePathForFile(string filePath)
         {
             RegisterPluginSaveWritePathsNoConfirm();
@@ -90,7 +85,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>True when VaM will show its own plugin overwrite confirm for this path.</summary>
         internal static bool PluginSaveWillShowVaMOverwriteConfirm(string path)
         {
             if (string.IsNullOrEmpty(path)) return true;
@@ -107,9 +101,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// One overwrite prompt: VPB message when VaM is suppressed, else let VaM prompt on save.
-        /// </summary>
         internal static void ConfirmOverwriteThenSave(string path, string vpbConfirmMessage, Action saveAction, Action cancelAction)
         {
             if (saveAction == null) return;

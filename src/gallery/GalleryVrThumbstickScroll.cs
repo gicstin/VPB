@@ -5,10 +5,6 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>
-    /// When a VR pointer is over a gallery pane, thumbstick forward/back scrolls the hovered
-    /// <see cref="ScrollRect"/> instead of moving the navigation rig (see VAM <c>LookInputModule</c> UIScroll).
-    /// </summary>
     public static class GalleryVrThumbstickScroll
     {
         private const float StickDeadzone = 0.12f;
@@ -55,7 +51,6 @@ namespace VPB
             float stickForward = ReadNavigateForwardAxis();
             if (Mathf.Abs(stickForward) <= StickDeadzone) return;
 
-            // Settings hover-preview placeholder: stick resizes instead of scrolling lists.
             try
             {
                 if (panel.TryApplyVrThumbstickHoverPreviewSize(stickForward))
@@ -124,7 +119,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Calls <see cref="SuperController.GetFreeNavigateVector"/> via reflection (SteamVR types live outside VPB refs).</summary>
         private static float ReadNavigateForwardAxis(SuperController sc, FieldInfo moveActionField)
         {
             if (sc == null || GetFreeNavigateVectorMethod == null || moveActionField == null) return 0f;

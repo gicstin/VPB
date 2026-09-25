@@ -7,7 +7,6 @@ namespace VPB
 {
     class Tools
     {
-
 		public static string GetGameObjectPath(GameObject obj)
 		{
 			string path = "/" + obj.name;
@@ -19,16 +18,7 @@ namespace VPB
 			return path;
 		}
 
-
-		/// <summary>
-		/// Add a new child game object.
-		/// </summary>
-
 		static public GameObject AddChild(GameObject parent) { return AddChild(parent, true); }
-
-		/// <summary>
-		/// Add a new child game object.
-		/// </summary>
 
 		static public GameObject AddChild(GameObject parent, bool undo)
 		{
@@ -47,10 +37,6 @@ namespace VPB
 			}
 			return go;
 		}
-
-		/// <summary>
-		/// Instantiate an object and add it to the specified parent.
-		/// </summary>
 
 		static public GameObject AddChild(GameObject parent, GameObject prefab)
 		{
@@ -109,6 +95,5 @@ namespace VPB
 			}
 			return GetChildBFS(queue, target, generation++);
 		}
-
 	}
 }

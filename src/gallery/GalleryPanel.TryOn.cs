@@ -7,10 +7,6 @@ using VPB.src.util;
 
 namespace VPB
 {
-    // Try-On Mode: apply a preset live but non-destructively. A floating bar lets the
-    // user Compare (hold to peek at the original), Revert, or Keep. Works identically in
-    // desktop (overlay canvas) and VR (worldspace canvas) because the bar lives on the
-    // same gallery canvas the user already points at.
     public partial class GalleryPanel
     {
         private enum TryOnKind
@@ -25,16 +21,14 @@ namespace VPB
             Plugins
         }
 
-        // Session state
         private bool _tryOnActive;
         private string _tryOnAtomUid;
         private JSONClass _tryOnBaseline;   // snapshot before the candidate was applied
-        private JSONClass _tryOnCandidate;  // snapshot of the applied candidate (lazy, for Compare)
-        private bool _tryOnTouchedPhysical; // cumulative: did any tried preset move the body?
+        private JSONClass _tryOnCandidate;
+        private bool _tryOnTouchedPhysical;
         private bool _tryOnComparing;
         private string _tryOnCurrentName;
 
-        // UI
         private GameObject _tryOnBarGO;
         private Text _tryOnLabel;
 
@@ -53,10 +47,10 @@ namespace VPB
             string categoryLower = category.ToLowerInvariant();
 
             // Excluded from Try-On (full-scene / object-spawning / cache-only operations).
-            if (pathLower.EndsWith(".var")) return TryOnKind.None;
+            if (pathLower.EndsWith(".var", StringComparison.Ordinal)) return TryOnKind.None;
             if (pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || category.Contains("SubScene")) return TryOnKind.None;
-            if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle") || pathLower.EndsWith(".unity3d")) return TryOnKind.None;
-            bool isScene = pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || category.Contains("Scene"));
+            if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle", StringComparison.Ordinal) || pathLower.EndsWith(".unity3d", StringComparison.Ordinal)) return TryOnKind.None;
+            bool isScene = pathLower.EndsWith(".json", StringComparison.Ordinal) && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || category.Contains("Scene"));
             if (isScene) return TryOnKind.None;
 
             if (pathLower.Contains("/clothing/") || pathLower.Contains("\\clothing\\") || category.Contains("Clothing")) return TryOnKind.Clothing;
@@ -67,13 +61,13 @@ namespace VPB
 
             bool isPluginScript =
                 (pathLower.Contains("/custom/scripts/") || pathLower.Contains("\\custom\\scripts\\"))
-                && (pathLower.EndsWith(".cs") || pathLower.EndsWith(".cslist") || pathLower.EndsWith(".dll"));
+                && (pathLower.EndsWith(".cs", StringComparison.Ordinal) || pathLower.EndsWith(".cslist", StringComparison.Ordinal) || pathLower.EndsWith(".dll", StringComparison.Ordinal));
             bool isPluginPreset =
                 pathLower.Contains("/custom/atom/person/plugins/") ||
                 pathLower.Contains("\\custom\\atom\\person\\plugins\\") ||
                 pathLower.Contains("/custom/pluginpresets/") ||
                 pathLower.Contains("\\custom\\pluginpresets\\") ||
-                (pathLower.EndsWith(".vap") && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset") || categoryLower.Contains("plugins")));
+                (pathLower.EndsWith(".vap", StringComparison.Ordinal) && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset") || categoryLower.Contains("plugins")));
             if (isPluginScript || isPluginPreset) return TryOnKind.Plugins;
 
             if (pathLower.Contains("/pose/") || pathLower.Contains("\\pose\\") || pathLower.Contains("/person/") || pathLower.Contains("\\person\\") || category.Contains("Pose")) return TryOnKind.Pose;
@@ -81,11 +75,6 @@ namespace VPB
             return TryOnKind.None;
         }
 
-        /// <summary>
-        /// Routes an apply through Try-On Mode. Returns true if the apply was handled here
-        /// (the caller must then skip its own apply). Returns false to fall through to the
-        /// normal one-shot apply path.
-        /// </summary>
         private bool TryOnInterceptApply(FileEntry file)
         {
             if (!TryOnIsEnabled()) return false;
@@ -96,7 +85,6 @@ namespace VPB
             Atom target = GetBestTargetAtom();
             if (target == null)
             {
-                // No valid target: let the normal path log the "select a Person" hint.
                 return false;
             }
 
@@ -116,7 +104,6 @@ namespace VPB
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB] TryOnInterceptApply error: " + ex);
-                // Best-effort: tear down a half-built session rather than leave a stuck bar.
                 try { TryOnEndSession(false); } catch { }
                 return false;
             }
@@ -207,8 +194,6 @@ namespace VPB
 
             try
             {
-                // restoreCore:false keeps on/collision/parenting flags; setMissingToDefault:true
-                // cleanly removes storables the candidate added that the baseline never had.
                 atom.Restore(state, restorePhysical, true, false, null, false, false, true, false);
             }
             catch (Exception ex)
@@ -221,12 +206,10 @@ namespace VPB
         {
             if (!_tryOnActive) return;
 
-            // Make sure we are showing the candidate, not a held Compare peek.
             if (_tryOnComparing && _tryOnCandidate != null)
                 TryOnRestoreState(_tryOnCandidate, _tryOnTouchedPhysical);
             _tryOnComparing = false;
 
-            // Preserve the ability to undo the committed change.
             JSONClass baseline = _tryOnBaseline;
             string uid = _tryOnAtomUid;
             bool phys = _tryOnTouchedPhysical;
@@ -316,8 +299,6 @@ namespace VPB
             try { ResetArmedApplySemanticsIfIdle(toast: false); } catch { }
         }
 
-        // ---- UI ----
-
         private void TryOnShowBar()
         {
             TryOnEnsureBar();
@@ -339,8 +320,6 @@ namespace VPB
             catch { }
         }
 
-        // Height (in toolbox units) of the Try-On row. Matches a standard toolbox row so the
-        // bar reads as part of the toolbox stack.
         private float TryOnRowHeight(float s)
         {
             float h = tboxInfoRowHeight;
@@ -349,9 +328,7 @@ namespace VPB
             return h;
         }
 
-        // Extra height the toolbox must reserve at its top for the active Try-On bar (row +
-        // gap). Zero when no session is active. Called from the toolbox height calc so the
-        // toolbox grows to include the bar instead of the bar floating over the buttons.
+        // Extra height the toolbox must reserve at its top for the active Try-On bar (row + gap).
         private float TryOnToolboxReservedHeight()
         {
             if (!_tryOnActive || _tryOnBarGO == null) return 0f;
@@ -360,10 +337,6 @@ namespace VPB
             return TryOnRowHeight(s) + TboxBtnRowGapScaled();
         }
 
-        // Pin the bar to the top edge of the toolbox interior, filling the reserved row.
-        // The toolbox top grows (TryOnToolboxReservedHeight) to make room, so the bar sits
-        // above the action buttons rather than over them. Re-run each layout pass so it
-        // tracks resize, toolbox expansion, and scale changes.
         private void TryOnLayoutBar()
         {
             if (_tryOnBarGO == null) return;
@@ -398,14 +371,10 @@ namespace VPB
         private void TryOnEnsureBar()
         {
             if (_tryOnBarGO != null) return;
-            // The bar lives INSIDE the toolbox so it participates in the toolbox layout and
-            // the toolbox grows to include it (see TryOnToolboxReservedHeight / TryOnLayoutBar).
             EnsureTboxUI();
             GameObject parent = tbox != null ? tbox : backgroundBoxGO;
             if (parent == null) return;
 
-            // Pinned to the top edge of the toolbox interior (set fully in TryOnLayoutBar).
-            // Scales with the rest of the chrome.
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
             GameObject bar = UI.CreateChildRT(parent, "VPB_TryOnBar", AnchorPresets.hStretchTop, new Vector2(-(16f * s), TryOnRowHeight(s)));
@@ -414,20 +383,16 @@ namespace VPB
 
             HorizontalLayoutGroup row = UI.AddHLG(bar, spacing: UI.GapControl(s), padding: UI.PadHV(GalleryUiDesignTokens.GroupGapRef, GalleryUiDesignTokens.ControlGapRef, s), childForceExpandWidth: false, childForceExpandHeight: true);
 
-            // Label (takes the remaining width).
             Text label = UI.CreateLabel(bar, "", GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef), new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, name: "Label");
             LayoutElement labelLE = UI.AddLE(label.gameObject, flexibleWidth: 1f);
             _tryOnLabel = label;
 
-            // Compare (hold to peek at the original).
             GameObject compareGO = TryOnCreateButton(bar, "Compare", new Color(0.20f, 0.24f, 0.30f, 1f), 120f * s, s, null);
             TryOnCompareHandler handler = compareGO.AddComponent<TryOnCompareHandler>();
             handler.Panel = this;
 
-            // Revert (discard the candidate, restore the original).
             TryOnCreateButton(bar, "Revert", new Color(0.34f, 0.16f, 0.16f, 1f), 110f * s, s, TryOnRevert);
 
-            // Keep (commit the candidate, end the session).
             TryOnCreateButton(bar, "Keep", new Color(0.16f, 0.32f, 0.18f, 1f), 110f * s, s, TryOnKeep);
 
             bar.SetActive(false);
@@ -454,11 +419,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Hold-to-peek handler for the Try-On Compare button. Pointer down restores the original;
-    /// pointer up (or pointer exit) restores the candidate. Works for mouse (desktop) and the
-    /// VR pointer trigger because both raise the same Unity pointer events on the gallery canvas.
-    /// </summary>
     internal class TryOnCompareHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
     {
         public GalleryPanel Panel;

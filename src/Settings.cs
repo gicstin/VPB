@@ -58,11 +58,8 @@ namespace VPB
         public ConfigEntry<bool> DeleteOriginalCacheAfterCompression;
         public ConfigEntry<bool> Downscale8kTo4kBeforeZstdCache;
         public ConfigEntry<int> ThumbnailThreshold;
-        /// <summary>0 = auto from CPU count and TurboJPEG mode; else clamped 1–64.</summary>
         public ConfigEntry<int> MaxLoaderThreads;
-        /// <summary>0 = auto from CPU count and TurboJPEG mode; else clamped 1–64.</summary>
         public ConfigEntry<int> MaxThumbnailThreads;
-        /// <summary>0 = auto: min(ProcessorCount, 12); else clamped 1–32 parallel VAR deep-scan workers.</summary>
         public ConfigEntry<int> MaxDeepScanWorkers;
 
         public ConfigEntry<string> LastGalleryPage;
@@ -95,6 +92,7 @@ namespace VPB
         public ConfigEntry<bool> LogPerfDiagnostics;
         public ConfigEntry<bool> PerfSilenceVaMPerfMon;
         public ConfigEntry<bool> PerfDetectGiveMeFpsConflict;
+        public ConfigEntry<bool> PerfFastNativePackageRefresh;
         public ConfigEntry<bool> LogSavePerf;
         public ConfigEntry<bool> LogStateMachineApply;
 
@@ -128,9 +126,9 @@ namespace VPB
         public ConfigEntry<bool> ReturnToSceneViewOnStartup;
         public ConfigEntry<string> StartupScenePath;
         public ConfigEntry<bool> ForceLatestDependencies;
+        public ConfigEntry<bool> ForceLatestAllDependencies;
         public ConfigEntry<string> ForceLatestDependencyPackageGroups;
         public ConfigEntry<string> ForceLatestDependencyIgnorePackageGroups;
-        /// <summary>When true, honor meta.json standard/script ReferenceVersionOption (Exact/Minimum/Latest).</summary>
         public ConfigEntry<bool> RespectPackageReferenceVersionOption;
         /// <summary>When true, always treat package refs as Exact (never upgrade versioned UIDs).</summary>
         public ConfigEntry<bool> ForceExactPackageVersions;
@@ -153,7 +151,6 @@ namespace VPB
             UIScale = config.Bind<float>("UI", "Scale", 1.5f, "Set UI Scale.");
             UIPosition = config.Bind<Vector2>("UI", "Position", Vector2.zero, "Set UI Position.");
             MiniMode = config.Bind<bool>("UI", "MiniMode", false, "Set Mini Mode.");
-            // Baseline anchor: treated as "0,0" in the UI position window (see QuickMenuAnchorBaseline in VamHookPlugin).
             QuickMenuCreateGalleryPosDesktop = config.Bind<Vector2>("UI", "QuickMenuCreateGalleryPosDesktop", new Vector2(-515f, -12f), "Anchored position for Quick Menu Create Gallery button in Desktop mode.");
             QuickMenuCreateGalleryPosVR = config.Bind<Vector2>("UI", "QuickMenuCreateGalleryPosVR", new Vector2(-515f, -12f), "Anchored position for Quick Menu Create Gallery button in VR mode.");
             QuickMenuShowHidePosDesktop = config.Bind<Vector2>("UI", "QuickMenuShowHidePosDesktop", new Vector2(-470f, -216f), "Anchored position for Quick Menu Show/Hide button in Desktop mode.");
@@ -162,7 +159,6 @@ namespace VPB
             QuickMenuShowHideUseSameInVR = config.Bind<bool>("UI", "QuickMenuShowHideUseSameInVR", true, "Use the same Quick Menu Show/Hide position in VR as Desktop.");
             QuickMenuCreateGalleryEnabled = config.Bind<bool>("UI", "QuickMenuCreateGalleryEnabled", true, "Show the Quick Menu Create Gallery button.");
             QuickMenuShowHideEnabled = config.Bind<bool>("UI", "QuickMenuShowHideEnabled", true, "Show the Quick Menu Show/Hide button.");
-            // One-time migration: force everyone to the baseline anchor once, then allow custom.
             QuickMenuCreateGalleryAnchorBaselineMigrated = config.Bind<bool>("UI", "QuickMenuCreateGalleryAnchorBaselineMigrated", false, "Internal: set true after Quick Menu anchor baseline migration runs once.");
             EnableZstdCompression = config.Bind<bool>("Optimze", "EnableZstdCompression", true, "Enable Zstd compression for texture cache.");
             
@@ -187,8 +183,9 @@ namespace VPB
             ReturnToSceneViewOnStartup = config.Bind<bool>("Helpers", "ReturnToSceneViewOnStartup", false, "On startup, skip VaM main menu (World UI) and return to scene view (same as Return To Scene View). Ignored when StartupScenePath is set — that scene loads instead.");
             StartupScenePath = config.Bind<string>("Helpers", "StartupScenePath", "", "Scene JSON path or package uid (Author.Pkg.N:/Saves/scene/....json) loaded once after World UI is ready. Empty = VaM main menu. Set from gallery: right-click one scene → Set as startup scene.");
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
+            ForceLatestAllDependencies = config.Bind<bool>("Settings", "ForceLatestAllDependencies", false, "Always use the newest installed version of every package a scene, preset or package depends on, instead of the exact version it names. Groups in ForceLatestDependencyIgnorePackageGroups are excluded. A pinned version is kept when the newest version lacks the requested file, when the item comes from that same package group, and when ForceExactPackageVersions is on. Never downgrades: an older installed version is not used in place of a newer missing one.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
-            ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Comma/space separated list of package groups (Author.Package) to ignore (do not force) even when ForceLatestDependencies is enabled.");
+            ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Package groups (Author.Package) that keep their exact version when ForceLatestAllDependencies or ForceLatestDependencies is on. Mirrored from VPB plugin data file dependency_whitelist.json on every start; edit it in Gallery Settings > Package versions > Excluded packages, not here.");
             RespectPackageReferenceVersionOption = config.Bind<bool>("Settings", "RespectPackageReferenceVersionOption", true, "When true, honor meta.json standardReferenceVersionOption / scriptReferenceVersionOption (Exact, Minimum, Latest) when a pinned package version is missing. Exact pins that exist on disk are always kept.");
             ForceExactPackageVersions = config.Bind<bool>("Settings", "ForceExactPackageVersions", false, "When true, never rewrite versioned package paths (Author.Pkg.N) to a newer version — always use the exact pin. Overrides meta Latest/Minimum for missing-version fallback.");
             PluginConsolidateCslist = config.Bind<bool>("Settings", "PluginConsolidateCslist", true, "In the Plugins gallery category, hide .cs files that are referenced by a .cslist so each multi-file plugin shows as a single row (its .cslist). Standalone .cs files (not in any .cslist) always show. Turn off to see every individual .cs file.");
@@ -225,6 +222,7 @@ namespace VPB
             LogPerfDiagnostics = config.Bind<bool>("Logging", "LogPerfDiagnostics", false, "Emit a 1Hz VPB.Diag line with per-frame call counters (quick-menu refresh, icon GO churn, gallery Update gating, pointer sibling reorders) plus one-shot transition logs for show/hide/menu-gate. Enable temporarily to pinpoint frame-cost hotspots; disable for normal use.");
             PerfSilenceVaMPerfMon = config.Bind<bool>("Performance", "SilenceVaMPerfMonOnPerfPreset", true, "When gallery perf preset P1/P2 is active, silence MeshVR PerfMon camera/pre update hooks (reduces overlay cost).");
             PerfDetectGiveMeFpsConflict = config.Bind<bool>("Performance", "DetectGiveMeFpsConflict", true, "Log a one-time warning if Redeyes GiveMeFPS session plugin is loaded alongside VPB perf presets.");
+            PerfFastNativePackageRefresh = config.Bind<bool>("Performance", "FastNativePackageRefresh", true, "Reuse VaM's AddonPackages listing between package refreshes while folder timestamps are unchanged, and stop VaM from offering every scan-excluded package to the scan filter one by one. Saves roughly 0.3-0.5s on each package catalog refresh (scene loads, on-demand package loads) in large libraries. Turn off if packages copied into AddonPackages while VaM runs are not picked up by a rescan.");
             LogSavePerf = config.Bind<bool>("Logging", "LogSavePerf", false, "Log scene-save timing split: bridge prep vs native SaveScene invocation. Enable when diagnosing save-time regressions vs native VaM baseline.");
             LogStateMachineApply = config.Bind<bool>("Logging", "LogStateMachineApply", false, "Trace MacGruber StateMachine storable restore: Atom.Restore entry, Atom.RestoreFromLast match outcome, MVRPluginManager.CreateScriptController insideRestore field, JSONStorable.RestoreFromJSON payload size. Off by default. Enable only when investigating per-instance storable apply failures (ref. issue #52).");
 
@@ -240,7 +238,6 @@ namespace VPB
             HubCurrentPage = config.Bind<int>("HubBrowser", "CurrentPage", 1, "Hub Browser: Current page.");
             HubOnlyDownloadable = config.Bind<bool>("HubBrowser", "OnlyDownloadable", false, "Hub Browser: Only show downloadable resources.");
             HubHideDownloaded = config.Bind<bool>("HubBrowser", "HideDownloaded", false, "Hub Browser: Hide packages already downloaded to disk.");
-
 
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "", "Last opened Gallery page.");
 

@@ -24,7 +24,6 @@ namespace VPB
             return _userTagClipboardTags != null ? _userTagClipboardTags.Count : 0;
         }
 
-        /// <summary>Copy user tags from current selection into session buffer + system clipboard (union across items).</summary>
         private void UserTagClipboardCopyFromSelection()
         {
             if (selectedFiles == null || selectedFiles.Count == 0)
@@ -93,10 +92,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Paste session buffer (or system clipboard tag list) onto selection.
-        /// Default merge; replace=true removes target user tags not in buffer then applies buffer.
-        /// </summary>
         private void UserTagClipboardPasteToSelection(bool replace)
         {
             if (selectedFiles == null || selectedFiles.Count == 0)
@@ -153,7 +148,6 @@ namespace VPB
             StartCoroutine(UserTagClipboardPasteCoroutine(new List<string>(tags), targets, replace));
         }
 
-        /// <summary>Merge tags from first selected item onto the rest of the selection (same-view speed path).</summary>
         private void UserTagClipboardStampFromFirst()
         {
             if (selectedFiles == null || selectedFiles.Count < 2)
@@ -198,8 +192,6 @@ namespace VPB
                 return;
             }
 
-            // Merge onto whole selection (first already has them — idempotent).
-            // Bulk apply coroutine owns success status ("Updated N item(s).").
             ApplyUserTagsToFileEntries(list, selectedFiles, remove: false);
         }
 
@@ -208,7 +200,6 @@ namespace VPB
             if (UserTagClipboardHasTags())
                 return new List<string>(_userTagClipboardTags);
 
-            // Fall back to system clipboard (newline list) — recognition over recall for external pastes.
             string raw = null;
             try { raw = GUIUtility.systemCopyBuffer; } catch { raw = null; }
             if (string.IsNullOrEmpty(raw)) return null;
@@ -226,7 +217,6 @@ namespace VPB
             }
             if (list.Count == 0) return null;
 
-            // Adopt into session buffer so Paste chrome enables and next paste is instant.
             _userTagClipboardTags = list;
             _userTagClipboardSourceItemCount = 0;
             try { DetailStripSyncTagClipboardActionChrome(); } catch { }
@@ -293,7 +283,6 @@ namespace VPB
 
             if (rows.Count == 0) yield break;
 
-            // For replace: compute tags present on selection that are not in the clipboard (union extras).
             List<string> removeExtras = null;
             if (replace)
             {
@@ -358,7 +347,6 @@ namespace VPB
                 yield break;
             }
 
-            // Refresh: treat as assign for pin/filter sync; also pass removed names when replace.
             if (removeSnap != null && removeSnap.Count > 0)
                 RefreshUiAfterUserTagMutate(remove: true, rowsSnap, removeSnap);
             RefreshUiAfterUserTagMutate(remove: false, rowsSnap, tagsSnap);

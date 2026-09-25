@@ -11,11 +11,9 @@ namespace VPB
         {
             if (!tagsCached) ScheduleTagCountsForSideTabsNonBlocking();
 
-            // Cleared on every sub-pane rebuild; the active chip (if any) re-registers its handle.
             _activeSubfilterChipText = null;
             _activeSubfilterChipLabelPrefix = null;
 
-            // Determine which tags to show
             List<string> tagsToShow = new List<string>();
             string title = titleText != null ? titleText.text : "";
 
@@ -46,17 +44,15 @@ namespace VPB
                         Color btnColor = isActive ? active : inactive;
 
                         int cnt = 0;
-                        if (opt == "Real Clothing") cnt = isActive ? clothingSubfilterCountReal : clothingSubfilterFacetCountReal;
-                        else if (opt == "Presets") cnt = isActive ? clothingSubfilterCountPresets : clothingSubfilterFacetCountPresets;
-                        else if (opt == "Custom") cnt = isActive ? clothingSubfilterCountCustom : clothingSubfilterFacetCountCustom;
-                        else if (opt == "Custom Preset") cnt = isActive ? clothingSubfilterCountCustomPreset : clothingSubfilterFacetCountCustomPreset;
-                        else if (opt == "Base Clothing") cnt = isActive ? clothingSubfilterCountItems : clothingSubfilterFacetCountItems;
-                        else if (opt == "Male") cnt = isActive ? clothingSubfilterCountMale : clothingSubfilterFacetCountMale;
-                        else if (opt == "Female") cnt = isActive ? clothingSubfilterCountFemale : clothingSubfilterFacetCountFemale;
-                        else if (opt == "Decals") cnt = isActive ? clothingSubfilterCountDecals : clothingSubfilterFacetCountDecals;
+                        if (opt == "Real Clothing") cnt = isActive ? tagFacets.ClothingSubfilterCountReal : tagFacets.ClothingSubfilterFacetCountReal;
+                        else if (opt == "Presets") cnt = isActive ? tagFacets.ClothingSubfilterCountPresets : tagFacets.ClothingSubfilterFacetCountPresets;
+                        else if (opt == "Custom") cnt = isActive ? tagFacets.ClothingSubfilterCountCustom : tagFacets.ClothingSubfilterFacetCountCustom;
+                        else if (opt == "Custom Preset") cnt = isActive ? tagFacets.ClothingSubfilterCountCustomPreset : tagFacets.ClothingSubfilterFacetCountCustomPreset;
+                        else if (opt == "Base Clothing") cnt = isActive ? tagFacets.ClothingSubfilterCountItems : tagFacets.ClothingSubfilterFacetCountItems;
+                        else if (opt == "Male") cnt = isActive ? tagFacets.ClothingSubfilterCountMale : tagFacets.ClothingSubfilterFacetCountMale;
+                        else if (opt == "Female") cnt = isActive ? tagFacets.ClothingSubfilterCountFemale : tagFacets.ClothingSubfilterFacetCountFemale;
+                        else if (opt == "Decals") cnt = isActive ? tagFacets.ClothingSubfilterCountDecals : tagFacets.ClothingSubfilterFacetCountDecals;
 
-                        // Active chip shows the live grid count (kept equal to the bottom "X Items" by
-                        // UpdateSelectionContextMenu); inactive chips show the SQL facet count as a prediction.
                         if (isActive && currentFilteredFiles != null) cnt = currentFilteredFiles.Count;
 
                         string label = opt + " (" + cnt + ")";
@@ -108,12 +104,12 @@ namespace VPB
                         Color btnColor = isActive ? active : inactive;
 
                         int cnt = 0;
-                        if (opt == "Presets") cnt = isActive ? hairSubfilterCountPresets : hairSubfilterFacetCountPresets;
-                        else if (opt == "Custom") cnt = isActive ? hairSubfilterCountCustom : hairSubfilterFacetCountCustom;
-                        else if (opt == "Custom Preset") cnt = isActive ? hairSubfilterCountCustomPreset : hairSubfilterFacetCountCustomPreset;
-                        else if (opt == "Base Hair") cnt = isActive ? hairSubfilterCountItems : hairSubfilterFacetCountItems;
-                        else if (opt == "Male") cnt = isActive ? hairSubfilterCountMale : hairSubfilterFacetCountMale;
-                        else if (opt == "Female") cnt = isActive ? hairSubfilterCountFemale : hairSubfilterFacetCountFemale;
+                        if (opt == "Presets") cnt = isActive ? tagFacets.HairSubfilterCountPresets : tagFacets.HairSubfilterFacetCountPresets;
+                        else if (opt == "Custom") cnt = isActive ? tagFacets.HairSubfilterCountCustom : tagFacets.HairSubfilterFacetCountCustom;
+                        else if (opt == "Custom Preset") cnt = isActive ? tagFacets.HairSubfilterCountCustomPreset : tagFacets.HairSubfilterFacetCountCustomPreset;
+                        else if (opt == "Base Hair") cnt = isActive ? tagFacets.HairSubfilterCountItems : tagFacets.HairSubfilterFacetCountItems;
+                        else if (opt == "Male") cnt = isActive ? tagFacets.HairSubfilterCountMale : tagFacets.HairSubfilterFacetCountMale;
+                        else if (opt == "Female") cnt = isActive ? tagFacets.HairSubfilterCountFemale : tagFacets.HairSubfilterFacetCountFemale;
 
                         if (isActive && currentFilteredFiles != null) cnt = currentFilteredFiles.Count;
 
@@ -163,10 +159,10 @@ namespace VPB
                         Color btnColor = isActive ? active : inactive;
 
                         int cnt = 0;
-                        if (opt == "Male") cnt = isActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
-                        else if (opt == "Female") cnt = isActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
-                        else if (opt == "Futa") cnt = isActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
-                        else if (opt == "Unknown") cnt = isActive ? appearanceSubfilterCurrentCountUnknown : appearanceSubfilterFacetCountUnknown;
+                        if (opt == "Male") cnt = isActive ? tagFacets.AppearanceSubfilterCurrentCountMale : tagFacets.AppearanceSubfilterFacetCountMale;
+                        else if (opt == "Female") cnt = isActive ? tagFacets.AppearanceSubfilterCurrentCountFemale : tagFacets.AppearanceSubfilterFacetCountFemale;
+                        else if (opt == "Futa") cnt = isActive ? tagFacets.AppearanceSubfilterCurrentCountFuta : tagFacets.AppearanceSubfilterFacetCountFuta;
+                        else if (opt == "Unknown") cnt = isActive ? tagFacets.AppearanceSubfilterCurrentCountUnknown : tagFacets.AppearanceSubfilterFacetCountUnknown;
 
                         string label = opt + " (" + cnt + ")";
 
@@ -226,7 +222,6 @@ namespace VPB
                     Color inactive = ColorInactiveRow;
                     Color active = ColorFacetActiveRow;
 
-                    // Pose people-count filter (Single vs Dual)
                     {
                         bool isSingleActive = (posePeopleFilter == PosePeopleFilter.Single);
                         bool isDualActive = (posePeopleFilter == PosePeopleFilter.Dual);
@@ -257,7 +252,6 @@ namespace VPB
             }
             else if (title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                // handled above
             }
 
             if (!string.IsNullOrEmpty(tagFilter))
@@ -304,8 +298,6 @@ namespace VPB
                 }, trackedButtons);
             }
 
-            // Update Clear Button
-            // Split-pane clear lives at footer of old sub-scroller — accordion uses filter chips instead.
             GameObject clearBtn = isLeft ? leftSubClearBtn : rightSubClearBtn;
             Text clearBtnText = isLeft ? leftSubClearBtnText : rightSubClearBtnText;
 
@@ -325,4 +317,3 @@ namespace VPB
         }
     }
 }
-

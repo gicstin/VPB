@@ -4,14 +4,8 @@ using System.Text;
 
 namespace VPB
 {
-    /// <summary>
-    /// Library-global newest-version flags on <c>pkg</c> for gallery SQL filters.
-    /// Family = uid prefix before last <c>.</c> (Creator.Package, package name may contain dots);
-    /// <c>is_newest=1</c> for max <c>ver</c> per family and for unparseable uids (always keep when hiding old).
-    /// </summary>
     internal static partial class VpbLocalDatabase
     {
-        /// <summary>No package-version SQL filter.</summary>
         internal const int PkgVersionFilterOff = 0;
         /// <summary>Keep only library-newest package per family (<c>is_newest!=0</c>).</summary>
         internal const int PkgVersionFilterNewestOnly = 1;
@@ -20,9 +14,6 @@ namespace VPB
 
         const string PkgNewestBackfillMetaKey = "pkg_newest_flags_v1";
 
-        /// <summary>
-        /// Parse <c>Creator.Package.N</c> (N integer). Family lowercased for SQL GROUP BY stability.
-        /// </summary>
         internal static bool TryParsePkgUidFamilyVer(string uid, out string familyLower, out int ver)
         {
             familyLower = "";
@@ -60,7 +51,6 @@ namespace VPB
             TryParsePkgUidFamilyVer(uid, out familyLower, out ver);
         }
 
-        /// <summary>Appends AND clause; no bind placeholders.</summary>
         internal static void AppendPkgVersionFilterSql(StringBuilder sb, string pkgAlias, int filterMode)
         {
             if (sb == null || filterMode == PkgVersionFilterOff) return;
@@ -146,10 +136,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Recompute <c>is_newest</c> for entire <c>pkg</c> table. Call after full rebuild / incremental / backfill.
-        /// Unparseable rows (empty family or ver&lt;0) stay newest so Hide-old never drops them.
-        /// </summary>
         static void RefreshAllPkgNewestFlags(VpbSqlite3.Connection conn)
         {
             if (conn == null) return;

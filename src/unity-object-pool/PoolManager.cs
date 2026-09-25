@@ -64,9 +64,6 @@ public class PoolManager : MonoBehaviour
 		var pool = prefabLookup[prefab];
 
 		var clone = pool.GetItem();
-		//recttransform的pool非常难搞。
-		//clone.transform.SetPositionAndRotation(position, rotation);
-		//clone.SetActive(true);
 
 		instanceLookup.Add(clone, pool);
 		dirty = true;
@@ -89,13 +86,11 @@ public class PoolManager : MonoBehaviour
 		}
 	}
 
-
 	private GameObject InstantiatePrefab(GameObject prefab)
 	{
 		var go = Instantiate(prefab) as GameObject;
 		if (root != null)
 		{
-			//go.transform.parent = root;
 			go.SetActive(false);
 			go.transform.SetParent(root,false);
 		}
@@ -109,8 +104,6 @@ public class PoolManager : MonoBehaviour
 			Debug.Log(string.Format("Object Pool for Prefab: {0} In Use: {1} Total {2}", keyVal.Key.name, keyVal.Value.CountUsedItems, keyVal.Value.Count));
 		}
 	}
-
-	#region Static API
 
 	public static void WarmPool(GameObject prefab, int size)
 	{
@@ -131,8 +124,4 @@ public class PoolManager : MonoBehaviour
 	{
 		Instance.releaseObject(clone);
 	}
-
-	#endregion
 }
-
-

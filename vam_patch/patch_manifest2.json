@@ -1,7 +1,7 @@
 {
   "ManifestVersion": 2,
-  "Version": "0.32.880",
-  "BuiltUtc": "2026-09-23T16:24:57Z",
+  "Version": "0.32.893",
+  "BuiltUtc": "2026-09-25T16:48:36Z",
   "Schema": 13,
   "Files": [
     {
@@ -157,8 +157,8 @@
     {
       "RelativePath": "BepInEx/patchers/VPB.Patcher.dll",
       "IsDirectory": false,
-      "Sha1": "02af4cd3ac340001e4bf85636b40a84cd16d3757",
-      "Size": 26624
+      "Sha1": "5d5abc9ccc9aa141d03127b6c60df0b102e37c06",
+      "Size": 27136
     },
     {
       "RelativePath": "BepInEx/plugins/VPB",
@@ -175,8 +175,8 @@
     {
       "RelativePath": "BepInEx/plugins/VPB/VPB.dll",
       "IsDirectory": false,
-      "Sha1": "6f178693e97c4c109ce2e3cb9bfe25f08013b668",
-      "Size": 7109120
+      "Sha1": "d3486f97c6eea860043c3a13503d51b7f6328cd5",
+      "Size": 7085568
     },
     {
       "RelativePath": "BepInEx/plugins/VPB/assets",
@@ -247,26 +247,26 @@
     {
       "RelativePath": "BepInEx/plugins/VPB/assets/translations/ja.json",
       "IsDirectory": false,
-      "Sha1": "e8d361c92b83a6f1ca406f5e63129bceba29e180",
-      "Size": 135908
+      "Sha1": "cbc0fac53c9603b020f64b59d013c6c3f972119a",
+      "Size": 250015
     },
     {
       "RelativePath": "BepInEx/plugins/VPB/assets/translations/ko.json",
       "IsDirectory": false,
-      "Sha1": "0e0155d6519d8085cec8f72994a951c6ddbec765",
-      "Size": 124901
+      "Sha1": "3e2ec666f507f9211f4cccd0d7f955364bfca068",
+      "Size": 229037
     },
     {
       "RelativePath": "BepInEx/plugins/VPB/assets/translations/zh_cn.json",
       "IsDirectory": false,
-      "Sha1": "bbe2bacf0ddfd4a4f0a4a4439d3817eefac0e246",
-      "Size": 113549
+      "Sha1": "6360078768807da8396d66bcef806043d4a3c69e",
+      "Size": 204307
     },
     {
       "RelativePath": "BepInEx/plugins/VPB/assets/translations/zh_tw.json",
       "IsDirectory": false,
-      "Sha1": "31dfe018ada11715a048b32eb1ecc9e9597e2e09",
-      "Size": 113397
+      "Sha1": "2259743cbfe608e5d8145adeeb65bf997a177c16",
+      "Size": 205622
     },
     {
       "RelativePath": "BepInEx/plugins/VPB/assets/icons.pack",

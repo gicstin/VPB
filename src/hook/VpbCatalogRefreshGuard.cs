@@ -2,11 +2,7 @@ using System;
 
 namespace VPB
 {
-    /// <summary>
-    /// Main-thread guard for clothing/hair-only native catalog refreshes.
-    /// When set, VaM RefreshPackageMorphs handlers no-op so Naturalis/TittyMagic morph banks
-    /// are not re-ingested on every clothing on-demand register (log: ~18s × person).
-    /// </summary>
+    /// <summary>Main-thread guard for clothing/hair-only native catalog refreshes.</summary>
     internal static class VpbCatalogRefreshGuard
     {
         static int s_SkipPackageMorphDepth;
@@ -27,7 +23,6 @@ namespace VPB
                 s_SkipPackageMorphDepth--;
         }
 
-        /// <summary>Run action with morph-refresh skip held for the whole call.</summary>
         public static void RunSkippingPackageMorphRefresh(Action action)
         {
             if (action == null) return;

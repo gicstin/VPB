@@ -3,7 +3,6 @@ using UnityEngine.Events;
 
 namespace VPB
 {
-    /// <summary>Entry points for shared modal pickers (color, etc.). Host panel supplies gallery canvas / overlay integration.</summary>
     public static class VPBUiPickers
     {
         /// <summary>Opens <see cref="UIColorPicker"/> via <see cref="GalleryPanel.DisplayColorPicker"/>. Confirmed color keeps <paramref name="initial"/>.a (picker is RGB-only).</summary>

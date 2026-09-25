@@ -10,23 +10,17 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Selection-driven detail strip: identity, badges, clickable actions, quick tags, path.
-    /// </summary>
     public partial class GalleryPanel
     {
         private const int DetailStripMaxTagsShown = 8;
-        /// <summary>Hard cap for inline chips even if width allows more (keeps strip calm).</summary>
         private const int DetailStripMaxTagsInlineHard = 12;
         private const float DetailStripTagFilterPopupWidthRef = 320f;
         private const float DetailStripTagFilterPopupMaxHRef = 320f;
         private const float DetailStripTagFilterPopupPadRef = GalleryUiDesignTokens.ControlGapRef;
-        /// <summary>Meta wrap rows. Was 3 — at high ChromeScale wider glyphs dropped Version/Gender/Flags/dates.</summary>
         private const int DetailStripMetaMaxRows = 6;
-        /// <summary>φ ≈ 1.618 — width / height.</summary>
         private const float DetailStripTagMenuGolden = 1.618034f;
         private const float DetailStripTagMenuWidthRef = 610f;
-        private const float DetailStripTagMenuHeightRef = DetailStripTagMenuWidthRef / DetailStripTagMenuGolden; // ≈377
+        private const float DetailStripTagMenuHeightRef = DetailStripTagMenuWidthRef / DetailStripTagMenuGolden;
         private const float DetailStripTagMenuMinWidthRef = 420f;
         private const float DetailStripTagMenuMinHeightRef = 260f;
         private const float DetailStripTagMenuMaxWidthRef = 1400f;
@@ -35,50 +29,43 @@ namespace VPB
         private const float DetailStripTagMenuColGapRef = GalleryUiDesignTokens.ControlGapRef;
         private const float DetailStripTagMenuSectionLabelHRef = 22f;
         private const float DetailStripTagMenuHeaderHRef = 36f;
-        /// <summary>Sort / title X square — match gallery <see cref="GalleryUiDesignTokens.ButtonSizeRef"/>.</summary>
         private const float DetailStripTagMenuChromeBtnRef = 32f;
         private const int DetailStripTagMenuMaxRows = 48;
         private const int DetailStripTagMenuRecentMax = 8;
         private const float DetailStripTagMenuFilterDebounceSec = 0.12f;
-        /// <summary>Opaque work-surface fill — not shared translucent popup glass.</summary>
-        // Match Settings float chrome (neutral greys — not blue title/chips).
         private static readonly Color DetailStripTagMenuPanelBg = GalleryUiColorTokens.SurfaceDeep;
         private static readonly Color DetailStripTagMenuColBg = GalleryUiColorTokens.ModalSurface;
         private static readonly Color DetailStripTagMenuTitleBarBg = GalleryUiColorTokens.SurfaceDark;
         private static readonly Color DetailStripTagMenuTitleBarBgMulti = GalleryUiColorTokens.SurfaceMid;
 
-        // Semantic value colors (status / role — not one generic blue).
-        private static readonly Color DetailStripColorAuthor = new Color(0.95f, 0.78f, 0.42f, 1f);      // amber identity
+        private static readonly Color DetailStripColorAuthor = new Color(0.95f, 0.78f, 0.42f, 1f);
         private static readonly Color DetailStripColorCategory = GalleryUiColorTokens.CategoryText;
-        private static readonly Color DetailStripColorHubType = new Color(0.55f, 0.72f, 0.92f, 1f);     // Hub listing type
-        private static readonly Color DetailStripColorFact = new Color(0.72f, 0.78f, 0.88f, 1f);        // cool fact
-        private static readonly Color DetailStripColorDeps = new Color(0.55f, 0.78f, 1f, 1f);           // info blue
-        private static readonly Color DetailStripColorMissingOk = new Color(0.45f, 0.78f, 0.52f, 1f);   // green
-        private static readonly Color DetailStripColorMissingBad = new Color(0.95f, 0.42f, 0.38f, 1f);  // red
-        private static readonly Color DetailStripColorDependents = new Color(0.72f, 0.62f, 0.95f, 1f);  // violet
-        private static readonly Color DetailStripColorFlags = new Color(0.92f, 0.62f, 0.38f, 1f);       // orange
-        private static readonly Color DetailStripColorTag = new Color(0.70f, 0.72f, 0.98f, 1f);         // lavender
-        // Action-link weights (hierarchy): Load = launch primary; manage peers quiet; destructive
-        // verbs carry danger at rest (hover-only danger arrives after the click is committed).
-        // Meta/status colors above stay semantic — do not rainbow the action row.
-        private static readonly Color DetailStripActionPrimary = new Color(0.42f, 0.90f, 0.48f, 1f);   // Load (launch)
-        private static readonly Color DetailStripActionSecondary = new Color(0.68f, 0.72f, 0.78f, 1f); // quiet peers
-        private static readonly Color DetailStripActionDangerRest = new Color(0.86f, 0.55f, 0.52f, 1f); // Delete idle
-        private static readonly Color DetailStripActionDanger = new Color(0.95f, 0.45f, 0.45f, 1f);     // Delete hover
+        private static readonly Color DetailStripColorHubType = new Color(0.55f, 0.72f, 0.92f, 1f);
+        private static readonly Color DetailStripColorFact = new Color(0.72f, 0.78f, 0.88f, 1f);
+        private static readonly Color DetailStripColorDeps = new Color(0.55f, 0.78f, 1f, 1f);
+        private static readonly Color DetailStripColorMissingOk = new Color(0.45f, 0.78f, 0.52f, 1f);
+        private static readonly Color DetailStripColorMissingBad = new Color(0.95f, 0.42f, 0.38f, 1f);
+        private static readonly Color DetailStripColorDependents = new Color(0.72f, 0.62f, 0.95f, 1f);
+        private static readonly Color DetailStripColorFlags = new Color(0.92f, 0.62f, 0.38f, 1f);
+        private static readonly Color DetailStripColorTag = new Color(0.70f, 0.72f, 0.98f, 1f);
+        private static readonly Color DetailStripActionPrimary = new Color(0.42f, 0.90f, 0.48f, 1f);
+        private static readonly Color DetailStripActionSecondary = new Color(0.68f, 0.72f, 0.78f, 1f);
+        private static readonly Color DetailStripActionDangerRest = new Color(0.86f, 0.55f, 0.52f, 1f);
+        private static readonly Color DetailStripActionDanger = new Color(0.95f, 0.45f, 0.45f, 1f);
         private static readonly Color DetailStripColorVersionLatest = new Color(0.50f, 0.85f, 0.58f, 1f);
         private static readonly Color DetailStripColorVersionOlder = new Color(0.95f, 0.70f, 0.40f, 1f);
         private static readonly Color DetailStripColorDesc = new Color(0.70f, 0.72f, 0.76f, 0.95f);
 
         private struct DetailStripMetaField
         {
-            public string Label;      // "Author" (plain; colon added in UI)
-            public string Value;      // "CreatorX" (colored; clickable when Enabled)
-            public int Group;         // 0 flowable facts; 1 deps cluster (kept together)
+            public string Label;
+            public string Value;
+            public int Group;
             public bool Enabled;
             public Color ValueColor;
             public UnityAction OnClick;
             public string Tip;
-            public float MaxValueWidth; // >0 soft-cap / ellipsis (long author)
+            public float MaxValueWidth;
         }
 
         private GameObject _detailStripGO;
@@ -96,7 +83,6 @@ namespace VPB
         /// <summary>Collapse control left of title (expanded strip only).</summary>
         private GameObject _detailStripCollapseBtnGO;
         private Image _detailStripCollapseIconImage;
-        /// <summary>Expand control in toolbox label row: icon + label (collapsed strip + selection).</summary>
         private GameObject _detailStripExpandBtnGO;
         private Image _detailStripExpandIconImage;
         private Text _detailStripExpandLabel;
@@ -107,15 +93,12 @@ namespace VPB
         private Image[] _detailStripStarImages;
         private int _detailStripStarRating;
         private int _detailStripStarHover;
-        /// <summary>Overlay prev on thumb (absolute; does not shrink preview).</summary>
         private GameObject _detailStripThumbPrevBtnGO;
         private Button _detailStripThumbPrevBtn;
         private Image _detailStripThumbPrevBtnImage;
-        /// <summary>Overlay next on thumb (absolute; does not shrink preview).</summary>
         private GameObject _detailStripThumbNextBtnGO;
         private Button _detailStripThumbNextBtn;
         private Image _detailStripThumbNextBtnImage;
-        /// <summary>Transient n/N chip on thumb during scrub.</summary>
         private GameObject _detailStripThumbScrubIndexGO;
         private Text _detailStripThumbScrubIndexText;
         private int _detailStripThumbScrubIndexShown = int.MinValue;
@@ -123,17 +106,15 @@ namespace VPB
         private bool _detailStripThumbScrubIndexVisible;
         private Sprite _detailStripThumbNavPrevSprite;
         private Sprite _detailStripThumbNavNextSprite;
-        // Quiet overlay chrome — preview stays primary; ◀▶ secondary (hierarchy / de-emphasize).
         private static readonly Color DetailStripThumbNavBackdrop = new Color(0.04f, 0.04f, 0.04f, 0.40f);
         private static readonly Color DetailStripThumbNavGlyph = new Color(
             GalleryUiColorTokens.TextMuted.r, GalleryUiColorTokens.TextMuted.g, GalleryUiColorTokens.TextMuted.b, 0.70f);
-        /// <summary>Inactive ◀▶ CanvasGroup — keep edge recognizable, not competing with live peer.</summary>
         private const float DetailStripThumbNavDisabledAlpha = 0.20f;
         private static readonly Color DetailStripThumbScrubIndexBg = new Color(0.04f, 0.04f, 0.04f, 0.72f);
         private GameObject _detailStripMetaHost;
         private LayoutElement _detailStripMetaHostLE;
         private GameObject[] _detailStripMetaRows;
-        private GameObject _detailStripActionsRowGO; // host (VLG) for wrapped action rows
+        private GameObject _detailStripActionsRowGO;
         private GameObject[] _detailStripActionRows;
         private const int DetailStripActionMaxRows = 3;
         private GameObject _detailStripThumbColGO;
@@ -168,11 +149,10 @@ namespace VPB
         private static readonly Color DetailStripLinkColor = DetailStripColorDeps;
         private static readonly Color DetailStripLinkDisabledColor = new Color(0.45f, 0.45f, 0.48f, 0.85f);
         private static readonly Color DetailStripMetaMutedColor = new Color(0.62f, 0.62f, 0.66f, 0.95f);
-        // Filled gold on / muted outline off — Jakob rating pattern; solid alpha so fill reads (not washed outline).
         private static readonly Color DetailStripStarOnColor = new Color(0.92f, 0.78f, 0.38f, 0.95f);
         private static readonly Color DetailStripStarOffColor = new Color(0.55f, 0.55f, 0.58f, 0.45f);
         private static readonly Color DetailStripStarPreviewColor = new Color(0.98f, 0.86f, 0.48f, 1f);
-        private Text _detailStripTags; // "Set Tags: " action label (opens quick-tag editor)
+        private Text _detailStripTags;
         private GameObject _detailStripTagsChipsHost;
         private GameObject _detailStripTagClipboardActionsGO;
         private Text _detailStripCopyTagsLink;
@@ -185,7 +165,6 @@ namespace VPB
         private GameObject _detailStripTagFilterMenuGO;
         private RectTransform _detailStripTagFilterPanelRT;
         private Text _detailStripPath;
-        /// <summary>Wide-pane right column: scrollable description + native package tags.</summary>
         private GameObject _detailStripSideColGO;
         private LayoutElement _detailStripSideColLE;
         private GameObject _detailStripSideDescScrollGO;
@@ -208,10 +187,8 @@ namespace VPB
         private Text _detailStripTagMenuSelText;
         private bool _detailStripTagMenuDragged;
         private string _detailStripTagMenuSelectionKey = "";
-        /// <summary>Top filter row (Settings float pattern — search above body).</summary>
         private GameObject _detailStripTagMenuFilterRowGO;
         private GameObject _detailStripTagMenuFilterClearGo;
-        /// <summary>Footer band (Close + resize). Search lives in FilterRow.</summary>
         private GameObject _detailStripTagMenuSearchRowGO;
         private GameObject _detailStripTagMenuCloseGO;
         private GameObject _detailStripTagMenuCollapseBtn;
@@ -219,7 +196,6 @@ namespace VPB
         private bool _detailStripTagMenuCollapsed;
         private Vector2? _detailStripTagMenuCollapsedTopLeftPos;
         private float? _detailStripTagMenuExpandHeightRef;
-        /// <summary>Footer text Close; icon X lives in titlebar.</summary>
         private GameObject _detailStripTagMenuFooterCloseGO;
         private GameObject _detailStripTagMenuColumnsGO;
         private GameObject _detailStripTagMenuAppliedScrollGO;
@@ -243,7 +219,7 @@ namespace VPB
         private const int DetailStripHubTagSelectionScanMax = 256;
         /// <summary>Session MRU for Add column (pinned tags still win order).</summary>
         private readonly List<string> _detailStripTagMenuRecent = new List<string>(DetailStripTagMenuRecentMax);
-        private Vector2? _detailStripTagMenuSavedPos; // panel center (top-left pivot at runtime)
+        private Vector2? _detailStripTagMenuSavedPos;
         private Vector2? _detailStripTagMenuSavedSize;
         private Coroutine _detailStripTagMenuPosSaveCo;
         private GameObject _detailStripTagMenuResizeGO;
@@ -263,21 +239,13 @@ namespace VPB
         private bool _detailStripWantNativeTags;
         private bool _detailStripWantHubTags;
         private bool _detailStripSideVisible;
-        /// <summary>
-        /// Sticky tall-strip stack mode (desc/package tags as main rows). Paired with height
-        /// hysteresis so side↔stack cannot 1 Hz hunt when auto-measure straddles the threshold.
-        /// </summary>
         private bool _detailStripStackSideAsRows;
         private bool _detailStripStackSideDecided;
-        /// <summary>
-        /// Auto-fit height locked to selection identity. Rating/tag paint must not remasure —
-        /// remasure only on selection change, scale, user drag, or large width class change.
-        /// </summary>
+        /// <summary>Auto-fit height locked to selection identity.</summary>
         private float _detailStripAutoHeightLock = -1f;
         private string _detailStripAutoHeightLockKey = "";
         /// <summary>Identity key for last <see cref="DetailStripRefreshSideContent"/> fill (scrub/sameKey skip otherwise).</summary>
         private string _detailStripSideContentKey = "";
-        // Thumb-wheel selection scrub: coalesce steps, lite UI while spinning, soft commit on idle.
         private bool _detailStripScrubActive;
         private int _detailStripScrubPendingSteps;
         private int _detailStripScrubIndex = -1;
@@ -286,31 +254,22 @@ namespace VPB
         private float _detailStripScrubLockedHeight = -1f;
         private const float DetailStripScrubCommitDelaySec = 0.22f;
 
-        /// <summary>True while thumb-scrub session should refuse strip rebuild/hide/populate.</summary>
         private bool DetailStripScrubBlocksRebuild =>
             _detailStripScrubActive || _detailStripScrubHeightLocked;
 
-        /// <summary>Hard floor: min thumb edge. Design 96×s is comfort target via measure, not empty band.</summary>
         private static float DetailStripHardMinHeight(float s)
         {
             if (s <= 0f) s = 1f;
             return 44f * s;
         }
 
-        /// <summary>
-        /// User/content max — design ref × scale. Keep ≤ thumb max so preview stays flush
-        /// (old lineH×rows formula could exceed ThumbMax and leave a gap under the image).
-        /// </summary>
         private static float DetailStripMaxHeight(float s)
         {
             if (s <= 0f) s = 1f;
             return GalleryUiDesignTokens.FooterDetailStripHeightRef * s;
         }
 
-        /// <summary>
-        /// True when auto-fit height is locked for this open strip session.
-        /// Sticky across selection flips so thumb/nav do not jump per item.
-        /// </summary>
+        /// <summary>True when auto-fit height is locked for this open strip session.</summary>
         private bool DetailStripHasAutoHeightLock()
         {
             return _detailStripAutoHeightLock > 8f;
@@ -326,19 +285,13 @@ namespace VPB
             return VPBConfig.Instance != null && VPBConfig.Instance.GalleryDetailStripThumbOnRight;
         }
 
-        /// <summary>
-        /// User-drag floor: title + 1 action + tags + path (+ pad/gaps). No meta —
-        /// HideOverflow drops facts first so path is not clipped at min height.
-        /// Token MinHeightRef is soft target; compact path-fit wins when larger.
-        /// </summary>
         private static float DetailStripUserMinHeight(float s)
         {
             if (s <= 0f) s = 1f;
             float lineH = DetailStripLineHeight(s);
             float hitH = DetailStripHitHeight(s);
             float gap = DetailStripBandGap(s);
-            float vPad = 8f * s; // match TextCol top+bottom pad
-            // title + action0 + tags + path (protected bands)
+            float vPad = 8f * s;
             float compact = vPad + lineH + gap + hitH + gap + lineH + gap + lineH;
             return Mathf.Max(DetailStripHardMinHeight(s), compact);
         }
@@ -371,17 +324,12 @@ namespace VPB
         private static float DetailStripLineHeight(float s)
         {
             if (s <= 0f) s = 1f;
-            // Match global chrome font metrics (ScaledFontSize + FontMin); pad for Arial line box.
             int fontPx = GalleryUiMetrics.ScaledFontSize(
                 GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             float designLine = GalleryUiDesignTokens.FooterDetailStripLineHeightRef * s;
             return Mathf.Max(designLine, fontPx + 4f * s);
         }
 
-        /// <summary>
-        /// Interactive band height for action links + meta rows (≥ line, ≥ hit token).
-        /// Title / desc / path stay on <see cref="DetailStripLineHeight"/>.
-        /// </summary>
         private static float DetailStripHitHeight(float s)
         {
             if (s <= 0f) s = 1f;
@@ -390,7 +338,6 @@ namespace VPB
             return Mathf.Max(lineH, hit);
         }
 
-        /// <summary>Equal condensed gap between strip bands (title / meta / actions / flex lines).</summary>
         private static float DetailStripBandGap(float s)
         {
             if (s <= 0f) s = 1f;
@@ -404,7 +351,6 @@ namespace VPB
             if (csf != null) csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
         }
 
-        /// <summary>Same font path as rest of gallery chrome (<see cref="GalleryUiMetrics.ApplyFont"/>).</summary>
         private static void DetailStripApplyFont(Text txt, float s, int designPt = GalleryUiDesignTokens.FontBodyRef)
         {
             if (txt == null) return;
@@ -413,7 +359,6 @@ namespace VPB
             GalleryUiMetrics.ApplyFont(txt, designPt, s, GalleryUiDesignTokens.FontMinRef);
         }
 
-        /// <summary>Count active meta rows (ignore host active — host may be off from a prior empty sync).</summary>
         private int DetailStripActiveMetaRowCount()
         {
             int metaN = 0;
@@ -445,8 +390,7 @@ namespace VPB
             DetailStripEnsureHostHeightDrivers(_detailStripMetaHost);
 
             float h = DetailStripMetaHostHeight(s);
-            // Keep host active always — SetActive(false) + height check that required host
-            // active was a deadlock (meta never came back after scale/empty sync).
+            // Keep host always active; SetActive(false) gating deadlocked meta refresh.
             if (!_detailStripMetaHost.activeSelf)
                 _detailStripMetaHost.SetActive(true);
             if (_detailStripMetaHostLE == null) return;
@@ -464,14 +408,10 @@ namespace VPB
             _detailStripMetaHostLE.ignoreLayout = false;
         }
 
-        /// <summary>
-        /// LayoutElement only (no ContentSizeFitter) — CSF on VLG children fights parent layout
-        /// and can leave MetaHost / Actions sharing one rect.
-        /// </summary>
+        /// <summary>LayoutElement only: ContentSizeFitter on VLG children fights parent layout.</summary>
         private static void DetailStripEnsureHostHeightDrivers(GameObject host)
         {
             if (host == null) return;
-            // Strip leftover CSF from prior overlap fix attempt.
             ContentSizeFitter csf = host.GetComponent<ContentSizeFitter>();
             if (csf != null)
             {
@@ -532,15 +472,11 @@ namespace VPB
             if (_detailStripGO == null) return 0f;
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            // No extra row-gap — BandPadV on the button band is the seam.
             return DetailStripRowHeight(s);
         }
 
         private void DetailStripEnsure()
         {
-            // Rebuild when missing meta-flow, stars, or still on split Tools row / old D-M-Dn layout.
-            // NOTE: action links live under ActionRowN, not Actions host — never Transform.Find("Link_*")
-            // on _detailStripActionsRowGO (Find is direct-child only; was always-null → destroy loop).
             bool needsRebuild = _detailStripGO != null && (
                 _detailStripActionsRowGO == null
                 || _detailStripMetaHost == null
@@ -591,19 +527,15 @@ namespace VPB
                 || DetailStripActionsHostHasLegacyDirectChild("Link_Tag")
                 || DetailStripActionsHostHasLegacyDirectChild("Chip_Deps")
                 || DetailStripActionsHostHasLegacyDirectChild("Link_Deps")
-                // Hierarchy pass: rebuild strips still on per-action rainbow colors.
                 || (_detailStripActionsRowGO != null
                     && _detailStripActionsRowGO.transform.Find("ActionWeightV2") == null)
                 // Load-first launch CTA + hard sep before manage cluster.
                 || (_detailStripActionsRowGO != null
                     && _detailStripActionsRowGO.transform.Find("ActionLoadV1") == null)
-                // Hit-target pad: rebuild strips still on line-height action/meta rows.
                 || (_detailStripActionsRowGO != null
                     && _detailStripActionsRowGO.transform.Find("HitPadV1") == null)
-                // Band stack: rebuild strips that allowed MetaHost/Actions minHeight collapse.
                 || (_detailStripActionsRowGO != null
                     && _detailStripActionsRowGO.transform.Find("BandStackV1") == null)
-                // Drop More… overflow — rebuild strips that still hide tools behind it.
                 || (_detailStripActionsRowGO != null
                     && (_detailStripActionsRowGO.transform.Find("ActionMoreV1") != null
                         || _detailStripActionsRowGO.transform.Find("OverflowHost") != null)));
@@ -615,7 +547,6 @@ namespace VPB
                 _detailStripLayoutScale = -1f;
             }
 
-            // Orphan More… popup from reverted IA — destroy if still on chrome.
             if (backgroundBoxGO != null)
             {
                 Transform moreMenu = backgroundBoxGO.transform.Find("DetailStripMoreMenu");
@@ -625,7 +556,6 @@ namespace VPB
                 }
             }
 
-            // Expand button is fixed top-left chrome on buttons layer (not flex-packed).
             if (_detailStripExpandBtnGO != null
                 && (_detailStripExpandLabel == null
                     || _detailStripExpandBtnGO.GetComponent<UIScrollWheelHandler>() == null
@@ -646,8 +576,6 @@ namespace VPB
             }
             DetailStripEnsureExpandButton();
 
-            // Strip-level RectMask2D clips ResizeGrip (pivot hangs above strip top). Remove if present.
-            // Desc overflow stays clipped via TextCol mask + budget ellipsis / HideOverflow.
             if (_detailStripGO != null)
             {
                 RectMask2D stripMask = _detailStripGO.GetComponent<RectMask2D>();
@@ -657,7 +585,6 @@ namespace VPB
                 }
             }
 
-            // Tag menu: rebuild if missing two-column / drag-header / search-row, legacy ARF close, or still parented under pane.
             bool tagMenuCloseHasArf = _detailStripTagMenuCloseGO != null
                 && _detailStripTagMenuCloseGO.GetComponent<AspectRatioFitter>() != null;
             bool tagMenuWrongParent = _detailStripTagMenuRoot != null && canvas != null
@@ -671,7 +598,6 @@ namespace VPB
             }
             bool tagMenuMissingKeys = _detailStripTagMenuSearch != null
                 && _detailStripTagMenuSearch.GetComponent<DetailStripTagMenuSearchKeys>() == null;
-            // Settings-master chrome: left title + collapse + top FilterRow (no legacy centered title / footer search).
             bool tagMenuLegacyChrome = false;
             if (_detailStripTagMenuHeaderGO != null)
             {
@@ -695,7 +621,6 @@ namespace VPB
                 && _detailStripTagMenuAvailableScrollGO.GetComponent<UserTagRemoveDropZone>() == null;
             bool tagMenuMissingAppliedApply = _detailStripTagMenuAppliedScrollGO != null
                 && _detailStripTagMenuAppliedScrollGO.GetComponent<UserTagApplyDropZone>() == null;
-            // Soft-attach column drop zones without hard rebuild.
             if (tagMenuMissingAvailRemove || tagMenuMissingAppliedApply)
             {
                 try { DetailStripEnsureTagMenuColumnDropZones(); } catch { }
@@ -707,9 +632,7 @@ namespace VPB
             bool tagMenuMissingResize = _detailStripTagMenuResizeGO == null
                 || (_detailStripTagMenuSearchRowGO != null
                     && !_detailStripTagMenuResizeGO.transform.IsChildOf(_detailStripTagMenuSearchRowGO.transform));
-            // Soft-attach footer drag chrome without hard rebuild.
             try { DetailStripEnsureTagMenuFooterDrag(); } catch { }
-            // Prefer attach ModeTabs / DatabaseHost over destroying an open menu (flash-close).
             if (_detailStripTagMenuRoot != null && DetailStripTagMenuNeedsUnifiedRebuild())
             {
                 try
@@ -804,7 +727,6 @@ namespace VPB
             if (s <= 0f) s = 1f;
             float rowH = DetailStripRowHeight(s);
 
-            // Full-bleed in InfoBar — thumb sits flush; text owns its own pad.
             GameObject strip = UI.CreateChildRT(
                 tbox, "VPB_DetailStrip", AnchorPresets.hStretchTop, new Vector2(0f, rowH));
             _detailStripGO = strip;
@@ -814,7 +736,6 @@ namespace VPB
             stripBg.a = 0.98f;
             _detailStripBg = UI.AddImage(strip, stripBg, raycastTarget: true);
 
-            // Drop zone: drag tags from quick-tagger / chips onto strip → apply to selection.
             DetailStripEnsureApplyDropZone(strip);
 
             // No HLG pad — preview uses full strip edge; gap to text via spacing only.
@@ -854,8 +775,6 @@ namespace VPB
             // Clip path/title Overflow so long strings never paint over SideCol.
             if (textCol.GetComponent<RectMask2D>() == null)
                 textCol.AddComponent<RectMask2D>();
-            // Small left pad so collapse hover rim is not clipped by RectMask2D at thumb seam.
-            // Main gap to thumb stays HLG spacing on strip.
             float bandGap = DetailStripBandGap(s);
             UI.AddVLG(textCol, spacing: bandGap, padding: UI.Pad(GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, s),
                 childAlignment: TextAnchor.UpperLeft,
@@ -865,7 +784,6 @@ namespace VPB
             float lineH = DetailStripLineHeight(s);
             float hitH = DetailStripHitHeight(s);
 
-            // Title left + subtle 5-star rating right.
             _detailStripTitleRowGO = UI.CreateChildRT(textCol, "TitleRow", AnchorPresets.hStretchTop);
             UI.AddHLG(_detailStripTitleRowGO, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false, childForceExpandHeight: true);
@@ -880,7 +798,6 @@ namespace VPB
                 TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
                 raycastTarget: true, richText: true, name: "Title");
             DetailStripApplyFont(_detailStripTitle, s);
-            // preferredWidth 0 — same as flex Path/Tags; bare preferred-size drifts left at low scale.
             UI.AddLE(_detailStripTitle.gameObject, preferredHeight: lineH, minHeight: lineH,
                 flexibleWidth: 1f, minWidth: 0f, preferredWidth: 0f);
             DetailStripBindClick(_detailStripTitle.gameObject, DetailStripOnTitleClick);
@@ -891,7 +808,6 @@ namespace VPB
                 return name + "\n" + VPBTranslation.T("gallery.detail.tip.title", "Click: copy display name");
             });
 
-            // Status badges sit left of stars (not over thumb).
             _detailStripBadgeRowGO = UI.CreateChildRT(_detailStripTitleRowGO, "Badges", AnchorPresets.middleRight, new Vector2(80f * s, lineH));
             UI.AddLE(_detailStripBadgeRowGO, preferredHeight: lineH, minHeight: lineH, flexibleWidth: 0f);
             UI.AddHLG(_detailStripBadgeRowGO, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0, s),
@@ -912,8 +828,6 @@ namespace VPB
 
             DetailStripCreateStars(_detailStripTitleRowGO, s, lineH);
 
-            // Balanced wrapping meta (Author mixed with facts; deps cluster kept together).
-            // hStretchTop (not stretchAll) — prevents TextCol VLG bands from stacking on one rect.
             _detailStripMetaHost = UI.CreateChildRT(textCol, "MetaHost", AnchorPresets.hStretchTop);
             UI.AddVLG(_detailStripMetaHost, spacing: bandGap, padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.UpperLeft,
@@ -963,7 +877,6 @@ namespace VPB
             GameObject act0 = _detailStripActionRows[0];
             GameObject act1 = _detailStripActionRows[1];
 
-            // Markers force rebuild of pre-hierarchy / pre-hit-pad / Load-CTA strips.
             UI.CreateChildRT(_detailStripActionsRowGO, "ActionWeightV2", AnchorPresets.topLeft, Vector2.zero)
                 .SetActive(false);
             UI.CreateChildRT(_detailStripActionsRowGO, "ActionLoadV1", AnchorPresets.topLeft, Vector2.zero)
@@ -971,8 +884,6 @@ namespace VPB
             UI.CreateChildRT(_detailStripActionsRowGO, "HitPadV1", AnchorPresets.topLeft, Vector2.zero)
                 .SetActive(false);
 
-            // Flat action density (power tool): all verbs visible; wrap across rows.
-            // Weights: Load = launch primary; hard | then manage cluster (Hub first); Delete danger on hover.
             _detailStripLoadLink = DetailStripCreateActionLink(act0, "Load", "Load", s,
                 DetailStripOnLoadClick, "gallery.detail.tip.load", "Click: load / open / apply selected item",
                 DetailStripActionPrimary);
@@ -1017,8 +928,6 @@ namespace VPB
                 DetailStripOnCleanupOldVersionsClick, "gallery.detail.tip.old_vers", "Click: move older package versions to DeletedPackages/OldVersions",
                 DetailStripActionDangerRest, DetailStripActionDanger);
 
-            // User tags + path first (actionable). Desc + package tags last (read-only meta).
-            // Set Tags: opens editor; individual chips filter gallery (author-style).
             DetailStripCreateTagsRow(textCol, s, lineH);
 
             _detailStripPath = DetailStripCreateFlexLine(textCol, "Path", new Color(0.62f, 0.62f, 0.65f, 0.92f), s, true, lineH);
@@ -1049,7 +958,6 @@ namespace VPB
             AddDynamicTooltip(_detailStripPackageTags.gameObject, DetailStripPackageTagsTooltip);
             _detailStripPackageTagsChipsHost = DetailStripCreateHubTagChipsHost(textCol, "HubTagChips", s, lineH);
 
-            // Wide-pane right column — scrollable description + native tags (collapses when narrow).
             float sideW = GalleryUiDesignTokens.FooterDetailStripSideMinColWidthRef * s;
             GameObject sideCol = UI.CreateChildRT(strip, "SideCol", AnchorPresets.stretchAll);
             _detailStripSideColGO = sideCol;
@@ -1083,7 +991,6 @@ namespace VPB
 
             DetailStripEnsureExpandButton();
 
-            // T badge also opens tag menu
             DetailStripBindClick(_detailStripBadgeTags, DetailStripOnTagClick);
 
             strip.SetActive(false);
@@ -1101,7 +1008,6 @@ namespace VPB
             _detailStripSideDescScrollLE = UI.AddLE(scrollGO,
                 preferredHeight: lineH, minHeight: lineH,
                 flexibleWidth: 1f, flexibleHeight: 1f);
-            // Raycast target so wheel works over empty padded areas too.
             Image scrollHit = UI.AddImage(scrollGO, new Color(0f, 0f, 0f, 0.01f), raycastTarget: true);
             if (scrollHit != null) scrollHit.raycastTarget = true;
 
@@ -1237,7 +1143,6 @@ namespace VPB
             _detailStripTitle = null;
             _detailStripCollapseBtnGO = null;
             _detailStripCollapseIconImage = null;
-            // Expand button is InfoBar chrome — keep alive across strip rebuilds.
             _detailStripStarsGO = null;
             _detailStripStarImages = null;
             _detailStripStarRating = 0;
@@ -1321,8 +1226,6 @@ namespace VPB
 
         private static Text DetailStripCreateFlexLine(GameObject parent, string name, Color color, float s, bool clickable, float height)
         {
-            // Wrapper row + preferredWidth 0 keeps left edge aligned with Title/Meta
-            // (bare Text preferred-width was shifting Path/Tags left toward the thumb).
             GameObject row = UI.CreateChildRT(parent, name + "Row", AnchorPresets.hStretchTop);
             UI.AddHLG(row, spacing: 0f, padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: true, childForceExpandHeight: true);
@@ -1356,10 +1259,6 @@ namespace VPB
             return host;
         }
 
-        /// <summary>
-        /// Tags row: verb label opens quick-tag editor; chips toggle gallery tag filter (author-style);
-        /// trailing Copy Tags / Paste Tags for 1→N stamp via session clipboard.
-        /// </summary>
         private void DetailStripCreateTagsRow(GameObject parent, float s, float lineH)
         {
             if (parent == null) return;
@@ -1445,7 +1344,6 @@ namespace VPB
 
             DetailStripAddTagChipSep(_detailStripTagClipboardActionsGO, " · ", s, hitH);
 
-            // Quiet secondary — recognition for replace without equal-peer shout (von Restorff).
             _detailStripReplaceTagsLink = DetailStripCreateTagClipboardActionLink(
                 _detailStripTagClipboardActionsGO,
                 "ReplaceTags",
@@ -1495,7 +1393,6 @@ namespace VPB
                 }
                 else if (t == _detailStripReplaceTagsLink)
                 {
-                    // Quieter than Paste when ready; same disabled cue when empty.
                     baseCol = UserTagClipboardHasTags()
                         ? DetailStripActionSecondary
                         : DetailStripLinkDisabledColor;
@@ -1517,7 +1414,6 @@ namespace VPB
 
         private void DetailStripOnPasteTagsClick()
         {
-            // Shift still accelerates replace for experts; visible Replace Tags is the discoverable path.
             bool replace = IsShiftHeld();
             UserTagClipboardPasteToSelection(replace);
         }
@@ -1570,7 +1466,7 @@ namespace VPB
             if (_detailStripCopyTagsLink != null)
             {
                 bool canCopy = selectedFiles != null && selectedFiles.Count > 0;
-                _detailStripCopyTagsLink.raycastTarget = true; // always clickable → status explains empty
+                _detailStripCopyTagsLink.raycastTarget = true;
                 _detailStripCopyTagsLink.color = canCopy
                     ? DetailStripActionSecondary
                     : DetailStripLinkDisabledColor;
@@ -1579,7 +1475,6 @@ namespace VPB
             bool has = UserTagClipboardHasTags();
             if (_detailStripPasteTagsLink != null)
             {
-                // Keep clickable so empty buffer explains itself (no silent disable).
                 _detailStripPasteTagsLink.raycastTarget = true;
                 _detailStripPasteTagsLink.color = has
                     ? DetailStripColorTag
@@ -1737,7 +1632,6 @@ namespace VPB
             float btnW = DetailStripExpandButtonWidth(s);
             string label = VPBTranslation.T("gallery.detail.expand", "Details");
 
-            // Fixed top-left chrome — one action-row tall; wrap rows 2+ use space under it.
             _detailStripExpandBtnGO = new GameObject("DetailStrip_Expand");
             _detailStripExpandBtnGO.transform.SetParent(tboxButtonsLayerRT, false);
             Image bg = UI.AddGalleryElementRoundedBg(_detailStripExpandBtnGO, new Color(0.16f, 0.20f, 0.30f, 0.96f));
@@ -1828,7 +1722,6 @@ namespace VPB
                     return;
                 }
                 VPBConfig.Instance.GalleryDetailStripExpanded = expanded;
-                // Persist across restart.
                 try { VPBConfig.Instance.Save(false); } catch { }
             }
 
@@ -1840,7 +1733,6 @@ namespace VPB
             }
             else
             {
-                // Force populate on re-open (strip may have been soft-hidden).
                 _detailStripCacheKey = "";
             }
 
@@ -1968,10 +1860,6 @@ namespace VPB
             hlg.padding = new RectOffset(left, rightPad >= 0 ? rightPad : p.right, p.top, p.bottom);
         }
 
-        /// <summary>
-        /// Flex root stays full-bleed. Only the top band beside Details gets a left pad —
-        /// wrap rows 2+ reclaim the void under the one-row Details chrome.
-        /// </summary>
         private void DetailStripApplyToolboxFlexLeftInset(float s)
         {
             if (tboxButtonsFlexRootRT == null) return;
@@ -1980,7 +1868,6 @@ namespace VPB
 
             float detailsPad = DetailStripExpandLeftReserve(s);
             bool clothingTop = tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf;
-            // Clothing sits above action rows when active — it shares the Details vertical band.
             float bandPadH = GalleryUiDesignTokens.BandPadHRef * s;
             float clothingLeft = detailsPad > 0f ? detailsPad : bandPadH;
             DetailStripSetHlgLeftPad(tboxClothingModeRowHLG, clothingTop ? clothingLeft : bandPadH, -1);
@@ -2040,7 +1927,6 @@ namespace VPB
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return;
             starValue = Mathf.Clamp(starValue, 0, 5);
-            // Same star again clears rating (0).
             int next = (starValue > 0 && starValue == _detailStripStarRating) ? 0 : starValue;
             DetailStripApplyStarRating(next);
         }
@@ -2073,7 +1959,6 @@ namespace VPB
             DetailStripApplyFont(t, s);
             ContentSizeFitter csf = t.gameObject.AddComponent<ContentSizeFitter>();
             csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            // Vertical PreferredSize fights row LE at high scale (~1.6) → Truncate clip.
             csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
             float hitH = DetailStripHitHeight(s);
             UI.AddLE(t.gameObject, minHeight: hitH, preferredHeight: hitH, flexibleWidth: 0f, flexibleHeight: 0f);
@@ -2150,7 +2035,6 @@ namespace VPB
             et.triggers.Add(entry);
         }
 
-        /// <summary>Tooltip + double-click launch + overlay prev/next on preview thumb.</summary>
         private void DetailStripSyncThumbInteractions()
         {
             GameObject thumbCol = _detailStripThumbColGO;
@@ -2161,14 +2045,11 @@ namespace VPB
             }
             if (thumbCol == null) return;
 
-            // Status bar is one line tall — keep tip as a single line (newlines truncate).
             AddTooltip(
                 thumbCol,
                 "gallery.detail.tip.thumb",
                 "◀ ▶ / Scroll: prev/next · Double-click: launch / apply");
 
-            // EventTrigger implements IScrollHandler and swallows wheel if placed on the hit
-            // target above UIScrollWheelHandler — never put EventTrigger on Thumb/Image children.
             DetailStripStripEventTrigger(_detailStripThumbGO);
             if (_detailStripThumb != null)
                 DetailStripStripEventTrigger(_detailStripThumb.gameObject);
@@ -2204,7 +2085,6 @@ namespace VPB
             wheel.OnScrollValue = DetailStripOnThumbScroll;
         }
 
-        /// <summary>Double-click apply on thumb column (no EventTrigger / IScrollHandler).</summary>
         private void DetailStripBindThumbInput(GameObject go)
         {
             if (go == null) return;
@@ -2219,7 +2099,6 @@ namespace VPB
             DetailStripLaunchBoundOrFirstSelected();
         }
 
-        /// <summary>Load action + thumb double-click — same apply/open path as grid launch.</summary>
         private void DetailStripOnLoadClick()
         {
             DetailStripLaunchBoundOrFirstSelected();
@@ -2245,10 +2124,6 @@ namespace VPB
             DetailStripThumbScrubBy(1);
         }
 
-        /// <summary>
-        /// Overlay ◀▶ on thumb image (absolute anchors). Does not pad/inset RawImage —
-        /// preview stays full square; buttons draw on top.
-        /// </summary>
         private void DetailStripEnsureThumbNavOverlay(GameObject thumbCol)
         {
             if (thumbCol == null) return;
@@ -2411,7 +2286,6 @@ namespace VPB
                 if (rt != null)
                 {
                     float indexH = GalleryUiDesignTokens.ButtonSizeRef * s;
-                    // Wide enough for compact "999K/999K" at body font.
                     float indexW = Mathf.Max(72f * s, btnSz * 2.4f);
                     rt.sizeDelta = new Vector2(indexW, indexH);
                     rt.anchoredPosition = new Vector2(0f, inset);
@@ -2458,7 +2332,6 @@ namespace VPB
 
             bool canPrev = count > 1 && idx > 0;
             bool canNext = count > 1 && idx >= 0 && idx < count - 1;
-            // Unknown index: allow both so first click resolves via scrub path.
             if (count > 1 && idx < 0)
             {
                 canPrev = true;
@@ -2476,7 +2349,6 @@ namespace VPB
                 btn.interactable = enabled;
 
             // ColorTint is Transition.None — disabledColor never reaches Icon child.
-            // CanvasGroup dims backdrop + glyph + hover rim as one unit.
             CanvasGroup cg = btn.GetComponent<CanvasGroup>();
             if (cg == null) cg = btn.gameObject.AddComponent<CanvasGroup>();
             float a = enabled ? 1f : DetailStripThumbNavDisabledAlpha;
@@ -2491,10 +2363,6 @@ namespace VPB
             if (hb != null) hb.SyncIndicatorVisibility();
         }
 
-        /// <summary>
-        /// Show n/N on thumb while scrubbing. Text rebuild only when index/count changes
-        /// (warm path — not per-frame).
-        /// </summary>
         private void DetailStripSyncScrubIndexOverlay()
         {
             if (_detailStripThumbScrubIndexGO == null) return;
@@ -2568,7 +2436,6 @@ namespace VPB
             }
             catch { }
             try { TboxAfterGridRateChanged(); } catch { }
-            // Cache key excludes rating — no remount. Stars already painted.
         }
 
         private static void DetailStripUnbindClick(GameObject go)
@@ -2616,7 +2483,6 @@ namespace VPB
                 DetailStripRefreshGeometry();
         }
 
-        /// <summary>Re-apply every scale-dependent strip metric so ChromeScale stays consistent.</summary>
         private void DetailStripApplyChromeScale(float s)
         {
             if (s <= 0f) s = 1f;
@@ -2788,7 +2654,6 @@ namespace VPB
             DetailStripApplyFont(_detailStripTags, s);
             DetailStripApplyFont(_detailStripPath, s);
 
-            // Desc height/wrap depends on tall-stack vs side — not a fixed single line.
             try { DetailStripApplyDescPlacement(); } catch { }
             try { DetailStripApplyPackageTagsPlacement(); } catch { }
             DetailStripSyncTagsRowChrome(lineH, s);
@@ -2996,7 +2861,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Called from gallery UI-scale path so strip tracks pane × host at any factor.</summary>
         internal void DetailStripRescaleForUiScale(float s)
         {
             if (s <= 0f) s = 1f;
@@ -3015,7 +2879,6 @@ namespace VPB
         private static float DetailStripThumbEdge(float s, float stripH)
         {
             if (s <= 0f) s = 1f;
-            // Always match strip height — clamping below stripH left a black gap under preview.
             float minEdge = DetailStripHardMinHeight(s);
             if (stripH > 1f) return Mathf.Max(minEdge, stripH);
             return minEdge;
@@ -3105,7 +2968,6 @@ namespace VPB
             if (s <= 0f) s = 1f;
             Transform textColTr = _detailStripGO != null ? _detailStripGO.transform.Find("TextCol") : null;
             if (textColTr == null) return;
-            // Extra pad on the thumb seam so collapse hover rim is not clipped.
             RectOffset pad = DetailStripThumbOnRight()
                 ? UI.Pad(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, s)
                 : UI.Pad(GalleryUiDesignTokens.HairGapRef, GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.TightGapRef, s);
@@ -3136,15 +2998,13 @@ namespace VPB
                 if (sideCol != null) sideCol.SetSiblingIndex(2);
             }
 
-            // Keep overlay grip last so it stays above HLG children for raycasts.
             if (_detailStripResizeGripGO != null)
                 _detailStripResizeGripGO.transform.SetAsLastSibling();
 
             DetailStripApplyTextColPadForThumbSide(ChromeScale > 0f ? ChromeScale : 1f);
         }
 
-        // Hover-reveal splitter (desktop pane pattern): idle chrome stays out of the way;
-        // full rail + pill only when pointer approaches. Hit target stays full-width (Fitts).
+        // Hover-reveal splitter (desktop pane pattern): idle chrome stays out of the way; full rail + pill only when pointer approaches.
         private static readonly Color DetailStripResizeGripBgNormal = new Color(
             GalleryUiColorTokens.SurfaceDark.r, GalleryUiColorTokens.SurfaceDark.g, GalleryUiColorTokens.SurfaceDark.b, 0f);
         private static readonly Color DetailStripResizeGripBgHover = new Color(
@@ -3153,7 +3013,6 @@ namespace VPB
             GalleryUiColorTokens.TextMuted.r, GalleryUiColorTokens.TextMuted.g, GalleryUiColorTokens.TextMuted.b, 0.14f);
         private static readonly Color DetailStripResizeGripHandleHover = GalleryUiColorTokens.TextPrimary;
 
-        /// <summary>True when grip is legacy (over title / opaque idle / missing Handle).</summary>
         private static bool DetailStripResizeGripNeedsRebuild(GameObject grip)
         {
             if (grip == null) return true;
@@ -3161,7 +3020,6 @@ namespace VPB
             if (rt == null) return true;
             if (rt.pivot.y > 0.5f) return true;
             if (grip.transform.Find("Handle") == null) return true;
-            // Old always-on chrome (opaque rail/pill) → rebuild for quiet-idle colors.
             UIHoverColor[] hovers = grip.GetComponents<UIHoverColor>();
             for (int i = 0; i < hovers.Length; i++)
             {
@@ -3169,7 +3027,6 @@ namespace VPB
                 if (h != null && h.normalColor.a > 0.35f)
                     return true;
             }
-            // Twin dashes fought quiet idle; drop them.
             Transform handle = grip.transform.Find("Handle");
             if (handle != null && handle.Find("DashA") != null)
                 return true;
@@ -3206,13 +3063,11 @@ namespace VPB
                     flexibleWidth: 1f, flexibleHeight: 0f);
                 if (gripLe != null) gripLe.ignoreLayout = true;
 
-                // Full-width rail — easy to aim; idle alpha 0 so work surface stays clean.
                 _detailStripResizeGripBg = UI.AddImage(grip, DetailStripResizeGripBgNormal, raycastTarget: true);
 
                 float handleW = GalleryUiDesignTokens.FooterDetailStripResizePillWRef * s;
                 float handleH = GalleryUiDesignTokens.FooterDetailStripResizePillHRef * s;
                 GameObject handle = UI.CreateChildRT(grip, "Handle", AnchorPresets.middleCenter, new Vector2(handleW, handleH));
-                // Whisper pill at rest (Norman signifier); bright on hover. Bg owns raycasts.
                 _detailStripResizeGripPill = UI.AddImage(handle, DetailStripResizeGripHandleNormal, raycastTarget: false);
 
                 DetailStripHeightDragRelay drag = grip.AddComponent<DetailStripHeightDragRelay>();
@@ -3220,7 +3075,6 @@ namespace VPB
                 drag.OnMove = DetailStripOnResizeDrag;
                 drag.OnEnd = DetailStripOnResizeEnd;
 
-                // Rail + pill: quiet idle → full chrome on hover/drag (two hover comps, same GO).
                 UIHoverColor railHover = grip.AddComponent<UIHoverColor>();
                 railHover.targetImage = _detailStripResizeGripBg;
                 railHover.normalColor = DetailStripResizeGripBgNormal;
@@ -3247,7 +3101,6 @@ namespace VPB
             RectTransform gripRT = _detailStripResizeGripGO.GetComponent<RectTransform>();
             if (gripRT != null)
             {
-                // Pivot at bottom edge of grip → bar sits fully above strip top (no title clip).
                 gripRT.anchorMin = new Vector2(0f, 1f);
                 gripRT.anchorMax = new Vector2(1f, 1f);
                 gripRT.pivot = new Vector2(0.5f, 0f);
@@ -3261,8 +3114,7 @@ namespace VPB
                 gripLe.preferredHeight = gripH;
                 gripLe.ignoreLayout = true;
             }
-            // Keep UIHoverColor targets in sync; do not paint Image.color here — refresh would
-            // wipe hover/drag highlight while the pointer is still over the grip.
+            // Keep UIHoverColor targets in sync; do not paint Image.color here.
             UIHoverColor[] hovers = _detailStripResizeGripGO.GetComponents<UIHoverColor>();
             for (int i = 0; i < hovers.Length; i++)
             {
@@ -3327,7 +3179,6 @@ namespace VPB
                     parent, eventData.position, cam, out local))
                 return;
 
-            // Strip grows InfoBar upward into grid — mouse up increases height.
             float dy = local.y - _detailStripResizeStartLocal.y;
             float minH = DetailStripUserMinHeight(s);
             float maxH = DetailStripMaxHeight(s);
@@ -3342,7 +3193,6 @@ namespace VPB
             try { VPBConfig.Instance?.TriggerChange(); } catch { }
         }
 
-        /// <summary>Set strip height from drag/settings; square thumb + overflow lines follow.</summary>
         private void DetailStripApplyUserHeight(float hScaled, bool persist)
         {
             float s = ChromeScale;
@@ -3383,7 +3233,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Pack actions by width, measure content, resize strip (shorter when wide / fewer rows).</summary>
         private void DetailStripRefreshGeometry()
         {
             if (_detailStripInRefreshGeometry) return;
@@ -3393,7 +3242,6 @@ namespace VPB
                 float s = ChromeScale;
                 if (s <= 0f) s = 1f;
                 try { DetailStripNormalizeTextColRows(); } catch { }
-                // Side column first — packs + meta avail width subtract its column.
                 try { DetailStripSyncSideColumn(s, allowPlacementChange: true); } catch { }
                 try { DetailStripPackActionRows(s); } catch { }
                 try { DetailStripSyncMetaHostHeight(s); } catch { }
@@ -3417,19 +3265,14 @@ namespace VPB
                     h = DetailStripComputeContentHeight(s);
                     _detailStripAutoHeightLock = h;
                 }
-                // Scrub session: keep outer strip height stable (no tbox jump / layout thrash).
                 if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
                     h = _detailStripScrubLockedHeight;
                 _detailStripMeasuredHeight = h;
                 try { DetailStripSyncThumbSide(); } catch { }
                 DetailStripLayout();
-                // Side desc viewport was sized with pre-measure height — refill to final strip edge.
-                // Do not flip stack/side here (that reopens the height↔width feedback loop).
                 try { DetailStripSyncSideColumn(s, allowPlacementChange: false); } catch { }
-                // Pack/side sync can reintroduce horizontal drift — re-align once, then restack.
                 try { DetailStripNormalizeTextColRows(); } catch { }
                 try { DetailStripRebuildTextColLayout(); } catch { }
-                // Side-rail span ignores detail-strip height (stable pane chrome) — no invalidate here.
             }
             finally
             {
@@ -3448,22 +3291,15 @@ namespace VPB
             return DetailStripMaxHeight(s);
         }
 
-        /// <summary>
-        /// If content exceeds budget: meta extras → package tags → shrink/ellipsis desc →
-        /// trailing actions. Always keep title + action row 0 (Copy/Hub/…). Never squash
-        /// protected row heights. User tags + path stay. Read-only prose yields first.
-        /// </summary>
         private void DetailStripHideOverflowLines(float s, float maxH)
         {
             try
             {
                 if (maxH < 8f) maxH = DetailStripMaxHeight(s);
-                // Must use unclamped measure — clamped ComputeContentHeight always ≤ maxH,
-                // so overflow never fired and multi-line desc painted over toolbox.
+                // Must use unclamped measure — clamped ComputeContentHeight always ≤ maxH.
                 float h = DetailStripComputeContentHeightRaw(s);
                 if (h <= maxH + 0.5f) return;
 
-                // Drop meta beyond the first 2 detail rows, then 2nd, then 1st.
                 if (_detailStripMetaRows != null)
                 {
                     for (int pass = 0; pass < 3; pass++)
@@ -3526,8 +3362,6 @@ namespace VPB
                     }
                 }
 
-                // Keep Tags + Path when wanted — strip RectMask2D clips remainder.
-                // Still over budget: accept clip. Never deactivate action row 0.
             }
             finally
             {
@@ -3535,7 +3369,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Keep primary action band on when it still has visible links.</summary>
         private void DetailStripEnsureActionRow0Visible(float s)
         {
             if (_detailStripActionRows == null || _detailStripActionRows.Length == 0) return;
@@ -3605,7 +3438,6 @@ namespace VPB
             DetailStripSyncMetaHostHeight(s);
         }
 
-        /// <summary>Restore optional bands then hide what no longer fits the height budget.</summary>
         private void DetailStripAdaptContentToHeight(float s, float budgetH)
         {
             try
@@ -3654,10 +3486,6 @@ namespace VPB
             return Mathf.Clamp(DetailStripComputeContentHeightRaw(s), hardMin, maxH);
         }
 
-        /// <summary>
-        /// Unclamped TextCol stack height. Used by overflow adapt — clamped measure always
-        /// sits ≤ max and would skip hide/ellipsis.
-        /// </summary>
         private float DetailStripComputeContentHeightRaw(float s)
         {
             return DetailStripComputeContentHeightCore(s, includeDesc: true, includePackageTags: true);
@@ -3674,7 +3502,6 @@ namespace VPB
             float lineH = DetailStripLineHeight(s);
             float hitH = DetailStripHitHeight(s);
             float gap = DetailStripBandGap(s);
-            // vPad matches TextCol VLG top+bottom pad (4+4).
             float vPad = 8f * s;
             float total = vPad;
             int parts = 0;
@@ -3686,8 +3513,7 @@ namespace VPB
                 parts++;
             }
 
-            // Derive from live row count — stale LayoutElement preferredHeight after scale-down
-            // left a tall empty meta band (black gap between title and actions).
+            // Derive height from live row count; stale preferredHeight left an empty band.
             float metaH = DetailStripMetaHostHeight(s);
             if (metaH > 0.5f)
             {
@@ -3756,8 +3582,7 @@ namespace VPB
             if (row == null) return;
             RectTransform rt = row.GetComponent<RectTransform>();
             if (rt == null) return;
-            // Horizontal drift only. Never rewrite vertical anchors/size — that fights VLG and
-            // piles every TextCol band on the parent top (meta + actions overlap).
+            // Horizontal drift only.
             float yMin = rt.offsetMin.y;
             float yMax = rt.offsetMax.y;
             if (Mathf.Abs(rt.offsetMin.x) > 0.01f || Mathf.Abs(rt.offsetMax.x) > 0.01f)
@@ -3770,7 +3595,6 @@ namespace VPB
                 rt.anchoredPosition = new Vector2(0f, ap.y);
         }
 
-        /// <summary>Re-align every TextCol band to the same left/right edge (scale-safe).</summary>
         private void DetailStripNormalizeTextColRows()
         {
             DetailStripNormalizeRowRect(_detailStripTitleRowGO);
@@ -3813,7 +3637,7 @@ namespace VPB
             for (int i = 0; i < t.childCount; i++)
             {
                 Transform c = t.GetChild(i);
-                if (c != null && c.gameObject.activeSelf && c.name != null && c.name.StartsWith("Link_"))
+                if (c != null && c.gameObject.activeSelf && c.name != null && c.name.StartsWith("Link_", StringComparison.Ordinal))
                     return true;
             }
             return false;
@@ -3926,7 +3750,7 @@ namespace VPB
             for (int i = 0; i < t.childCount; i++)
             {
                 Transform c = t.GetChild(i);
-                if (c != null && c.gameObject.activeSelf && c.name != null && c.name.StartsWith("Link_"))
+                if (c != null && c.gameObject.activeSelf && c.name != null && c.name.StartsWith("Link_", StringComparison.Ordinal))
                     links.Add(c);
             }
             for (int i = 1; i < links.Count; i++)
@@ -4033,7 +3857,6 @@ namespace VPB
             DetailStripEnsureExpandButton();
 
             // Entire scrub session (active wheel OR height-locked): never hide/populate/reflow.
-            // Side meta is filled on scrub commit (see DetailStripCommitScrub).
             if (DetailStripScrubBlocksRebuild)
             {
                 // Scrub blocks strip rebuild, but tag popup must still track selection swaps.
@@ -4045,14 +3868,12 @@ namespace VPB
             if (sel <= 0)
             {
                 // Tag editor stays open (Apply shows empty lists; Database is vocab-only).
-                // Only explicit Close / Esc / toggle dismisses it — strip refresh must not.
                 DetailStripCloseTagFilterPopup();
                 DetailStripHide();
                 try { DetailStripSyncOpenTagMenuIfSelectionChanged(); } catch { }
                 return;
             }
 
-            // Collapsed: strip height 0; Info expand button stays in toolbox gutter.
             if (!DetailStripIsExpanded())
             {
                 // Keep tag editor open across strip collapse (mode switch / Edit must stay stable).
@@ -4094,15 +3915,13 @@ namespace VPB
                     else
                     {
                         float avail = DetailStripEstimateMetaAvailWidth();
-                        // Match width-side hysteresis scale: tiny avail drift must not reflow every
-                        // SelectionContext tick (0.25s) or height↔thumb↔pack hunts forever.
+                        // Width hysteresis: small drift must not reflow every SelectionContext tick.
                         float drift = Mathf.Abs(avail - _detailStripMetaAvailWidth);
                         float reflowEps = 8f;
                         float geomEps = 6f;
                         if (_detailStripMetaAvailWidth < 0f || drift > reflowEps)
                         {
-                            // Width-class change: reflow meta only — do not remasure strip height
-                            // (height stickiness keeps thumb/nav stable across items).
+                            // Width-class change: reflow meta only — do not remasure strip height (height stickiness keeps thumb/nav stable across items).
                             DetailStripReflowMetaForCurrentSelection();
                         }
                         else if (drift > geomEps)
@@ -4144,7 +3963,6 @@ namespace VPB
                 StringComparison.Ordinal);
         }
 
-        /// <summary>Description + native tags for current selection (hydrate meta.json).</summary>
         private void DetailStripRefreshSideMetaForSelection()
         {
             FileEntry file = null;
@@ -4251,7 +4069,6 @@ namespace VPB
 
             if (heavy)
             {
-                // Size sum is cheap field reads; skip creator/package resolve storm.
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
                     FileEntry f = selectedFiles[i];
@@ -4286,7 +4103,6 @@ namespace VPB
             if (!creatorMixed) _detailStripBoundCreator = sharedCreator ?? "";
             else _detailStripBoundCreator = "";
 
-            // Multi: deps chips operate on first item; tag/copy still work for whole selection.
             int deps = 0, missing = 0, dependents = 0;
             if (first != null)
             {
@@ -4300,14 +4116,12 @@ namespace VPB
                 first, deps, mShow, dependents, sel, totalSize, creatorMixed));
 
             DetailStripSetToolLinksEnabled(first != null);
-            // First-item description still useful for multi (same as deps chips / thumb).
             DetailStripRefreshDescription(first);
             DetailStripRefreshSideContent(first);
             DetailStripRefreshTagsLineForPlacement();
 
             if (_detailStripPath != null)
             {
-                // Multi: show first-item path (Copy still dumps all paths).
                 if (first != null)
                 {
                     string pathLine = DetailStripResolvePathLine(first);
@@ -4343,21 +4157,19 @@ namespace VPB
             link.text = label ?? "";
             link.raycastTarget = enabled;
             bool rich = label != null && label.IndexOf("<color=", StringComparison.OrdinalIgnoreCase) >= 0;
-            // Preserve hover tint while pointer still over the link.
             UIHoverDelegate del = link.GetComponent<UIHoverDelegate>();
             bool hovered = del != null && del.IsHovered;
             Color hover = hoverColor ?? DetailStripBrighten(idleColor, 0.18f);
             if (!enabled)
                 link.color = DetailStripLinkDisabledColor;
             else if (rich)
-                link.color = Color.white; // rich text supplies its own colors
+                link.color = Color.white;
             else
                 link.color = hovered ? hover : idleColor;
         }
 
         private void DetailStripSetToolLinksEnabled(bool enabled)
         {
-            // Task chrome: sticky Eraser/Try-On/Cleanup kill strip actions.
             try { enabled = TaskChromeShouldEnableDetailStripTools(enabled); } catch { }
 
             DetailStripSetLink(
@@ -4421,7 +4233,6 @@ namespace VPB
             enableN = 0;
             disableN = 0;
             if (selectedFiles == null || selectedFiles.Count == 0) return;
-            // Large selection: enable both actions without resolving every package.
             if (SelectionExceedsHeavyScanBudget())
             {
                 enableN = 1;
@@ -4592,7 +4403,6 @@ namespace VPB
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
             float avail = DetailStripEstimateMetaAvailWidth();
-            // Cap long creator names so Author mixes with neighbors (no lone stretched row).
             float authorCap = Mathf.Clamp(avail * 0.30f, 88f * s, 150f * s);
             fields.Add(new DetailStripMetaField
             {
@@ -4771,7 +4581,6 @@ namespace VPB
                 });
             }
 
-            // Version / gender / flags — Mixed when selection differs; else show shared / first.
             if (file != null || multi)
             {
                 string version;
@@ -4855,7 +4664,6 @@ namespace VPB
                 }
             }
 
-            // Deps cluster — kept together. Deps/Dependents are first-item when multi; Missing is selection total.
             fields.Add(new DetailStripMetaField
             {
                 Label = VPBTranslation.T("gallery.detail.label_deps", "Dependencies") + firstSuffix,
@@ -4952,9 +4760,6 @@ namespace VPB
             return fields;
         }
 
-        /// <summary>
-        /// When multi-select: shared value if all match, else Mixed. Single-select: value from bound file.
-        /// </summary>
         private void DetailStripResolveSharedOrMixedMeta(
             bool multi, System.Func<FileEntry, string> resolve, out string value, out bool mixed)
         {
@@ -4967,7 +4772,6 @@ namespace VPB
             }
 
             // Large multi-select: never walk N items with license/meta hydrate (Select-All hitch).
-            // Show first-item value; CollectMetaFields already marks multi with "(1st)" where needed.
             if (SelectionExceedsHeavyScanBudget())
             {
                 FileEntry first = _detailStripBoundFile != null ? _detailStripBoundFile : selectedFiles[0];
@@ -5073,8 +4877,6 @@ namespace VPB
             float leftReserve = GalleryUiDesignTokens.FooterDetailStripSideLeftReserveRef * s;
             float leftRemain = stripW - thumb - gap - sideW - gap;
 
-            // Sticky band: open needs full threshold; stay open until clearly narrower.
-            // Prevents 1–2 Hz flicker when pane width sits on the collapse edge.
             if (_detailStripSideVisible)
             {
                 if (stripW < closeMin) return false;
@@ -5094,7 +4896,6 @@ namespace VPB
             float charW = Mathf.Max(5f, GalleryUiDesignTokens.FontRef * 0.52f * s);
             int charsPerLine = Mathf.Max(8, Mathf.FloorToInt(width / charW));
             int lines = Mathf.CeilToInt(text.Length / (float)charsPerLine);
-            // Count hard newlines as extra breaks.
             for (int i = 0; i < text.Length; i++)
             {
                 if (text[i] == '\n') lines++;
@@ -5102,7 +4903,6 @@ namespace VPB
             return Mathf.Max(1f, lines);
         }
 
-        /// <summary>Ellipsize prose to fit max wrapped lines (warm path; char-width estimate).</summary>
         private string DetailStripEllipsizeToLines(string full, float width, float s, int maxLines)
         {
             if (string.IsNullOrEmpty(full) || maxLines < 1) return "";
@@ -5153,7 +4953,6 @@ namespace VPB
             float gap = DetailStripBandGap(s);
             float without = DetailStripComputeContentHeightCore(
                 s, includeDesc: false, includePackageTags: true, applyHardMin: false);
-            // Reserve band gap for inserting desc under existing rows.
             float remain = budgetH - without - gap;
             int fit = Mathf.FloorToInt((remain + 0.01f) / Mathf.Max(1f, lineH));
             if (fit < 0) fit = 0;
@@ -5168,7 +4967,6 @@ namespace VPB
             DetailStripSyncLeftDescContent(s, budget, maxLinesOverride: -1);
         }
 
-        /// <param name="maxLinesOverride">≥0 forces line cap (overflow shrink). −1 = compute.</param>
         private void DetailStripSyncLeftDescContent(float s, float budgetH, int maxLinesOverride)
         {
             if (_detailStripDesc == null || !_detailStripWantDesc) return;
@@ -5205,7 +5003,6 @@ namespace VPB
                     1, softCap);
                 int fit = DetailStripLeftDescFitLines(s, budgetH, softCap);
                 lines = Mathf.Min(needed, fit);
-                // Prefer one ellipsized line over blank — HideOverflow / strip mask guard toolbox.
                 if (lines < 1) lines = 1;
             }
 
@@ -5247,7 +5044,6 @@ namespace VPB
 
         private void DetailStripApplyDescPlacement()
         {
-            // SideCol (wide+short): scroll desc there. Else main-column row under tags/path.
             bool showLeft = _detailStripWantDesc && !_detailStripSideVisible;
             DetailStripSetFlexLineActive(_detailStripDesc, showLeft);
             if (showLeft)
@@ -5260,11 +5056,6 @@ namespace VPB
                 _detailStripSideDescScrollGO.SetActive(_detailStripSideVisible && _detailStripWantDesc);
         }
 
-        /// <summary>
-        /// Tall strip: prefer description + package tags as main-column rows instead of SideCol.
-        /// Sticky band (same idea as width side hysteresis) — open at minStack, stay until
-        /// clearly shorter so auto-height ↔ pack ↔ side cannot oscillate.
-        /// </summary>
         private bool DetailStripShouldStackSideAsRows(float s)
         {
             if (!DetailStripWantSideContent())
@@ -5293,7 +5084,6 @@ namespace VPB
             return stack;
         }
 
-        /// <summary>Forget sticky stack decision (selection/scale/hide) so next layout re-picks.</summary>
         private void DetailStripResetStackSideDecision()
         {
             _detailStripStackSideDecided = false;
@@ -5313,11 +5103,6 @@ namespace VPB
             return DetailStripSideContentKeyForSelection();
         }
 
-        /// <summary>
-        /// Selection identity changed. Keep auto-height + stack sticky so strip/thumb/nav
-        /// do not jump per item — content adapts via HideOverflow to locked budget.
-        /// Remasure only on scale / hide / user resize / explicit invalidate.
-        /// </summary>
         private void DetailStripOnSelectionLayoutKeyChanged()
         {
             // Intentionally no InvalidateAutoHeightLock / ResetStackSideDecision.
@@ -5332,11 +5117,6 @@ namespace VPB
             return fallbackLineH;
         }
 
-        /// <summary>
-        /// Package tags (meta.json regions) plus Look-A-Pedia Hub tags: SideCol when wide+short; else left row under path.
-        /// Never merge into user-tags line — user tags stay actionable and above.
-        /// Hub tags render as clickable chips (same filter as Tags list / hubtag:).
-        /// </summary>
         private void DetailStripApplyPackageTagsPlacement()
         {
             if (_detailStripPackageTags == null) return;
@@ -5355,16 +5135,11 @@ namespace VPB
             DetailStripSyncSideColumn(s, allowPlacementChange: true);
         }
 
-        /// <param name="allowPlacementChange">
-        /// False = only resize SideCol to current strip edge (post-measure). Flipping stack/side
-        /// after height apply causes avail-width drift and 0.25s SelectionContext reflow hunt.
-        /// </param>
         private void DetailStripSyncSideColumn(float s, bool allowPlacementChange)
         {
             if (_detailStripSideColGO == null) return;
             if (s <= 0f) s = 1f;
 
-            // Wide opens SideCol; tall strip stacks desc+package tags as main rows instead.
             bool show;
             if (allowPlacementChange)
             {
@@ -5433,7 +5208,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Sync side field active/height. Desc scroll uses flexibleHeight to fill SideCol.</summary>
         private void DetailStripApplySideFieldVisibility(bool show, float s, float sideW, float stripH)
         {
             float lineH = DetailStripLineHeight(s);
@@ -5481,7 +5255,6 @@ namespace VPB
                 }
                 else
                 {
-                    // Fill leftover SideCol height (tags keep preferred; scroll takes flex remainder).
                     if (_detailStripSideDescScrollLE != null)
                     {
                         _detailStripSideDescScrollLE.minHeight = lineH;
@@ -5512,7 +5285,6 @@ namespace VPB
 
         private void DetailStripRefreshSideContent(FileEntry file)
         {
-            // Always clear first — prevents previous selection's package tags/desc sticking.
             DetailStripClearSideContentFields();
 
             VarPackage pkg = null;
@@ -5788,12 +5560,10 @@ namespace VPB
                 if (i > 0) flowTotal += sepW;
             }
 
-            // Reserve one row for deps cluster when present; use remaining for flow fields.
             int maxFlowRows = cluster.Count > 0 ? DetailStripMetaMaxRows - 1 : DetailStripMetaMaxRows;
             if (maxFlowRows < 1) maxFlowRows = 1;
             int needed = Mathf.Max(1, Mathf.CeilToInt(flowTotal / Mathf.Max(1f, avail * 0.98f)));
             int flowRowCount = Mathf.Clamp(needed, 1, maxFlowRows);
-            // Prefer at least 2 rows when many fields so Version/Gender/Flags are not jammed off-screen.
             if (flow.Count >= 4 && maxFlowRows >= 2)
                 flowRowCount = Mathf.Max(flowRowCount, 2);
             if (flow.Count >= 6 && maxFlowRows >= 3)
@@ -5819,9 +5589,6 @@ namespace VPB
 
             if (cluster.Count > 0 && rowIdx < DetailStripMetaMaxRows)
             {
-                // Always own row for deps cluster. Appending "in line" with flow facts at the
-                // width fit threshold left MetaHost height short → action links painted over
-                // Dependencies / Missing / Dependents.
                 GameObject rowGO = _detailStripMetaRows[rowIdx++];
                 if (rowGO != null)
                 {
@@ -5850,7 +5617,7 @@ namespace VPB
             float charW = Mathf.Max(5f, GalleryUiDesignTokens.FontRef * 0.52f * s);
             string label = field.Label ?? "";
             string value = field.Value ?? "";
-            float labelW = (label.Length + 2) * charW; // "Label: "
+            float labelW = (label.Length + 2) * charW;
             float valueW = value.Length * charW;
             if (field.MaxValueWidth > 8f)
                 valueW = Mathf.Min(valueW, field.MaxValueWidth);
@@ -5871,7 +5638,6 @@ namespace VPB
             return w;
         }
 
-        /// <summary>Split items into roughly equal-width rows (density balance).</summary>
         private static List<List<int>> DetailStripBalancePackIndices(float[] widths, float avail, float sepW, int rowCount)
         {
             var result = new List<List<int>>();
@@ -5895,7 +5661,6 @@ namespace VPB
                 bool underTargetCap = result.Count + 1 < rowCount;
                 bool overAvail = cur.Count > 0 && x + add > avail;
                 bool overTarget = cur.Count > 0 && x + add > target && x >= target * 0.55f;
-                // Always wrap on avail overflow if a row remains; also balance toward rowCount.
                 if (underRowCap && (overAvail || (underTargetCap && overTarget)))
                 {
                     result.Add(cur);
@@ -5924,8 +5689,6 @@ namespace VPB
             UI.AddLE(sep.gameObject, minHeight: sepHitH, preferredHeight: sepHitH, flexibleWidth: 0f, flexibleHeight: 0f);
         }
 
-        /// <summary>Muted label + colored value. Soft-caps long values (author) without stretching row.</summary>
-        /// <param name="rowH">Interactive row/hit height (not prose line height).</param>
         private float DetailStripCreateMetaField(GameObject row, DetailStripMetaField field, float s, float rowH)
         {
             float totalW = 0f;
@@ -5991,7 +5754,6 @@ namespace VPB
         private static string DetailStripEllipsizeToWidth(string text, float maxW, float s)
         {
             if (string.IsNullOrEmpty(text) || maxW <= 8f) return text ?? "";
-            // Approximate glyph width for current font scale.
             float charW = Mathf.Max(5f, GalleryUiDesignTokens.FontRef * 0.52f * s);
             int maxChars = Mathf.Max(4, Mathf.FloorToInt(maxW / charW));
             if (text.Length <= maxChars) return text;
@@ -6030,8 +5792,6 @@ namespace VPB
                 return;
             }
 
-            // Multi: show badge if any selected item has it. Prefer temporary chrome if any temp.
-            // Large selection: sample first item only — avoid N× SQLite tag badge queries.
             bool showAi = false, showHide = false, showScan = false, showTags = false;
             FileEntry scanSample = null;
             ScanWhitelistManager.GalleryScanWlBadgeKind scanKind = ScanWhitelistManager.GalleryScanWlBadgeKind.None;
@@ -6075,11 +5835,6 @@ namespace VPB
                 _detailStripBadgeRowGO.SetActive(showAi || showHide || showScan || showTags);
         }
 
-        /// <summary>
-        /// Full-res decode tier (same as hover preview). Optional keepCurrentUntilReady avoids
-        /// blank flash while upgrading the <em>same</em> file's grid copy to hi-res.
-        /// Never keep another item's texture — that mislabels the current selection.
-        /// </summary>
         private void DetailStripLoadThumb(FileEntry file, bool keepCurrentUntilReady = false)
         {
             if (_detailStripThumb == null || file == null) return;
@@ -6095,14 +5850,12 @@ namespace VPB
             _detailStripThumb.color = Color.white;
             try
             {
-                // Same path as hover preview: not grid context, denom 1, Unity decode tier.
                 LoadThumbnail(
                     file,
                     _detailStripThumb,
                     gridThumbnailContext: false,
                     turboJpegThumbnailDenom: 1,
                     thumbnailUnityDecodeOnly: true);
-                // LoadThumbnail blanks while queued — restore same-file placeholder until callback.
                 if (keepTex != null && _detailStripThumb.texture == null)
                 {
                     _detailStripThumb.texture = keepTex;
@@ -6123,7 +5876,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Empty preview chrome for current item (no leftover prior texture).</summary>
         private void DetailStripClearThumbPreview()
         {
             if (_detailStripThumb == null) return;
@@ -6136,11 +5888,9 @@ namespace VPB
             }
         }
 
-        /// <summary>Mouse wheel over strip thumb → previous/next item in current filtered list.</summary>
         private void DetailStripOnThumbScroll(float scrollDelta)
         {
             if (Mathf.Abs(scrollDelta) < 0.01f) return;
-            // Unity scroll up is positive → previous item (matches typical list feel).
             int step = scrollDelta > 0f ? -1 : 1;
             DetailStripThumbScrubBy(step);
         }
@@ -6248,7 +5998,6 @@ namespace VPB
                 DetailStripEnsure();
                 if (_detailStripGO == null) return;
             }
-            // Collapsed: selection already nudged; keep strip hidden (scrub from Details button).
             if (!DetailStripIsExpanded())
                 return;
             if (!_detailStripGO.activeSelf) _detailStripGO.SetActive(true);
@@ -6289,7 +6038,6 @@ namespace VPB
                         if (diag == null || !ReferenceEquals(diag.FileEntry, file)) continue;
                     }
                     RawImage ri = binder != null ? binder.thumbRaw : null;
-                    // Cell found but empty → treat as no preview for this item (caller clears).
                     if (ri == null || ri == _detailStripThumb) continue;
                     if (ri.texture == null) return false;
                     _detailStripThumb.texture = ri.texture;
@@ -6312,12 +6060,10 @@ namespace VPB
             if (file == null && selectedFiles != null && selectedFiles.Count > 0)
                 file = selectedFiles[0];
 
-            // Collapsed scrub (Details button): selection already moved — skip strip enrich.
             if (!DetailStripIsExpanded())
             {
                 try { UpdatePaginationText(); } catch { }
                 try { RefreshSelectionVisualsCore(runHeavySideEffects: false); } catch { }
-                // Heavy path skipped during scrub spin — refresh side-rail applied/avail now.
                 try { RefreshUserTagsSideRailAfterScrubSelection(); } catch { }
                 // Same settle point as expanded scrub: import source must track preview scroll.
                 try { TryLoadSelectedSceneIntoImportSidebar(); } catch { }
@@ -6325,11 +6071,8 @@ namespace VPB
                 return;
             }
 
-            // Enrich when idle: patch existing texts in place (no destroy / SetActive).
             try { DetailStripEnrichScrubFields(file); } catch { }
-            // Upgrade scrub's grid-copy thumb → hover-quality decode (keep grid tex until ready).
             try { DetailStripLoadThumb(file, keepCurrentUntilReady: true); } catch { }
-            // Side meta (desc/native/promo) skipped during scrub spin + sameKey — hydrate now.
             try
             {
                 _detailStripSideContentKey = "";
@@ -6343,16 +6086,11 @@ namespace VPB
             catch { }
             try { UpdatePaginationText(); } catch { }
             try { RefreshSelectionVisualsCore(runHeavySideEffects: false); } catch { }
-            // Heavy path skipped during scrub spin — refresh side-rail applied/avail now.
             try { RefreshUserTagsSideRailAfterScrubSelection(); } catch { }
             // Defer LoadSourceScene to scrub settle (warm path) — avoid cancel/reparse per wheel tick.
             try { TryLoadSelectedSceneIntoImportSidebar(); } catch { }
         }
 
-        /// <summary>
-        /// Scrub uses runHeavySideEffects:false for scroll perf. On commit, sync UserTags
-        /// side-rail applied list (and avail selection chrome) without full DetailStripRefresh.
-        /// </summary>
         private void RefreshUserTagsSideRailAfterScrubSelection()
         {
             userTagAppliedRemoveSelection.Clear();
@@ -6361,10 +6099,6 @@ namespace VPB
             try { DetailStripSyncOpenTagMenuIfSelectionChanged(); } catch { }
         }
 
-        /// <summary>
-        /// Smooth scrub enrich: rewrite visible field strings + meta values in place.
-        /// Never DestroyAllChildren, never blank thumb, never toggle row active state.
-        /// </summary>
         private void DetailStripEnrichScrubFields(FileEntry file)
         {
             if (file == null || _detailStripGO == null) return;
@@ -6386,7 +6120,6 @@ namespace VPB
             }
             catch { }
 
-            // Meta values: patch by label match (no row rebuild).
             try { DetailStripPatchMetaValuesInPlace(file); } catch { }
 
             if (_detailStripTags != null && DetailStripFlexLineVisible(_detailStripTags))
@@ -6429,7 +6162,6 @@ namespace VPB
                 else
                     _detailStripDesc.text = "";
             }
-            // Side column lite patch during scrub spin; full hydrate on CommitScrub.
             try
             {
                 if (_detailStripSideVisible)
@@ -6466,14 +6198,11 @@ namespace VPB
             }
             catch { }
 
-            // Thumb upgrade happens in CommitScrub via DetailStripLoadThumb (hi-res).
-
             _detailStripCacheKey = BuildDetailStripCacheKey();
             if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
                 _detailStripMeasuredHeight = _detailStripScrubLockedHeight;
         }
 
-        /// <summary>Update MetaValue texts under matching MetaLabel keys — no destroy/rebuild.</summary>
         private void DetailStripPatchMetaValuesInPlace(FileEntry file)
         {
             if (file == null || _detailStripMetaRows == null) return;
@@ -6533,8 +6262,7 @@ namespace VPB
                         valueT.text = valueText;
                     valueT.color = valueCol;
 
-                    // Scrub patch used to update text only — tip/click stayed on prior item
-                    // (e.g. "No dependents" + no filter while counter shows 2).
+                    // Scrub patch used to update text only — tip/click stayed on prior item (e.g. "No dependents" + no filter while counter shows 2).
                     string tip = field.Tip ?? valueText;
                     if (field.MaxValueWidth > 8f && !string.IsNullOrEmpty(field.Value) && field.Value != valueText
                         && !string.IsNullOrEmpty(field.Tip))
@@ -6557,8 +6285,6 @@ namespace VPB
             DetailStripEndScrubHeightLock();
             _detailStripCacheKey = "";
         }
-
-        // ── Clicks ────────────────────────────────────────────────────────────
 
         private void DetailStripOnTitleClick()
         {
@@ -6919,7 +6645,6 @@ namespace VPB
             catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip quick tag: " + ex.Message); }
         }
 
-        /// <summary>Toggle gallery user-tag filter (include on/off). Keeps current F/T work mode — filter sets are orthogonal.</summary>
         private void DetailStripOnTagFilterClick(string tagName)
         {
             if (string.IsNullOrEmpty(tagName)) return;
@@ -6930,7 +6655,6 @@ namespace VPB
                 norm = VpbLocalDatabase.NormalizeGalleryUserTagName(norm);
                 if (string.IsNullOrEmpty(norm)) return;
 
-                // Exit presence browse if armed; restore prior F/T work mode without forcing Filter mode.
                 if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
                     || _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly)
                 {
@@ -6962,7 +6686,6 @@ namespace VPB
                 try { SyncBrowseFilterChipChrome(); } catch { }
                 try { RefreshUserTagsAvailPaneInPlace(true); } catch { }
                 try { RefreshUserTagsAvailPaneInPlace(false); } catch { }
-                // Force chip recolor for active filter state.
                 _detailStripTagsContentKey = "";
                 try { DetailStripRefreshTagsLineForPlacement(); } catch { }
 
@@ -7000,7 +6723,6 @@ namespace VPB
                 : 0f;
             float moreUnit = DetailStripEstimateChipTextWidth("+99", s) + sepW;
 
-            // Progressive disclosure: pack prefix that fits; rest in "+N" filter popup.
             var shown = new List<string>(Math.Min(list.Count, DetailStripMaxTagsInlineHard));
             float used = 0f;
             for (int i = 0; i < list.Count && shown.Count < DetailStripMaxTagsInlineHard; i++)
@@ -7284,7 +7006,6 @@ namespace VPB
                     vlg.childControlWidth = true;
                 });
             _detailStripTagFilterPanelRT = panel.GetComponent<RectTransform>();
-            // Pivot at bottom — panel grows upward from anchor under the chips row.
             if (_detailStripTagFilterPanelRT != null)
                 _detailStripTagFilterPanelRT.pivot = new Vector2(0.5f, 0f);
 
@@ -7315,7 +7036,6 @@ namespace VPB
             float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
             if (anchor != null && overlayRT != null)
             {
-                // Place above the Set Tags / chips band (open upward).
                 Vector3 worldBottom = anchor.TransformPoint(new Vector3(
                     anchor.rect.center.x,
                     anchor.rect.yMin,
@@ -7435,7 +7155,6 @@ namespace VPB
 
         private void DetailStripEnsureTagMenu()
         {
-            // Parent to canvas (sibling of pane) so drag can leave the main pane area freely.
             GameObject host = canvas != null ? canvas.gameObject : backgroundBoxGO;
             if (_detailStripTagMenuRoot != null || host == null) return;
             float s = ChromeScale;
@@ -7452,7 +7171,6 @@ namespace VPB
             _detailStripTagMenuPanelRT = _detailStripTagMenuPanelGO.GetComponent<RectTransform>();
             if (_detailStripTagMenuPanelRT != null)
             {
-                // Top-left pivot — resize grows bottom-right (same as Settings / QuickFilters floats).
                 _detailStripTagMenuPanelRT.pivot = new Vector2(0f, 1f);
                 DetailStripLoadTagMenuSavedSizeFromConfig();
                 Vector2 sizeRef = DetailStripResolveTagMenuSizeRef();
@@ -7473,7 +7191,6 @@ namespace VPB
                 panelVlg.spacing = 6f;
             }
 
-            // Title bar — Settings float master: grip · left title · collapse · close.
             float headerH = GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef;
             float chromeSz = GalleryUiDesignTokens.ButtonSizeRef;
             float titleCloseSz = chromeSz;
@@ -7524,7 +7241,7 @@ namespace VPB
                 font, Color.white, TextAnchor.MiddleLeft, name: "Title");
             UI.AddLE(_detailStripTagMenuSelText.gameObject, flexibleWidth: 1f, minWidth: 60f);
 
-            _detailStripTagMenuCollapseBtn = SettingsFloatSquareIconButton(
+            _detailStripTagMenuCollapseBtn = UI.CreateFloatChromeIconButton(
                 _detailStripTagMenuHeaderGO.transform, titleCloseSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, DetailStripToggleTagMenuCollapsed);
             if (_detailStripTagMenuCollapseBtn != null)
@@ -7534,7 +7251,7 @@ namespace VPB
                 _detailStripTagMenuCollapseIcon = iconTr != null ? iconTr.GetComponent<Image>() : null;
             }
 
-            _detailStripTagMenuCloseGO = SettingsFloatSquareIconButton(
+            _detailStripTagMenuCloseGO = UI.CreateFloatChromeIconButton(
                 _detailStripTagMenuHeaderGO.transform, titleCloseSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, DetailStripCloseTagMenu);
             if (_detailStripTagMenuCloseGO != null)
@@ -7547,13 +7264,11 @@ namespace VPB
                 AddTooltip(_detailStripTagMenuCollapseBtn, "gallery.detail.tag_menu_collapse", "Collapse to title bar");
             }
 
-            // Hairline under titlebar (separates chrome from work surface).
             GameObject headerRule = UI.CreateChildRT(_detailStripTagMenuPanelGO, "HeaderRule");
             Image ruleImg = UI.AddImage(headerRule, GalleryUiColorTokens.SurfaceMid, raycastTarget: false);
             if (ruleImg != null) ruleImg.raycastTarget = false;
             UI.AddLE(headerRule, preferredHeight: 1f, minHeight: 1f, flexibleWidth: 1f, flexibleHeight: 0f);
 
-            // Filter row — top, Settings chrome input + search glyph.
             float filterH = chromeSz + 10f;
             _detailStripTagMenuFilterRowGO = UI.CreateChildRT(_detailStripTagMenuPanelGO, "FilterRow");
             Image filterRowBg = UI.AddImage(_detailStripTagMenuFilterRowGO, GalleryUiColorTokens.SurfaceDarker);
@@ -7666,7 +7381,6 @@ namespace VPB
                 DetailStripRefreshTagMenuFilterClearVisible();
             }
 
-            // Discoverability tip (same popup row font as rest of menu chrome).
             GameObject tipGO = UI.CreateChildRT(_detailStripTagMenuPanelGO, "Tip");
             _detailStripTagMenuTipText = UI.CreateLabel(
                 tipGO,
@@ -7696,7 +7410,6 @@ namespace VPB
             headerDrag.Target = _detailStripTagMenuPanelRT;
             headerDrag.OnMoved = DetailStripOnTagMenuDragged;
 
-            // Two columns: Applied | Available — proximity + recognition for multi-tag.
             _detailStripTagMenuColumnsGO = UI.CreateChildRT(_detailStripTagMenuPanelGO, "Columns");
             UI.AddHLG(
                 _detailStripTagMenuColumnsGO,
@@ -7748,7 +7461,6 @@ namespace VPB
                 flexibleWidth: 1f);
             _detailStripTagMenuCreateGO.SetActive(false);
 
-            // Footer — Settings master: Close text + Dock text + spacer + resize.
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef;
             _detailStripTagMenuSearchRowGO = UI.CreateChildRT(_detailStripTagMenuPanelGO, "Footer");
             UI.AddImage(_detailStripTagMenuSearchRowGO, GalleryUiColorTokens.SurfaceDarker);
@@ -7770,7 +7482,6 @@ namespace VPB
             if (_detailStripTagMenuSearchRowGO.GetComponent<RectMask2D>() == null)
                 _detailStripTagMenuSearchRowGO.AddComponent<RectMask2D>();
 
-            // Full-footer drag hit (behind Close/Dock/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(_detailStripTagMenuSearchRowGO);
             if (footerDragArea != null)
             {
@@ -7787,7 +7498,6 @@ namespace VPB
             if (_detailStripTagMenuFooterCloseGO != null)
                 _detailStripTagMenuFooterCloseGO.name = "FooterClose";
 
-            // Text Dock — Import float language; Settings chrome button (dismiss — tag menu has no side dock).
             GameObject footerDock = SettingsFloatChromeButton(
                 _detailStripTagMenuSearchRowGO.transform, footerBtnW, chromeSz,
                 VPBTranslation.T("gallery.import.dock", "Dock"), font, 1f,
@@ -7967,7 +7677,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Esc while search focused: clear filter, then close. Enter: create when Create row shown.</summary>
         internal void DetailStripTagMenuOnSearchEscape()
         {
             if (_detailStripTagMenuRoot == null || !_detailStripTagMenuRoot.activeSelf) return;
@@ -8019,7 +7728,6 @@ namespace VPB
             if (_detailStripTagMenuRoot == null || !_detailStripTagMenuRoot.activeSelf) return;
             if (DetailStripTagMenuIsDatabaseMode())
             {
-                // Enter in Database filter: create vocab rows from filter text (one name).
                 string filter = (_detailStripTagMenuFilter ?? "").Trim();
                 if (string.IsNullOrEmpty(filter)) return;
                 if (_userTagEditorNewTagInput != null
@@ -8063,7 +7771,6 @@ namespace VPB
                 childForceExpandHeight: false);
             UI.AddLE(col, flexibleWidth: 1f, flexibleHeight: 1f, minWidth: 120f);
 
-            // Header: label (+ optional sort on Add). Both cols use chrome btn height so rows align.
             float headerH = DetailStripTagMenuChromeBtnRef;
             GameObject header = UI.CreateChildRT(col, "Header");
             UI.AddHLG(
@@ -8104,7 +7811,6 @@ namespace VPB
                 Sprite sortSpr0 = sceneSourceSortModeSprites != null && sceneSourceSortModeSprites.Length > 0
                     ? sceneSourceSortModeSprites[0]
                     : null;
-                // Same edge as side-pane sort chips; pad 5 keeps glyph readable.
                 _detailStripTagMenuAvailSortBtnGO = UI.CreateSideTabSquareIconButton(
                     header, sortSq, sortSpr0, DetailStripCycleTagMenuAvailSort, sortBackdropCol, 5f);
                 _detailStripTagMenuAvailSortBtnGO.name = "AvailSortBtn";
@@ -8188,10 +7894,7 @@ namespace VPB
             DetailStripRebuildTagMenuFromCaches();
         }
 
-        /// <summary>
-        /// Apply is async (DB thread). Update menu caches immediately so Applied column
-        /// reflects the click before the coroutine finishes.
-        /// </summary>
+        /// <summary>Apply is async (DB thread).</summary>
         private void DetailStripOptimisticTagMenuSet(string tag, bool applied)
         {
             if (string.IsNullOrEmpty(tag)) return;
@@ -8227,7 +7930,6 @@ namespace VPB
                 }
                 if (!inOrder) _detailStripTagMenuAppliedOrder.Add(tag);
 
-                // Keep Mixed→On chrome honest until CacheAppliedUserTagsForSelection reruns.
                 if (_userTagSelectionStates != null)
                     _userTagSelectionStates[tag] = UserTagSelectionState.On;
                 if (_userTagSelectionRowCount > 0)
@@ -8276,7 +7978,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Rebuild lists from current caches (no DB re-read). Keeps optimistic state.</summary>
         private void DetailStripRebuildTagMenuFromCaches()
         {
             if (_detailStripTagMenuRoot == null || !_detailStripTagMenuRoot.activeSelf) return;
@@ -8355,17 +8056,14 @@ namespace VPB
             _detailStripTagMenuDragged = true;
             if (_detailStripTagMenuPanelRT != null)
             {
-                // Persist as center (legacy + Settings/QuickFilters) — panel uses top-left pivot.
-                Vector2 center = DetailStripTagMenuTopLeftToCenter(
+                Vector2 center = FloatPanelCoords.TopLeftToCenter(
                     _detailStripTagMenuPanelRT.anchoredPosition, _detailStripTagMenuPanelRT.sizeDelta);
                 _detailStripTagMenuSavedPos = center;
                 DetailStripPersistTagMenuPos(center);
             }
         }
 
-        /// <summary>
-        /// Soft-wire footer drag on existing tag menus built before FooterDragArea existed.
-        /// </summary>
+        /// <summary>Soft-wire footer drag on existing tag menus built before FooterDragArea existed.</summary>
         private void DetailStripEnsureTagMenuFooterDrag()
         {
             if (_detailStripTagMenuSearchRowGO == null || _detailStripTagMenuPanelRT == null) return;
@@ -8406,7 +8104,7 @@ namespace VPB
             DetailStripRefreshTagMenuColumnWidths(s);
             if (_detailStripTagMenuDragged)
             {
-                Vector2 center = DetailStripTagMenuTopLeftToCenter(
+                Vector2 center = FloatPanelCoords.TopLeftToCenter(
                     _detailStripTagMenuPanelRT.anchoredPosition, _detailStripTagMenuPanelRT.sizeDelta);
                 _detailStripTagMenuSavedPos = center;
                 DetailStripPersistTagMenuPos(center);
@@ -8437,11 +8135,8 @@ namespace VPB
             if (_detailStripTagMenuSavedPos.HasValue) return;
             try
             {
-                if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryDetailStripTagMenuPosSaved)
-                    return;
-                _detailStripTagMenuSavedPos = new Vector2(
-                    VPBConfig.Instance.GalleryDetailStripTagMenuPosX,
-                    VPBConfig.Instance.GalleryDetailStripTagMenuPosY);
+                if (VPBConfig.Instance == null) return;
+                _detailStripTagMenuSavedPos = VPBConfig.Instance.GalleryDetailStripTagMenuGeometry.Current.SavedPos;
             }
             catch { }
         }
@@ -8451,15 +8146,10 @@ namespace VPB
             if (_detailStripTagMenuSavedSize.HasValue) return;
             try
             {
-                if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryDetailStripTagMenuSizeSaved)
-                    return;
-                float w = VPBConfig.Instance.GalleryDetailStripTagMenuWidthRef;
-                float h = VPBConfig.Instance.GalleryDetailStripTagMenuHeightRef;
-                if (w < DetailStripTagMenuMinWidthRef || h < DetailStripTagMenuMinHeightRef)
-                    return;
-                _detailStripTagMenuSavedSize = new Vector2(
-                    Mathf.Clamp(w, DetailStripTagMenuMinWidthRef, DetailStripTagMenuMaxWidthRef),
-                    Mathf.Clamp(h, DetailStripTagMenuMinHeightRef, DetailStripTagMenuMaxHeightRef));
+                if (VPBConfig.Instance == null) return;
+                _detailStripTagMenuSavedSize = VPBConfig.Instance.GalleryDetailStripTagMenuGeometry.Current.SavedSize(
+                    new Vector2(DetailStripTagMenuMinWidthRef, DetailStripTagMenuMinHeightRef),
+                    new Vector2(DetailStripTagMenuMaxWidthRef, DetailStripTagMenuMaxHeightRef));
             }
             catch { }
         }
@@ -8477,9 +8167,7 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                VPBConfig.Instance.GalleryDetailStripTagMenuPosSaved = true;
-                VPBConfig.Instance.GalleryDetailStripTagMenuPosX = pos.x;
-                VPBConfig.Instance.GalleryDetailStripTagMenuPosY = pos.y;
+                VPBConfig.Instance.GalleryDetailStripTagMenuGeometry.Current.StorePos(pos);
             }
             catch { return; }
             DetailStripScheduleTagMenuPosSave();
@@ -8490,9 +8178,7 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                VPBConfig.Instance.GalleryDetailStripTagMenuSizeSaved = true;
-                VPBConfig.Instance.GalleryDetailStripTagMenuWidthRef = sizeRef.x;
-                VPBConfig.Instance.GalleryDetailStripTagMenuHeightRef = sizeRef.y;
+                VPBConfig.Instance.GalleryDetailStripTagMenuGeometry.Current.StoreSize(sizeRef);
             }
             catch { return; }
             DetailStripScheduleTagMenuPosSave();
@@ -8523,23 +8209,8 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Free float like Settings/Plugins — no host clamp (user may park off-screen).
-        /// Kept as call-site hook so open/layout paths stay stable.
-        /// </summary>
         private void DetailStripClampTagMenuPanelInView()
         {
-        }
-
-        /// <summary>Saved tag-menu pos is panel center (legacy center-pivot + Settings/QuickFilters).</summary>
-        private static Vector2 DetailStripTagMenuCenterToTopLeft(Vector2 center, Vector2 size)
-        {
-            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
-        }
-
-        private static Vector2 DetailStripTagMenuTopLeftToCenter(Vector2 topLeft, Vector2 size)
-        {
-            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
         }
 
         private void DetailStripUpdateTagMenuColumnLabels(int appliedCount, int availCount)
@@ -8563,7 +8234,6 @@ namespace VPB
             }
         }
 
-        /// <summary>While dragging Applied → Available: cue drop-to-remove target.</summary>
         internal void DetailStripSetTagMenuRemoveDragHint(bool dragging, bool overAvailable)
         {
             if (!dragging)
@@ -8648,7 +8318,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Identity + applied-tags fingerprint — changes when selection or tags for selection change.</summary>
         private string BuildDetailStripTagMenuSelectionKey()
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return "";
@@ -8661,13 +8330,11 @@ namespace VPB
             return sb.ToString();
         }
 
-        /// <summary>Live-sync Applied/Add when selection (or its tags) changes while popup open.</summary>
         private void DetailStripSyncOpenTagMenuIfSelectionChanged(bool force = false)
         {
             if (_detailStripTagMenuRoot == null || !_detailStripTagMenuRoot.activeSelf) return;
             if (_detailStripTagMenuMode == DetailStripTagMenuMode.Database)
             {
-                // Database mode is vocab-scoped — still refresh title count if cache dirty.
                 DetailStripSyncTagMenuModeTipAndTitle();
                 return;
             }
@@ -8752,7 +8419,6 @@ namespace VPB
             var applied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (selectedFiles == null || selectedFiles.Count == 0) return applied;
 
-            // Prefer selection On+Mixed so multi-select partials show in Applied.
             try { CacheAppliedUserTagsForSelection(); } catch { }
             if (_userTagSelectionRowCount > 0 && _userTagSelectionStates != null && _userTagSelectionStates.Count > 0)
             {
@@ -8801,11 +8467,7 @@ namespace VPB
                 _detailStripTagMenuRecent.RemoveAt(_detailStripTagMenuRecent.Count - 1);
         }
 
-        /// <summary>
-        /// Add-column order: pinned first (investment), then user sort (A→Z / Z→A / count).
-        /// Name A→Z also floats session-recent (recognition). Filter only applies here —
-        /// Applied column stays full for remove/reorder.
-        /// </summary>
+        /// <summary>Add-column order: pinned first (investment), then user sort (A→Z / Z→A / count).</summary>
         private List<string> DetailStripOrderAvailableTagsForMenu(List<string> vocab, HashSet<string> applied, string filter)
         {
             var result = new List<string>(64);
@@ -8994,10 +8656,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Pane center in tag-menu root local space. Popup lives on canvas (free drag) but opens
-        /// centered on <see cref="backgroundBoxGO"/> — including docked/offset pane positions.
-        /// </summary>
         private Vector2 DetailStripTagMenuPaneCenterInRoot()
         {
             RectTransform paneRT = backgroundBoxGO != null ? backgroundBoxGO.GetComponent<RectTransform>() : null;
@@ -9022,7 +8680,6 @@ namespace VPB
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(rootRT, screen, cam, out local))
                 return local;
 
-            // Same-canvas fallback: centre-anchored pane offset is already canvas-local.
             return paneRT.anchoredPosition;
         }
 
@@ -9041,7 +8698,7 @@ namespace VPB
             {
                 Vector2 center = DetailStripTagMenuPaneCenterInRoot();
                 _detailStripTagMenuPanelRT.anchoredPosition =
-                    DetailStripTagMenuCenterToTopLeft(center, sizePx);
+                    FloatPanelCoords.CenterToTopLeft(center, sizePx);
             }
             DetailStripClampTagMenuPanelInView();
         }
@@ -9062,7 +8719,7 @@ namespace VPB
                 {
                     Vector2 center = DetailStripTagMenuPaneCenterInRoot();
                     _detailStripTagMenuPanelRT.anchoredPosition =
-                        DetailStripTagMenuCenterToTopLeft(center, sizePx);
+                        FloatPanelCoords.CenterToTopLeft(center, sizePx);
                 }
                 DetailStripClampTagMenuPanelInView();
             }
@@ -9484,7 +9141,6 @@ namespace VPB
             bool createWillShow = DetailStripTagMenuFilterWouldCreate(filter);
             if (availRows == 0 && skipped == 0)
             {
-                // When Create row will appear, skip redundant "No match" empty (Create is the action).
                 if (!(createWillShow && !string.IsNullOrEmpty(filter)))
                 {
                     DetailStripAddTagMenuEmptyRow(
@@ -9850,7 +9506,6 @@ namespace VPB
             if (sr == null || sr.content == null || sr.viewport == null) return;
             RectTransform rowRT = nav.GetComponent<RectTransform>();
             if (rowRT == null) return;
-            // Lightweight: nudge normalized position toward row sibling index.
             Transform list = sr.content;
             int idx = rowRT.GetSiblingIndex();
             int n = Mathf.Max(1, list.childCount - 1);
@@ -9962,16 +9617,10 @@ namespace VPB
             return result;
         }
 
-        // ── Applied-list reorder via existing tag pick-drag (insert line) ──────
-
         private GameObject _detailStripTagReorderInsertGO;
         private int _detailStripTagReorderInsertIndex = -1;
         private ScrollRect _detailStripTagReorderPausedScroll;
 
-        /// <summary>
-        /// While dragging an Applied tag: if pointer is over Applied list, show insert separator.
-        /// Returns true when reorder UI is active (caller should skip gallery-apply hover).
-        /// </summary>
         internal bool DetailStripUpdateAppliedReorderHint(string draggedTag, Vector2 screenPos)
         {
             if (string.IsNullOrEmpty(draggedTag)
@@ -10119,7 +9768,6 @@ namespace VPB
                 if (rt == null) continue;
                 Vector3[] corners = new Vector3[4];
                 rt.GetWorldCorners(corners);
-                // corners[0]=bl, [1]=tl — mid Y in screen space
                 float midY = (corners[0].y + corners[1].y) * 0.5f;
                 Vector2 screenMid = RectTransformUtility.WorldToScreenPoint(null, new Vector3(corners[0].x, midY, 0f));
                 if (screenPos.y > screenMid.y)
@@ -10189,7 +9837,6 @@ namespace VPB
             return sb.ToString();
         }
 
-        /// <returns>Normalized tag name applied, or null on no-op.</returns>
         private string DetailStripCreateAndApplyTag(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return null;
@@ -10277,8 +9924,6 @@ namespace VPB
 
             ApplyUserTagsToFileEntries(new List<string> { norm }, selectedFiles, remove: false);
         }
-
-        // ── Data helpers ──────────────────────────────────────────────────────
 
         private string DetailStripResolveTagsLine(FileEntry file, bool includeNative = true)
         {
@@ -10836,14 +10481,9 @@ namespace VPB
                 return;
             }
             _detailStripWantDesc = true;
-            // Placement + truncate/wrap decided by side vs tall-stack vs narrow.
             DetailStripApplyDescPlacement();
         }
 
-        /// <param name="ensureMeta">
-        /// True (default): may open .var ZIP once via <see cref="VarPackage.TryEnsureMetaJsonLiteFields"/>.
-        /// False: hover tips — read cached Description only; never block EventSystem on disk I/O.
-        /// </param>
         private static string DetailStripResolveDescription(FileEntry file, bool ensureMeta = true)
         {
             if (file == null) return "";
@@ -10908,11 +10548,15 @@ namespace VPB
             return result;
         }
 
-        /// <summary>Esc/Enter/arrows/Space while quick-tag search focused.</summary>
         private sealed class DetailStripTagMenuSearchKeys : MonoBehaviour
         {
             public GalleryPanel Panel;
             public InputField Field;
+
+            private void Awake()
+            {
+                useGUILayout = false;
+            }
 
             private void OnGUI()
             {
@@ -10920,7 +10564,6 @@ namespace VPB
                 Event e = Event.current;
                 if (e == null || e.type != EventType.KeyDown) return;
 
-                // List nav works even when search not focused (panel open).
                 bool searchFocused = Field != null && Field.isFocused;
                 if (e.keyCode == KeyCode.UpArrow || e.keyCode == KeyCode.DownArrow || e.keyCode == KeyCode.Space)
                 {
@@ -10947,7 +10590,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Keyboard-focusable tag row in quick-tagger.</summary>
         private sealed class DetailStripTagMenuNavRow : MonoBehaviour
         {
             public string TagName;

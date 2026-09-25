@@ -247,7 +247,6 @@ namespace VPB
 
                 if (fullLibrary && !_cancelRequested && items.Count > 0)
                 {
-                    // Full-library pass: drop rows for packages that no longer exist.
                     try { VpbPackageInsightStore.RemoveMissingPackages(live); } catch { }
                 }
             }

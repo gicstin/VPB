@@ -43,8 +43,8 @@ namespace VPB
 
         public static void Tick()
         {
+            VamFrameAttributionProfiler.PumpPendingPatches();
             VamSceneLoadPhaseProfiler.Tick();
         }
-
     }
 }

@@ -16,12 +16,8 @@ namespace VPB
         {
             internal const string DeletedLocalPresetsFolderName = "DeletedPresets";
 
-            // Scope: "LOCAL CUSTOM PRESETS" categories (Appearance/Clothing/Hair/Pose/Skin/Morphs/General/Plugins/Subscenes).
-            // Safety: only allow deletes for known VaM local preset roots (not arbitrary disk files).
             private static readonly string[] AllowedRoots = new string[]
             {
-                // Broad "Custom/" covers VaM local preset roots (and any other user-created assets under Custom).
-                // Still excludes .var internal paths (":/") and non-existent files at delete-time.
                 "Custom/",
                 "Saves/SubsceneData/",
             };
@@ -30,7 +26,7 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(rel)) return false;
                 rel = rel.Replace('\\', '/');
-                if (rel.IndexOf(":/", StringComparison.Ordinal) >= 0) return false; // inside .var
+                if (rel.IndexOf(":/", StringComparison.Ordinal) >= 0) return false;
                 for (int i = 0; i < AllowedRoots.Length; i++)
                 {
                     if (rel.StartsWith(AllowedRoots[i], StringComparison.OrdinalIgnoreCase))
@@ -183,7 +179,6 @@ namespace VPB
                         undoOut.Add(pair);
                     }
 
-                    // Keep VaM markers with file when moving.
                     TryMovePresetSidecar(src, dst, ".fav", "Local preset sidecar fav");
                     TryMovePresetSidecar(src, dst, ".hide", "Local preset sidecar hide");
                 }
@@ -197,7 +192,6 @@ namespace VPB
             try { PurgeGalleryEntriesForMovedLocalPresets(movedRelPaths); } catch { }
 
             // Do NOT trigger FileManager.Refresh here: it kicks off a full package scan (~seconds).
-            // Preset delete already updates current grid by purging moved rows; next manual refresh or navigation can rescan disk.
         }
 
         private void PurgeGalleryEntriesForMovedLocalPresets(HashSet<string> movedRelativePaths)
@@ -277,4 +271,3 @@ namespace VPB
         }
     }
 }
-

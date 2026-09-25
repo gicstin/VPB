@@ -7,7 +7,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Geometry mirrors side tab column tokens; aliases keep import module call sites stable.
         private const float ImportSidebarBaseWidth = GalleryUiDesignTokens.ImportSidebarWidthRef;
         private const float ImportSidebarBaseHeaderHeight = GalleryUiDesignTokens.ImportSidebarHeaderHeightRef;
         private const float ImportSidebarBaseApplyHeight = GalleryUiDesignTokens.ImportSidebarApplyHeightRef;
@@ -40,17 +39,14 @@ namespace VPB
         private RectTransform importSidebarHeaderRT;
         private Text importSidebarHeaderLabel;
         private Button importSidebarHeaderBtn;
-        // Single scroll body: header pinned top, Apply pinned bottom, everything else scrolls between them.
-        private RectTransform importSidebarBodyScrollRT;     // CreateVScrollableContent root (the scroll viewport host)
-        private RectTransform importSidebarScrollContentRT;  // VLG content node holding all rows (target of ForceRebuild)
-        private RectTransform importSidebarApplyRT;          // pinned Apply button
-        private GameObject importSidebarHeaderFloatBtnGO;    // docked header "Float" control
+        private RectTransform importSidebarBodyScrollRT;
+        private RectTransform importSidebarScrollContentRT;
+        private RectTransform importSidebarApplyRT;
+        private GameObject importSidebarHeaderFloatBtnGO;
         private Text importSidebarHeaderFloatBtnText;
 
         partial void BuildImportSidebar()
         {
-            // Parent is backgroundBoxGO so the sidebar layers above the gallery grid
-            // at the same z-depth as rightTabScrollGO (Creator/Category column).
             Transform parent = ResolveImportSidebarParent();
             if (parent == null)
             {
@@ -69,9 +65,6 @@ namespace VPB
                 importSidebarRT = importSidebarRoot.AddComponent<RectTransform>();
                 ApplyImportSidebarBaseRect(1f);
 
-                // Transparent root, like leftTabScrollGO / rightTabScrollGO. Rows render against
-                // the gallery panel background, so the sidebar visually reads as part of the same
-                // UI family rather than a foreign popup tinted with PopupBackdrop.
                 importSidebarRootBg = UI.AddImage(importSidebarRoot, new Color(0f, 0f, 0f, 0f), false);
 
                 int siblingIndex = ResolveImportSidebarSiblingIndex(parent);
@@ -88,25 +81,19 @@ namespace VPB
                 if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB import][diag] build: float chrome");
                 BuildImportSidebarFloatChrome();
                 LoadImportSidebarFloatGeometryFromConfig();
-                // Match QuickFilters / Settings: reparent to float host BEFORE applying float
-                // geometry. Saved center is canvas-local — Apply+Clamp under dock parent
-                // rewrites it into the wrong space and restore lands wrong.
+                // Match QuickFilters / Settings: reparent to float host BEFORE applying float geometry.
                 if (importSidebarDetached)
                     ApplyImportSidebarDetachChrome(reposition: true, persist: false);
                 else
                     ApplyImportSidebarDockChrome(persist: false);
-                // Float entry lives on docked header (not scroll row).
 
                 // Re-run rect/font scaling whenever VPB's inner-pane scale changes (Settings UI scale slider).
                 innerPaneScaleActions.Add(ApplyImportSidebarBaseRect);
-                // The scroll content (VLG + ContentSizeFitter) only recomputes when forced; rebuild it after a scale
-                // change so row heights / the type-radio grid settle to the new scale.
+                // The scroll content (VLG + ContentSizeFitter) only recomputes when forced.
                 innerPaneScaleActions.Add(s => RebuildImportSidebarContent());
 
                 ApplyImportSidebarBaseRect(ChromeScale);
-                // Row label fonts are scaled only by the innerPaneScaleActions closures (fired on a
-                // scale-slider change). Fire them once now so a sidebar built at a non-1 global UI
-                // scale renders at the correct text size instead of the unscaled design size.
+                // Row label fonts are scaled only by the innerPaneScaleActions closures (fired on a scale-slider change).
                 try { ApplyInnerPaneScaleLegacyActions(ChromeScale); } catch { }
                 RebuildImportSidebarContent();
                 importSidebarRoot.SetActive(false);
@@ -123,8 +110,6 @@ namespace VPB
             }
         }
 
-        // Vertical-stretch rect (anchored to panel top AND bottom) with raw-px insets, mirroring leftTabRT/rightTabRT
-        // so it tracks the panel at any UI scale instead of a fixed-height box that overflows the column.
         private float ImportSidebarTopOffsetY(float s) => -ImportSidebarBaseTopRowRef * s;
 
         private void ApplyImportSidebarBaseRect(float s)
@@ -187,7 +172,6 @@ namespace VPB
         {
             float titleH = GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef * s;
             float footerH = importSidebarFloatCollapsed ? 0f : GalleryUiDesignTokens.QuickFiltersFooterHeightRef * s;
-            // Float title bar owns identity (type → target). Docked header chip stays hidden — no duplicate banner.
             float headerH = 0f;
             float headerGap = 0f;
             float applyH = importSidebarFloatCollapsed ? 0f : ImportSidebarBaseApplyHeight * s;
@@ -204,7 +188,6 @@ namespace VPB
             importSidebarRT.anchorMax = new Vector2(0.5f, 0.5f);
             importSidebarRT.pivot = new Vector2(0f, 1f);
             // Pivot top-left: resize only — keep title corner fixed on UI scale.
-            // Center→topLeft re-apply (ApplyImportSidebarFloatAnchorsAndPos) drifts on size change.
             Vector2 keepTopLeft = importSidebarRT.anchoredPosition;
             importSidebarRT.sizeDelta = new Vector2(w, h);
 
@@ -218,7 +201,6 @@ namespace VPB
             if (!importSidebarFloatCollapsed)
             {
                 // Memory + Instance fields only — BaseRect runs on every scale/rebuild.
-                // UI-scale hotkey deferred Save flushes disk.
                 CaptureImportSidebarFloatGeometryToMemory();
                 try { PersistImportSidebarFloatGeometryFieldsOnly(); } catch { }
             }
@@ -229,7 +211,6 @@ namespace VPB
 
             if (importSidebarRootBg != null)
             {
-                // Collapsed: match title bar so no dark panel strip under chrome.
                 importSidebarRootBg.color = importSidebarFloatCollapsed
                     ? ImportSidebarFloatTitleBarBg
                     : ImportSidebarFloatPanelBg;
@@ -280,7 +261,6 @@ namespace VPB
             return ImportSidebarBaseApplyReasonHeight * s;
         }
 
-        /// <summary>Reposition Apply + reason strip without full BaseRect (called from RefreshApplyButtonEnabled).</summary>
         private void LayoutImportSidebarApplyBand(float s)
         {
             if (importSidebarRT == null || !importSidebarActive) return;
@@ -460,11 +440,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Atom/type/option rows add Button without UIHoverBorder — gallery pane enforcer only walks
-        /// backgroundBoxGO. Floated import reparents to canvas, so auto-restore never gets borders
-        /// until a dock round-trip. Apply float inward policy on the import tree itself.
-        /// </summary>
+        /// <summary>Atom/type/option rows add Button without UIHoverBorder — gallery pane enforcer only walks backgroundBoxGO.</summary>
         private void SyncImportSidebarHoverChrome()
         {
             if (importSidebarRoot != null)
@@ -474,7 +450,6 @@ namespace VPB
             SyncImportSidebarScrollHoverBorders();
         }
 
-        /// <summary>Scroll body sits under RectMask2D — outward hover rims clip; draw inward like side-tab rows.</summary>
         private void SyncImportSidebarScrollHoverBorders()
         {
             if (importSidebarScrollContentRT == null) return;
@@ -632,7 +607,6 @@ namespace VPB
             if (importSidebarHeaderLabel == null) return;
             float s = ChromeScale;
             GetImportSidebarContentWidthInsets(s, out _, out _, out float contentWidth);
-            // Reserve Float button width when docked.
             float floatReserve = (!importSidebarDetached && importSidebarHeaderFloatBtnGO != null
                 && importSidebarHeaderFloatBtnGO.activeSelf)
                 ? GalleryUiDesignTokens.ButtonSizeRef * 1.6f * s + 8f * s
@@ -649,14 +623,11 @@ namespace VPB
             ApplyImportSidebarHeaderLabelText(FormatSidePanelHeaderLabel(importSidebarOnLeft, title));
         }
 
-        // Same clamp-and-localScale technique GalleryPanel.Tabs.cs uses to keep text legible
-        // at low scales (Unity Text.fontSize is int and visually clamps below ~10).
         public static void ApplyScaledFont(Text txt, int baseFont, float s)
         {
             GalleryUiMetrics.ApplyFont(txt, baseFont, s, ImportSidebarBaseFontSizeMin);
         }
 
-        /// <summary>Rounded row/button fill — matches gallery <see cref="RoundedRect"/> chrome.</summary>
         private static Image AddImportSidebarRoundedBg(GameObject go, Color color, bool raycastTarget = true)
         {
             RoundedRect rr = go.AddComponent<RoundedRect>();
@@ -676,8 +647,6 @@ namespace VPB
             return Mathf.Max(0, parent.childCount - 1);
         }
 
-        // One scroll for the whole body (between the pinned header and pinned Apply): all rows live in its VLG content
-        // and scroll as a unit when the panel is short, instead of fixed bands that clip. Insets set in ApplyImportSidebarBaseRect.
         private void BuildImportSidebarBodyScroll()
         {
             GameObject scroll = UI.CreateVScrollableContent(
@@ -695,8 +664,6 @@ namespace VPB
                 ? importSidebarApplyButton.GetComponent<RectTransform>() : null;
         }
 
-        // Force the scroll content's VLG + ContentSizeFitter to recompute (size changes after scale, type swap, or row
-        // count change don't settle on their own reliably for nested layout groups).
         private void RebuildImportSidebarContent()
         {
             if (importSidebarScrollContentRT != null)
@@ -730,7 +697,6 @@ namespace VPB
             rt.offsetMax = new Vector2(-GalleryUiDesignTokens.ImportSidebarLabelPadRightRef * s, 0f);
         }
 
-        // Checklist rows use a fixed height; disable wrap so long atom ids stay on one visible line.
         private static void ConfigureImportSidebarChecklistLabel(Text t)
         {
             if (t == null) return;
@@ -739,8 +705,7 @@ namespace VPB
             t.verticalOverflow = VerticalWrapMode.Truncate;
         }
 
-        // [diag] Dump resolved rects one frame after activation so an empty-body symptom can be
-        // attributed to zero-size / off-screen containers vs missing children, without guessing.
+        // [diag] Dump rects one frame after activation to diagnose an empty body.
         private System.Collections.IEnumerator DiagDumpImportSidebarRects()
         {
             yield return new WaitForEndOfFrame();
@@ -753,7 +718,6 @@ namespace VPB
             DiagLogRect("typeRadio", importSidebarTypeRadioContainer as RectTransform);
             DiagLogRect("optionsHost", importSidebarOptionsPanelHost as RectTransform);
             DiagLogRect("apply", importSidebarApplyRT);
-            // The type-radio overflow check: cellSize vs panel width tells if the cellW fix took.
             RectTransform trc = importSidebarTypeRadioContainer as RectTransform;
             GridLayoutGroup g = trc != null ? trc.GetComponent<GridLayoutGroup>() : null;
             if (g != null)
@@ -807,6 +771,5 @@ namespace VPB
             ApplyTooltip(leftSceneImportSideBtn, categoryGated && importSidebarOnLeft);
             ApplyTooltip(rightSceneImportSideBtn, categoryGated && !importSidebarOnLeft);
         }
-
     }
 }

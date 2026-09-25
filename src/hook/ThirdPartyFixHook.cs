@@ -37,13 +37,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// True when a still-unpatched third-party type could plausibly have appeared since the last scan.
-        /// <see cref="PatchAll"/> resolves types via <c>AccessTools.TypeByName</c>, which walks every type in
-        /// every loaded assembly — far too expensive to repeat on each Unity scene load. CustomUnityAsset
-        /// atoms load their .assetbundle scene additively on every skybox/environment pick, so that path fires
-        /// constantly. New third-party types can only arrive with a new assembly, so gate on the assembly count.
-        /// </summary>
+        /// <summary>True when a still-unpatched third-party type could plausibly have appeared since the last scan.</summary>
         internal static bool ShouldRetryPendingPatches()
         {
             if (AllPatchesApplied) return false;
@@ -60,7 +54,6 @@ namespace VPB
             try { _lastPatchScanAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length; } catch { }
             try
             {
-                // Patch MacGruber.ParentHoldLink.OnEnable to prevent NRE during LateRestore
                 if (!_parentHoldLinkPatched)
                 {
                     Type parentHoldLinkType = AccessTools.TypeByName("MacGruber.ParentHoldLink");
@@ -255,7 +248,6 @@ namespace VPB
                     msgText.fontSize = 14;
             }
 
-            // Message log prefab often uses best-fit/overflow; long lines shrink to fit width.
             msgText.resizeTextForBestFit = false;
             if (msgText.horizontalOverflow == HorizontalWrapMode.Overflow)
                 msgText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -272,13 +264,12 @@ namespace VPB
             }
         }
 
-        // Finalizer for MacGruber.ParentHoldLink.OnEnable to catch and suppress exceptions
         private static Exception ParentHoldLink_OnEnable_Finalizer(MonoBehaviour __instance, Exception __exception)
         {
             if (__exception != null)
             {
                 LogUtil.LogWarning($"[VPB] Suppressed exception in {__instance.GetType().Name}.OnEnable: {__exception.Message}\n{__exception.StackTrace}");
-                return null; // Suppress the exception
+                return null;
             }
             return null;
         }

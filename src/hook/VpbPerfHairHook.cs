@@ -7,7 +7,6 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>Re-apply perf hair tuning when hair changes in-scene (swap, load, restore).</summary>
     public static class VpbPerfHairHook
     {
         static MethodInfo s_SetActiveHairItemGroup;

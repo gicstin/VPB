@@ -3,11 +3,6 @@ using System.Collections.Generic;
 
 namespace VPB
 {
-    /// <summary>
-    /// Named, color-coded user-tag categories (US-02). A category groups tags and owns a display color;
-    /// each tag references at most one category via <c>gallery_user_tag.category_id</c>. Store is authoritative
-    /// SQLite (<c>gallery_user_tag_category</c>). Same static partial type as the rest of the local DB layer.
-    /// </summary>
     internal static partial class VpbLocalDatabase
     {
         internal const int GalleryUserTagCategoryNameMaxLength = 64;
@@ -20,7 +15,6 @@ namespace VPB
             public string Color;
         }
 
-        /// <summary>Trim + collapse; reject empty/oversized. Display case preserved (unlike tag names), uniqueness enforced by DB (case-sensitive TEXT UNIQUE).</summary>
         internal static string NormalizeGalleryUserTagCategoryName(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";
@@ -169,7 +163,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>Assign a tag to a category, or pass <paramref name="categoryId"/> &lt; 0 to clear. Creates the tag row if it does not exist.</summary>
         internal static bool TryAssignGalleryUserTagCategory(string tagName, long categoryId)
         {
             string n = NormalizeGalleryUserTagName(tagName);
@@ -204,8 +197,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>Assign many tags to one category (or clear when <paramref name="categoryId"/> &lt; 0) in a SINGLE connection + transaction.
-        /// Avoids the per-tag connection/EnsureSchema cost that made bulk assignment slow.</summary>
         internal static bool TryAssignGalleryUserTagCategoryBatch(IEnumerable<string> tagNames, long categoryId)
         {
             if (!VpbSqlite3.IsAvailable || tagNames == null) return false;
@@ -254,7 +245,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>Map of tag name (normalized) → color hex for every tag with an assigned category. Used for row tinting.</summary>
         internal static bool TryReadGalleryUserTagColorMap(Dictionary<string, string> mapOut)
         {
             mapOut?.Clear();
@@ -282,7 +272,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>Map of tag name (normalized) → category id for every assigned tag.</summary>
         internal static bool TryReadGalleryUserTagCategoryAssignments(Dictionary<string, long> mapOut)
         {
             mapOut?.Clear();

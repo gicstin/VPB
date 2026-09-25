@@ -31,19 +31,52 @@ namespace VPB.Tests.Static
             return c;
         }
 
-        private static List<string> PersistableFieldNames(ClassDeclarationSyntax cls)
+        private static readonly HashSet<string> AutoSerializedTypes =
+            new HashSet<string>(StringComparer.Ordinal) { "bool", "int", "float", "string", "JSONClass" };
+
+        private static IEnumerable<FieldDeclarationSyntax> PersistableFields(ClassDeclarationSyntax cls)
         {
-            var names = new List<string>();
             foreach (FieldDeclarationSyntax fd in cls.Members.OfType<FieldDeclarationSyntax>())
             {
                 bool isPublic = fd.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword));
                 bool isStatic = fd.Modifiers.Any(m => m.IsKind(SyntaxKind.StaticKeyword));
                 bool isConst = fd.Modifiers.Any(m => m.IsKind(SyntaxKind.ConstKeyword));
-                if (!isPublic || isStatic || isConst) continue;
-                foreach (VariableDeclaratorSyntax v in fd.Declaration.Variables)
-                    names.Add(v.Identifier.ValueText);
+                if (isPublic && !isStatic && !isConst) yield return fd;
             }
-            return names;
+        }
+
+        private static List<string> PersistableFieldNames(ClassDeclarationSyntax cls)
+        {
+            return PersistableFields(cls)
+                .SelectMany(fd => fd.Declaration.Variables.Select(v => v.Identifier.ValueText))
+                .ToList();
+        }
+
+        private static HashSet<string> HandSerializedFieldNames(ClassDeclarationSyntax cls)
+        {
+            VariableDeclaratorSyntax set = cls.Members.OfType<FieldDeclarationSyntax>()
+                .SelectMany(fd => fd.Declaration.Variables)
+                .SingleOrDefault(v => v.Identifier.ValueText == "s_HandSerializedFields");
+            Assert.True(set != null,
+                "VPBConfig.s_HandSerializedFields was not found - the automatic field serializer was renamed; update ConfigSerializationTests.");
+            return new HashSet<string>(
+                set.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                    .Where(i => i.Expression.ToString() == "nameof")
+                    .Select(i => i.ArgumentList.Arguments[0].ToString()),
+                StringComparer.Ordinal);
+        }
+
+        private static HashSet<string> AutoSerializedFieldNames(ClassDeclarationSyntax cls)
+        {
+            HashSet<string> hand = HandSerializedFieldNames(cls);
+            return new HashSet<string>(
+                PersistableFields(cls)
+                    .Where(fd => fd.Declaration.Type.ToString() == "FloatGeometryPair"
+                                 || (!fd.Modifiers.Any(m => m.IsKind(SyntaxKind.ReadOnlyKeyword))
+                                     && AutoSerializedTypes.Contains(fd.Declaration.Type.ToString())))
+                    .SelectMany(fd => fd.Declaration.Variables.Select(v => v.Identifier.ValueText))
+                    .Where(n => !hand.Contains(n)),
+                StringComparer.Ordinal);
         }
 
         private static MethodDeclarationSyntax Method(ClassDeclarationSyntax cls, string name, int parameterCount)
@@ -69,7 +102,7 @@ namespace VPB.Tests.Static
 
         [Theory]
         [InlineData("Save", 2)]
-        [InlineData("Load", 0)]
+        [InlineData("LoadCore", 0)]
         public void EveryPublicConfigFieldIsNamedIn(string methodName, int parameterCount)
         {
             ClassDeclarationSyntax cls = ConfigClass();
@@ -79,16 +112,19 @@ namespace VPB.Tests.Static
                 "the serializer was renamed or re-shaped; update ConfigSerializationTests.");
 
             HashSet<string> mentioned = SerializationNamesIn(method);
+            HashSet<string> automatic = AutoSerializedFieldNames(cls);
             var allowed = new HashSet<string>(Repo.ReadAllowlist(Allowlist), StringComparer.Ordinal);
             List<string> fields = PersistableFieldNames(cls);
 
             _out.WriteLine("public instance fields on VPBConfig: " + fields.Count);
             _out.WriteLine("identifiers and JSON keys used inside " + methodName + ": " + mentioned.Count);
+            _out.WriteLine("fields covered by the automatic serializer: " + automatic.Count);
 
-            var forgotten = fields.Where(n => !mentioned.Contains(n) && !allowed.Contains(n)).ToList();
+            var forgotten = fields.Where(n => !mentioned.Contains(n) && !automatic.Contains(n) && !allowed.Contains(n)).ToList();
 
             Assert.True(forgotten.Count == 0,
-                "These public VPBConfig fields appear inside " + methodName + "() neither by name nor as a JSON key." + Environment.NewLine +
+                "These public VPBConfig fields are not covered by the automatic serializer (bool/int/float/string/JSONClass/" + Environment.NewLine +
+                "FloatGeometryPair, not listed in s_HandSerializedFields) and appear inside " + methodName + "() neither by name nor as a JSON key." + Environment.NewLine +
                 "A setting that is missing from Save() silently resets on the next launch; one missing from Load()" + Environment.NewLine +
                 "silently ignores what the user chose. Neither produces an error or a log line:" + Environment.NewLine +
                 Repo.Bullets(forgotten) + Environment.NewLine + Environment.NewLine +

@@ -15,7 +15,6 @@ namespace VPB
 
         private UIHoverColor backgroundHoverColor;
 
-        /// <summary>Recomputes and applies pane/side/dock-hover transparency immediately (settings toggle, ConfigChanged, Update).</summary>
         internal void ApplyGalleryTransparencyVisuals()
         {
             if (VPBConfig.Instance == null) return;
@@ -129,13 +128,12 @@ namespace VPB
 
         private void AdvanceSideButtonsFadeDelayTimer()
         {
-            // Same engagement as auto-hide — typing / search chrome keeps side rails visible.
             if (IsGalleryInteractionEngaged())
             {
                 sideButtonsFadeDelayTimer = 0f;
                 return;
             }
-            sideButtonsFadeDelayTimer += Time.deltaTime;
+            sideButtonsFadeDelayTimer += Time.unscaledDeltaTime;
         }
 
         private bool ShouldShowSideButtonsAfterFadeDelay()

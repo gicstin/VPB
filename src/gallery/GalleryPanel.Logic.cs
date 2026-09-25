@@ -77,11 +77,6 @@ namespace VPB
             return new Color(1f, 1f, 0f, 1f);
         }
 
-        /// <summary>
-        /// Grid cells always inset hover/selection rims. Outward expansion bleeds into the next
-        /// row/col when spacing is 0 (default) — reads as 1px clip/seam on the bottom of each thumb
-        /// (default hover width is 1px). List still honors the inward-when-square setting.
-        /// </summary>
         private bool EffectiveGridBorderInwardForGalleryCell()
         {
             try
@@ -212,9 +207,6 @@ namespace VPB
             return new Color(1f, 0.15f, 1f, 1f);
         }
 
-        /// <summary>
-        /// Splits a search query into lowercase terms (whitespace separated), removing empties.
-        /// </summary>
         internal static string[] SplitSearchTerms(string query)
         {
             // .NET 3.5 compatibility: no string.IsNullOrWhiteSpace / Array.Empty<T>()
@@ -230,7 +222,6 @@ namespace VPB
             return raw;
         }
 
-        /// <summary>True if every term appears in either <paramref name="a"/> or <paramref name="b"/> (case-insensitive).</summary>
         internal static bool MatchesAllTermsInEither(string a, string b, string[] termsLower)
         {
             if (termsLower == null || termsLower.Length == 0) return true;
@@ -261,11 +252,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Single entry point for FileEntry-based search matching. Reads <see cref="VPBConfig.GallerySearchScope"/> and picks a strategy.
-        /// Name field is always the pretty form so search couples to what the user sees on the tile.
-        /// Path field engaged only in PathAndName mode.
-        /// </summary>
         internal static bool MatchesFileEntryByScope(FileEntry file, string[] termsLower)
         {
             if (termsLower == null || termsLower.Length == 0) return true;
@@ -291,10 +277,6 @@ namespace VPB
             return nameFilterQuery != null && !nameFilterQuery.IsEmpty;
         }
 
-        /// <summary>
-        /// Fallback package-scan match when category SQL index unavailable.
-        /// Structured-only queries (tag:/creator:/status) cannot be evaluated here → reject.
-        /// </summary>
         private static bool MatchesPackageFallbackSearch(GallerySearchQuery query, string packageUid, string packagePath, string internalPath)
         {
             if (query == null || query.IsEmpty) return true;
@@ -316,7 +298,7 @@ namespace VPB
                     : new string[0];
                 bool hasBroad = broad.Length > 0;
                 bool hasBroadExcl = br.BroadExclude != null && br.BroadExclude.Count > 0;
-                if (structured && !hasBroad && !hasBroadExcl) continue; // this OR-branch cannot match on fallback
+                if (structured && !hasBroad && !hasBroadExcl) continue;
                 if (!hasBroad && !hasBroadExcl) continue;
                 if (hasBroad && !MatchesPackageByScope(packageUid, packagePath, internalPath, broad)) continue;
                 if (hasBroadExcl)
@@ -363,7 +345,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Keep <see cref="nameFilter"/> / terms / parsed AST in sync.</summary>
         private void AssignNameFilterState(string raw)
         {
             string f = raw ?? "";
@@ -455,7 +436,6 @@ namespace VPB
             return _searchTagKeysCache;
         }
 
-        /// <summary>VAR / package-list rows come from category SQL (loaded/tagged already applied).</summary>
         private static bool IsGallerySqlIndexedSearchEntry(FileEntry entry)
         {
             if (entry == null) return false;
@@ -498,12 +478,6 @@ namespace VPB
             return "";
         }
 
-        /// <summary>
-        /// In-memory match for parsed title-bar search. OR of AND-branches.
-        /// <paramref name="tagKeysByTerm"/> maps each tag substring → row keys (<c>pkg\0path</c>).
-        /// When <paramref name="skipSqlOwnedPredicates"/> is true (post-SQL VAR rows), loaded/tagged
-        /// already applied in SQL are not re-checked here.
-        /// </summary>
         private bool MatchesFileEntryBySearchQuery(
             FileEntry file,
             GallerySearchQuery query,
@@ -752,7 +726,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Same surface as include broad: name/path (scope), creator, uid, user-tag, or Look-A-Pedia subject.</summary>
         private bool FileEntryMatchesBroadTerm(
             FileEntry file,
             string t,
@@ -811,7 +784,7 @@ namespace VPB
             try
             {
                 SystemFileEntry sfe = file as SystemFileEntry;
-                if (sfe != null && !sfe.isVar) return true; // loose files always "loaded"
+                if (sfe != null && !sfe.isVar) return true;
             }
             catch { }
             try
@@ -842,7 +815,6 @@ namespace VPB
             catch { return true; }
         }
 
-        /// <summary>One SQLite connection for all tag substrings; reused across base-list filter.</summary>
         private Dictionary<string, HashSet<string>> BuildTagKeyLookupForSearch(GallerySearchQuery query)
         {
             var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
@@ -879,7 +851,6 @@ namespace VPB
             }
             if (need.Count == 0) return map;
 
-            // No user tags in DB → skip connection (cache empty probe).
             if (hasExplicitTag)
                 _searchUserTagVocabEmpty = false;
             else
@@ -906,9 +877,6 @@ namespace VPB
             return map;
         }
 
-        /// <summary>
-        /// Package-level overload for sites that pass raw strings (no FileEntry available). Package uid is the name field; internalPath optionally folded into the path field for PathAndName mode.
-        /// </summary>
         internal static bool MatchesPackageByScope(string packageUid, string packagePath, string internalPath, string[] termsLower)
         {
             if (termsLower == null || termsLower.Length == 0) return true;
@@ -930,7 +898,6 @@ namespace VPB
             }
         }
 
-        /// <summary>VAR zip paths often use '\'; category roots use '/'.</summary>
         private static string GalleryNormalizePathSlashes(string p)
         {
             return string.IsNullOrEmpty(p) ? p : p.Replace('\\', '/');
@@ -943,7 +910,6 @@ namespace VPB
             return GalleryNormalizePathSlashes(internalPath).StartsWith(GalleryNormalizePathSlashes(prefix), StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>Path rules for VAR file worker / SQLite index path (matches <see cref="GalleryPanel.IO"/> RefreshFilesRoutine).</summary>
         internal static bool RefreshWorkerPathMatches(string checkPath, List<string> currentPaths, string currentPath)
         {
             bool pathOk = true;
@@ -986,17 +952,11 @@ namespace VPB
             return pathOk;
         }
 
-        /// <summary>
-        /// True for Person Appearance look paths only.
-        /// Used when Appearance package scan skips category-root path match (non-Local source) —
-        /// without this, <c>json|vap</c> pulls Custom/SubScene/*.json into the Appearance grid
-        /// (and Load Random then loads SubScenes/scenes).
-        /// </summary>
+        /// <summary>True for Person Appearance look paths only.</summary>
         internal static bool IsAppearanceLookInternalPath(string checkPath)
         {
             if (string.IsNullOrEmpty(checkPath)) return false;
             string p = GalleryNormalizePathSlashes(checkPath);
-            // Strip package prefix "Creator.Pkg.1:/" if present.
             int sep = p.IndexOf(":/", StringComparison.Ordinal);
             if (sep >= 0 && sep + 2 < p.Length)
                 p = p.Substring(sep + 2);
@@ -1011,7 +971,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Reject SubScene/Scene/other person-preset folders when browsing Appearance.</summary>
         internal static bool IsForbiddenInAppearanceCategory(string checkPath)
         {
             if (string.IsNullOrEmpty(checkPath)) return true;
@@ -1053,7 +1012,6 @@ namespace VPB
 
             layoutMode = mode;
 
-            // Persist across restarts unless this is a temporary mode switch.
             if (persistConfig)
             {
                 try
@@ -1067,15 +1025,12 @@ namespace VPB
                 catch { }
             }
             
-            // ALWAYS use internal UI now
             if (scrollRect != null) scrollRect.gameObject.SetActive(true);
 
             UpdateFooterLayoutState();
             if (!keepInternalSettingsMode)
                 UpdateLayout();
 
-            // Layout switch should not force a full RefreshFiles().
-            // The grid items support both modes, so we just reconfigure and rebind visible rows.
             try
             {
                 if (contentGO != null)
@@ -1116,10 +1071,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Re-applies grid config height and rebinds all visible cells.
-        /// Call after grid label settings or column count changes (label strip height tracks font, not columns).
-        /// </summary>
         public void RebuildGridLayout()
         {
             try
@@ -1159,17 +1110,12 @@ namespace VPB
             return !string.IsNullOrEmpty(title) && title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>
-        /// CUA category ("CUA" / Custom/Assets): an .assetbundle pick applies to a CustomUnityAsset atom, so the
-        /// Target picker must list those instead of Persons — otherwise there is no way to say which CUA receives it.
-        /// </summary>
         public bool IsCuaTargetMode()
         {
             string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             return !string.IsNullOrEmpty(title) && title.IndexOf("CUA", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>Gallery Target when it is a CUA, else VaM's selected atom when that is a CUA. Null = spawn one.</summary>
         public Atom ResolveCuaTargetAtom()
         {
             try
@@ -1194,23 +1140,17 @@ namespace VPB
             foreach (var c in categories) categoryCounts[c.name] = 0;
 
             // Category side list should only "filter down" by creator selection.
-            // If tags are active but no creator selected, keep counts global so categories don't disappear.
             var tagFilterForCategoryCounts = HasCreatorFilter() ? activeTags : null;
             if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, GetCreatorFilterForQueries(), tagFilterForCategoryCounts, currentPackagePathFilter, null))
             {
-                // SQL path succeeded.
             }
             else
             {
-                // Fallback: manual scan (O(N_files))
-                // Build optimized lookup map for categories by extension
-                // Map: Extension (lowercase, no dot) -> List of Categories
                 Dictionary<string, List<Gallery.Category>> extToCats = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
                 
                 foreach (var c in categories) 
                 {
                     if (string.IsNullOrEmpty(c.extension)) continue;
-                    // Skip package-level pseudo-extension categories from file-entry scans
                     if (string.Equals(c.extension, "varpkg", StringComparison.OrdinalIgnoreCase)) continue;
                     if (Gallery.IsEverythingCategoryExtension(c.extension)) continue;
                     string[] exts = c.extension.Split('|');
@@ -1229,7 +1169,6 @@ namespace VPB
                     foreach (var pkg in snapshot)
                     {
                         if (pkg == null) continue;
-                        // Filter by creator if set
                         if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
                         if (!string.IsNullOrEmpty(currentPackagePathFilter) &&
                             !GalleryPathFilterMatchesRawPath(pkg.Path, currentPackagePathFilter))
@@ -1243,7 +1182,6 @@ namespace VPB
                             var entry = pkg.FileEntries[i];
                             string internalPath = entry.InternalPath;
                             
-                            // Fast extension extraction
                             int lastDot = internalPath.LastIndexOf('.');
                             if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
                             
@@ -1256,7 +1194,6 @@ namespace VPB
                                 for (int j = 0; j < candCount; j++)
                                 {
                                     var cat = candidates[j];
-                                    // Check path match
                                     bool pathMatch = false;
                                     if (cat.paths != null && cat.paths.Count > 0)
                                     {
@@ -1277,14 +1214,12 @@ namespace VPB
                                     }
                                     else
                                     {
-                                        // No path specified means match all (unlikely for category but possible)
                                         pathMatch = true;
                                     }
 
                                     if (pathMatch)
                                     {
-                                        // Issue #101: top-level Clothing/Hair counts reflect base items (.vam) only,
-                                        // excluding .vap presets that share the same category.
+                                        // Issue #101: top-level Clothing/Hair counts reflect base items (.vam) only, excluding .vap presets that share the same category.
                                         if ((string.Equals(cat.name, "Clothing", StringComparison.OrdinalIgnoreCase) ||
                                              string.Equals(cat.name, "Hair", StringComparison.OrdinalIgnoreCase)) &&
                                             !string.Equals(ext, "vam", StringComparison.OrdinalIgnoreCase))
@@ -1292,7 +1227,7 @@ namespace VPB
                                             break;
                                         }
                                         categoryCounts[cat.name]++;
-                                        break; // File belongs to one category
+                                        break;
                                     }
                                 }
                             }
@@ -1324,7 +1259,6 @@ namespace VPB
                 }
             }
 
-            // Package-level pseudo-category counts: varpkg counts packages (use SQL pkg table).
             try
             {
                 for (int ci = 0; ci < categories.Count; ci++)
@@ -1405,8 +1339,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Rebuild side-tab counts once SQL/index + package scan are ready.</summary>
-        /// <returns>True when category/creator/user-tag counts were rebuilt (caller should refresh side-tab UI).</returns>
         private bool EnsureSideTabCountsFreshAfterGridReady(bool force)
         {
             DateTime scanNow = DateTime.MinValue;
@@ -1444,9 +1376,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// SQLite-cached recursive file count under <paramref name="root"/> for the given extensions.
-        /// </summary>
         private static int CountLooseFilesCached(string root, string[] exts, string cacheKeyPrefix)
         {
             string sig = "0";
@@ -1495,10 +1424,6 @@ namespace VPB
             return n;
         }
 
-        /// <summary>
-        /// Count .cs / .cslist / .dll under Custom/Scripts on disk so the Plugins category is not stuck at 0.
-        /// (Package-only counting misses almost all session plugins.)
-        /// </summary>
         private static void AddLocalCustomScriptsCountToCategory(Dictionary<string, int> counts, string selectedPathFilter = "")
         {
             if (counts == null || !counts.ContainsKey("Plugins")) return;
@@ -1512,7 +1437,6 @@ namespace VPB
 
             int n = CountLooseFilesCached(root, new[] { "cs", "cslist", "dll" }, "plugins:custom_scripts");
 
-            // Ref cache has its own sig so it rebuilds even when the file-list cache is warm.
             string sig = "0";
             try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
             const string refKey = "plugins:cslist_referenced_disk|root=Custom/Scripts";
@@ -1585,10 +1509,7 @@ namespace VPB
             counts["Appearance"] += total;
         }
 
-        /// <summary>
-        /// Fill dest from count map, sort by name (culture, matches former LINQ OrderBy).
-        /// Clear+reuse dest — no Select/ToList alloc. Safe on worker threads if dest is thread-local.
-        /// </summary>
+        /// <summary>Fill dest from count map, sort by name (culture, matches former LINQ OrderBy).</summary>
         internal static void FillCreatorCacheEntriesSorted(Dictionary<string, int> counts, List<CreatorCacheEntry> dest)
         {
             if (dest == null) return;
@@ -1610,9 +1531,7 @@ namespace VPB
             return string.Compare(a.Name, b.Name, StringComparison.CurrentCulture);
         }
 
-        /// <summary>
-        /// Fill dest from count map, sort path OrdinalIgnoreCase (matches former LINQ OrderBy).
-        /// </summary>
+        /// <summary>Fill dest from count map, sort path OrdinalIgnoreCase (matches former LINQ OrderBy).</summary>
         internal static void FillPathCacheEntriesSorted(Dictionary<string, int> counts, List<PathCacheEntry> dest)
         {
             if (dest == null) return;
@@ -1757,9 +1676,7 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Parent folder of a normalized file path (slash-safe; avoids <see cref="Path.GetDirectoryName"/> quirks).
-        /// </summary>
+        /// <summary>Parent folder of a normalized file path (slash-safe; avoids GetDirectoryName quirks).</summary>
         internal static string TryGetParentFolderFromNormalizedPath(string normalizedFilePath)
         {
             if (string.IsNullOrEmpty(normalizedFilePath)) return null;
@@ -1796,17 +1713,12 @@ namespace VPB
             return GalleryPathFilterMatchesFolder(folder, selectedFilter);
         }
 
-        /// <summary>
-        /// True when <paramref name="filter"/> still matches at least one live .var path or an on-disk folder.
-        /// Used to drop Path filters whose folder was deleted in Explorer.
-        /// </summary>
         internal static bool PackagePathFilterStillResolves(string filter)
         {
             if (string.IsNullOrEmpty(filter)) return true;
             string f = filter.Replace('\\', '/').Trim().TrimEnd('/');
             if (f.Length == 0) return true;
 
-            // Folder still on disk (incl. empty AddonPackages/new) — keep filter.
             try
             {
                 if (Directory.Exists(f)) return true;
@@ -1835,10 +1747,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Clears <see cref="currentPackagePathFilter"/> when the selected folder no longer exists
-        /// (Explorer delete/move). Returns true when the filter was cleared.
-        /// </summary>
         internal bool TryClearStalePackagePathFilter()
         {
             if (string.IsNullOrEmpty(currentPackagePathFilter)) return false;
@@ -1854,10 +1762,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Seed Custom/Saves roots that exist on disk (count 0). Folder tree stays visible even when
-        /// current category has no loose hits under those roots.
-        /// </summary>
         private static void EnsureLoosePathRootsSeeded(Dictionary<string, int> folders)
         {
             if (folders == null) return;
@@ -1879,11 +1783,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Category-agnostic Path folder tree: every known package/loose folder, counts start at 0.
-        /// Category-scoped counts overlay later in <see cref="CachePaths"/>.
-        /// Prefer SQLite <c>pkg_var_path</c> inventory; live registry only when SQL seed empty.
-        /// </summary>
         private static void SeedAgnosticPathFolders(Dictionary<string, int> folders)
         {
             if (folders == null) return;
@@ -1920,10 +1819,6 @@ namespace VPB
             EnsureLoosePathRootsSeeded(folders);
         }
 
-        /// <summary>
-        /// When SQLite Path counts are unavailable, build AddonPackages/AllPackages folder hierarchy
-        /// from the live registry (full tree, not the path-filtered grid).
-        /// </summary>
         private static void AddPathCountsFromLiveVarPackages(Dictionary<string, int> counts)
         {
             if (counts == null) return;
@@ -1948,9 +1843,7 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Ensure folder + parents exist in the map with count 0 (do not inflate existing counts).
-        /// </summary>
+        /// <summary>Ensure folder + parents exist in the map with count 0 (do not inflate existing counts).</summary>
         private static void SeedPathFolderHierarchy(Dictionary<string, int> folders, string folderPath)
         {
             if (folders == null || string.IsNullOrEmpty(folderPath)) return;
@@ -2040,11 +1933,9 @@ namespace VPB
             if (!sqlOk)
                 AddPathCountsFromLiveVarPackages(counts);
 
-            // 3) Overlay category counts onto agnostic tree (folders with no hits stay 0).
             foreach (KeyValuePair<string, int> kv in counts)
                 folders[kv.Key] = kv.Value;
 
-            // Mid-refresh with nothing useful yet — keep previous Path list, rebuild when grid finishes.
             if (refreshCoroutine != null && folders.Count == 0)
             {
                 pathsCached = false;
@@ -2061,8 +1952,6 @@ namespace VPB
             if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
 
             var allNames = new List<string>(128);
-            // SQLite can be briefly busy during scene load / package refresh. Do not clear a good
-            // cache or mark empty-as-cached — that empties the Tags panel until F↔T (issue #74).
             if (!VpbLocalDatabase.TryReadAllGalleryUserTagNames(allNames))
             {
                 _userTagSideTabCountsReady = false;
@@ -2089,8 +1978,6 @@ namespace VPB
                 cachedUserTagSideTab.Add(new UserTagSideTabEntry { Name = name, Count = c });
             }
             // Stick vocabulary after name load so empty category / failed counts do not re-query every refresh.
-            // Amounts stay Count=0 until _userTagSideTabCountsReady; EnsureSideTabCountsFreshAfterGridReady
-            // retries when cat_mem index becomes ready (issue #84). Hide-unused waits on counts-ready.
             userTagsCached = true;
             _userTagSideTabCountsReady = countsOk;
             unchecked { userTagSideTabDataRevision++; }
@@ -2132,17 +2019,13 @@ namespace VPB
             while (e.MoveNext()) { }
         }
 
-        /// <summary>
-        /// Used from <see cref="GalleryPanel.UpdateTabs"/> when <c>!tagsCached</c>: same work as <see cref="CacheTagCounts"/> but time-sliced so Clothing subfilter clicks do not freeze the UI
-        /// while <see cref="GalleryPanel.RefreshFiles"/> is also queued (previously both compounded on the main thread).
-        /// </summary>
+        /// <summary>Time-sliced tag counting so Clothing subfilter clicks do not freeze the UI.</summary>
         private void ScheduleTagCountsForSideTabsNonBlocking()
         {
             if (tagsCached) return;
             if (_sideTabsTagCountSliceCo != null)
                 return;
             // RefreshFiles owns DeferredGallerySideTabsAfterGridReady (tag scan + sub-pane).
-            // Starting a parallel slice during an in-flight refresh races session id and is cancelled.
             if (refreshCoroutine != null)
                 return;
             int sessionSnap = _deferredSubPaneSessionId;
@@ -2170,63 +2053,12 @@ namespace VPB
             }
         }
 
-        private void ApplyTagScanTotalsFromWorker(GalleryTagCountBackgroundScan.TagScanTotals t)
+        private void ApplyTagScanTotalsFromWorker(TagFacetCounts t)
         {
             if (t == null) return;
-            appearanceSourceCountAll = t.AppearanceSourceCountAll;
-            appearanceSourceCountPresets = t.AppearanceSourceCountPresets;
-            appearanceSourceCountCustom = t.AppearanceSourceCountCustom;
-            clothingSubfilterCountAll = t.ClothingSubfilterCountAll;
-            clothingSubfilterCountReal = t.ClothingSubfilterCountReal;
-            clothingSubfilterCountPresets = t.ClothingSubfilterCountPresets;
-            clothingSubfilterCountCustom = t.ClothingSubfilterCountCustom;
-            clothingSubfilterCountCustomPreset = t.ClothingSubfilterCountCustomPreset;
-            clothingSubfilterCountItems = t.ClothingSubfilterCountItems;
-            clothingSubfilterCountMale = t.ClothingSubfilterCountMale;
-            clothingSubfilterCountFemale = t.ClothingSubfilterCountFemale;
-            clothingSubfilterCountDecals = t.ClothingSubfilterCountDecals;
-            hairSubfilterCountAll = t.HairSubfilterCountAll;
-            hairSubfilterCountPresets = t.HairSubfilterCountPresets;
-            hairSubfilterCountCustom = t.HairSubfilterCountCustom;
-            hairSubfilterCountCustomPreset = t.HairSubfilterCountCustomPreset;
-            hairSubfilterCountItems = t.HairSubfilterCountItems;
-            hairSubfilterCountMale = t.HairSubfilterCountMale;
-            hairSubfilterCountFemale = t.HairSubfilterCountFemale;
-            appearanceSubfilterCountAll = t.AppearanceSubfilterCountAll;
-            appearanceSubfilterCountPresets = t.AppearanceSubfilterCountPresets;
-            appearanceSubfilterCountCustom = t.AppearanceSubfilterCountCustom;
-            appearanceSubfilterCountMale = t.AppearanceSubfilterCountMale;
-            appearanceSubfilterCountFemale = t.AppearanceSubfilterCountFemale;
-            appearanceSubfilterCountFuta = t.AppearanceSubfilterCountFuta;
-            appearanceSubfilterCountUnknown = t.AppearanceSubfilterCountUnknown;
-            clothingSubfilterFacetCountReal = t.ClothingSubfilterFacetCountReal;
-            clothingSubfilterFacetCountPresets = t.ClothingSubfilterFacetCountPresets;
-            clothingSubfilterFacetCountCustom = t.ClothingSubfilterFacetCountCustom;
-            clothingSubfilterFacetCountCustomPreset = t.ClothingSubfilterFacetCountCustomPreset;
-            clothingSubfilterFacetCountItems = t.ClothingSubfilterFacetCountItems;
-            clothingSubfilterFacetCountMale = t.ClothingSubfilterFacetCountMale;
-            clothingSubfilterFacetCountFemale = t.ClothingSubfilterFacetCountFemale;
-            clothingSubfilterFacetCountDecals = t.ClothingSubfilterFacetCountDecals;
-            hairSubfilterFacetCountPresets = t.HairSubfilterFacetCountPresets;
-            hairSubfilterFacetCountCustom = t.HairSubfilterFacetCountCustom;
-            hairSubfilterFacetCountCustomPreset = t.HairSubfilterFacetCountCustomPreset;
-            hairSubfilterFacetCountItems = t.HairSubfilterFacetCountItems;
-            hairSubfilterFacetCountMale = t.HairSubfilterFacetCountMale;
-            hairSubfilterFacetCountFemale = t.HairSubfilterFacetCountFemale;
-            appearanceSubfilterFacetCountPresets = t.AppearanceSubfilterFacetCountPresets;
-            appearanceSubfilterFacetCountCustom = t.AppearanceSubfilterFacetCountCustom;
-            appearanceSubfilterFacetCountMale = t.AppearanceSubfilterFacetCountMale;
-            appearanceSubfilterFacetCountFemale = t.AppearanceSubfilterFacetCountFemale;
-            appearanceSubfilterFacetCountFuta = t.AppearanceSubfilterFacetCountFuta;
-            appearanceSubfilterFacetCountUnknown = t.AppearanceSubfilterFacetCountUnknown;
-            appearanceSubfilterCurrentCountAll = t.AppearanceSubfilterCurrentCountAll;
-            appearanceSubfilterCurrentCountMale = t.AppearanceSubfilterCurrentCountMale;
-            appearanceSubfilterCurrentCountFemale = t.AppearanceSubfilterCurrentCountFemale;
-            appearanceSubfilterCurrentCountFuta = t.AppearanceSubfilterCurrentCountFuta;
-            appearanceSubfilterCurrentCountUnknown = t.AppearanceSubfilterCurrentCountUnknown;
+            tagFacets.CopyFrom(t);
         }
 
-        /// <summary>Prime Hair/Clothing subfilter chip counts from SQLite VAR rows so split sub-pane buttons appear immediately.</summary>
         private bool TryApplyHairClothingSubfilterCountsFromSql()
         {
             if (!VpbSqlite3.IsAvailable) return false;
@@ -2241,7 +2073,7 @@ namespace VPB
 
             string extJ = string.IsNullOrEmpty(currentExtension) ? "" : currentExtension;
             var tagCountsScratch = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            VpbLocalDatabase.TagScanTotals sqlFacets;
+            TagFacetCounts sqlFacets;
             if (!VpbLocalDatabase.TryReadTagCounts(
                     title,
                     extJ,
@@ -2255,36 +2087,36 @@ namespace VPB
                     activeTags))
                 return false;
 
-            clothingSubfilterCountAll = sqlFacets.ClothingSubfilterCountAll;
-            clothingSubfilterCountReal = sqlFacets.ClothingSubfilterCountReal;
-            clothingSubfilterCountPresets = sqlFacets.ClothingSubfilterCountPresets;
-            clothingSubfilterCountCustom = sqlFacets.ClothingSubfilterCountCustom;
-            clothingSubfilterCountCustomPreset = sqlFacets.ClothingSubfilterCountCustomPreset;
-            clothingSubfilterCountItems = sqlFacets.ClothingSubfilterCountItems;
-            clothingSubfilterCountMale = sqlFacets.ClothingSubfilterCountMale;
-            clothingSubfilterCountFemale = sqlFacets.ClothingSubfilterCountFemale;
-            clothingSubfilterCountDecals = sqlFacets.ClothingSubfilterCountDecals;
-            hairSubfilterCountAll = sqlFacets.HairSubfilterCountAll;
-            hairSubfilterCountPresets = sqlFacets.HairSubfilterCountPresets;
-            hairSubfilterCountCustom = sqlFacets.HairSubfilterCountCustom;
-            hairSubfilterCountCustomPreset = sqlFacets.HairSubfilterCountCustomPreset;
-            hairSubfilterCountItems = sqlFacets.HairSubfilterCountItems;
-            hairSubfilterCountMale = sqlFacets.HairSubfilterCountMale;
-            hairSubfilterCountFemale = sqlFacets.HairSubfilterCountFemale;
-            clothingSubfilterFacetCountReal = sqlFacets.ClothingSubfilterFacetCountReal;
-            clothingSubfilterFacetCountPresets = sqlFacets.ClothingSubfilterFacetCountPresets;
-            clothingSubfilterFacetCountCustom = sqlFacets.ClothingSubfilterFacetCountCustom;
-            clothingSubfilterFacetCountCustomPreset = sqlFacets.ClothingSubfilterFacetCountCustomPreset;
-            clothingSubfilterFacetCountItems = sqlFacets.ClothingSubfilterFacetCountItems;
-            clothingSubfilterFacetCountMale = sqlFacets.ClothingSubfilterFacetCountMale;
-            clothingSubfilterFacetCountFemale = sqlFacets.ClothingSubfilterFacetCountFemale;
-            clothingSubfilterFacetCountDecals = sqlFacets.ClothingSubfilterFacetCountDecals;
-            hairSubfilterFacetCountPresets = sqlFacets.HairSubfilterFacetCountPresets;
-            hairSubfilterFacetCountCustom = sqlFacets.HairSubfilterFacetCountCustom;
-            hairSubfilterFacetCountCustomPreset = sqlFacets.HairSubfilterFacetCountCustomPreset;
-            hairSubfilterFacetCountItems = sqlFacets.HairSubfilterFacetCountItems;
-            hairSubfilterFacetCountMale = sqlFacets.HairSubfilterFacetCountMale;
-            hairSubfilterFacetCountFemale = sqlFacets.HairSubfilterFacetCountFemale;
+            tagFacets.ClothingSubfilterCountAll = sqlFacets.ClothingSubfilterCountAll;
+            tagFacets.ClothingSubfilterCountReal = sqlFacets.ClothingSubfilterCountReal;
+            tagFacets.ClothingSubfilterCountPresets = sqlFacets.ClothingSubfilterCountPresets;
+            tagFacets.ClothingSubfilterCountCustom = sqlFacets.ClothingSubfilterCountCustom;
+            tagFacets.ClothingSubfilterCountCustomPreset = sqlFacets.ClothingSubfilterCountCustomPreset;
+            tagFacets.ClothingSubfilterCountItems = sqlFacets.ClothingSubfilterCountItems;
+            tagFacets.ClothingSubfilterCountMale = sqlFacets.ClothingSubfilterCountMale;
+            tagFacets.ClothingSubfilterCountFemale = sqlFacets.ClothingSubfilterCountFemale;
+            tagFacets.ClothingSubfilterCountDecals = sqlFacets.ClothingSubfilterCountDecals;
+            tagFacets.HairSubfilterCountAll = sqlFacets.HairSubfilterCountAll;
+            tagFacets.HairSubfilterCountPresets = sqlFacets.HairSubfilterCountPresets;
+            tagFacets.HairSubfilterCountCustom = sqlFacets.HairSubfilterCountCustom;
+            tagFacets.HairSubfilterCountCustomPreset = sqlFacets.HairSubfilterCountCustomPreset;
+            tagFacets.HairSubfilterCountItems = sqlFacets.HairSubfilterCountItems;
+            tagFacets.HairSubfilterCountMale = sqlFacets.HairSubfilterCountMale;
+            tagFacets.HairSubfilterCountFemale = sqlFacets.HairSubfilterCountFemale;
+            tagFacets.ClothingSubfilterFacetCountReal = sqlFacets.ClothingSubfilterFacetCountReal;
+            tagFacets.ClothingSubfilterFacetCountPresets = sqlFacets.ClothingSubfilterFacetCountPresets;
+            tagFacets.ClothingSubfilterFacetCountCustom = sqlFacets.ClothingSubfilterFacetCountCustom;
+            tagFacets.ClothingSubfilterFacetCountCustomPreset = sqlFacets.ClothingSubfilterFacetCountCustomPreset;
+            tagFacets.ClothingSubfilterFacetCountItems = sqlFacets.ClothingSubfilterFacetCountItems;
+            tagFacets.ClothingSubfilterFacetCountMale = sqlFacets.ClothingSubfilterFacetCountMale;
+            tagFacets.ClothingSubfilterFacetCountFemale = sqlFacets.ClothingSubfilterFacetCountFemale;
+            tagFacets.ClothingSubfilterFacetCountDecals = sqlFacets.ClothingSubfilterFacetCountDecals;
+            tagFacets.HairSubfilterFacetCountPresets = sqlFacets.HairSubfilterFacetCountPresets;
+            tagFacets.HairSubfilterFacetCountCustom = sqlFacets.HairSubfilterFacetCountCustom;
+            tagFacets.HairSubfilterFacetCountCustomPreset = sqlFacets.HairSubfilterFacetCountCustomPreset;
+            tagFacets.HairSubfilterFacetCountItems = sqlFacets.HairSubfilterFacetCountItems;
+            tagFacets.HairSubfilterFacetCountMale = sqlFacets.HairSubfilterFacetCountMale;
+            tagFacets.HairSubfilterFacetCountFemale = sqlFacets.HairSubfilterFacetCountFemale;
             return true;
         }
 
@@ -2324,72 +2156,70 @@ namespace VPB
 
             Stopwatch sliceWatch = (maxMsPerSlice < TagCountScanNoSliceMs) ? Stopwatch.StartNew() : null;
 
-            appearanceSourceCountAll = 0;
-            appearanceSourceCountPresets = 0;
-            appearanceSourceCountCustom = 0;
+            tagFacets.AppearanceSourceCountAll = 0;
+            tagFacets.AppearanceSourceCountPresets = 0;
+            tagFacets.AppearanceSourceCountCustom = 0;
 
-            clothingSubfilterCountAll = 0;
-            clothingSubfilterCountReal = 0;
-            clothingSubfilterCountPresets = 0;
-            clothingSubfilterCountCustom = 0;
-            clothingSubfilterCountCustomPreset = 0;
-            clothingSubfilterCountItems = 0;
-            clothingSubfilterCountMale = 0;
-            clothingSubfilterCountFemale = 0;
-            clothingSubfilterCountDecals = 0;
+            tagFacets.ClothingSubfilterCountAll = 0;
+            tagFacets.ClothingSubfilterCountReal = 0;
+            tagFacets.ClothingSubfilterCountPresets = 0;
+            tagFacets.ClothingSubfilterCountCustom = 0;
+            tagFacets.ClothingSubfilterCountCustomPreset = 0;
+            tagFacets.ClothingSubfilterCountItems = 0;
+            tagFacets.ClothingSubfilterCountMale = 0;
+            tagFacets.ClothingSubfilterCountFemale = 0;
+            tagFacets.ClothingSubfilterCountDecals = 0;
 
-            hairSubfilterCountAll = 0;
-            hairSubfilterCountPresets = 0;
-            hairSubfilterCountCustom = 0;
-            hairSubfilterCountCustomPreset = 0;
-            hairSubfilterCountItems = 0;
-            hairSubfilterCountMale = 0;
-            hairSubfilterCountFemale = 0;
+            tagFacets.HairSubfilterCountAll = 0;
+            tagFacets.HairSubfilterCountPresets = 0;
+            tagFacets.HairSubfilterCountCustom = 0;
+            tagFacets.HairSubfilterCountCustomPreset = 0;
+            tagFacets.HairSubfilterCountItems = 0;
+            tagFacets.HairSubfilterCountMale = 0;
+            tagFacets.HairSubfilterCountFemale = 0;
 
-            appearanceSubfilterCountAll = 0;
-            appearanceSubfilterCountPresets = 0;
-            appearanceSubfilterCountCustom = 0;
-            appearanceSubfilterCountMale = 0;
-            appearanceSubfilterCountFemale = 0;
-            appearanceSubfilterCountFuta = 0;
-            appearanceSubfilterCountUnknown = 0;
+            tagFacets.AppearanceSubfilterCountAll = 0;
+            tagFacets.AppearanceSubfilterCountPresets = 0;
+            tagFacets.AppearanceSubfilterCountCustom = 0;
+            tagFacets.AppearanceSubfilterCountMale = 0;
+            tagFacets.AppearanceSubfilterCountFemale = 0;
+            tagFacets.AppearanceSubfilterCountFuta = 0;
+            tagFacets.AppearanceSubfilterCountUnknown = 0;
 
-            clothingSubfilterFacetCountReal = 0;
-            clothingSubfilterFacetCountPresets = 0;
-            clothingSubfilterFacetCountCustom = 0;
-            clothingSubfilterFacetCountCustomPreset = 0;
-            clothingSubfilterFacetCountItems = 0;
-            clothingSubfilterFacetCountMale = 0;
-            clothingSubfilterFacetCountFemale = 0;
-            clothingSubfilterFacetCountDecals = 0;
+            tagFacets.ClothingSubfilterFacetCountReal = 0;
+            tagFacets.ClothingSubfilterFacetCountPresets = 0;
+            tagFacets.ClothingSubfilterFacetCountCustom = 0;
+            tagFacets.ClothingSubfilterFacetCountCustomPreset = 0;
+            tagFacets.ClothingSubfilterFacetCountItems = 0;
+            tagFacets.ClothingSubfilterFacetCountMale = 0;
+            tagFacets.ClothingSubfilterFacetCountFemale = 0;
+            tagFacets.ClothingSubfilterFacetCountDecals = 0;
 
-            hairSubfilterFacetCountPresets = 0;
-            hairSubfilterFacetCountCustom = 0;
-            hairSubfilterFacetCountCustomPreset = 0;
-            hairSubfilterFacetCountItems = 0;
-            hairSubfilterFacetCountMale = 0;
-            hairSubfilterFacetCountFemale = 0;
+            tagFacets.HairSubfilterFacetCountPresets = 0;
+            tagFacets.HairSubfilterFacetCountCustom = 0;
+            tagFacets.HairSubfilterFacetCountCustomPreset = 0;
+            tagFacets.HairSubfilterFacetCountItems = 0;
+            tagFacets.HairSubfilterFacetCountMale = 0;
+            tagFacets.HairSubfilterFacetCountFemale = 0;
 
-            appearanceSubfilterFacetCountPresets = 0;
-            appearanceSubfilterFacetCountCustom = 0;
-            appearanceSubfilterFacetCountMale = 0;
-            appearanceSubfilterFacetCountFemale = 0;
-            appearanceSubfilterFacetCountFuta = 0;
-            appearanceSubfilterFacetCountUnknown = 0;
+            tagFacets.AppearanceSubfilterFacetCountPresets = 0;
+            tagFacets.AppearanceSubfilterFacetCountCustom = 0;
+            tagFacets.AppearanceSubfilterFacetCountMale = 0;
+            tagFacets.AppearanceSubfilterFacetCountFemale = 0;
+            tagFacets.AppearanceSubfilterFacetCountFuta = 0;
+            tagFacets.AppearanceSubfilterFacetCountUnknown = 0;
 
-            appearanceSubfilterCurrentCountAll = 0;
-            appearanceSubfilterCurrentCountMale = 0;
-            appearanceSubfilterCurrentCountFemale = 0;
-            appearanceSubfilterCurrentCountFuta = 0;
-            appearanceSubfilterCurrentCountUnknown = 0;
+            tagFacets.AppearanceSubfilterCurrentCountAll = 0;
+            tagFacets.AppearanceSubfilterCurrentCountMale = 0;
+            tagFacets.AppearanceSubfilterCurrentCountFemale = 0;
+            tagFacets.AppearanceSubfilterCurrentCountFuta = 0;
+            tagFacets.AppearanceSubfilterCurrentCountUnknown = 0;
 
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
-            // Build extension set for fast lookup
             HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var e in extensions) if (!string.IsNullOrEmpty(e)) targetExts.Add(e.Trim());
             bool everythingExtMode = Gallery.IsEverythingCategoryExtension(currentExtension);
 
-            // Collect all relevant tags to count
             HashSet<string> tagsToCount = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             string cp = currentPath ?? "";
@@ -2414,12 +2244,10 @@ namespace VPB
                 tagsToCount.UnionWith(TagFilter.HairUnknownTags);
             }
             
-            // Include user-defined tags
             tagsToCount.UnionWith(TagsManager.Instance.GetAllUserTags());
 
             bool hasAnyTagsToCount = (tagsToCount.Count > 0);
 
-            // Split tags into single-word and multi-word
             HashSet<string> singleWordTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             List<string> multiWordTags = new List<string>();
             char[] separators = new char[] { '/', '\\', '.', '_', '-', ' ' };
@@ -2438,7 +2266,7 @@ namespace VPB
 
             TagCountParallelInputs tagParForScan;
             TryBuildTagCountParallelInputs(out tagParForScan);
-            var coTagScanTotals = new GalleryTagCountBackgroundScan.TagScanTotals();
+            var coTagScanTotals = new TagFacetCounts();
             bool coVarFromSql = false;
             if (tagParForScan != null && VpbSqlite3.IsAvailable && sliceWatch != null)
             {
@@ -2447,67 +2275,14 @@ namespace VPB
                 yield return null;
                 if (deferredSessionId >= 0 && deferredSessionId != _deferredSubPaneSessionId) yield break;
             }
-            // Skip the SQL fast path under Source: Local. cat_mem holds var-backed rows only, and the var counters
-            // must be zero in Local mode; the live-loop walk below will produce loose-only counts correctly.
             if (tagParForScan != null && VpbSqlite3.IsAvailable && countVarRows)
             {
-                VpbLocalDatabase.TagScanTotals sqlFacets;
+                TagFacetCounts sqlFacets;
                 string extJ = GalleryTagCountBackgroundScan.JoinExtensionsForTagScan(tagParForScan.ExtensionsSplit);
                 if (VpbLocalDatabase.TryReadTagCounts(tagParForScan.Title, extJ, tagParForScan.CurrentCreator ?? "", tagsToCount, tagCounts, out sqlFacets, clothingSubfilter, hairSubfilter, appearanceSubfilter, activeTags))
                 {
                     coVarFromSql = true;
-                    // Map sqlFacets back to our local variables
-                    appearanceSourceCountAll = sqlFacets.AppearanceSourceCountAll;
-                    appearanceSourceCountPresets = sqlFacets.AppearanceSourceCountPresets;
-                    appearanceSourceCountCustom = sqlFacets.AppearanceSourceCountCustom;
-                    clothingSubfilterCountAll = sqlFacets.ClothingSubfilterCountAll;
-                    clothingSubfilterCountReal = sqlFacets.ClothingSubfilterCountReal;
-                    clothingSubfilterCountPresets = sqlFacets.ClothingSubfilterCountPresets;
-                    clothingSubfilterCountCustom = sqlFacets.ClothingSubfilterCountCustom;
-                    clothingSubfilterCountCustomPreset = sqlFacets.ClothingSubfilterCountCustomPreset;
-                    clothingSubfilterCountItems = sqlFacets.ClothingSubfilterCountItems;
-                    clothingSubfilterCountMale = sqlFacets.ClothingSubfilterCountMale;
-                    clothingSubfilterCountFemale = sqlFacets.ClothingSubfilterCountFemale;
-                    clothingSubfilterCountDecals = sqlFacets.ClothingSubfilterCountDecals;
-                    hairSubfilterCountAll = sqlFacets.HairSubfilterCountAll;
-                    hairSubfilterCountPresets = sqlFacets.HairSubfilterCountPresets;
-                    hairSubfilterCountCustom = sqlFacets.HairSubfilterCountCustom;
-                    hairSubfilterCountCustomPreset = sqlFacets.HairSubfilterCountCustomPreset;
-                    hairSubfilterCountItems = sqlFacets.HairSubfilterCountItems;
-                    hairSubfilterCountMale = sqlFacets.HairSubfilterCountMale;
-                    hairSubfilterCountFemale = sqlFacets.HairSubfilterCountFemale;
-                    appearanceSubfilterCountAll = sqlFacets.AppearanceSubfilterCountAll;
-                    appearanceSubfilterCountPresets = sqlFacets.AppearanceSubfilterCountPresets;
-                    appearanceSubfilterCountCustom = sqlFacets.AppearanceSubfilterCountCustom;
-                    appearanceSubfilterCountMale = sqlFacets.AppearanceSubfilterCountMale;
-                    appearanceSubfilterCountFemale = sqlFacets.AppearanceSubfilterCountFemale;
-                    appearanceSubfilterCountFuta = sqlFacets.AppearanceSubfilterCountFuta;
-                    appearanceSubfilterCountUnknown = sqlFacets.AppearanceSubfilterCountUnknown;
-                    clothingSubfilterFacetCountReal = sqlFacets.ClothingSubfilterFacetCountReal;
-                    clothingSubfilterFacetCountPresets = sqlFacets.ClothingSubfilterFacetCountPresets;
-                    clothingSubfilterFacetCountCustom = sqlFacets.ClothingSubfilterFacetCountCustom;
-                    clothingSubfilterFacetCountCustomPreset = sqlFacets.ClothingSubfilterFacetCountCustomPreset;
-                    clothingSubfilterFacetCountItems = sqlFacets.ClothingSubfilterFacetCountItems;
-                    clothingSubfilterFacetCountMale = sqlFacets.ClothingSubfilterFacetCountMale;
-                    clothingSubfilterFacetCountFemale = sqlFacets.ClothingSubfilterFacetCountFemale;
-                    clothingSubfilterFacetCountDecals = sqlFacets.ClothingSubfilterFacetCountDecals;
-                    hairSubfilterFacetCountPresets = sqlFacets.HairSubfilterFacetCountPresets;
-                    hairSubfilterFacetCountCustom = sqlFacets.HairSubfilterFacetCountCustom;
-                    hairSubfilterFacetCountCustomPreset = sqlFacets.HairSubfilterFacetCountCustomPreset;
-                    hairSubfilterFacetCountItems = sqlFacets.HairSubfilterFacetCountItems;
-                    hairSubfilterFacetCountMale = sqlFacets.HairSubfilterFacetCountMale;
-                    hairSubfilterFacetCountFemale = sqlFacets.HairSubfilterFacetCountFemale;
-                    appearanceSubfilterFacetCountPresets = sqlFacets.AppearanceSubfilterFacetCountPresets;
-                    appearanceSubfilterFacetCountCustom = sqlFacets.AppearanceSubfilterFacetCountCustom;
-                    appearanceSubfilterFacetCountMale = sqlFacets.AppearanceSubfilterFacetCountMale;
-                    appearanceSubfilterFacetCountFemale = sqlFacets.AppearanceSubfilterFacetCountFemale;
-                    appearanceSubfilterFacetCountFuta = sqlFacets.AppearanceSubfilterFacetCountFuta;
-                    appearanceSubfilterFacetCountUnknown = sqlFacets.AppearanceSubfilterFacetCountUnknown;
-                    appearanceSubfilterCurrentCountAll = sqlFacets.AppearanceSubfilterCurrentCountAll;
-                    appearanceSubfilterCurrentCountMale = sqlFacets.AppearanceSubfilterCurrentCountMale;
-                    appearanceSubfilterCurrentCountFemale = sqlFacets.AppearanceSubfilterCurrentCountFemale;
-                    appearanceSubfilterCurrentCountFuta = sqlFacets.AppearanceSubfilterCurrentCountFuta;
-                    appearanceSubfilterCurrentCountUnknown = sqlFacets.AppearanceSubfilterCurrentCountUnknown;
+                    tagFacets.CopyFrom(sqlFacets);
                 }
             }
 
@@ -2521,7 +2296,6 @@ namespace VPB
 
                 if (pkg.FileEntries == null) continue;
                 
-                // If filtering by creator, respect it
                 if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
 
                 int count = pkg.FileEntries.Count;
@@ -2537,14 +2311,12 @@ namespace VPB
                     var entry = pkg.FileEntries[i];
                     string internalPath = entry.InternalPath;
 
-                    // 1. Check extension
                     int lastDot = internalPath.LastIndexOf('.');
                     if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
                     string ext = internalPath.Substring(lastDot + 1);
                     if (everythingExtMode && Gallery.IsEverythingExcludedPreviewExtension(ext)) continue;
                     if (!everythingExtMode && !targetExts.Contains(ext)) continue;
 
-                    // 2. Check path match (Inline IsMatch logic)
                     bool match = false;
                     if (currentPaths != null && currentPaths.Count > 0)
                     {
@@ -2576,7 +2348,6 @@ namespace VPB
 						isClothingEntry = (ck == ClothingLoadingUtils.ResourceKind.Clothing);
 						if (isClothingEntry)
                         {
-                            // For Clothing category we include both .vam and .vap, and subfilters split them.
 							isPresetEntry = (ext.Equals("vap", StringComparison.OrdinalIgnoreCase));
 							// VAR entries are never considered "Custom".
 							isCustomPreset = false;
@@ -2586,8 +2357,7 @@ namespace VPB
                             ClothingSubfilter cur = clothingSubfilter;
                             bool PassesClothingSubfilters(ClothingSubfilter f)
                             {
-                                // Issue #101: with no flags set, default-hide .vap presets so the
-                                // grid does not show duplicate base + preset pairs.
+                                // Issue #101: with no flags set, default-hide .vap presets so the grid does not show duplicate base + preset pairs.
                                 if (f == 0) return !isPresetEntry;
 
                                 bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
@@ -2611,7 +2381,6 @@ namespace VPB
 								if (wantsPresets) { if (!isPresetEntry) return false; }
 								if (wantsCustom) { if (!isCustomPreset) return false; }
                                 if (wantsCustomPreset) return false;
-                                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
                                 if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPresetEntry) return false; }
 								if ((f & ClothingSubfilter.Items) != 0) { if (isPresetEntry) return false; }
 								if ((f & ClothingSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
@@ -2620,25 +2389,21 @@ namespace VPB
                                 return true;
                             }
 
-                            // Facet counts: how many would be shown if the user toggled that flag now.
-							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.RealClothing)) clothingSubfilterFacetCountReal++;
-							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Presets)) clothingSubfilterFacetCountPresets++;
-							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Custom)) clothingSubfilterFacetCountCustom++;
-                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.CustomPreset)) clothingSubfilterFacetCountCustomPreset++;
-							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Items)) clothingSubfilterFacetCountItems++;
-							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Male)) clothingSubfilterFacetCountMale++;
-							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Female)) clothingSubfilterFacetCountFemale++;
-							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Decals)) clothingSubfilterFacetCountDecals++;
+							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.RealClothing)) tagFacets.ClothingSubfilterFacetCountReal++;
+							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Presets)) tagFacets.ClothingSubfilterFacetCountPresets++;
+							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Custom)) tagFacets.ClothingSubfilterFacetCountCustom++;
+                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.CustomPreset)) tagFacets.ClothingSubfilterFacetCountCustomPreset++;
+							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Items)) tagFacets.ClothingSubfilterFacetCountItems++;
+							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Male)) tagFacets.ClothingSubfilterFacetCountMale++;
+							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Female)) tagFacets.ClothingSubfilterFacetCountFemale++;
+							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Decals)) tagFacets.ClothingSubfilterFacetCountDecals++;
 
-							// All Clothing includes everything: real clothing + decals
-							clothingSubfilterCountAll++;
+							tagFacets.ClothingSubfilterCountAll++;
 
-                            // Decals are counted separately and excluded from real clothing filters by default.
                             if (isDecal)
                             {
-                                clothingSubfilterCountDecals++;
+                                tagFacets.ClothingSubfilterCountDecals++;
 
-                                // Apply active subfilters (if any) to tag counting.
                                 if (clothingSubfilter != 0)
                                 {
                                     bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
@@ -2660,18 +2425,16 @@ namespace VPB
                             }
                             else
                             {
-                                clothingSubfilterCountReal++;
-                                if (isPresetEntry) clothingSubfilterCountPresets++;
-								if (isCustomPreset) clothingSubfilterCountCustom++;
-								if (!isPresetEntry) clothingSubfilterCountItems++;
-                                if (cg == ClothingLoadingUtils.ResourceGender.Male) clothingSubfilterCountMale++;
-                                else if (cg == ClothingLoadingUtils.ResourceGender.Female) clothingSubfilterCountFemale++;
+                                tagFacets.ClothingSubfilterCountReal++;
+                                if (isPresetEntry) tagFacets.ClothingSubfilterCountPresets++;
+								if (isCustomPreset) tagFacets.ClothingSubfilterCountCustom++;
+								if (!isPresetEntry) tagFacets.ClothingSubfilterCountItems++;
+                                if (cg == ClothingLoadingUtils.ResourceGender.Male) tagFacets.ClothingSubfilterCountMale++;
+                                else if (cg == ClothingLoadingUtils.ResourceGender.Female) tagFacets.ClothingSubfilterCountFemale++;
 
-                                // Issue #101: default-hide presets when no subfilter is active so
-                                // tag counts reflect what is actually shown in the grid.
+                                // Issue #101: default-hide presets when no subfilter is active so tag counts reflect what is actually shown in the grid.
                                 if (clothingSubfilter == 0 && isPresetEntry) continue;
 
-                                // Apply active subfilters (if any) to tag counting.
                                 if (clothingSubfilter != 0)
                                 {
                                     bool typeExplicit = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
@@ -2679,14 +2442,12 @@ namespace VPB
                                     {
                                         if ((clothingSubfilter & ClothingSubfilter.RealClothing) == 0) continue;
                                     }
-                                    // Additional constraints
                                     bool wantsPresets = (clothingSubfilter & ClothingSubfilter.Presets) != 0;
                                     bool wantsCustom = (clothingSubfilter & ClothingSubfilter.Custom) != 0;
                                     bool wantsCustomPreset = (clothingSubfilter & ClothingSubfilter.CustomPreset) != 0;
                                     if (wantsPresets) { if (!isPresetEntry) continue; }
                                     if (wantsCustom) { if (!isCustomPreset) continue; }
                                     if (wantsCustomPreset) continue;
-                                    // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
                                     if (!wantsPresets && !wantsCustom && !wantsCustomPreset && isPresetEntry) continue;
                                     if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPresetEntry) continue; }
                                     if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male && cg != ClothingLoadingUtils.ResourceGender.Unknown) continue; }
@@ -2696,22 +2457,18 @@ namespace VPB
                         }
                         else
                         {
-                            // When browsing Clothing, ignore non-clothing entries for tag counts.
                             continue;
                         }
                     }
 
                     if (isAppearanceTitle)
                     {
-                        // Source-filter gate: var rows are var-backed by definition, so a Local-only filter must
-                        // exclude them from every appearance counter (matches the grid's PassesFilters behavior).
                         if (!countVarRows) continue;
 
                         string p = internalPath.Replace('\\', '/');
                         bool isAppearance = p.IndexOf("/appearance", StringComparison.OrdinalIgnoreCase) >= 0;
                         if (!isAppearance)
                         {
-                            // When browsing Appearance, ignore non-appearance entries for tag counts.
                             continue;
                         }
 
@@ -2721,13 +2478,13 @@ namespace VPB
                         AppearanceGender g = AppearanceGender.Unknown;
                         try { g = GetAppearanceGender(entry); } catch { g = AppearanceGender.Unknown; }
 
-                        appearanceSubfilterCountAll++;
-                        if (isPresetAppearance) appearanceSubfilterCountPresets++;
-                        if (isCustomAppearance) appearanceSubfilterCountCustom++;
-                        if (g == AppearanceGender.Male) appearanceSubfilterCountMale++;
-                        if (g == AppearanceGender.Female) appearanceSubfilterCountFemale++;
-                        if (g == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
-                        if (g == AppearanceGender.Unknown) appearanceSubfilterCountUnknown++;
+                        tagFacets.AppearanceSubfilterCountAll++;
+                        if (isPresetAppearance) tagFacets.AppearanceSubfilterCountPresets++;
+                        if (isCustomAppearance) tagFacets.AppearanceSubfilterCountCustom++;
+                        if (g == AppearanceGender.Male) tagFacets.AppearanceSubfilterCountMale++;
+                        if (g == AppearanceGender.Female) tagFacets.AppearanceSubfilterCountFemale++;
+                        if (g == AppearanceGender.Futa) tagFacets.AppearanceSubfilterCountFuta++;
+                        if (g == AppearanceGender.Unknown) tagFacets.AppearanceSubfilterCountUnknown++;
 
                         AppearanceSubfilter cur = appearanceSubfilter;
                         bool PassesAppearanceSubfilters(AppearanceSubfilter f)
@@ -2748,52 +2505,46 @@ namespace VPB
                             return true;
                         }
 
-                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Presets)) appearanceSubfilterFacetCountPresets++;
-                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Custom)) appearanceSubfilterFacetCountCustom++;
-                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Male))) appearanceSubfilterFacetCountMale++;
-                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Female))) appearanceSubfilterFacetCountFemale++;
-                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Futa))) appearanceSubfilterFacetCountFuta++;
-                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Unknown))) appearanceSubfilterFacetCountUnknown++;
+                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Presets)) tagFacets.AppearanceSubfilterFacetCountPresets++;
+                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Custom)) tagFacets.AppearanceSubfilterFacetCountCustom++;
+                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Male))) tagFacets.AppearanceSubfilterFacetCountMale++;
+                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Female))) tagFacets.AppearanceSubfilterFacetCountFemale++;
+                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Futa))) tagFacets.AppearanceSubfilterFacetCountFuta++;
+                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Unknown))) tagFacets.AppearanceSubfilterFacetCountUnknown++;
 
                         if (PassesAppearanceSubfilters(appearanceSubfilter))
                         {
-                            appearanceSubfilterCurrentCountAll++;
-                            if (g == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
-                            if (g == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
-                            if (g == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
-                            if (g == AppearanceGender.Unknown) appearanceSubfilterCurrentCountUnknown++;
+                            tagFacets.AppearanceSubfilterCurrentCountAll++;
+                            if (g == AppearanceGender.Male) tagFacets.AppearanceSubfilterCurrentCountMale++;
+                            if (g == AppearanceGender.Female) tagFacets.AppearanceSubfilterCurrentCountFemale++;
+                            if (g == AppearanceGender.Futa) tagFacets.AppearanceSubfilterCurrentCountFuta++;
+                            if (g == AppearanceGender.Unknown) tagFacets.AppearanceSubfilterCurrentCountUnknown++;
                         }
 
-                        // Apply active subfilters (if any) to tag counting.
                         if (appearanceSubfilter != 0)
                         {
                             if (!PassesAppearanceSubfilters(appearanceSubfilter)) continue;
                         }
                     }
 
-                    // Appearance split-pane counts (All/Presets/Custom)
                     if (isAppearanceTitle && countVarRows)
                     {
                         if (string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase))
                         {
                             if (internalPath.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase))
                             {
-                                // Presets = appearance .vap inside .var packages
-                                appearanceSourceCountPresets++;
-                                appearanceSourceCountAll++;
+                                tagFacets.AppearanceSourceCountPresets++;
+                                tagFacets.AppearanceSourceCountAll++;
                             }
                         }
                     }
 
                     if (hasAnyTagsToCount)
                     {
-                        // 3. Count tags
-                        // Tokenize path for single-word tags; singleWordTags uses OrdinalIgnoreCase so no lowering needed
                         string[] tokens = internalPath.Split(separators);
 
                         foundTags.Clear();
 
-                        // Check tokens against single word tags
                         for (int k = 0; k < tokens.Length; k++)
                         {
                             if (singleWordTags.Contains(tokens[k]))
@@ -2802,7 +2553,6 @@ namespace VPB
                             }
                         }
 
-                        // Check multi-word tags using case-insensitive IndexOf
                         for (int k = 0; k < multiWordTags.Count; k++)
                         {
                             if (internalPath.IndexOf(multiWordTags[k], StringComparison.OrdinalIgnoreCase) >= 0)
@@ -2811,14 +2561,12 @@ namespace VPB
                             }
                         }
 
-                        // Check user-defined tags specifically for this entry
                         var uTags = TagsManager.Instance.GetTags(entry.Uid);
                         foreach (var ut in uTags)
                         {
                             if (tagsToCount.Contains(ut)) foundTags.Add(ut);
                         }
 
-                        // Increment counts
                         foreach (var tag in foundTags)
                         {
                             int cur;
@@ -2832,8 +2580,6 @@ namespace VPB
             if (coVarFromSql)
                 ApplyTagScanTotalsFromWorker(coTagScanTotals);
 
-            // Count Clothing (local filesystem) entries for subfilter facet counts.
-            // This is intentionally separate from the package loop above.
             if (isClothingTitle)
             {
                 if (!HasCreatorFilter())
@@ -2842,7 +2588,6 @@ namespace VPB
                     if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
                     else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
 
-                    // Prefer SQLite-cached loose-file enumeration (same mechanism as RefreshFilesRoutine).
                     string sysCacheKey = null;
                     string sysCacheSig = null;
                     List<VpbLocalDatabase.SystemFileRow> sysCached = null;
@@ -2875,7 +2620,6 @@ namespace VPB
                         var sbSig = new StringBuilder(128);
                         for (int i = 0; i < p2.Count; i++)
                         {
-                            // Deep dir-mtime so additions in subfolders invalidate this cache.
                             long t = 0;
                             try { t = VpbLocalDatabase.DeepMaxDirMtimeBinary(p2[i]); } catch { t = 0; }
                             if (i != 0) sbSig.Append('|');
@@ -2972,29 +2716,29 @@ namespace VPB
                                     return true;
                                 }
 
-                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.RealClothing)) clothingSubfilterFacetCountReal++;
-                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Presets)) clothingSubfilterFacetCountPresets++;
-                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Custom)) clothingSubfilterFacetCountCustom++;
-                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.CustomPreset)) clothingSubfilterFacetCountCustomPreset++;
-                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Items)) clothingSubfilterFacetCountItems++;
-                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Male)) clothingSubfilterFacetCountMale++;
-                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Female)) clothingSubfilterFacetCountFemale++;
-                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Decals)) clothingSubfilterFacetCountDecals++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.RealClothing)) tagFacets.ClothingSubfilterFacetCountReal++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Presets)) tagFacets.ClothingSubfilterFacetCountPresets++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Custom)) tagFacets.ClothingSubfilterFacetCountCustom++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.CustomPreset)) tagFacets.ClothingSubfilterFacetCountCustomPreset++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Items)) tagFacets.ClothingSubfilterFacetCountItems++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Male)) tagFacets.ClothingSubfilterFacetCountMale++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Female)) tagFacets.ClothingSubfilterFacetCountFemale++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Decals)) tagFacets.ClothingSubfilterFacetCountDecals++;
 
-                                clothingSubfilterCountAll++;
+                                tagFacets.ClothingSubfilterCountAll++;
                                 if (isDecal)
                                 {
-                                    clothingSubfilterCountDecals++;
+                                    tagFacets.ClothingSubfilterCountDecals++;
                                 }
                                 else
                                 {
-                                    clothingSubfilterCountReal++;
-                                    if (isPresetEntry && !isCustomItem && !isCustomPresetLoose) clothingSubfilterCountPresets++;
-                                    if (isCustomItem) clothingSubfilterCountCustom++;
-                                    if (isCustomPresetLoose && isPresetEntry) clothingSubfilterCountCustomPreset++;
-                                    if (!isPresetEntry) clothingSubfilterCountItems++;
-                                    if (cg == ClothingLoadingUtils.ResourceGender.Male) clothingSubfilterCountMale++;
-                                    else if (cg == ClothingLoadingUtils.ResourceGender.Female) clothingSubfilterCountFemale++;
+                                    tagFacets.ClothingSubfilterCountReal++;
+                                    if (isPresetEntry && !isCustomItem && !isCustomPresetLoose) tagFacets.ClothingSubfilterCountPresets++;
+                                    if (isCustomItem) tagFacets.ClothingSubfilterCountCustom++;
+                                    if (isCustomPresetLoose && isPresetEntry) tagFacets.ClothingSubfilterCountCustomPreset++;
+                                    if (!isPresetEntry) tagFacets.ClothingSubfilterCountItems++;
+                                    if (cg == ClothingLoadingUtils.ResourceGender.Male) tagFacets.ClothingSubfilterCountMale++;
+                                    else if (cg == ClothingLoadingUtils.ResourceGender.Female) tagFacets.ClothingSubfilterCountFemale++;
                                 }
                             }
                         }
@@ -3037,8 +2781,6 @@ namespace VPB
 
             // Tally override moved to BuildTagsTabs (last writer before chip render; covers the cache-hit and parallel-scan paths this coroutine doesn't).
 
-            // Count Hair (local filesystem) entries for subfilter facet counts.
-            // Separate from package loop above (mirrors Clothing block).
             if (isHairTitle)
             {
                 if (!HasCreatorFilter())
@@ -3079,7 +2821,6 @@ namespace VPB
                         var sbSig = new StringBuilder(128);
                         for (int i = 0; i < p2.Count; i++)
                         {
-                            // Deep dir-mtime so additions in subfolders invalidate this cache.
                             long t = 0;
                             try { t = VpbLocalDatabase.DeepMaxDirMtimeBinary(p2[i]); } catch { t = 0; }
                             if (i != 0) sbSig.Append('|');
@@ -3157,20 +2898,20 @@ namespace VPB
                                     return true;
                                 }
 
-                                if (PassesHairSubfilters(cur ^ HairSubfilter.Presets)) hairSubfilterFacetCountPresets++;
-                                if (PassesHairSubfilters(cur ^ HairSubfilter.Custom)) hairSubfilterFacetCountCustom++;
-                                if (PassesHairSubfilters(cur ^ HairSubfilter.CustomPreset)) hairSubfilterFacetCountCustomPreset++;
-                                if (PassesHairSubfilters(cur ^ HairSubfilter.Items)) hairSubfilterFacetCountItems++;
-                                if (PassesHairSubfilters(cur ^ HairSubfilter.Male)) hairSubfilterFacetCountMale++;
-                                if (PassesHairSubfilters(cur ^ HairSubfilter.Female)) hairSubfilterFacetCountFemale++;
+                                if (PassesHairSubfilters(cur ^ HairSubfilter.Presets)) tagFacets.HairSubfilterFacetCountPresets++;
+                                if (PassesHairSubfilters(cur ^ HairSubfilter.Custom)) tagFacets.HairSubfilterFacetCountCustom++;
+                                if (PassesHairSubfilters(cur ^ HairSubfilter.CustomPreset)) tagFacets.HairSubfilterFacetCountCustomPreset++;
+                                if (PassesHairSubfilters(cur ^ HairSubfilter.Items)) tagFacets.HairSubfilterFacetCountItems++;
+                                if (PassesHairSubfilters(cur ^ HairSubfilter.Male)) tagFacets.HairSubfilterFacetCountMale++;
+                                if (PassesHairSubfilters(cur ^ HairSubfilter.Female)) tagFacets.HairSubfilterFacetCountFemale++;
 
-                                hairSubfilterCountAll++;
-                                if (isPresetEntry && !isCustomItem && !isCustomPresetLoose) hairSubfilterCountPresets++;
-                                if (isCustomItem) hairSubfilterCountCustom++;
-                                if (isCustomPresetLoose && isPresetEntry) hairSubfilterCountCustomPreset++;
-                                if (!isPresetEntry) hairSubfilterCountItems++;
-                                if (cg == ClothingLoadingUtils.ResourceGender.Male) hairSubfilterCountMale++;
-                                else if (cg == ClothingLoadingUtils.ResourceGender.Female) hairSubfilterCountFemale++;
+                                tagFacets.HairSubfilterCountAll++;
+                                if (isPresetEntry && !isCustomItem && !isCustomPresetLoose) tagFacets.HairSubfilterCountPresets++;
+                                if (isCustomItem) tagFacets.HairSubfilterCountCustom++;
+                                if (isCustomPresetLoose && isPresetEntry) tagFacets.HairSubfilterCountCustomPreset++;
+                                if (!isPresetEntry) tagFacets.HairSubfilterCountItems++;
+                                if (cg == ClothingLoadingUtils.ResourceGender.Male) tagFacets.HairSubfilterCountMale++;
+                                else if (cg == ClothingLoadingUtils.ResourceGender.Female) tagFacets.HairSubfilterCountFemale++;
                             }
                         }
                     }
@@ -3210,9 +2951,6 @@ namespace VPB
                 }
             }
 
-            // Count Custom (local filesystem) appearances for split-pane counts.
-            // This is intentionally separate from the package loop above.
-            // Source-filter gate: skip the loose-file scan entirely when the user is on Source: Var.
             if (isAppearanceTitle && countLooseFiles)
             {
                 List<string> pathsToSearch = new List<string>();
@@ -3239,7 +2977,6 @@ namespace VPB
                     var sbSig = new StringBuilder(128);
                     for (int i = 0; i < p2.Count; i++)
                     {
-                        // Deep dir-mtime so additions in subfolders invalidate this cache.
                         long t = 0;
                         try { t = VpbLocalDatabase.DeepMaxDirMtimeBinary(p2[i]); } catch { t = 0; }
                         if (i != 0) sbSig.Append('|');
@@ -3294,24 +3031,22 @@ namespace VPB
                             continue;
                         }
 
-                        appearanceSourceCountCustom++;
-                        appearanceSourceCountAll++;
+                        tagFacets.AppearanceSourceCountCustom++;
+                        tagFacets.AppearanceSourceCountAll++;
 
-                        // Gender + subfilter counting for loose .vap. Matches the merge contract used by the var path
-                        // so totals add up when SourceFilterMode == All.
                         bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                         bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
                         AppearanceGender lg = AppearanceGender.Unknown;
                         try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, appearanceCat, _appearanceUserTagsByRowKey, genderBulk); }
                         catch { lg = AppearanceGender.Unknown; }
 
-                        appearanceSubfilterCountAll++;
-                        if (isPresetLoose) appearanceSubfilterCountPresets++;
-                        if (isCustomLoose) appearanceSubfilterCountCustom++;
-                        if (lg == AppearanceGender.Male) appearanceSubfilterCountMale++;
-                        if (lg == AppearanceGender.Female) appearanceSubfilterCountFemale++;
-                        if (lg == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
-                        if (lg == AppearanceGender.Unknown) appearanceSubfilterCountUnknown++;
+                        tagFacets.AppearanceSubfilterCountAll++;
+                        if (isPresetLoose) tagFacets.AppearanceSubfilterCountPresets++;
+                        if (isCustomLoose) tagFacets.AppearanceSubfilterCountCustom++;
+                        if (lg == AppearanceGender.Male) tagFacets.AppearanceSubfilterCountMale++;
+                        if (lg == AppearanceGender.Female) tagFacets.AppearanceSubfilterCountFemale++;
+                        if (lg == AppearanceGender.Futa) tagFacets.AppearanceSubfilterCountFuta++;
+                        if (lg == AppearanceGender.Unknown) tagFacets.AppearanceSubfilterCountUnknown++;
 
                         bool LoosePasses(AppearanceSubfilter f)
                         {
@@ -3331,19 +3066,19 @@ namespace VPB
                         }
 
                         AppearanceSubfilter aSub = appearanceSubfilter;
-                        if (LoosePasses(aSub ^ AppearanceSubfilter.Presets)) appearanceSubfilterFacetCountPresets++;
-                        if (LoosePasses(aSub ^ AppearanceSubfilter.Custom))  appearanceSubfilterFacetCountCustom++;
-                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Male)))    appearanceSubfilterFacetCountMale++;
-                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Female)))  appearanceSubfilterFacetCountFemale++;
-                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Futa)))    appearanceSubfilterFacetCountFuta++;
-                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Unknown))) appearanceSubfilterFacetCountUnknown++;
+                        if (LoosePasses(aSub ^ AppearanceSubfilter.Presets)) tagFacets.AppearanceSubfilterFacetCountPresets++;
+                        if (LoosePasses(aSub ^ AppearanceSubfilter.Custom))  tagFacets.AppearanceSubfilterFacetCountCustom++;
+                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Male)))    tagFacets.AppearanceSubfilterFacetCountMale++;
+                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Female)))  tagFacets.AppearanceSubfilterFacetCountFemale++;
+                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Futa)))    tagFacets.AppearanceSubfilterFacetCountFuta++;
+                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Unknown))) tagFacets.AppearanceSubfilterFacetCountUnknown++;
                         if (LoosePasses(aSub))
                         {
-                            appearanceSubfilterCurrentCountAll++;
-                            if (lg == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
-                            if (lg == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
-                            if (lg == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
-                            if (lg == AppearanceGender.Unknown) appearanceSubfilterCurrentCountUnknown++;
+                            tagFacets.AppearanceSubfilterCurrentCountAll++;
+                            if (lg == AppearanceGender.Male) tagFacets.AppearanceSubfilterCurrentCountMale++;
+                            if (lg == AppearanceGender.Female) tagFacets.AppearanceSubfilterCurrentCountFemale++;
+                            if (lg == AppearanceGender.Futa) tagFacets.AppearanceSubfilterCurrentCountFuta++;
+                            if (lg == AppearanceGender.Unknown) tagFacets.AppearanceSubfilterCurrentCountUnknown++;
                         }
                     }
                 }
@@ -3386,12 +3121,7 @@ namespace VPB
             }
         }
 
-        /// <summary>Stable key for <see cref="GalleryTagCountSnapshotCache"/> when tag/facet counts depend only on category + filters + package scan.</summary>
-        /// <summary>
-        /// Effective source filter for scans / cache keys. Single source of truth: title-bar global Source
-        /// (All / Local / .var). Legacy per-category Scene/Appearance Local toggles were merged into global Local.
-        /// Returned values: 0=All, 1=Local, 2=Var.
-        /// </summary>
+        /// <summary>Stable key for GalleryTagCountSnapshotCache when tag/facet counts depend only on category + filters + package scan.</summary>
         private int ResolveEffectiveSourceFilterMode(bool isAppearanceTitle, string cp)
         {
             if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local) return 1;
@@ -3522,16 +3252,9 @@ namespace VPB
             return true;
         }
 
-        // Memo keyed on the refresh-session id (bumped in RefreshFiles, the routine that rebuilds the grid).
-        // The sub-pane rebuilds several times per refresh (left+right panes, multiple hooks); counts can't
-        // change within one session, so compute once and reuse. New refresh -> new session -> recompute,
-        // in lockstep with the grid, so the chip numbers stay consistent with what the grid shows.
         private int _clothingChipCountsSession = -1;
         private VpbLocalDatabase.ClothingChipCounts _clothingChipCountsCached;
 
-        // Counts each chip using the grid's own SQL WHERE builder (BuildGalleryCategoryWhere),
-        // so the number on each chip = what the grid shows when only that chip is active.
-        // Memoized per refresh session; called on every clothing sub-pane build.
         private void ApplyClothingChipCountsFromSqlIfEnabled()
         {
             try
@@ -3540,7 +3263,6 @@ namespace VPB
                 int sourceFilterMode = ResolveEffectiveSourceFilterMode(false, cp);
                 string creator = currentCreator ?? "";
 
-                // loadedState from current sort state (mirrors how RefreshFilesRoutine derives it).
                 int loadedState = -1;
                 try
                 {
@@ -3549,8 +3271,6 @@ namespace VPB
                 }
                 catch { }
 
-                // User tag filter params (mirrors RefreshFilesRoutine worker snapshot).
-                // Include/exclude arm independent of F/T; presence browse is exclusive.
                 bool utUntaggedOnly = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
                 bool utTaggedOnly = _userTagAvailMode == UserTagAvailMode.FilterTaggedOnly;
                 bool utIncludeExcludeArmed = IsUserTagIncludeExcludeFilterArmed();
@@ -3590,7 +3310,7 @@ namespace VPB
 
                     if (!VpbLocalDatabase.TryQueryClothingChipCounts(
                         creator, loadedState, nameFilterQuery ?? GallerySearchQuery.Empty,
-                        null, null, // pathExclusions/pathInclusions: both null for Clothing
+                        null, null,
                         activeTags, utNames, utUntaggedOnly, utRequireAll,
                         sourceFilterMode, pkgVersionFilter, out chips, utExcludeNames, utTaggedOnly,
                         currentLicenseFilter)) return;
@@ -3598,26 +3318,24 @@ namespace VPB
                     _clothingChipCountsSession = session;
                 }
 
-                // Single-select: each chip shows count for that chip alone (not XOR toggle).
-                // Assign both Count and FacetCount equal so the chip shows the same number active or inactive.
-                clothingSubfilterCountAll       = chips.Default;
-                clothingSubfilterCountReal      = chips.Real;
-                clothingSubfilterCountPresets   = chips.Presets;
-                clothingSubfilterCountCustom    = chips.Custom;
-                clothingSubfilterCountCustomPreset = chips.CustomPreset;
-                clothingSubfilterCountItems     = chips.Items;
-                clothingSubfilterCountMale      = chips.Male;
-                clothingSubfilterCountFemale    = chips.Female;
-                clothingSubfilterCountDecals    = chips.Decals;
+                tagFacets.ClothingSubfilterCountAll       = chips.Default;
+                tagFacets.ClothingSubfilterCountReal      = chips.Real;
+                tagFacets.ClothingSubfilterCountPresets   = chips.Presets;
+                tagFacets.ClothingSubfilterCountCustom    = chips.Custom;
+                tagFacets.ClothingSubfilterCountCustomPreset = chips.CustomPreset;
+                tagFacets.ClothingSubfilterCountItems     = chips.Items;
+                tagFacets.ClothingSubfilterCountMale      = chips.Male;
+                tagFacets.ClothingSubfilterCountFemale    = chips.Female;
+                tagFacets.ClothingSubfilterCountDecals    = chips.Decals;
 
-                clothingSubfilterFacetCountReal     = chips.Real;
-                clothingSubfilterFacetCountPresets  = chips.Presets;
-                clothingSubfilterFacetCountCustom   = chips.Custom;
-                clothingSubfilterFacetCountCustomPreset = chips.CustomPreset;
-                clothingSubfilterFacetCountItems    = chips.Items;
-                clothingSubfilterFacetCountMale     = chips.Male;
-                clothingSubfilterFacetCountFemale   = chips.Female;
-                clothingSubfilterFacetCountDecals   = chips.Decals;
+                tagFacets.ClothingSubfilterFacetCountReal     = chips.Real;
+                tagFacets.ClothingSubfilterFacetCountPresets  = chips.Presets;
+                tagFacets.ClothingSubfilterFacetCountCustom   = chips.Custom;
+                tagFacets.ClothingSubfilterFacetCountCustomPreset = chips.CustomPreset;
+                tagFacets.ClothingSubfilterFacetCountItems    = chips.Items;
+                tagFacets.ClothingSubfilterFacetCountMale     = chips.Male;
+                tagFacets.ClothingSubfilterFacetCountFemale   = chips.Female;
+                tagFacets.ClothingSubfilterFacetCountDecals   = chips.Decals;
             }
             catch (Exception ex) { try { LogUtil.LogWarning("[VPB] ApplyClothingChipCountsFromSql failed: " + ex.Message); } catch { } }
         }
@@ -3627,61 +3345,9 @@ namespace VPB
             var d = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in tagCounts)
                 d[kv.Key] = kv.Value;
-            return new TagCountSnapshot
-            {
-                TagCounts = d,
-                AppearanceSourceCountAll = appearanceSourceCountAll,
-                AppearanceSourceCountPresets = appearanceSourceCountPresets,
-                AppearanceSourceCountCustom = appearanceSourceCountCustom,
-                ClothingSubfilterCountAll = clothingSubfilterCountAll,
-                ClothingSubfilterCountReal = clothingSubfilterCountReal,
-                ClothingSubfilterCountPresets = clothingSubfilterCountPresets,
-                ClothingSubfilterCountCustom = clothingSubfilterCountCustom,
-                ClothingSubfilterCountCustomPreset = clothingSubfilterCountCustomPreset,
-                ClothingSubfilterCountItems = clothingSubfilterCountItems,
-                ClothingSubfilterCountMale = clothingSubfilterCountMale,
-                ClothingSubfilterCountFemale = clothingSubfilterCountFemale,
-                ClothingSubfilterCountDecals = clothingSubfilterCountDecals,
-                HairSubfilterCountAll = hairSubfilterCountAll,
-                HairSubfilterCountPresets = hairSubfilterCountPresets,
-                HairSubfilterCountCustom = hairSubfilterCountCustom,
-                HairSubfilterCountCustomPreset = hairSubfilterCountCustomPreset,
-                HairSubfilterCountItems = hairSubfilterCountItems,
-                HairSubfilterCountMale = hairSubfilterCountMale,
-                HairSubfilterCountFemale = hairSubfilterCountFemale,
-                AppearanceSubfilterCountAll = appearanceSubfilterCountAll,
-                AppearanceSubfilterCountPresets = appearanceSubfilterCountPresets,
-                AppearanceSubfilterCountCustom = appearanceSubfilterCountCustom,
-                AppearanceSubfilterCountMale = appearanceSubfilterCountMale,
-                AppearanceSubfilterCountFemale = appearanceSubfilterCountFemale,
-                AppearanceSubfilterCountFuta = appearanceSubfilterCountFuta,
-                AppearanceSubfilterCountUnknown = appearanceSubfilterCountUnknown,
-                ClothingSubfilterFacetCountReal = clothingSubfilterFacetCountReal,
-                ClothingSubfilterFacetCountPresets = clothingSubfilterFacetCountPresets,
-                ClothingSubfilterFacetCountCustom = clothingSubfilterFacetCountCustom,
-                ClothingSubfilterFacetCountCustomPreset = clothingSubfilterFacetCountCustomPreset,
-                ClothingSubfilterFacetCountItems = clothingSubfilterFacetCountItems,
-                ClothingSubfilterFacetCountMale = clothingSubfilterFacetCountMale,
-                ClothingSubfilterFacetCountFemale = clothingSubfilterFacetCountFemale,
-                ClothingSubfilterFacetCountDecals = clothingSubfilterFacetCountDecals,
-                HairSubfilterFacetCountPresets = hairSubfilterFacetCountPresets,
-                HairSubfilterFacetCountCustom = hairSubfilterFacetCountCustom,
-                HairSubfilterFacetCountCustomPreset = hairSubfilterFacetCountCustomPreset,
-                HairSubfilterFacetCountItems = hairSubfilterFacetCountItems,
-                HairSubfilterFacetCountMale = hairSubfilterFacetCountMale,
-                HairSubfilterFacetCountFemale = hairSubfilterFacetCountFemale,
-                AppearanceSubfilterFacetCountPresets = appearanceSubfilterFacetCountPresets,
-                AppearanceSubfilterFacetCountCustom = appearanceSubfilterFacetCountCustom,
-                AppearanceSubfilterFacetCountMale = appearanceSubfilterFacetCountMale,
-                AppearanceSubfilterFacetCountFemale = appearanceSubfilterFacetCountFemale,
-                AppearanceSubfilterFacetCountFuta = appearanceSubfilterFacetCountFuta,
-                AppearanceSubfilterFacetCountUnknown = appearanceSubfilterFacetCountUnknown,
-                AppearanceSubfilterCurrentCountAll = appearanceSubfilterCurrentCountAll,
-                AppearanceSubfilterCurrentCountMale = appearanceSubfilterCurrentCountMale,
-                AppearanceSubfilterCurrentCountFemale = appearanceSubfilterCurrentCountFemale,
-                AppearanceSubfilterCurrentCountFuta = appearanceSubfilterCurrentCountFuta,
-                AppearanceSubfilterCurrentCountUnknown = appearanceSubfilterCurrentCountUnknown,
-            };
+            var snapshot = new TagCountSnapshot { TagCounts = d };
+            snapshot.CopyFrom(tagFacets);
+            return snapshot;
         }
 
         private void RestoreTagCountSnapshot(TagCountSnapshot s)
@@ -3693,57 +3359,7 @@ namespace VPB
                 foreach (var kv in s.TagCounts)
                     tagCounts[kv.Key] = kv.Value;
             }
-            appearanceSourceCountAll = s.AppearanceSourceCountAll;
-            appearanceSourceCountPresets = s.AppearanceSourceCountPresets;
-            appearanceSourceCountCustom = s.AppearanceSourceCountCustom;
-            clothingSubfilterCountAll = s.ClothingSubfilterCountAll;
-            clothingSubfilterCountReal = s.ClothingSubfilterCountReal;
-            clothingSubfilterCountPresets = s.ClothingSubfilterCountPresets;
-            clothingSubfilterCountCustom = s.ClothingSubfilterCountCustom;
-            clothingSubfilterCountCustomPreset = s.ClothingSubfilterCountCustomPreset;
-            clothingSubfilterCountItems = s.ClothingSubfilterCountItems;
-            clothingSubfilterCountMale = s.ClothingSubfilterCountMale;
-            clothingSubfilterCountFemale = s.ClothingSubfilterCountFemale;
-            clothingSubfilterCountDecals = s.ClothingSubfilterCountDecals;
-            hairSubfilterCountAll = s.HairSubfilterCountAll;
-            hairSubfilterCountPresets = s.HairSubfilterCountPresets;
-            hairSubfilterCountCustom = s.HairSubfilterCountCustom;
-            hairSubfilterCountCustomPreset = s.HairSubfilterCountCustomPreset;
-            hairSubfilterCountItems = s.HairSubfilterCountItems;
-            hairSubfilterCountMale = s.HairSubfilterCountMale;
-            hairSubfilterCountFemale = s.HairSubfilterCountFemale;
-            appearanceSubfilterCountAll = s.AppearanceSubfilterCountAll;
-            appearanceSubfilterCountPresets = s.AppearanceSubfilterCountPresets;
-            appearanceSubfilterCountCustom = s.AppearanceSubfilterCountCustom;
-            appearanceSubfilterCountMale = s.AppearanceSubfilterCountMale;
-            appearanceSubfilterCountFemale = s.AppearanceSubfilterCountFemale;
-            appearanceSubfilterCountFuta = s.AppearanceSubfilterCountFuta;
-            appearanceSubfilterCountUnknown = s.AppearanceSubfilterCountUnknown;
-            clothingSubfilterFacetCountReal = s.ClothingSubfilterFacetCountReal;
-            clothingSubfilterFacetCountPresets = s.ClothingSubfilterFacetCountPresets;
-            clothingSubfilterFacetCountCustom = s.ClothingSubfilterFacetCountCustom;
-            clothingSubfilterFacetCountCustomPreset = s.ClothingSubfilterFacetCountCustomPreset;
-            clothingSubfilterFacetCountItems = s.ClothingSubfilterFacetCountItems;
-            clothingSubfilterFacetCountMale = s.ClothingSubfilterFacetCountMale;
-            clothingSubfilterFacetCountFemale = s.ClothingSubfilterFacetCountFemale;
-            clothingSubfilterFacetCountDecals = s.ClothingSubfilterFacetCountDecals;
-            hairSubfilterFacetCountPresets = s.HairSubfilterFacetCountPresets;
-            hairSubfilterFacetCountCustom = s.HairSubfilterFacetCountCustom;
-            hairSubfilterFacetCountCustomPreset = s.HairSubfilterFacetCountCustomPreset;
-            hairSubfilterFacetCountItems = s.HairSubfilterFacetCountItems;
-            hairSubfilterFacetCountMale = s.HairSubfilterFacetCountMale;
-            hairSubfilterFacetCountFemale = s.HairSubfilterFacetCountFemale;
-            appearanceSubfilterFacetCountPresets = s.AppearanceSubfilterFacetCountPresets;
-            appearanceSubfilterFacetCountCustom = s.AppearanceSubfilterFacetCountCustom;
-            appearanceSubfilterFacetCountMale = s.AppearanceSubfilterFacetCountMale;
-            appearanceSubfilterFacetCountFemale = s.AppearanceSubfilterFacetCountFemale;
-            appearanceSubfilterFacetCountFuta = s.AppearanceSubfilterFacetCountFuta;
-            appearanceSubfilterFacetCountUnknown = s.AppearanceSubfilterFacetCountUnknown;
-            appearanceSubfilterCurrentCountAll = s.AppearanceSubfilterCurrentCountAll;
-            appearanceSubfilterCurrentCountMale = s.AppearanceSubfilterCurrentCountMale;
-            appearanceSubfilterCurrentCountFemale = s.AppearanceSubfilterCurrentCountFemale;
-            appearanceSubfilterCurrentCountFuta = s.AppearanceSubfilterCurrentCountFuta;
-            appearanceSubfilterCurrentCountUnknown = s.AppearanceSubfilterCurrentCountUnknown;
+            tagFacets.CopyFrom(s);
         }
 
         public void SetCategories(List<Gallery.Category> cats)
@@ -3751,8 +3367,6 @@ namespace VPB
             categories = cats;
             categoriesCached = false;
 
-            // Cold start: settings Initial (or LastUsed → disk). In-session recreate: LastGalleryCategory.
-            // Do not prime Last* on cold start when Initial is Scenes — that overwrote launch settings.
             string lastPageName = null;
             if (Gallery.SessionBrowseMemoryActive)
             {
@@ -3777,7 +3391,6 @@ namespace VPB
 
             if (string.IsNullOrEmpty(currentPath) && !string.IsNullOrEmpty(lastPageName))
             {
-                // Normalize legacy enum-style names ("CategoryHair" -> "Hair", "PresetHair" -> "Hair")
                 lastPageName = lastPageName.Trim();
                 if (lastPageName.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
                     lastPageName = lastPageName.Substring("Category ".Length);
@@ -3807,7 +3420,6 @@ namespace VPB
 
             if (string.IsNullOrEmpty(currentPath) && categories.Count > 0)
             {
-                // Fallback to first category
                 currentPath = categories[0].path;
                 currentPaths = categories[0].paths;
                 currentExtension = categories[0].extension;
@@ -3817,8 +3429,6 @@ namespace VPB
             }
 
             if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[Gallery] SetCategories resolved: currentPath='" + currentPath + "' currentCategoryTitle='" + currentCategoryTitle + "'");
-            // Full UpdateTabs() runs synchronous CacheCategoryCounts/CacheCreators and can take many seconds on large libraries.
-            // New panes defer that work to RefreshFilesRoutine (background cache + one UpdateTabs at the end).
             if (hasLoadedContent)
                 UpdateTabs();
             else
@@ -3826,7 +3436,6 @@ namespace VPB
                 _sideTabsNeedFullRebuildAfterFirstRefresh = true;
                 UpdateTabsImpl(rebuildSideTabLists: false);
             }
-            // If we have categories but no path, set title to first category
             if (categories.Count > 0 && string.IsNullOrEmpty(currentPath))
             {
                 titleText.text = categories[0].name;
@@ -3878,7 +3487,6 @@ namespace VPB
             TrimStackToMax(ref redoStack, MaxUndoRedoHistory);
             TrimStackToMax(ref undoLabelStack, MaxUndoRedoHistory);
             TrimStackToMax(ref redoLabelStack, MaxUndoRedoHistory);
-            // Keep label stacks aligned if trim drifted (defensive).
             while (undoLabelStack != null && undoStack != null && undoLabelStack.Count > undoStack.Count)
                 undoLabelStack.Pop();
             while (redoLabelStack != null && redoStack != null && redoLabelStack.Count > redoStack.Count)
@@ -3980,10 +3588,6 @@ namespace VPB
             return a;
         }
 
-        /// <summary>
-        /// Push appearance-capable undo for a person atom (morphs/skin/clothing/hair/scale).
-        /// Cold path — selective storable GetJSON, not full Atom.Store (Store stalls large persons).
-        /// </summary>
         public void PushUndoAtomSnapshot(Atom atom)
         {
             PushUndoAtomSnapshot(atom, null);
@@ -4016,16 +3620,11 @@ namespace VPB
                 ClothingLoadingUtils.CaptureClothingHairUndoState(atom);
             List<JSONClass> additionalStorableSnapshots = new List<JSONClass>();
 
-            // Full Atom.Store was correct but multi-second on clothed persons (and Serialize of the
-            // dump). Selective GetJSON is enough for Undo of appearance/skin/morphs: morph banks live
-            // on geometry (must include — old code skipped it and Undo left morphs stuck).
-            // rescaleObject holds person height/scale — without it Undo keeps post-import scale.
             bool ShouldSnapshotAdditionalStorableId(string sid)
             {
                 if (string.IsNullOrEmpty(sid)) return false;
                 if (ClothingLoadingUtils.ClothingHairUndoStateContainsStorable(clothingHairSnapshot, sid))
                     return false;
-                // Pose/plugins/physics undo is out of scope for this light snapshot.
                 if (string.Equals(sid, "PosePresets", StringComparison.OrdinalIgnoreCase)) return false;
                 if (string.Equals(sid, "PluginPresets", StringComparison.OrdinalIgnoreCase)) return false;
                 if (string.Equals(sid, "PluginManager", StringComparison.OrdinalIgnoreCase)) return false;
@@ -4090,8 +3689,6 @@ namespace VPB
                 catch { targetAtom = null; }
                 if (targetAtom == null) return;
 
-                // Geometry/skin/morphs first, then clothing/hair (toggles + item materials win last).
-                // rescaleObject restored after those so Undo returns pre-import height/scale.
                 JSONClass rescaleSnap = null;
                 try
                 {
@@ -4355,7 +3952,6 @@ namespace VPB
                 personAtoms.Add(null);
             }
 
-            // Restore previous selection by UID, or default to first
             if (currentSelectionUid != null)
             {
                 int idx = -1;
@@ -4376,7 +3972,6 @@ namespace VPB
 
             // Keep toolbox person-atom buttons in sync whenever the target list changes (same timing as category Show()).
             try { RefreshTboxPersonAtomButtonsAfterSceneLoad(); } catch { }
-            // Plugins float Person dest chips — same atom add/remove/scene-load path.
             try { NotifyPluginsFloatSceneTargetsChanged(); } catch { }
         }
 
@@ -4436,15 +4031,10 @@ namespace VPB
             if (prev != targetDropdownValue) OnTargetAtomChanged("cycle");
         }
 
-        /// <summary>
-        /// Syncs visible target labels when text/icon target picker controls exist on the side rail.
-        /// This branch does not declare those controls in GalleryPanel.Fields — keep a no-op so RefreshTargetDropdown / Init compile.
-        /// </summary>
         private void UpdateTargetDropdownUI()
         {
             try
             {
-                // Toolbox dropup label sync
                 if (tboxTargetDropdownBtnText != null)
                 {
                     string label = "Target";
@@ -4462,7 +4052,6 @@ namespace VPB
 
                 try { SyncTboxTargetDropdownGenderBadge(); } catch { }
 
-                // If menu open, rebuild checkmarks.
                 if (tboxTargetMenuOpen)
                 {
                     try { RebuildTboxTargetMenuOptions(); } catch { }
@@ -4622,7 +4211,6 @@ namespace VPB
                 checkPath = vfe.InternalPath;
             }
             
-            // Extension Filter
             bool extMatch = false;
             if (extensions == null || extensions.Length == 0 || (extensions.Length == 1 && string.IsNullOrEmpty(extensions[0])))
             {
@@ -4633,7 +4221,7 @@ namespace VPB
                 string entryExt = Path.GetExtension(checkPath);
                 if (!string.IsNullOrEmpty(entryExt))
                 {
-                    entryExt = entryExt.Substring(1); // remove dot
+                    entryExt = entryExt.Substring(1);
                     foreach (var ext in extensions)
                     {
                         if (string.Equals(entryExt, ext, StringComparison.OrdinalIgnoreCase))
@@ -4646,15 +4234,12 @@ namespace VPB
             }
             if (!extMatch) return false;
 
-            // Path Filter
             if (paths != null && paths.Count > 0)
             {
                 foreach (var p in paths)
                 {
                     if (checkPath.StartsWith(p, StringComparison.OrdinalIgnoreCase)) 
                     {
-                        // Special Case: "Saves/Person" is often used for Poses, but "Saves/Person/appearance" are Appearances.
-                        // If we are looking for Poses (Saves/Person) and found an appearance, skip it unless specifically requested.
                         if (string.Equals(p, "Saves/Person", StringComparison.OrdinalIgnoreCase) || string.Equals(p, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
                         {
                             if (checkPath.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
@@ -4689,14 +4274,8 @@ namespace VPB
             
             if (!type.HasValue) return;
 
-            // Simply close the panel (toggle off)
             if (isRight) ToggleRight(type.Value);
             else ToggleLeft(type.Value);
-            
-            // Optionally clear filters if desired, but "X" on a side tab usually implies "Close this tab"
-            // If the user meant "Clear Filter" specifically for search text, that's inside the panel.
-            // "the X button should be on the outside of the side buttons... side buttons that are being hidden"
-            // This strongly suggests a close button for the side panel overlay.
             
             UpdateTabs();
         }

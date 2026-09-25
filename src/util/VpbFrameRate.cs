@@ -3,8 +3,6 @@ using UnityEngine;
 namespace VPB
 {
     // Real frame rate from frames counted over a wall-clock window (Time.realtimeSinceStartup).
-    // Time.smoothDeltaTime/deltaTime can report VaM's fixed loop cadence (a flat 72) rather than the
-    // actual render rate; counting rendered frames against real time is immune to that.
     static class VpbFrameRate
     {
         public static float Current { get; private set; }

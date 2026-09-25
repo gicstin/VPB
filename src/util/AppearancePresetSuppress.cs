@@ -6,14 +6,9 @@ using UnityEngine;
 
 namespace VPB.src.util
 {
-    /// <summary>
-    /// JSON-patch helper for Appearance preset imports.
-    /// Rewrites scale to target current; preserves live pose/controllers across look apply.
-    /// </summary>
     internal static class AppearancePresetSuppress
     {
         // After look apply, SubScene / browse-sync can re-fire PosePresets (often empty name).
-        // Hold live snap and skip those auto-loads until window expires.
         static float _posePreserveUntil;
         static string _posePreserveAtomName;
         static List<JSONClass> _posePreserveSnap;
@@ -33,7 +28,6 @@ namespace VPB.src.util
             return string.Equals(atomName, _posePreserveAtomName, System.StringComparison.Ordinal);
         }
 
-        /// <summary>Skip empty-name PosePresets loads during preserve (SubScene browse sync junk).</summary>
         public static bool ShouldSkipPosePresetAutoLoad(string atomName, string storableId, string presetName)
         {
             if (!string.Equals(storableId, "PosePresets", System.StringComparison.OrdinalIgnoreCase))
@@ -49,7 +43,6 @@ namespace VPB.src.util
             return RestoreLivePoseStorables(person, _posePreserveSnap);
         }
 
-        /// <summary>Restore snap on the preserve atom (even when another atom's PosePresets just loaded).</summary>
         public static int TryRestorePreservedPoseAny()
         {
             if (string.IsNullOrEmpty(_posePreserveAtomName)) return 0;
@@ -92,10 +85,6 @@ namespace VPB.src.util
 
         static float _lastRestoreAnyAt;
 
-        /// <summary>
-        /// Mutates presetJson in place. No-op if storables array or rescaleObject storable absent on either side.
-        /// Returns true iff a rescaleObject was found in both the preset AND the target atom and the scale was rewritten.
-        /// </summary>
         public static bool PatchScaleToTargetCurrent(JSONClass presetJson, Atom targetAtom)
         {
             if (presetJson == null || targetAtom == null) return false;
@@ -119,9 +108,6 @@ namespace VPB.src.util
             return false;
         }
 
-        /// <summary>
-        /// Snapshot FreeControllerV3 JSON from the live person (pose + root position).
-        /// </summary>
         public static List<JSONClass> CaptureLivePoseStorables(Atom person)
         {
             var list = new List<JSONClass>(64);
@@ -148,10 +134,6 @@ namespace VPB.src.util
             return list;
         }
 
-        /// <summary>
-        /// Restore FreeControllerV3 state from <see cref="CaptureLivePoseStorables"/>.
-        /// Call after AppearancePresets load — strip+setUnlistedParamsToDefault resets controllers to defaults.
-        /// </summary>
         public static int RestoreLivePoseStorables(Atom person, List<JSONClass> snap)
         {
             if (person == null || snap == null || snap.Count == 0) return 0;
@@ -174,10 +156,6 @@ namespace VPB.src.util
             return ok;
         }
 
-        /// <summary>
-        /// Remove pose-driving storables from appearance JSON. Pair with Capture + Restore —
-        /// alone, setUnlistedParamsToDefault T-poses missing controllers.
-        /// </summary>
         public static int StripPoseStorables(JSONClass presetJson)
         {
             if (presetJson == null) return 0;
@@ -218,8 +196,6 @@ namespace VPB.src.util
             if (string.IsNullOrEmpty(id)) return false;
             if (string.Equals(id, "PosePresets", System.StringComparison.OrdinalIgnoreCase)) return true;
             if (string.Equals(id, "control", System.StringComparison.OrdinalIgnoreCase)) return true;
-            // Clothing/hair WrapControl holds Offset/Thickness — not a pose FreeController.
-            // EndsWith("Control") would strip it from appearance JSON (issue #80).
             if (id.EndsWith("WrapControl", System.StringComparison.OrdinalIgnoreCase)) return false;
             if (id.EndsWith("Control", System.StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(id, "EyelidControl", System.StringComparison.OrdinalIgnoreCase)

@@ -8,7 +8,6 @@ using MeshVR;
 
 namespace VPB
 {
-    /// <summary>Harmony timing hooks for VaM cold-start hotspots (see VamStartupProfiler).</summary>
     internal static class VamStartupProfilerPatches
     {
         // Must use MVR.FileManagement.* — namespace VPB also defines FileManager/VarPackage with different Refresh overloads.

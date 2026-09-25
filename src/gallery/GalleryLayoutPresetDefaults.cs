@@ -2,23 +2,14 @@ using System.Collections.Generic;
 
 namespace VPB
 {
-    /// <summary>
-    /// Shipped baseline arrangements. They exist only in memory: <see cref="GalleryLayoutPresetStore"/>
-    /// appends them after the SQLite rows, and the writer skips them, so no user database ever carries
-    /// a copy that could drift from the build or be half-deleted.
-    /// Ids sit in a reserved high band so a user preset can never collide with one.
-    /// </summary>
     internal static class GalleryLayoutPresetDefaults
     {
         internal const int IdBase = 900000;
 
-        /// <summary>Side dock occupying the golden-ratio minor share of the screen.</summary>
         private const float SingleSideWidthFree = GalleryUiDesignTokens.GoldenRatioMajor;
 
-        /// <summary>Both side docks present: a quarter each, well inside <see cref="GalleryDockLayout.MaxSideWidthSum"/>.</summary>
         private const float PairedSideWidthFree = 0.75f;
 
-        /// <summary>Bottom anchor of the Top dock — it takes the upper 38% of the screen.</summary>
         private const float TopBottomAnchor = 0.62f;
 
         internal static void Append(List<GalleryLayoutPreset> into)

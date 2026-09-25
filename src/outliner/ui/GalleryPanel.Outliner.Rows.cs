@@ -262,7 +262,7 @@ namespace VPB
                     return;
                 }
                 MirrorOutlinerParamToGroup(atom, d);
-                _outlinerUndo.Push(key, d.Label, before.ToString("0.###"), v.ToString("0.###"));
+                _outlinerUndo.Push(key, d.Label, FormatOutlinerFloat(before), FormatOutlinerFloat(v));
                 if (valTxt != null) valTxt.text = v.ToString("0.##");
             });
             AddOutlinerResetButton(row, () => ResetOutlinerParam(atom, d), s);
@@ -317,7 +317,7 @@ namespace VPB
             }
             MirrorOutlinerParamToGroup(atom, d);
             _outlinerUndo.Push(atom.uid + "|" + d.StorableId + "|" + d.ParamId, d.Label,
-                before.ToString("0.###"), next.ToString("0.###"));
+                FormatOutlinerFloat(before), FormatOutlinerFloat(next));
             _outlinerLastFocused = true;
             if (slider != null && echoGuard != null)
             {
@@ -363,7 +363,7 @@ namespace VPB
             string key = atom.uid + "|" + d.StorableId + "|" + d.ParamId;
             OutlinerEdits.WriteFloat(atom, d.StorableId, d.ParamId, next);
             MirrorOutlinerParamToGroup(atom, d);
-            _outlinerUndo.Push(key, d.Label, before.ToString("0.###"), next.ToString("0.###"));
+            _outlinerUndo.Push(key, d.Label, FormatOutlinerFloat(before), FormatOutlinerFloat(next));
             _outlinerLastFocused = true;
             InvalidateOutlinerParamCard(d.StorableId);
             RebuildOutlinerInspector();
@@ -715,7 +715,7 @@ namespace VPB
                 if ((payload == "0" || payload == "1")
                     && OutlinerEdits.TryReadBool(atom, sid, pid, out wasBool))
                     OutlinerEdits.WriteBool(atom, sid, pid, payload == "1");
-                else if (float.TryParse(payload, out f)
+                else if (TryParseOutlinerFloat(payload, out f)
                     && OutlinerEdits.GetFloat(atom, sid, pid) != null)
                     OutlinerEdits.WriteFloat(atom, sid, pid, f);
                 else
@@ -733,6 +733,24 @@ namespace VPB
             RebuildOutlinerInspector();
         }
 
+        internal static string FormatOutlinerVector3(Vector3 value)
+        {
+            return "(" + FormatOutlinerFloat(value.x) + ", " + FormatOutlinerFloat(value.y) + ", " + FormatOutlinerFloat(value.z) + ")";
+        }
+
+        internal static string FormatOutlinerFloat(float value)
+        {
+            return value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        internal static bool TryParseOutlinerFloat(string text, out float value)
+        {
+            value = 0f;
+            if (string.IsNullOrEmpty(text)) return false;
+            return float.TryParse(text.Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out value);
+        }
+
         internal static bool TryParseOutlinerVector3(string text, out Vector3 value)
         {
             value = Vector3.zero;
@@ -745,9 +763,9 @@ namespace VPB
             string[] bits = body.Split(',');
             if (bits.Length < 3) return false;
             float x, y, z;
-            if (!float.TryParse(bits[0].Trim(), out x)) return false;
-            if (!float.TryParse(bits[1].Trim(), out y)) return false;
-            if (!float.TryParse(bits[2].Trim(), out z)) return false;
+            if (!TryParseOutlinerFloat(bits[0], out x)) return false;
+            if (!TryParseOutlinerFloat(bits[1], out y)) return false;
+            if (!TryParseOutlinerFloat(bits[2], out z)) return false;
             value = new Vector3(x, y, z);
             return true;
         }

@@ -378,7 +378,7 @@ namespace VPB
             }
             string key = OutlinerPoseMorphs.UndoKey(atom, e);
             if (key.Length > 0)
-                _outlinerUndo.Push(key, e.Label, before.ToString("R"), "0");
+                _outlinerUndo.Push(key, e.Label, FormatOutlinerFloat(before), "0");
             _outlinerLastFocused = true;
             ShowTemporaryStatus(e.Label + VPBTranslation.T("outliner.pose.zeroed_one", " set to neutral"), 1.8f);
             QueueOutlinerPoseRefresh();

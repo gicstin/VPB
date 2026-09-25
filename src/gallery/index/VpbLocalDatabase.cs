@@ -10,10 +10,6 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Local SQLite database for VPB: gallery VAR index (category membership, package rows, rebuild metadata).
-    /// Rebuilt after package scans; optional fast path in <see cref="GalleryPanel"/> when signatures match.
-    /// </summary>
     internal static partial class VpbLocalDatabase
     {
         /// <summary>Set on main thread by <see cref="GalleryPanel"/> before creator-filtered DB queries for the active browse.</summary>
@@ -72,38 +68,23 @@ namespace VPB
 
         /// <summary>Optional <c>[VPB.History]</c> trace logs (default off).</summary>
         internal static bool LogHistoryUsageDebug = false;
-        /// <summary>Logs every <see cref="TryRecordItemUse"/> (very chatty).</summary>
         internal static bool LogHistoryRecordWrites = false;
 
         internal struct Row
         {
             public string PackageUid;
             public string InternalPath;
-            /// <summary>Precomputed <see cref="VarFileEntry.Path"/> at index rebuild (empty for legacy DB rows until rebuild).</summary>
             public string ListPath;
-            /// <summary>Last known .var path (<c>pkg.var_path</c>) for lazy package resolution if the file moved.</summary>
             public string VarPath;
             public long LastWriteTicksOrInvalid;
             public long PackageSizeOrInvalid;
             public long PackageCreationTicksOrInvalid;
-            /// <summary>NTFS creation time from <c>pkg.pctime</c>, kept separate from internal ZIP creation time.</summary>
             public long PackageFileCreationTicksOrInvalid;
-            /// <summary>First time VPB indexed this VAR uid (<c>pkg.first_scanned</c>, <see cref="DateTime.ToBinary"/>); 0 when unknown.</summary>
             public long FirstScannedTicksOrInvalid;
-            /// <summary>
-            /// Packed gender / preset / decal / kind for Clothing gallery subfilters (see <see cref="ClothingPackedAttrMatchesSubfilter"/>).
-            /// Bit 31 set when populated at index rebuild; 0 or unset column means caller may fall back to path classification.
-            /// </summary>
             public int ClothingAttrPacked;
-            /// <summary>
-            /// From <c>pkg.loaded</c>: package is &quot;loaded&quot; when its .var lives under <c>AddonPackages/</c>, or under <c>Custom/</c> / <c>Saves/</c> (always loaded).
-            /// </summary>
             public bool PackageIsLoaded;
-            /// <summary><c>item_usage.item_key</c> when this row is from History SQL; empty for category index rows.</summary>
             public string ItemUsageKey;
-            /// <summary><c>item_usage.use_count</c> when <see cref="ItemUsageKey"/> is set.</summary>
             public int ItemUsageCount;
-            /// <summary><c>item_usage.last_used</c> (<see cref="DateTime.ToBinary"/>).</summary>
             public long ItemLastUsedBinary;
         }
 
@@ -114,17 +95,14 @@ namespace VPB
             public long LastWriteTicksOrInvalid;
             public long PackageSizeOrInvalid;
             public long PackageCreationTicksOrInvalid;
-            /// <summary>NTFS creation time from <c>pkg.pctime</c>, kept separate from internal ZIP creation time.</summary>
             public long PackageFileCreationTicksOrInvalid;
-            /// <summary>First time VPB indexed this VAR uid (<c>pkg.first_scanned</c>, <see cref="DateTime.ToBinary"/>); 0 or <see cref="long.MinValue"/> when unknown.</summary>
             public long FirstScannedTicksOrInvalid;
             public bool PackageIsLoaded;
         }
 
-        /// <summary>High bit: row has <see cref="ClothingAttrPacked"/> from index rebuild (fast clothing subfilter path).</summary>
         internal const int ClothingAttrPresentFlag = unchecked((int)0x80000000);
         // Loose-only: a user-saved .vap under Custom/. VAR rows never set this. Bit chosen from the free range (bits 10-30 unused; 0-9 are kind/gender/preset/decal, 31 is present-flag).
-        internal const int ClothingAttrIsCustomFlag = 0x400; // bit 10
+        internal const int ClothingAttrIsCustomFlag = 0x400;
 
         private const int SchemaVersion = 13;
 
@@ -140,7 +118,6 @@ namespace VPB
         private static volatile int s_SuppressNextIncompleteRebuildReschedule;
         /// <summary>Queued <see cref="QueueGalleryIndexUpdateWorker"/> with force — worker must not honor stale skip flags.</summary>
         private static volatile int s_WorkerBypassGallerySkipCheck;
-        /// <summary>Consecutive rebuilds that finished with incomplete package coverage. Capped to break re-queue loops when a handful of VARs are genuinely uncacheable.</summary>
         private static volatile int s_PostBulkIncompleteRebuildAttempts;
         private const int MaxPostBulkIncompleteRebuildAttempts = 3;
         /// <summary>Set by <see cref="RebuildCore"/> when it bails for zip-cache readiness; <see cref="RebuildWorker"/> must not spin-requeue.</summary>
@@ -151,7 +128,6 @@ namespace VPB
         private const int RebuildOutcomeDeferred = 1;
         private const int RebuildOutcomeNoProgress = 2;
         private const int RebuildOutcomeFailed = 3;
-        /// <summary>Consecutive full-rebuild finishes that did not advance ready meta. Circuit-breaks spin loops.</summary>
         private static volatile int s_NoProgressFullRebuildStreak;
         private const int MaxNoProgressFullRebuildStreak = 4;
         /// <summary>Min gap between full-rebuild ThreadPool enqueues after a deferred/no-progress outcome (ms).</summary>
@@ -169,8 +145,6 @@ namespace VPB
         private static long s_BulkDepScanBinary = long.MinValue;
         private static long s_ReadyScanBinary = long.MinValue;
         private static string s_ReadyCategoriesSig;
-        // Package-inventory signature for the currently "ready" index. Lets us bump ready scan clock
-        // without rebuilding when FileManager.lastPackageRefreshTime advances but package set is unchanged.
         private static string s_ReadyPkgInvSig;
         private static string s_LastError;
         private static bool s_LoggedSqliteUnavailable;
@@ -186,7 +160,6 @@ namespace VPB
         private static readonly object s_DbPathLock = new object();
         private static bool s_DbMigrateFromCacheAttempted;
 
-        /// <summary>Prefer <see cref="DatabaseFileName"/>; one-time rename from <see cref="LegacyDatabaseFileName"/> when the new file is absent.</summary>
         private static string ResolveDatabaseFilePath(string directory)
         {
             if (string.IsNullOrEmpty(directory))
@@ -214,12 +187,6 @@ namespace VPB
             return current;
         }
 
-        /// <summary>
-        /// One-time copy of gallery SQLite (+ wal/shm) from <c>Cache\VPB</c> into
-        /// <c>Saves\PluginData\VPB</c>. Leaves Cache copy in place so a downgrade to a
-        /// Cache-path build still finds a DB (snapshot at migrate time; later writes go
-        /// only to Saves — Cache copy can go stale).
-        /// </summary>
         private static void EnsureLocalDatabaseMigratedFromCache(string durableDir)
         {
             if (s_DbMigrateFromCacheAttempted) return;
@@ -274,7 +241,7 @@ namespace VPB
                     }
 
                     if (!TryCopySqliteDatabaseBundle(src, dest))
-                        return; // leave flag false so later open can retry
+                        return;
 
                     s_DbMigrateFromCacheAttempted = true;
                     try
@@ -291,7 +258,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Copy main DB file and SQLite -wal/-shm sidecars; leave sources in place.</summary>
         private static bool TryCopySqliteDatabaseBundle(string srcDb, string destDb)
         {
             if (string.IsNullOrEmpty(srcDb) || string.IsNullOrEmpty(destDb)) return false;
@@ -371,7 +337,6 @@ namespace VPB
             return s.Substring(0, maxLen) + "…(" + s.Length + " chars)";
         }
 
-        /// <summary>How many of the given keys currently exist in <c>item_usage</c> (same batching as delete).</summary>
         private static long CountItemUsageKeysPresent(VpbSqlite3.Connection conn, IList<string> itemKeys, int start, int n)
         {
             if (n <= 0) return 0;
@@ -407,19 +372,11 @@ namespace VPB
 
         private static long CountPackagesMissingCatMem(VpbSqlite3.Connection conn)
         {
-            // Every valid registered VAR has meta.json, which classification keeps in a real category or EVERYTHING.
-            // A package with no cat_mem row was never fully classified. no_cat=1 rows are packages the deep scan
-            // already resolved as permanently unclassifiable (corrupt zip, no meta.json, file gone) — counting those
-            // as "not yet indexed" would clear the ready stamp forever and force a full rebuild every launch.
             return ScalarInt64(conn,
                 "SELECT COUNT(*) FROM pkg WHERE COALESCE(no_cat,0)=0 AND uid NOT IN (SELECT pkg_uid FROM cat_mem);");
         }
 
-        /// <summary>
-        /// Tiny persistent gaps (corrupt / uncacheable VARs) must not wipe ready meta and force a full
-        /// gallery SQL rebuild on every launch. Seen: 28 missing of ~20k with uid set match.
-        /// Cap = max(32, total/500) — same floor as cache-ready gate, ~0.2% on large libraries.
-        /// </summary>
+        /// <summary>Tiny persistent gaps (corrupt / uncacheable VARs) must not wipe ready meta and force a full gallery SQL rebuild on every launch.</summary>
         private static bool IsAcceptableMissingCatMem(long missing, long totalPkgs)
         {
             if (missing <= 0) return true;
@@ -450,14 +407,12 @@ namespace VPB
                 List<long> ticks;
                 List<long> sizes;
                 if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) continue;
-                // A scanned meta.json always has category membership; corrupt or unscanned gaps still tolerate retry.
                 for (int j = 0; j < names.Count; j++)
                     if (string.Equals(names[j], "meta.json", StringComparison.OrdinalIgnoreCase)) return true;
             }
             return false;
         }
 
-        /// <summary>True when pkg row count + inventory sig match and cat_mem coverage is complete or within gap.</summary>
         private static bool IsGalleryIndexCoverageComplete(
             long pkgRowsAfter,
             int pkgSnapCount,
@@ -600,7 +555,6 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_cm_pkg ON cat_mem(pkg_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_src ON pkg_dep(src_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_dep ON pkg_dep(dep_uid);" +
-                // Default LIKE needs NOCASE to seek package families instead of scanning every dependency edge.
                 "CREATE INDEX IF NOT EXISTS idx_pd_dep_nocase ON pkg_dep(dep_uid COLLATE NOCASE);" +
                 "CREATE INDEX IF NOT EXISTS idx_sf_key ON sys_file(cache_key);" +
                 "CREATE TABLE IF NOT EXISTS cache_usage (cache_path TEXT PRIMARY KEY, hit_count INTEGER NOT NULL DEFAULT 0, last_accessed INTEGER NOT NULL);" +
@@ -612,9 +566,6 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_iu_last ON item_usage(last_used);" +
                 "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);" +
                 "CREATE INDEX IF NOT EXISTS idx_cm_pkg_ipath ON cat_mem(pkg_uid, internal_path);");
-            // Once-per-build wipe of pre-deep-sig sys_sig:* rows, gated by sentinel so it survives
-            // EnsureSchema's per-connection invocation. Old shallow-mtime sigs could otherwise
-            // coincidentally match a new deep-mtime sig and return stale cache rows.
             const string sysSigDeepMigKey = "schema_migration:sys_sig_deep_v1";
             if (string.IsNullOrEmpty(MetaGet(conn, sysSigDeepMigKey)))
             {
@@ -638,8 +589,7 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN cloth_attr TEXT;");
             conn.ExecUtf8(LooseCatMemDdl);
 
-            // One-shot repair: stamp the present-flag onto pre-existing cat_mem rows packed before the flag
-            // existed, so the grid's clothing/hair subfilter SQL (which gates on it) doesn't drop them.
+            // One-shot repair: stamp the present-flag onto pre-existing cat_mem rows packed before the flag existed.
             if (string.IsNullOrEmpty(MetaGet(conn, ClothAttrPresentBackfillKey)))
             {
                 int repacked = 0, unresolved = 0;
@@ -663,14 +613,8 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN no_cat INTEGER;");
             try { conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_pkg_missing_first_scanned ON pkg(uid,wtime) WHERE first_scanned IS NULL;"); } catch { }
 
-            // Backfill NULL first_scanned from wtime as a best-effort "when user got this" proxy.
-            // wtime is FileInfo.LastWriteTime.ToBinary() (Local kind); convert to UTC binary so
-            // DateTime.CompareTo (which sorts by Ticks ignoring Kind) compares actual moments.
             try { ConvertWtimeToUtcAndCopyToFirstScanned(conn, "first_scanned IS NULL"); } catch { }
 
-            // One-shot reset: align all rows to wtime so DateAdded reflects when the file landed
-            // on disk. New rows stamp UtcNow at insert and float above. Sentinel only on success,
-            // otherwise a transient SQLite failure here would skip the repair forever.
             const string FirstScannedRepairKey = "first_scanned_repair_v1";
             if (string.IsNullOrEmpty(MetaGet(conn, FirstScannedRepairKey)))
             {
@@ -679,8 +623,7 @@ namespace VPB
                 if (ok) MetaSet(conn, FirstScannedRepairKey, "1");
             }
 
-            // Convert any Local-kind first_scanned binaries (negative ToBinary values) to UTC binary
-            // so Ticks comparison reflects the actual moment. Sentinel only on success.
+            // Convert Local-kind first_scanned binaries to UTC; sentinel only on success.
             const string FirstScannedUtcRepairKey = "first_scanned_repair_v2_utc";
             if (string.IsNullOrEmpty(MetaGet(conn, FirstScannedUtcRepairKey)))
             {
@@ -738,7 +681,6 @@ namespace VPB
             }
         }
 
-        /// <summary>In-place uid remap for pkg rows whose uid disagrees with var_path; keeps first_scanned.</summary>
         static bool TryRepairPkgRowsWithMismatchedVarPathUid(VpbSqlite3.Connection conn, out int repaired)
         {
             repaired = 0;
@@ -803,7 +745,6 @@ namespace VPB
             return null;
         }
 
-        /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process. Returns true on success (including no-op).</summary>
         static bool ConvertWtimeToUtcAndCopyToFirstScanned(VpbSqlite3.Connection conn, string whereClause)
         {
             var fixups = new List<KeyValuePair<string, long>>();
@@ -847,7 +788,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Returns true on success (including no-op); convertedRows is the number of rows actually rewritten.</summary>
         static bool TryConvertNegativeFirstScannedToUtc(VpbSqlite3.Connection conn, out int convertedRows)
         {
             convertedRows = 0;
@@ -915,7 +855,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>All indexed gallery rows (category + internal_path) for given package UID.</summary>
         internal static bool TryReadCatMemRowsForPackage(string pkgUid, List<KeyValuePair<string, string>> categoryAndInternalPathOut)
         {
             if (!VpbSqlite3.IsAvailable || categoryAndInternalPathOut == null) return false;
@@ -947,9 +886,6 @@ namespace VPB
             }
         }
 
-        // One connection, one SELECT for every cslist-referenced path (disk + per-VAR keys).
-        // No per-uid sig check: rows are overwritten on the same cache_key when a VAR changes,
-        // so a stale row cannot outlive a rescan.
         public static void TryReadAllCslistReferencedFromCache(HashSet<string> outPaths)
         {
             if (outPaths == null) return;
@@ -972,9 +908,6 @@ namespace VPB
             catch { }
         }
 
-        // uid -> persisted cslist-ref sig, loaded once from the cslref_sig:<uid> meta keys.
-        // A dedicated queryable key is needed because the generic sys_file sig (SysSigMetaKey)
-        // is FNV-hashed and cannot be looked up by uid.
         private static volatile Dictionary<string, string> _cslistRefVarSigCache;
         private static readonly object _cslistRefVarSigCacheLock = new object();
         private const string CslistRefVarSigMetaPrefix = "cslref_sig:";
@@ -1013,7 +946,6 @@ namespace VPB
             }
         }
 
-        // In-memory sig lookup; an unchanged VAR can skip all disk and SQLite work.
         public static bool TryGetCslistRefVarSig(string uid, out string sig)
         {
             sig = null;
@@ -1038,12 +970,6 @@ namespace VPB
             }
         }
 
-        // Writes the referenced rows and the queryable cslref_sig:<uid> sig in one connection.
-        // The sig is what a later scan checks to skip re-parsing an unchanged VAR.
-        /// <summary>
-        /// Stamp cslist-ref sig only (meta + memory). No sys_file churn — use for packages with zero .cslist
-        /// so startup scan of 10k+ VARs does not open BEGIN IMMEDIATE per package.
-        /// </summary>
         internal static void StampCslistRefVarSigOnly(string uid, string sig)
         {
             if (!VpbSqlite3.IsAvailable) return;
@@ -1141,7 +1067,6 @@ namespace VPB
             if (!VpbSqlite3.IsAvailable) return;
             if (string.IsNullOrEmpty(itemKey)) return;
             string kindNorm = kind ?? "";
-            // Gallery UI + VaM LoadInternal/LoadAppearance hooks may both see one user action.
             if (IsRecentHistoryDuplicate(itemKey, kindNorm)) return;
             try
             {
@@ -1179,7 +1104,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Removes usage rows for the given keys (same strings as <see cref="BuildUsageKey"/>).</summary>
         internal static void TryDeleteItemUsageForKeys(IList<string> itemKeys)
         {
             if (!VpbSqlite3.IsAvailable || itemKeys == null || itemKeys.Count == 0)
@@ -1343,7 +1267,6 @@ namespace VPB
             Interlocked.Increment(ref _galleryHistoryModeCountsCacheGen);
         }
 
-        /// <summary>Fast path for History side tabs: returns last aggregated counts without hitting SQLite.</summary>
         internal static bool TryGetGalleryHistoryModeCountsCached(Dictionary<GalleryHistoryFilterMode, int> outCounts)
         {
             if (outCounts == null) return false;
@@ -1437,8 +1360,6 @@ namespace VPB
                         outCounts[GalleryHistoryFilterMode.Misc] = misc;
                     }
 
-                    // Local (non-package) usage rows (loose Saves/scene scenes, etc.) are excluded by the
-                    // pkg INNER JOIN above; add their per-kind counts so the History side tabs match the list.
                     AddLocalHistoryModeCounts(conn, outCounts);
 
                     return true;
@@ -1451,7 +1372,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Adds per-kind counts for local (non-package) <c>item_usage</c> rows to the History side-tab counts.</summary>
         private static void AddLocalHistoryModeCounts(VpbSqlite3.Connection conn, Dictionary<GalleryHistoryFilterMode, int> outCounts)
         {
             if (conn == null || outCounts == null) return;
@@ -1932,8 +1852,7 @@ namespace VPB
             catch { }
         }
 
-        // Single-connection stale scan + package join. Replaces the per-row TryGetCacheUsagePackages N+1
-        // (a fresh connection + EnsureSchema per cache file) that dominated the cleanup scan.
+        // Single-connection stale scan + package join.
         internal static void TryGetStaleCacheItemsWithPackages(long olderThanBinary, List<CacheUsageRow> outRows, Dictionary<string, List<string>> outPkgsByPath)
         {
             if (outRows == null) return;
@@ -2051,7 +1970,6 @@ namespace VPB
 
         private static string SysSigMetaKey(string cacheKey)
         {
-            // meta.k is a primary key; keep it short and stable even if cacheKey is long.
             return "sys_sig:" + HashFnv1a64Hex(cacheKey ?? "");
         }
 
@@ -2074,17 +1992,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Recursive max(mtime) across <paramref name="root"/> and all subdirectories. Used by sys_file cache
-        /// signature builders: callers walk file trees with SearchOption.AllDirectories, but the top-level
-        /// dir's mtime does not update when files are added to deep subfolders, so a shallow sig would let
-        /// the cache return stale rows. Walking GetDirectories(AllDirectories) costs one directory enumeration
-        /// per scan but is far cheaper than the file enumeration the cache is protecting against.
-        /// </summary>
-        /// <remarks>
-        /// Results cached briefly (TTL) + clear-on-overflow so chip/filter storms do not re-walk the same trees.
-        /// Cleared on package refresh. Thread-safe (tag background scan may call).
-        /// </remarks>
+        /// <summary>Recursive max(mtime) for sys_file cache signatures; TTL-cached, cleared on package refresh, thread-safe.</summary>
         private static readonly object s_DeepMtimeLock = new object();
         private static readonly Dictionary<string, DeepMtimeCacheEntry> s_DeepMtimeCache =
             new Dictionary<string, DeepMtimeCacheEntry>(StringComparer.OrdinalIgnoreCase);
@@ -2166,7 +2074,6 @@ namespace VPB
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
-                    // sys_file caches are independent of the gallery VAR index "ready" state.
                     EnsureSchema(conn);
                     string storedSig = MetaGet(conn, SysSigMetaKey(cacheKey));
                     if (!string.Equals(storedSig ?? "", expectedSig ?? "", StringComparison.Ordinal))
@@ -2252,10 +2159,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Persistent cache for dependencies extracted from loose .json scene/preset files. Survives VaM restarts so the
-        /// 1500ms per-file stream scan only runs once per (path, mtime, size). Returns true when a fresh row matches.
-        /// </summary>
         internal static bool TryReadLooseSceneDeps(string filePath, long expectedWtimeBinary, long expectedSize, HashSet<string> outDeps)
         {
             if (outDeps == null) return false;
@@ -2368,7 +2271,6 @@ namespace VPB
                     foreach (var d in deps)
                     {
                         if (string.IsNullOrEmpty(d)) continue;
-                        // Defensive: drop anything containing the delimiter so round-trip can't corrupt the set.
                         if (d.IndexOf('|') >= 0) continue;
                         if (!first) sb.Append('|');
                         sb.Append(d);
@@ -2452,7 +2354,6 @@ namespace VPB
             public int Gender;
         }
 
-        // Bulk-load loose_vap_gender in one connection: the per-file TryReadLooseVapGender opens a connection + runs EnsureSchema each call, so a scan over thousands of loose .vap files pays that bootstrap thousands of times.
         internal static bool TryLoadAllLooseVapGender(Dictionary<string, LooseVapGenderRow> outMap)
         {
             if (outMap == null) return false;
@@ -2611,10 +2512,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// 1 = loaded: .var under <c>AddonPackages/</c>, or under <c>Custom/</c> / <c>Saves/</c> (treated as always loaded / not AllPackages-style repo).
-        /// 0 = unloaded (e.g. <c>AllPackages/</c>, <c>InvalidPackages/</c>, or other roots).
-        /// </summary>
         internal static int ComputePackageLoadedFlagFromVarPath(string varPath)
         {
             if (string.IsNullOrEmpty(varPath)) return 0;
@@ -2625,9 +2522,7 @@ namespace VPB
             return 0;
         }
 
-        /// <summary>
-        /// After AllPackages ↔ AddonPackages moves, update <c>pkg.var_path</c> and <c>pkg.loaded</c> for the given UIDs (no full index rebuild).
-        /// </summary>
+        /// <summary>After AllPackages ↔ AddonPackages moves, update pkg.var_path and pkg.loaded for the given UIDs (no full index rebuild).</summary>
         internal static void TryUpdatePkgPathAndLoadedForUids(ICollection<string> packageUids)
         {
             if (!VpbSqlite3.IsAvailable || packageUids == null || packageUids.Count == 0) return;
@@ -2688,12 +2583,7 @@ namespace VPB
             return path.Replace('\\', '/');
         }
 
-        /// <summary>
-        /// When gallery index is reused via UID inventory signature, <c>pkg.var_path</c> can stay stale
-        /// after external Explorer moves (same UIDs, new folders). Sync paths + loaded from live
-        /// <see cref="FileManager.PackagesByUid"/> without rebuilding <c>cat_mem</c>.
-        /// </summary>
-        /// <returns>Number of rows updated.</returns>
+        /// <summary>Sync stale pkg.var_path after external moves without rebuilding cat_mem; returns rows updated.</summary>
         internal static int TrySyncAllPkgPathsFromLivePackages()
         {
             return TrySyncAllPkgPathsFromLivePackages(null);
@@ -2792,7 +2682,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Precomputes packed clothing metadata once per VAR row at index rebuild (mirrors VAR branch of <see cref="GalleryPanel.PassesClothingGalleryFiltersForPath"/>).</summary>
         internal static int PackClothingGalleryAttrForVarListPath(string listPath)
         {
             if (string.IsNullOrEmpty(listPath)) return 0;
@@ -2816,7 +2705,6 @@ namespace VPB
                 | (isDecal ? 0x200 : 0);
         }
 
-        /// <summary>Fast clothing subfilter test using <see cref="PackClothingGalleryAttrForVarListPath"/> output (no path parsing).</summary>
         internal static bool ClothingPackedAttrMatchesSubfilter(int packed, GalleryPanel.ClothingSubfilter clothingSubfilter)
         {
             int kind = packed & 0xF;
@@ -2826,8 +2714,7 @@ namespace VPB
 
             if (kind != (int)ClothingLoadingUtils.ResourceKind.Clothing) return false;
 
-            // Issue #101: default behavior (no flags set) hides .vap presets so the grid does not
-            // show duplicate base + preset pairs. Mirrors GalleryPanel.PassesClothingGalleryFiltersForPath.
+            // Issue #101: default behavior (no flags set) hides .vap presets so the grid does not show duplicate base + preset pairs.
             if (clothingSubfilter == 0) return !isPreset;
 
             const GalleryPanel.ClothingSubfilter Real = GalleryPanel.ClothingSubfilter.RealClothing;
@@ -2858,9 +2745,8 @@ namespace VPB
             bool wantsCustom = (clothingSubfilter & Cus) != 0;
             bool wantsCustomPreset = (clothingSubfilter & CusPre) != 0;
             if (wantsPresets) { if (!isPreset) return false; }
-            if (wantsCustom) return false; // VAR rows: isCustomLoose is always false
+            if (wantsCustom) return false;
             if (wantsCustomPreset) return false; // loose Custom/Atom/Person/Clothing only
-            // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
             if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
             if ((clothingSubfilter & Itm) != 0) { if (isPreset) return false; }
             if ((clothingSubfilter & Mal) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Male && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
@@ -2869,7 +2755,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Fast hair subfilter test using <see cref="PackClothingGalleryAttrForVarListPath"/> output (no path parsing).</summary>
         internal static bool HairPackedAttrMatchesSubfilter(int packed, GalleryPanel.HairSubfilter hairSubfilter)
         {
             int kind = packed & 0xF;
@@ -2892,7 +2777,7 @@ namespace VPB
             bool wantsCustom = (hairSubfilter & Cus) != 0;
             bool wantsCustomPreset = (hairSubfilter & CusPre) != 0;
             if (wantsPresets) { if (!isPreset) return false; }
-            if (wantsCustom) return false; // VAR rows: isCustomLoose is always false
+            if (wantsCustom) return false;
             if (wantsCustomPreset) return false; // loose Custom/Atom/Person/Hair only
             if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
             if ((hairSubfilter & Itm) != 0) { if (isPreset) return false; }
@@ -2902,10 +2787,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Extra <c>AND ...</c> fragment for <see cref="TryQueryGalleryCategoryRows"/> when Clothing + active subfilter + schema has <c>cloth_attr</c>.
-        /// Uses the same packing as <see cref="PackClothingGalleryAttrForVarListPath"/> (bit 31 present, kind, gender nibble, 0x100 preset, 0x200 decal).
-        /// </summary>
         private static string BuildClothingSubfilterSqlAnd(
             VpbSqlite3.Connection conn,
             string categoryTitle,
@@ -2928,8 +2809,7 @@ namespace VPB
 
             const string c = "CAST(ifnull(m.cloth_attr,'0') AS INTEGER)";
 
-            // Issue #101: with no subfilter active, default-hide .vap presets so the grid does not
-            // show duplicate base + preset pairs. Mirrors GalleryPanel.PassesClothingGalleryFiltersForPath.
+            // Issue #101: with no subfilter active, default-hide .vap presets so the grid does not show duplicate base + preset pairs.
             if (f == 0)
             {
                 var sb0 = new StringBuilder(96);
@@ -2965,7 +2845,6 @@ namespace VPB
             if ((f & Pre) != 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) <> 0");
             else if ((f & Cus) == 0 && (f & CusPre) == 0)
-                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
                 sb.Append(" AND (").Append(c).Append(" & 256) = 0");
             if ((f & Itm) != 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) = 0");
@@ -2977,12 +2856,6 @@ namespace VPB
             return sb.ToString();
         }
 
-        /// <summary>
-        /// Extra <c>AND ...</c> for Hair + <c>cloth_attr</c>.
-        /// Facets (<paramref name="defaultHidePresetsWhenIdle"/> false): keep presets when f==0 so Presets chip counts.
-        /// Grid (<paramref name="defaultHidePresetsWhenIdle"/> true): hide presets when f==0 — mirrors
-        /// <see cref="GalleryPanel.PassesHairGalleryFiltersForPath"/> / Clothing Issue #101.
-        /// </summary>
         private static string BuildHairSubfilterSqlAnd(
             VpbSqlite3.Connection conn,
             string categoryTitle,
@@ -3040,10 +2913,7 @@ namespace VPB
 
         internal static string LastErrorForDiagnostics { get { return s_LastError; } }
 
-        /// <summary>
-        /// Refresh discovered new/removed .var paths after SQL restore already stamped the index valid.
-        /// Clears the skip gate and schedules an incremental (or full) index patch.
-        /// </summary>
+        /// <summary>Refresh discovered new/removed .var paths after SQL restore already stamped the index valid.</summary>
         internal static void NotifyPackageInventoryChangedFromRefresh(int added, int removed, bool scheduleUpdate = true)
         {
             if (added <= 0 && removed <= 0) return;
@@ -3101,10 +2971,6 @@ namespace VPB
 
         internal static bool IsGalleryIndexRebuildActive() => s_RebuildRunning || s_RebuildScheduled;
 
-        /// <summary>
-        /// Quit stopper: give a running index worker a short window to leave its loops cleanly, then
-        /// interrupt every open connection so nothing stays parked inside native sqlite3_step.
-        /// </summary>
         internal static void RegisterShutdownHooks()
         {
             VpbShutdown.Register("gallery-sql-index", () =>
@@ -3114,7 +2980,6 @@ namespace VPB
             });
         }
 
-        /// <summary>True while gallery SQLite index is being built or about to start (startup overlay).</summary>
         internal static bool ShouldShowGalleryIndexBuildOverlay()
         {
             if (!VpbSqlite3.IsAvailable) return false;
@@ -3150,7 +3015,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Registry populated (paths/Uids) but zip manifest may still be empty — allow SQL rebuild to start.</summary>
         internal static void NotifyPackageRegistryReady()
         {
             bool manifestReady = false;
@@ -3171,7 +3035,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Deep VAR scan finished — run any gallery SQL rebuild that was deferred during scan.</summary>
         internal static void FlushPendingGalleryIndexAfterDeepScan()
         {
             if (Interlocked.CompareExchange(ref s_PendingSqlRebuildAfterDeepScan, 0, 1) != 1)
@@ -3239,7 +3102,6 @@ namespace VPB
             s_SkipDeferredGallerySqlRebuild = true;
             s_SqlRebuildDeferredPostReady = false;
             ResetGalleryIndexBuildProgress();
-            // UID inventory sig ignores folder moves; keep pkg.var_path aligned with live registry.
             SyncPkgPathsAfterIndexReuse();
             try { VamStartupProfiler.Milestone("sql_rebuild_skipped_" + reason); } catch { }
             try
@@ -3251,9 +3113,7 @@ namespace VPB
             try { VamStartupProfiler.RecordSqlRebuildSkipped(); } catch { }
         }
 
-        /// <summary>
-        /// Avoid full <c>cat_mem</c> rebuild when on-disk meta + live package inventory still match categories.
-        /// </summary>
+        /// <summary>Avoid full cat_mem rebuild when on-disk meta + live package inventory still match categories.</summary>
         internal static bool TrySkipGalleryIndexRebuild()
         {
             if (!VamStartupOptimizations.SkipGallerySqlRebuildIfValid) return false;
@@ -3325,10 +3185,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Fingerprint of installed VAR UIDs (order-independent). Used to reuse an on-disk index across
-        /// launches even though <see cref="FileManager.lastPackageRefreshTime"/> is a wall clock, not content-derived.
-        /// </summary>
+        /// <summary>Fingerprint of installed VAR UIDs (order-independent).</summary>
         internal static string ComputePackageInventorySignature(Dictionary<string, VarPackage> packagesByUid)
         {
             if (packagesByUid == null || packagesByUid.Count == 0) return "0";
@@ -3358,7 +3215,6 @@ namespace VPB
             }
         }
 
-        // pkg_inv_sig is "count:hash"; the count is the package total the signature was stamped for.
         static bool TryParseInventorySignatureCount(string sig, out int count)
         {
             count = 0;
@@ -3481,11 +3337,6 @@ namespace VPB
             return sig;
         }
 
-        /// <summary>
-        /// If the SQLite DB was built for the same category list and the same package set, republish the
-        /// in-memory gate using the <em>current</em> package scan stamp so <see cref="TryQueryGalleryCategoryRows"/>
-        /// works without a ~20s rebuild (e.g. first Clothing open right after startup).
-        /// </summary>
         internal static bool TryRestoreReadyStateIfMetaMatchesInventory()
         {
             if (!VpbSqlite3.IsAvailable || s_RebuildRunning) return false;
@@ -3557,8 +3408,7 @@ namespace VPB
                         try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: packages_missing_cat_mem=" + pkgsMissingCatMem); } catch { }
                         return false;
                     }
-                    // Signature counts the live set; an incremental update only bodies its delta, so a dropped
-                    // delta over-reports the count here. Trusting it would skip the rebuild on every restart.
+                    // Signature counts the live set; an incremental update only bodies its delta, so a dropped delta over-reports the count here.
                     int sigCount;
                     if (TryParseInventorySignatureCount(metaInv, out sigCount) && sigCount != pkgCount)
                     {
@@ -3608,7 +3458,6 @@ namespace VPB
                 ok = true;
                 s_SkipDeferredGallerySqlRebuild = true;
                 s_SqlRebuildDeferredPostReady = false;
-                // Direct callers (e.g. SetCategories) skip NoteGalleryIndexReadySkipDeferredRebuild.
                 SyncPkgPathsAfterIndexReuse();
                 return true;
             }
@@ -3777,7 +3626,7 @@ namespace VPB
                         delMem.BindText(1, pkg.Uid); delMem.Step(); delMem.Reset();
                         delDep.BindText(1, pkg.Uid); delDep.Step(); delDep.Reset();
                     }
-                    InsertPackageIndexPkgAndDepRows(pkg, existingFirstScanned, insPkg, insDep, ref nPkgInserted, ref nDepInserted, ref depTicksIgnored);
+                    InsertPackageIndexPkgAndDepRows(pkg, existingFirstScanned, null, insPkg, insDep, ref nPkgInserted, ref nDepInserted, ref depTicksIgnored);
                 }
 
                 if (parallelCatMem)
@@ -3836,7 +3685,6 @@ namespace VPB
             int existingCount;
             TryGetIndexedPackageCount(out existingCount);
 
-            // Init refresh registers every package as "added". Use DB diff instead of treating the whole library as delta.
             int scanDelta = scanAdded + scanRemoved;
             if (scanDelta > 0 && existingCount > 0 && liveCount > 0
                 && scanAdded >= Math.Max(32, (liveCount * 4) / 5))
@@ -4099,8 +3947,6 @@ namespace VPB
                     }
                     else
                     {
-                        // A stored signature that counts more packages than the body has rows means an earlier
-                        // incremental stamped a full-set count over a short delta write; rebuild to reconcile.
                         string metaInv = MetaGet(conn, "pkg_inv_sig");
                         string dbInv = ComputePackageInventorySignatureFromDatabase(conn);
                         if (string.IsNullOrEmpty(metaInv) || !string.Equals(metaInv, dbInv, StringComparison.Ordinal))
@@ -4133,7 +3979,6 @@ namespace VPB
 
         const string MetaGalleryReadyKey = "gallery_index_ready";
 
-        /// <summary>True when on-disk gallery SQLite index is populated (sqlRestore path).</summary>
         internal static bool HasGalleryIndexReadyOnDisk()
         {
             if (!VpbSqlite3.IsAvailable) return false;
@@ -4160,8 +4005,6 @@ namespace VPB
         static long ResolveFirstScannedForInsert(long existing, long ict, long wt)
         {
             if (existing != 0 && existing != long.MinValue) return existing;
-            // Brand-new uid: stamp now. ict (creator build date) and wt (file mtime) don't reflect
-            // when VPB first saw this uid, so they're unused here.
             return DateTime.UtcNow.ToBinary();
         }
 
@@ -4202,11 +4045,7 @@ namespace VPB
             return withCache;
         }
 
-        /// <summary>
-        /// Min zip file-list caches required before a destructive gallery SQL rebuild.
-        /// Always clamped to <paramref name="total"/> so small libraries cannot defer forever
-        /// (historical bug: Max(32, n/10) with n=7 → require 32 → spin forceFullRebuild).
-        /// </summary>
+        /// <summary>Min zip file-list caches required before a destructive gallery SQL rebuild.</summary>
         internal static int MinPackageCachesRequiredForGalleryRebuild(int total)
         {
             if (total <= 0) return 0;
@@ -4289,11 +4128,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Pure-SQL pass: returns every <c>pkg.first_scanned</c> as a uid → binary dict. Cheap to
-        /// call without holding any in-memory dict lock; pair with <see cref="ApplyFirstScannedToPackages"/>
-        /// under the caller's lock so SQL I/O doesn't span the lock window.
-        /// </summary>
         internal static Dictionary<string, long> ReadFirstScannedBinariesFromPkg()
         {
             var fsByUid = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
@@ -4376,7 +4210,6 @@ namespace VPB
             }
             // Explorer moves keep UID set; sync pkg.var_path before Path rail / filters query SQL.
             SyncPkgPathsAfterIndexReuse();
-            // Prefer flushing a rebuild that was coalesced while caches/scan were not ready.
             try
             {
                 if (Interlocked.CompareExchange(ref s_PendingSqlRebuildAfterDeepScan, 0, 0) == 1)
@@ -4403,8 +4236,7 @@ namespace VPB
 
             if (forceFullRebuild || NeedsFullGalleryIndexBuild())
             {
-                // forceFullRebuild must not bypass skip: deferred startup used to pass true and
-                // rebuild every launch even after a valid on-disk index. NeedsFull already decided.
+                // forceFullRebuild must not bypass the NeedsFull skip.
                 if (!TryEnqueueFullGalleryIndexRebuild(forceFullRebuild
                     ? "forceFullRebuild"
                     : "NeedsFullGalleryIndexBuild", false))
@@ -4436,11 +4268,6 @@ namespace VPB
             ThreadPool.QueueUserWorkItem(_ => IncrementalIndexUpdateWorker(addedCopy, removedPackagesCopy, removedUidsCopy));
         }
 
-        /// <summary>
-        /// Single choke point for full gallery SQL rebuild enqueue.
-        /// Rate-limits after deferred/no-progress outcomes and circuit-breaks spin loops
-        /// (warm/concurrent path — no Unity API; Environment.TickCount only).
-        /// </summary>
         static bool TryEnqueueFullGalleryIndexRebuild(string reason, bool forceBypassSkip)
         {
             int lastOutcome = s_LastFullRebuildOutcome;
@@ -4606,7 +4433,6 @@ namespace VPB
             ScheduleGalleryIndexUpdateAfterScan();
         }
 
-        /// <summary>Post-READY delayed index update (incremental when DB exists).</summary>
         internal static void QueueGalleryIndexRebuildWorker()
         {
             ScheduleGalleryIndexUpdateAfterScan();
@@ -4887,8 +4713,6 @@ namespace VPB
             if (readyScan == scanBin && !string.IsNullOrEmpty(catSig)) return;
 
             // Avoid expensive rebuild when only scan clock advanced.
-            // If we already have a ready index for same category signature and same package inventory,
-            // bump readyScanBinary to current scanBin and continue without rebuild.
             if (!string.IsNullOrEmpty(catSig))
             {
                 string readyInv;
@@ -4901,14 +4725,11 @@ namespace VPB
                     {
                         lock (s_Sync)
                         {
-                            // Ensure we are still talking about same category signature.
                             if (!string.IsNullOrEmpty(s_ReadyCategoriesSig) && string.Equals(s_ReadyCategoriesSig, catSig, StringComparison.Ordinal))
                             {
                                 s_ReadyScanBinary = scanBin;
-                                // keep s_ReadyPkgInvSig as-is
                             }
                         }
-                        // Same UID set can still mean Explorer moved .var folders — sync paths.
                         SyncPkgPathsAfterIndexReuse();
                         try
                         {
@@ -4985,7 +4806,6 @@ namespace VPB
             }
 
             // Zip caches not ready / bulk scan: RebuildCore already set PendingSqlRebuildAfterDeepScan.
-            // Immediate force re-queue here was the thousands-of-FULL-lines/sec loop.
             bool deferredCaches = Interlocked.CompareExchange(ref s_LastRebuildDeferredForCaches, 0, 1) == 1;
             if (deferredCaches)
             {
@@ -5001,7 +4821,6 @@ namespace VPB
 
             if (Interlocked.CompareExchange(ref s_PendingSqlRebuildAfterDeepScan, 0, 0) == 1)
             {
-                // Coalesced for scan/cache readiness — wait for FlushPending / NotifyPackageScanCompleted.
                 return;
             }
 
@@ -5132,7 +4951,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>First matching category wins (same spirit as <see cref="GalleryPanel.CacheCategoryCounts"/>).</summary>
         private static string ClassifyFile(List<Gallery.Category> orderedCats, string internalPath)
         {
             if (orderedCats == null) return null;
@@ -5226,7 +5044,6 @@ namespace VPB
 
                 if (string.IsNullOrEmpty(cname))
                 {
-                    // Orphan: no real-category row, so keep an EVERYTHING row; categorized files are recovered via DISTINCT at query time.
                     int lastDot = ip.LastIndexOf('.');
                     if (lastDot > 0 && lastDot < ip.Length - 1)
                     {
@@ -5297,17 +5114,12 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Abort an index build in progress at quit so the open transaction rolls back instead of
-        /// committing partial rows. No ready stamp is written, so the next launch repairs it.
-        /// </summary>
         static void ThrowIfQuitting()
         {
             if (VpbShutdown.IsQuitting)
                 throw new OperationCanceledException("VPB gallery index build aborted: VaM is quitting");
         }
 
-        /// <summary>Parallel classify pass; each worker list is filled independently.</summary>
         static int ParallelClassifyCatMemForPackages(
             VarPackage[] packages,
             CategoryClassifier classifier,
@@ -5368,12 +5180,7 @@ namespace VPB
             return totalRows;
         }
 
-        /// <summary>
-        /// 1 when the deep scan already settled that this package can never produce cat_mem rows
-        /// (corrupt archive, no meta.json, file moved to InvalidPackages under a stale path cache).
-        /// Only a finished scan may set it: an unscanned package is still "pending", and must keep
-        /// the index incomplete so the post-scan rebuild fills it in.
-        /// </summary>
+        /// <summary>1 when deep scan settled this package can never produce cat_mem rows; only a finished scan sets it.</summary>
         static long ComputeNoCatFlagForInsert(VarPackage pkg)
         {
             if (pkg == null) return 0L;
@@ -5384,6 +5191,7 @@ namespace VPB
         static void InsertPackageIndexPkgAndDepRows(
             VarPackage pkg,
             Dictionary<string, long> existingFirstScanned,
+            IDictionary<string, PkgLicenseCarryOver> licenseCarryOver,
             VpbSqlite3.Statement insPkg,
             VpbSqlite3.Statement insDep,
             ref int nPkgInserted,
@@ -5433,13 +5241,12 @@ namespace VPB
             insPkg.BindInt64(11, verNum);
             // Stamped 0; RefreshAllPkgNewestFlags after batch sets winners (and unparseable → 1).
             insPkg.BindInt64(12, 0);
-            string license = ResolveLicenseForInsert(pkg);
+            string license = ResolveLicenseForInsert(pkg, licenseCarryOver, wt, sz);
             insPkg.BindText(13, license ?? "");
             insPkg.BindInt64(14, ComputeNoCatFlagForInsert(pkg));
             insPkg.Step();
             insPkg.Reset();
             nPkgInserted++;
-            // Mirror onto the in-memory VarPackage so consumers that read it directly stay in sync with SQL.
             try { pkg.FirstScannedBinary = firstScannedBin; } catch { }
 
             if (insDep == null) return;
@@ -5533,8 +5340,8 @@ namespace VPB
             private struct Rule
             {
                 public string Name;
-                public string SinglePathPrefixNorm; // empty means "any"
-                public string[] PathPrefixesNorm;    // null means use SinglePathPrefixNorm
+                public string SinglePathPrefixNorm;
+                public string[] PathPrefixesNorm;
             }
 
             private readonly Rule[] _rules;
@@ -5556,7 +5363,6 @@ namespace VPB
                     Rule r = new Rule();
                     r.Name = name;
 
-                    // Normalize path prefixes once (slashes + null handling).
                     if (cat.paths != null && cat.paths.Count > 0)
                     {
                         var pref = new List<string>(cat.paths.Count);
@@ -5609,7 +5415,6 @@ namespace VPB
                 if (!_extToRuleIndices.TryGetValue(ext, out ruleIdx) || ruleIdx == null || ruleIdx.Count == 0)
                     return null;
 
-                // Normalize the internal path once per file.
                 string ipNorm = NormalizeSlashes(internalPath);
 
                 for (int k = 0; k < ruleIdx.Count; k++)
@@ -5619,7 +5424,6 @@ namespace VPB
                     Rule r = _rules[ci];
                     if (string.IsNullOrEmpty(r.Name)) continue;
 
-                    // Path rules: if no prefixes are configured, accept any path.
                     if (r.PathPrefixesNorm != null && r.PathPrefixesNorm.Length > 0)
                     {
                         bool ok = false;
@@ -5771,8 +5575,7 @@ namespace VPB
                 return;
             }
 
-            // Never rebuild against an unstamped clock: DateTime.MinValue.ToBinary() is 0 and would publish
-            // s_ReadyScanBinary=0 while real scans use a non-zero stamp — SQL fast path stays disabled forever.
+            // Never rebuild against an unstamped clock, or the SQL fast path stays disabled.
             DateTime refreshClock = DateTime.MinValue;
             try { refreshClock = refreshClockProvider(); } catch { }
             if (refreshClock == DateTime.MinValue)
@@ -5865,14 +5668,13 @@ namespace VPB
                     tEnsureSchema += Stopwatch.GetTimestamp() - t0;
 
                     // Rebuild-only perf pragmas (connection-local).
-                    // Avoids extra temp-file work and increases cache for bulk insert/index build.
                     t0 = Stopwatch.GetTimestamp();
                     try
                     {
                         conn.ExecUtf8(
                             "PRAGMA temp_store=MEMORY;" +
-                            "PRAGMA cache_size=-65536;" +          // ~64MiB page cache (negative = KiB)
-                            "PRAGMA mmap_size=268435456;");        // 256MiB mmap when supported
+                            "PRAGMA cache_size=-65536;" +
+                            "PRAGMA mmap_size=268435456;");
                     }
                     catch { }
                     tBulkPragmas += Stopwatch.GetTimestamp() - t0;
@@ -5887,13 +5689,16 @@ namespace VPB
                         conn.ExecUtf8("DROP INDEX IF EXISTS idx_cm_cat; DROP INDEX IF EXISTS idx_cm_pkg;");
                         tDropIdx += Stopwatch.GetTimestamp() - t0;
 
-                        // Preserve per-uid first_scanned across the DELETE+INSERT rebuild so "Date Added" history survives.
                         Dictionary<string, long> existingFirstScanned;
                         try
                         {
                             existingFirstScanned = ReadFirstScannedForRebuild(conn);
                         }
                         catch { existingFirstScanned = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase); }
+
+                        Dictionary<string, PkgLicenseCarryOver> licenseCarryOver;
+                        try { licenseCarryOver = ReadLicenseCarryOverForRebuild(conn); }
+                        catch { licenseCarryOver = null; }
 
                         t0 = Stopwatch.GetTimestamp();
                         conn.ExecUtf8("DELETE FROM cat_mem; DELETE FROM pkg_dep; DELETE FROM pkg;");
@@ -5951,7 +5756,7 @@ namespace VPB
                                 long tPkg0 = Stopwatch.GetTimestamp();
                                 long depTicks = 0;
                                 InsertPackageIndexPkgAndDepRows(
-                                    pkg, existingFirstScanned, insPkg, insDep,
+                                    pkg, existingFirstScanned, licenseCarryOver, insPkg, insDep,
                                     ref nPkgInserted, ref nDepInserted, ref depTicks);
                                 long tPkgDone = Stopwatch.GetTimestamp();
                                 tPkgRow += tPkgDone - tPkg0 - depTicks;
@@ -6198,7 +6003,6 @@ namespace VPB
                 if (catMemIncomplete && bulkActive) queueAnotherRebuild = false;
                 if (queueAnotherRebuild)
                 {
-                    // Still inside RebuildCore / RebuildWorker slot — coalesce; worker postamble enqueues with backoff.
                     CoalesceFullRebuildInsteadOfSpin();
                     Interlocked.Exchange(ref s_PendingRescheduleAfterRunningRebuild, 1);
                 }
@@ -6227,10 +6031,7 @@ namespace VPB
             try { VpbPackageIndexDiagnostics.AuditTracedPackages("gallerySqlRebuild"); } catch { }
         }
 
-        /// <summary>
-        /// Fills side-tab category totals from <c>cat_mem</c> when the index matches the current package scan (avoids scanning every VAR on disk).
-        /// Only keys already present in <paramref name="countsByCategoryName"/> are updated.
-        /// </summary>
+        /// <summary>Fills side-tab category totals from cat_mem when the index matches the current package scan (avoids scanning every VAR on disk).</summary>
         internal static bool TryReadCategoryMemberCounts(
             Dictionary<string, int> countsByCategoryName,
             string creatorFilter = "",
@@ -6368,9 +6169,6 @@ namespace VPB
                         catch { /* keep previous GROUP BY value */ }
                     }
 
-                    // Package-level pseudo-category: ALL VAR (varpkg) is not represented in cat_mem.
-                    // Count directly from pkg table so the side-tab count stays correct even when
-                    // FileManager.PackagesByUid snapshot is not ready.
                     if (countsByCategoryName.ContainsKey("ALL VAR"))
                     {
                         try
@@ -6467,7 +6265,6 @@ namespace VPB
                 for (int i = 0; i < exts2.Length; i++)
                 {
                     string e = exts2[i] != null ? exts2[i].Trim() : "";
-                    // Pseudo tokens (vpbeverything / varpkg) are category markers, not file suffixes.
                     if (e.Length > 0 && !Gallery.IsGalleryPseudoExtensionToken(e))
                         extSet.Add(e);
                 }
@@ -6653,11 +6450,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Seed Path side-tab folders from <c>pkg_var_path</c> inventory (all scanned .var paths,
-        /// including junction aliases that lost canonical registration to a shorter duplicate path).
-        /// Missing hierarchy nodes get count 0 — do not inflate category-scoped counts.
-        /// </summary>
         internal static void SeedPackageFoldersFromVarPathInventory(Dictionary<string, int> foldersOut)
         {
             if (!VpbSqlite3.IsAvailable || foldersOut == null) return;
@@ -6696,10 +6488,7 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Side-tab package-folder file counts (VAR rows only) grouped by package directory path under
-        /// AddonPackages/ and AllPackages/, including parent folders.
-        /// </summary>
+        /// <summary>Side-tab package-folder file counts (VAR rows only) grouped by package directory path under AddonPackages/ and AllPackages/.</summary>
         internal static bool TryReadPackageFolderCounts(
             Dictionary<string, int> countsOut,
             string extensionPipeSeparated,
@@ -6770,7 +6559,6 @@ namespace VPB
                     bool hasCreator = creatorList.Count > 0;
 
                     bool isEverythingC2 = Gallery.IsEverythingCategoryName(categoryTitle);
-                    // EVERYTHING: category.paths are loose-disk roots, not cat_mem path filters.
                     bool hasPathPrefix = !isEverythingC2
                         && ((pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix));
 
@@ -6892,21 +6680,20 @@ namespace VPB
             }
         }
 
-        /// <summary>Populated by <see cref="TryQueryGalleryCategoryRows"/> for perf diagnostics (gated logging).</summary>
         internal static bool TryReadTagCounts(
             string categoryTitle,
             string currentExtension,
             string creatorFilter,
             HashSet<string> tagsToCount,
             Dictionary<string, int> outTagCounts,
-            out TagScanTotals outFacets,
+            out TagFacetCounts outFacets,
             GalleryPanel.ClothingSubfilter clothingSubfilter = 0,
             GalleryPanel.HairSubfilter hairSubfilter = 0,
             GalleryPanel.AppearanceSubfilter appearanceSubfilter = 0,
             HashSet<string> activeTags = null,
             Dictionary<string, HashSet<string>> appearanceTagsByRowKey = null)
         {
-            outFacets = new TagScanTotals();
+            outFacets = new TagFacetCounts();
             if (!VpbSqlite3.IsAvailable) return false;
 
             long scanBin = 0;
@@ -6955,7 +6742,6 @@ namespace VPB
                     var sbSql = new StringBuilder(256);
                     sbSql.Append("SELECT ");
                     if (isEverythingTrc) sbSql.Append("DISTINCT ");
-                    // cloth_attr forced '0' for EVERYTHING: DISTINCT needs a stable value across real-category rows with packed attrs.
                     sbSql.Append("m.internal_path, m.pkg_uid, ");
                     sbSql.Append(isEverythingTrc ? "'0'" : "ifnull(m.cloth_attr,'0')");
                     sbSql.Append(", m.list_path FROM cat_mem m ");
@@ -7016,10 +6802,6 @@ namespace VPB
                             {
                                 outFacets.ClothingSubfilterCountAll++;
                                 // Issue #101: subfilter facet counts dropped to 0 when creator filter active.
-                                // Root cause: some indexed rows have clothAttr stored as 0/NULL (missing
-                                // ClothingAttrPresentFlag), so the packed-attr branch is skipped. Fall back
-                                // to per-row classification from internal_path/list_path so facet counts
-                                // are populated regardless of whether cloth_attr was packed at index time.
                                 if ((clothAttr & ClothingAttrPresentFlag) == 0)
                                     clothAttr = PackClothingGalleryAttrForVarListPath(string.IsNullOrEmpty(listPath) ? internalPath : listPath);
 
@@ -7032,7 +6814,6 @@ namespace VPB
 
                                     if (kind == (int)ClothingLoadingUtils.ResourceKind.Clothing)
                                     {
-                                        // Facet counts
                                         if (ClothingPackedAttrMatchesSubfilter(clothAttr, clothingSubfilter ^ GalleryPanel.ClothingSubfilter.RealClothing)) outFacets.ClothingSubfilterFacetCountReal++;
                                         if (ClothingPackedAttrMatchesSubfilter(clothAttr, clothingSubfilter ^ GalleryPanel.ClothingSubfilter.Presets)) outFacets.ClothingSubfilterFacetCountPresets++;
                                         if (ClothingPackedAttrMatchesSubfilter(clothAttr, clothingSubfilter ^ GalleryPanel.ClothingSubfilter.Custom)) outFacets.ClothingSubfilterFacetCountCustom++;
@@ -7046,9 +6827,7 @@ namespace VPB
                                         {
                                             outFacets.ClothingSubfilterCountReal++;
                                             if (isPreset) outFacets.ClothingSubfilterCountPresets++;
-                                            // VAR rows are never "Custom" or "Custom Preset" (those are loose .vap files only),
-                                            // so these counters stay 0 here and the loose-file pass adds any real hits. Assign
-                                            // explicitly so the fields are written at least once (clears CS0649).
+                                            // VAR rows are never "Custom" or "Custom Preset" (those are loose .vap files only).
                                             outFacets.ClothingSubfilterCountCustom = 0;
                                             outFacets.ClothingSubfilterCountCustomPreset = 0;
                                             outFacets.ClothingSubfilterFacetCountCustomPreset = 0;
@@ -7080,8 +6859,7 @@ namespace VPB
                                         if (HairPackedAttrMatchesSubfilter(clothAttr, hairSubfilter ^ GalleryPanel.HairSubfilter.Female)) outFacets.HairSubfilterFacetCountFemale++;
 
                                         if (isPreset) outFacets.HairSubfilterCountPresets++;
-                                        // VAR rows are never "Custom" / "Custom Preset" (loose .vap only); the loose pass
-                                        // adds real hits. Assign explicitly so the fields are written once (clears CS0649).
+                                        // VAR rows are never "Custom" / "Custom Preset" (loose .vap only); the loose pass adds real hits.
                                         outFacets.HairSubfilterCountCustom = 0;
                                         outFacets.HairSubfilterCountCustomPreset = 0;
                                         outFacets.HairSubfilterFacetCountCustomPreset = 0;
@@ -7093,8 +6871,6 @@ namespace VPB
                             }
                             else if (isAppearance)
                             {
-                                // Appearance subfilters are not yet packed into clothAttr in the current schema.
-                                // Fall back to path heuristics for now to avoid warnings and provide correct counts.
                                 string p = internalPath.Replace('\\', '/');
                                 if (p.IndexOf("/appearance", StringComparison.OrdinalIgnoreCase) >= 0)
                                 {
@@ -7115,7 +6891,6 @@ namespace VPB
                                     if (g == 3) outFacets.AppearanceSubfilterCountFuta++;
                                     if (g == 0) outFacets.AppearanceSubfilterCountUnknown++;
 
-                                    // Simplified PassesAppearanceSubfilters check
                                     bool PassesApp(GalleryPanel.AppearanceSubfilter f, bool isPre, bool isCus, int gen)
                                     {
                                         if (f == 0) return true;
@@ -7145,7 +6920,7 @@ namespace VPB
                                     {
                                         outFacets.AppearanceSourceCountPresets++;
                                         outFacets.AppearanceSourceCountAll++;
-                                        outFacets.AppearanceSourceCountCustom = 0; // Explicitly initialize to clear warning
+                                        outFacets.AppearanceSourceCountCustom = 0;
                                     }
                                     else if (isCustomAppearance)
                                     {
@@ -7171,65 +6946,8 @@ namespace VPB
             public string RejectReason;
             public long SqlElapsedMs;
             public int RowsRead;
-            /// <summary>True when WHERE included <c>pkg.is_newest</c> (skip in-memory hide-old).</summary>
             public bool AppliedPkgVersionFilter;
-            /// <summary>True when WHERE included Hair <c>cloth_attr</c> gallery subfilter.</summary>
             public bool AppliedHairGallerySubfilter;
-        }
-
-        internal sealed class TagScanTotals
-        {
-            public int AppearanceSourceCountAll;
-            public int AppearanceSourceCountPresets;
-            public int AppearanceSourceCountCustom;
-            public int ClothingSubfilterCountAll;
-            public int ClothingSubfilterCountReal;
-            public int ClothingSubfilterCountPresets;
-            public int ClothingSubfilterCountCustom;
-            public int ClothingSubfilterCountCustomPreset;
-            public int ClothingSubfilterCountItems;
-            public int ClothingSubfilterCountMale;
-            public int ClothingSubfilterCountFemale;
-            public int ClothingSubfilterCountDecals;
-            public int HairSubfilterCountAll;
-            public int HairSubfilterCountPresets;
-            public int HairSubfilterCountCustom;
-            public int HairSubfilterCountCustomPreset;
-            public int HairSubfilterCountItems;
-            public int HairSubfilterCountMale;
-            public int HairSubfilterCountFemale;
-            public int AppearanceSubfilterCountAll;
-            public int AppearanceSubfilterCountPresets;
-            public int AppearanceSubfilterCountCustom;
-            public int AppearanceSubfilterCountMale;
-            public int AppearanceSubfilterCountFemale;
-            public int AppearanceSubfilterCountFuta;
-            public int AppearanceSubfilterCountUnknown;
-            public int ClothingSubfilterFacetCountReal;
-            public int ClothingSubfilterFacetCountPresets;
-            public int ClothingSubfilterFacetCountCustom;
-            public int ClothingSubfilterFacetCountCustomPreset;
-            public int ClothingSubfilterFacetCountItems;
-            public int ClothingSubfilterFacetCountMale;
-            public int ClothingSubfilterFacetCountFemale;
-            public int ClothingSubfilterFacetCountDecals;
-            public int HairSubfilterFacetCountPresets;
-            public int HairSubfilterFacetCountCustom;
-            public int HairSubfilterFacetCountCustomPreset;
-            public int HairSubfilterFacetCountItems;
-            public int HairSubfilterFacetCountMale;
-            public int HairSubfilterFacetCountFemale;
-            public int AppearanceSubfilterFacetCountPresets;
-            public int AppearanceSubfilterFacetCountCustom;
-            public int AppearanceSubfilterFacetCountMale;
-            public int AppearanceSubfilterFacetCountFemale;
-            public int AppearanceSubfilterFacetCountFuta;
-            public int AppearanceSubfilterFacetCountUnknown;
-            public int AppearanceSubfilterCurrentCountAll;
-            public int AppearanceSubfilterCurrentCountMale;
-            public int AppearanceSubfilterCurrentCountFemale;
-            public int AppearanceSubfilterCurrentCountFuta;
-            public int AppearanceSubfilterCurrentCountUnknown;
         }
 
         private static string BuildEverythingNonPreviewAnd(string col)
@@ -7258,25 +6976,22 @@ namespace VPB
 
         internal struct GalleryCategoryWhereContext
         {
-            // FROM + WHERE prefix up to and including the cloth AND placeholder point.
-            // Append clothAnd, then any additional per-query suffix (ORDER BY / LIMIT).
-            public string CreatorAndFragment;  // " AND (p.creator = ? ...)" or ""
-            public string LoadedAndFragment;   // " AND ifnull(p.loaded,0)..." or ""
+            public string CreatorAndFragment;
+            public string LoadedAndFragment;
             public string VersionAndFragment;  // newest/old-only via pkg.is_newest, or ""
             public string LicenseAndFragment;  // " AND ifnull(p.license,'') = ? COLLATE NOCASE" or ""
-            public string NameAndFragment;     // title-bar search AST (broad OR + tag:/creator:) or ""
+            public string NameAndFragment;
             public string SearchTimeAndFragment; // time window (int64 binds after text) or ""
-            public string ExclusionAndFragment;// " AND m.internal_path NOT LIKE ? ..." or ""
-            public string InclusionAndFragment;// " AND (m.internal_path LIKE ? ...) " or ""
-            public string TagAndFragment;      // " AND m.list_path LIKE ? ..." or ""
-            public string UserTagAndFragment;  // user-tag correlated subquery or ""
-            public string ExcludedUserTagAndFragment; // " AND NOT EXISTS (... IN (excluded))" or ""
+            public string ExclusionAndFragment;
+            public string InclusionAndFragment;
+            public string TagAndFragment;
+            public string UserTagAndFragment;
+            public string ExcludedUserTagAndFragment;
 
             // Bind values in the order they appear after the cloth AND slot.
-            // category bind comes first (slot 1), then creatorBindValues, then license, then the rest.
             public List<string> CreatorBindValues;
             public string LicenseBindValue; // null/empty = no license filter bind
-            public List<string> NameBindValues;  // already LIKE-escaped pairs
+            public List<string> NameBindValues;
             public List<string> ExclusionBindValues;
             public List<string> InclusionBindValues;
             public List<string> TagBindValues;
@@ -7289,9 +7004,6 @@ namespace VPB
             public string CategoryTitle;
         }
 
-        // Builds the WHERE context for a clothing-category COUNT(*) or the full SELECT.
-        // clothAndFragment is NOT included here: callers build their own prefix (SELECT or COUNT(*))
-        // then append creatorAnd, clothAnd per chip, then the remaining fragments.
         internal static GalleryCategoryWhereContext BuildGalleryCategoryWhere(
             VpbSqlite3.Connection conn,
             string categoryTitle,
@@ -7338,7 +7050,6 @@ namespace VPB
             ctx.CategoryTitle = categoryTitle;
             ctx.IsEverything = Gallery.IsEverythingCategoryName(categoryTitle);
 
-            // loaded
             ctx.PkgHasLoadedCol = false;
             try { ctx.PkgHasLoadedCol = PkgHasLoadedColumn(conn); } catch { }
             ctx.LoadedAndFragment = "";
@@ -7356,7 +7067,6 @@ namespace VPB
                 if (hasCol)
                     ctx.VersionAndFragment = BuildPkgVersionFilterFragment("p", pkgVersionFilter);
             }
-            // creator
             var creatorList = SplitCreatorFilterList(creatorFilter);
             ctx.CreatorBindValues = creatorList;
             if (creatorList.Count > 0)
@@ -7390,13 +7100,11 @@ namespace VPB
                 }
             }
 
-            // title-bar search (bare terms OR into tags; tag:/creator:/time structured)
             ctx.NameBindValues = new List<string>();
             ctx.SearchInt64BindValues = new List<long>();
             ctx.SearchTimeAndFragment = "";
             AppendGallerySearchQueryToWhere(ctx, searchQuery ?? GallerySearchQuery.Empty, categoryTitle, ctx.IsEverything);
 
-            // path exclusions
             ctx.ExclusionBindValues = new List<string>();
             if (pathExclusions != null && pathExclusions.Count > 0)
             {
@@ -7414,7 +7122,6 @@ namespace VPB
                 ctx.ExclusionAndFragment = "";
             }
 
-            // path inclusions
             ctx.InclusionBindValues = new List<string>();
             if (pathInclusions != null && pathInclusions.Count > 0)
             {
@@ -7437,10 +7144,6 @@ namespace VPB
                 ctx.InclusionAndFragment = "";
             }
 
-            // Active category tags (TagFilter.* presets like "Top"/"Dress") matched as a plain
-            // substring of list_path: deliberate fuzzy heuristic, NOT a bracketed [tag] token.
-            // list_path holds file paths, so %tag% is the intended match; mirrors the other
-            // tag-LIKE sites in this file. One placeholder per tag, one bind each, ANDed together.
             ctx.TagBindValues = new List<string>();
             if (activeTags != null && activeTags.Count > 0)
             {
@@ -7457,7 +7160,6 @@ namespace VPB
                 ctx.TagAndFragment = "";
             }
 
-            // user tags
             ctx.UserTagBindValues = new List<string>();
             var sbUt = new StringBuilder();
             if (userTagsUntaggedOnly)
@@ -7479,10 +7181,6 @@ namespace VPB
             return ctx;
         }
 
-        // Applies binds from a GalleryCategoryWhereContext to a prepared statement, starting at bind slot `bindStart`.
-        // Order must match SQL fragment order in TryQueryGalleryCategoryRows:
-        // category, creator, license, name/search text, search time (int64), exclusions, inclusions, tags, userTags, excluded userTags.
-        // Returns next available bind slot.
         internal static int BindGalleryCategoryWhere(VpbSqlite3.Statement stmt, GalleryCategoryWhereContext ctx, int bindStart)
         {
             int b = bindStart;
@@ -7540,10 +7238,6 @@ namespace VPB
             return n;
         }
 
-        /// <summary>
-        /// Returns true if rows were read from SQLite (caller still applies path quirks e.g. Saves/Person vs appearance, name filter, PassesFilters).
-        /// </summary>
-        /// <param name="clothingSubfilterForSql">When non-zero and category is Clothing, narrows the query using indexed <c>cloth_attr</c> (schema 4+).</param>
         internal static bool TryQueryGalleryCategoryRows(
             string categoryTitle,
             string currentExtension,
@@ -7624,10 +7318,7 @@ namespace VPB
                 readyScan = s_ReadyScanBinary;
                 catSig = s_ReadyCategoriesSig;
             }
-            // scanBin advances on every scan; readyScan only on rebuild or inline bump. A scan
-            // completing between bump and this check can leave scanBin ahead even when content
-            // is unchanged. AutoSchedule bumps inline when inventory matches; re-read both clocks
-            // after so a scan that completed during the bump can't slip past as accepted.
+            // scanBin advances on every scan; readyScan only on rebuild or inline bump.
             if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
             {
                 AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
@@ -7675,7 +7366,6 @@ namespace VPB
                         pkgVersionFilter, userTagsTaggedOnly, licenseFilter);
 
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
-                    // Grid: default-hide presets when idle (same as PassesHairGalleryFiltersForPath).
                     string hairSqlAnd = BuildHairSubfilterSqlAnd(conn, categoryTitle, hairSubfilterForSql, true);
                     string sceneHubSqlAnd = BuildSceneHubSubfilterSqlAnd(conn, categoryTitle, sceneHubSubfilterForSql);
                     string loadedSelect = ctx.PkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
@@ -7689,7 +7379,6 @@ namespace VPB
                             case SortType.Date: orderBy = " ORDER BY p.wtime" + dir + ", m.list_path ASC"; break;
                             case SortType.Size: orderBy = " ORDER BY p.psize" + dir + ", m.list_path ASC"; break;
                             case SortType.DateCreated: orderBy = " ORDER BY ifnull(p.ictime, p.pctime)" + dir + ", m.list_path ASC"; break;
-                            // SortType.DateAdded / DateUpdated are family-level (creator.packageName aggregates), computed in-process by GallerySortManager.BuildFamilyScanTimes.
                         }
                     }
 
@@ -7697,7 +7386,6 @@ namespace VPB
                     sbSql.Append("SELECT ");
                     if (ctx.IsEverything) sbSql.Append("DISTINCT ");
                     sbSql.Append("m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), p.pctime, ");
-                    // cloth_attr forced '' for EVERYTHING: DISTINCT needs a stable value across real-category rows with packed attrs.
                     sbSql.Append(ctx.IsEverything ? "''" : "ifnull(m.cloth_attr,'')");
                     sbSql.Append(", ");
                     sbSql.Append(loadedSelect);
@@ -7772,8 +7460,6 @@ namespace VPB
             }
             catch (Exception ex)
             {
-                // Bind mismatch / SQLITE_RANGE: retry minimal category=? query so Appearance does not
-                // fall through to package scan that accepts every json|vap (SubScenes).
                 if (!Gallery.IsEverythingCategoryName(categoryTitle)
                     && outRows != null
                     && (ex.Message != null && (ex.Message.IndexOf("sqlite3_bind", StringComparison.OrdinalIgnoreCase) >= 0
@@ -7873,7 +7559,6 @@ namespace VPB
             return " ORDER BY i.last_used DESC, i.item_key ASC";
         }
 
-        // item_usage.item_key uid/path split (keep in sync with TryQueryGalleryHistoryRows + mode counts).
         private const string GalleryHistoryUsagePkgKeySql =
             "(CASE WHEN instr(i.item_key,':/')>0 THEN substr(i.item_key,1,instr(i.item_key,':/')-1) ELSE i.item_key END)";
 
@@ -7900,7 +7585,6 @@ namespace VPB
             sb.Append("WHERE 1=1");
         }
 
-        /// <summary>History browse SQL (<c>item_usage</c>, <c>pkg</c>, <c>cat_mem</c>).</summary>
         internal static bool TryQueryGalleryHistoryRows(
             GalleryHistoryFilterMode mode,
             string[] nameTerms,
@@ -7910,7 +7594,6 @@ namespace VPB
             return TryQueryGalleryHistoryRows(mode, GallerySearchQuery.FromLegacyNameTerms(nameTerms), outRows, out stats);
         }
 
-        /// <summary>History browse SQL (<c>item_usage</c>, <c>pkg</c>, <c>cat_mem</c>).</summary>
         internal static bool TryQueryGalleryHistoryRows(
             GalleryHistoryFilterMode mode,
             GallerySearchQuery searchQuery,
@@ -7995,8 +7678,6 @@ namespace VPB
                         }
                     }
 
-                    // Local (non-package) history items, e.g. loose Saves/scene scenes, have no pkg
-                    // row so the INNER JOIN above skips them. Append them from item_usage directly.
                     AppendLocalHistoryRows(conn, mode, searchQuery ?? GallerySearchQuery.Empty, outRows);
                     SortHistoryRows(outRows, mode);
 
@@ -8054,13 +7735,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Appends History rows for local (non-package) <c>item_usage</c> entries — items whose
-        /// <c>item_key</c> resolves to no package (e.g. loose <c>Saves/scene/*.json</c> scenes). These
-        /// are invisible to <see cref="AppendGalleryHistoryJoinFromWhere"/>'s INNER JOIN on <c>pkg</c>.
-        /// The row carries an empty <see cref="Row.PackageUid"/>; the list builder turns it into a
-        /// loose <c>SystemFileEntry</c> from <see cref="Row.ItemUsageKey"/>.
-        /// </summary>
         private static void AppendLocalHistoryRows(VpbSqlite3.Connection conn, GalleryHistoryFilterMode mode, GallerySearchQuery searchQuery, List<Row> outRows)
         {
             if (conn == null || outRows == null) return;
@@ -8084,7 +7758,6 @@ namespace VPB
                     {
                         GallerySearchBranch br = searchQuery.Branches[bi];
                         if (br == null || br.IsEmpty) continue;
-                        // Tag/creator structured parts cannot match loose rows.
                         if ((br.TagInclude != null && br.TagInclude.Count > 0)
                             || (br.TagExclude != null && br.TagExclude.Count > 0)
                             || (br.CreatorTerms != null && br.CreatorTerms.Count > 0))
@@ -8142,7 +7815,7 @@ namespace VPB
                         r.PackageFileCreationTicksOrInvalid = long.MinValue;
                         r.FirstScannedTicksOrInvalid = 0;
                         r.ClothingAttrPacked = 0;
-                        r.PackageIsLoaded = true; // loose files under the VaM tree are always "loaded"
+                        r.PackageIsLoaded = true;
                         r.ItemUsageCount = (int)Math.Min(Math.Max(stmt.ColumnInt64(1), 0), int.MaxValue);
                         r.ItemLastUsedBinary = stmt.ColumnInt64(2);
                         outRows.Add(r);
@@ -8187,10 +7860,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Reads package rows for a scoped set of UIDs from the local SQLite index (no full scan / no package resolution).
-        /// Returns false if the index is unavailable or stale.
-        /// </summary>
         internal static bool TryQueryPackageRowsForUids(HashSet<string> uids, List<PackageRow> outRows)
         {
             outRows.Clear();
@@ -8208,7 +7877,6 @@ namespace VPB
                 catSig = s_ReadyCategoriesSig;
             }
 
-            // Require a published index for the current package inventory.
             if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
             {
                 AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
@@ -8217,7 +7885,6 @@ namespace VPB
 
             try
             {
-                // SQLite default max variables is typically 999. Stay well under to allow future expansion.
                 const int chunkSize = 400;
                 var chunk = new List<string>(chunkSize);
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -8247,7 +7914,6 @@ namespace VPB
         private static string EscapeLike(string term)
         {
             if (string.IsNullOrEmpty(term)) return "";
-            // Escape LIKE wildcards and the escape character itself.
             return term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
         }
 
@@ -8319,10 +7985,7 @@ namespace VPB
                 readyScan = s_ReadyScanBinary;
                 catSig = s_ReadyCategoriesSig;
             }
-            // scanBin advances on every scan; readyScan only on rebuild or inline bump. A scan
-            // completing between bump and this check can leave scanBin ahead even when content
-            // is unchanged. AutoSchedule bumps inline when inventory matches; re-read both clocks
-            // after so a scan that completed during the bump can't slip past as accepted.
+            // scanBin advances on every scan; readyScan only on rebuild or inline bump.
             if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
             {
                 AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
@@ -8508,10 +8171,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Reads package rows for a scoped ordered list of UIDs, applying an AND-of-terms filter on <c>pkg.uid</c> using SQL LIKE.
-        /// Returns false if the index is unavailable or stale.
-        /// </summary>
+        /// <summary>Reads package rows for a scoped ordered list of UIDs, applying an AND-of-terms filter on pkg.uid using SQL LIKE.</summary>
         internal static bool TryQueryPackageRowsForUidsWithAllTerms(List<string> orderedUids, string[] termsLower, List<PackageRow> outRows)
         {
             outRows.Clear();
@@ -8530,7 +8190,6 @@ namespace VPB
                 catSig = s_ReadyCategoriesSig;
             }
 
-            // Require a published index for the current package inventory.
             if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
             {
                 AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
@@ -8539,7 +8198,7 @@ namespace VPB
 
             try
             {
-                const int chunkSize = 350; // leave headroom for term binds
+                const int chunkSize = 350;
                 var chunk = new List<string>(chunkSize);
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
@@ -8884,8 +8543,7 @@ namespace VPB
             }
         }
 
-        // Direct pkg_dep read with NO scan-freshness gate: an installed package's declared deps are
-        // immutable, so the gate TryReadRecursiveDependencyUids applies is irrelevant for this lookup.
+        // Direct pkg_dep read with NO scan-freshness gate: an installed package's declared deps are immutable.
         internal static bool TryReadDeclaredDependencyUidsDirect(string srcUid, HashSet<string> outUids)
         {
             if (outUids == null) return false;
@@ -9014,7 +8672,6 @@ namespace VPB
                         }
                     }
                     conn.ExecUtf8("COMMIT;");
-                    // Also reject a rebuild that started and finished while the batch was reading.
                     if (ScalarInt64(conn, "PRAGMA data_version") != version)
                         return false;
                 }
@@ -9060,7 +8717,6 @@ namespace VPB
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
-                    // Exact UID match always.
                     using (var st = conn.Prepare("SELECT DISTINCT src_uid FROM pkg_dep WHERE dep_uid = ?"))
                     {
                         st.BindText(1, targetUid);
@@ -9073,7 +8729,6 @@ namespace VPB
                         }
                     }
 
-                    // Group match (Author.Name.*): includes .latest, .minX, numeric versions, etc.
                     if (!string.IsNullOrEmpty(targetShort))
                     {
                         using (var st2 = conn.Prepare("SELECT DISTINCT src_uid FROM pkg_dep WHERE dep_uid LIKE ? ESCAPE '\\'"))

@@ -15,10 +15,6 @@ namespace VPB
             return vr ? (int)LayoutPresetMode.VR : (int)LayoutPresetMode.Desktop;
         }
 
-        /// <summary>
-        /// Snapshot of the live arrangement, stamped with the running interaction mode.
-        /// This pane is captured first so apply can reconcile against the coroutine host.
-        /// </summary>
         internal GalleryLayoutPreset CaptureCurrentLayout(string name)
         {
             var preset = new GalleryLayoutPreset();
@@ -118,10 +114,6 @@ namespace VPB
             return p;
         }
 
-        /// <summary>
-        /// Pose in the player-UI root frame (VaM's mainHUDAttachPoint), which rides the player rig —
-        /// a world pose would be meaningless after a teleport or a world-scale change.
-        /// </summary>
         private void CapturePaneWorldPose(out Vector3 localPos, out Quaternion localRot)
         {
             localPos = Vector3.zero;
@@ -150,7 +142,6 @@ namespace VPB
             localRot = Quaternion.Inverse(root.rotation) * t.rotation;
         }
 
-        /// <summary>Human-readable default name derived from the arrangement itself.</summary>
         internal static string BuildSuggestedLayoutName(GalleryLayoutPreset preset)
         {
             if (preset == null) return "Layout";

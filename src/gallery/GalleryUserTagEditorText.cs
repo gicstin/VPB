@@ -4,10 +4,8 @@ using System.Text;
 
 namespace VPB
 {
-    /// <summary>Parsing + validation for tag editor multiline field. Caveman want honest errors, no silent drop.</summary>
     internal static class GalleryUserTagEditorText
     {
-        /// <summary>Below this many bad lines cave use status bar; at or above cave use popup list.</summary>
         internal const int RejectPopupMinBadLineCount = 2;
 
         /// <summary>Split paste: newline only, trim ends, skip empty. Order kept.</summary>
@@ -63,7 +61,6 @@ namespace VPB
             return s.Substring(0, maxChars) + "…";
         }
 
-        /// <summary>Build dialog body: every bad line listed, cave hide nothing.</summary>
         internal static string FormatTagValidationErrorBody(IList<KeyValuePair<string, string>> lineAndReason)
         {
             if (lineAndReason == null || lineAndReason.Count == 0) return "";

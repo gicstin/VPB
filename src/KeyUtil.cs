@@ -6,7 +6,6 @@ namespace VPB
 {
 	public class KeyUtil
 	{
-		/// <summary>Mouse buttons cannot be plugin hotkeys (clicks would fire them constantly).</summary>
 		public static bool IsDisallowedHotkeyKey(KeyCode kc)
 		{
 			if (kc == KeyCode.None) return true;
@@ -104,7 +103,6 @@ namespace VPB
 		{
 			string[] array = keyPattern.Split('+');
 			List<KeyCode> list = new List<KeyCode>();
-			//string text;
 			KeyCode code=KeyCode.Home;
 			if (array.Length == 1)
 			{
@@ -115,7 +113,7 @@ namespace VPB
 			{
 				for (int i = 0; i < array.Length - 1; i++)
 				{
-					string a = array[i].ToLower();
+					string a = array[i].ToLowerInvariant();
 					if (a == "ctrl")
 					{
 						list.Add(KeyCode.LeftControl);
@@ -162,7 +160,7 @@ namespace VPB
 			{
 				case "`": return KeyCode.BackQuote;
 				case "~": return KeyCode.BackQuote;
-				case "§": return KeyCode.BackQuote; // Add support for Section sign
+				case "§": return KeyCode.BackQuote;
 				case "0": return KeyCode.Alpha0;
 				case "1": return KeyCode.Alpha1;
 				case "2": return KeyCode.Alpha2;

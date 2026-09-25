@@ -6,15 +6,9 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Title-bar Filter button + popup. Owns source (All / Local / .var) plus browse toggles
-        // that used to live in the sort menu (Hidden only, Always loaded, Hide old versions,
-        // Show hidden items). Active chrome + chips; right-click clears this button's filters.
-
         private const int GlobalSourceFilterButtonWidth = 88;
         private const float GlobalSourceFilterButtonHeight = GalleryUiDesignTokens.TitleBarChipRef;
         private const float GlobalSourceFilterButtonCenterRelativeX = -398f;
-        // Property-sheet popup: label column + 3-way segments. Wider than a plain menu so
-        // "Always loaded" / "Untagged" stay readable (Galitz form fill-in; Johnson proximity).
         private const float BrowseFilterMenuPanelWidthRef = 432f;
         private const float BrowseFilterMenuPadRef = GalleryUiDesignTokens.BandPadRef;
         private const float BrowseFilterMenuSpacingRef = GalleryUiDesignTokens.ControlRowGapRef;
@@ -99,7 +93,6 @@ namespace VPB
             AddTooltip(globalSourceFilterBtn, "gallery.tooltip.browse_filter",
                 "Filter: source, visibility, load, license. Icon rows = 3-way choice. Hover a label for meaning. Right-click or Reset clears.");
 
-            // Compact: filter-off idle / filter when active (filter-search is Filter Presets).
             try
             {
                 Sprite sp = UI.LoadIconSprite("filter-off", UI.BarIconGlyphTint);
@@ -220,7 +213,6 @@ namespace VPB
             if (panelImg != null)
                 panelImg.color = GalleryUiColorTokens.PopupSurface;
 
-            // Primary: Source as labeled row (no extra section — von Restorff one focus).
             int sourceSeg = currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local
                 ? 1
                 : (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var ? 2 : 0);
@@ -497,7 +489,6 @@ namespace VPB
             if (globalSourceFilterMenuPanelGO == null) return;
             GameObject sep = new GameObject("BrowseFilterDivider");
             sep.transform.SetParent(globalSourceFilterMenuPanelGO.transform, false);
-            // Transparent spacer; 1px hairline child — Image on root would paint a 7px slab.
             Image bg = UI.AddImage(sep, new Color(0f, 0f, 0f, 0f), false);
             if (bg != null) bg.raycastTarget = false;
             UI.AddLE(sep, preferredHeight: BrowseFilterDividerHeightRef, minHeight: BrowseFilterDividerHeightRef, flexibleWidth: 1f);
@@ -537,10 +528,6 @@ namespace VPB
             AddTooltip(row, "gallery.filter.tip.reset", "Clear source, visibility, load, and license filters. Right-click Filter button does the same.");
         }
 
-        /// <summary>
-        /// Property-sheet row: icon + field name left, exclusive segments right.
-        /// Armed rows get a left stripe + lifted fill (not color-only — Johnson / WCAG).
-        /// </summary>
         private void AddBrowseFilterLabeledRow(
             string label,
             string iconRole,
@@ -648,11 +635,6 @@ namespace VPB
             catch { return null; }
         }
 
-        /// <summary>
-        /// Visible exclusive segment row (usually 3). Recognition over Shift+click.
-        /// Empty labels skipped when <paramref name="allowEmptySlots"/>.
-        /// Optional <paramref name="parent"/> nests inside a labeled row.
-        /// </summary>
         private void AddBrowseFilterSegmentRow(
             string[] labels,
             int selectedIndex,
@@ -778,7 +760,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Default browse mode: newest package per family.</summary>
         private static BrowseFilterCycle DefaultBrowseOldVersionsCycle
         {
             get { return BrowseFilterCycle.Apply; }
@@ -862,10 +843,6 @@ namespace VPB
             PositionBrowseFilterMenuBelowButton(panelRT, s);
         }
 
-        /// <summary>
-        /// Hang panel from Filter button bottom-center in overlay space.
-        /// Do not copy click Y or clamp the menu above the button (tall content used to slide up).
-        /// </summary>
         private void PositionBrowseFilterMenuBelowButton(RectTransform panelRT, float s)
         {
             if (panelRT == null || globalSourceFilterBtn == null) return;
@@ -1140,7 +1117,6 @@ namespace VPB
 
         private void OnGlobalSourceFilterRowClicked(VPBConfig.GlobalSourceFilterValue value)
         {
-            // Re-click active Local/.var → All (toggle off). All stays selected.
             if (currentGlobalSourceFilter == value)
             {
                 if (value != VPBConfig.GlobalSourceFilterValue.All)
@@ -1334,7 +1310,6 @@ namespace VPB
                 RebuildGlobalSourceFilterMenuOptions();
         }
 
-        /// <summary>Right-click Filter button: clear filters owned by this control.</summary>
         private void ClearTitleBarBrowseFiltersFromButton()
         {
             bool changed = ClearTitleBarBrowseFilters(refresh: true);
@@ -1342,7 +1317,6 @@ namespace VPB
             HideGlobalSourceFilterDropdown();
         }
 
-        /// <returns>True when any owned filter changed.</returns>
         private bool ClearTitleBarBrowseFilters(bool refresh)
         {
             bool changed = false;
@@ -1520,10 +1494,7 @@ namespace VPB
                 HideGlobalSourceFilterDropdown();
         }
 
-        /// <summary>
-        /// Legacy sort modes HiddenOnly / AutoInstallOnly → Filter cycles.
-        /// Keeps enum values stable for persisted cache keys.
-        /// </summary>
+        /// <summary>Legacy sort modes HiddenOnly / AutoInstallOnly → Filter cycles.</summary>
         private void MigrateLegacyExclusiveFileSortIfNeeded()
         {
             SortState st = GetSortState("Files");
@@ -1566,7 +1537,6 @@ namespace VPB
             }
             else if (st.Type == SortType.Hidden)
             {
-                // Sort-by-hidden removed from menu; escalate to Show-hidden cycle if idle.
                 if (_browseHiddenCycle == BrowseFilterCycle.Off)
                 {
                     _browseHiddenCycle = BrowseFilterCycle.Apply;
@@ -1592,7 +1562,6 @@ namespace VPB
             try { UpdateSortButtonText(fileSortTypeText, fileSortDirText, st); } catch { }
         }
 
-        /// <summary>Hydrate cycles from mirrored settings when cycles still Off (startup / external toggle).</summary>
         private void SyncBrowseFilterCyclesFromMirroredSettings()
         {
             if (_browseHiddenCycle == BrowseFilterCycle.Off)
@@ -1608,7 +1577,6 @@ namespace VPB
             {
                 try
                 {
-                    // Legacy cfg: HideOldVersions true → Newest. False keeps All versions (Off).
                     if (Settings.Instance != null && Settings.Instance.HideOldVersions != null
                         && Settings.Instance.HideOldVersions.Value)
                         _browseOldVersionsCycle = BrowseFilterCycle.Apply;

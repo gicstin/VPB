@@ -23,19 +23,16 @@ namespace VPB
         Exclude = 1,
     }
 
-    /// <summary>One committed title-search atom (Enter-committed chip).</summary>
     internal struct TitleSearchChip
     {
         public TitleSearchChipKind Kind;
         public TitleSearchChipPolarity Polarity;
         public string Value;
         public int BranchIndex;
-        /// <summary>Quoted on serialize → exact pack-field match (facet click / multi-word).</summary>
         public bool Exact;
 
         public bool CanExclude
         {
-            // Broad / Tag / data-pack atoms may exclude. Creator / Status may not.
             get
             {
                 return Kind == TitleSearchChipKind.Tag
@@ -70,7 +67,6 @@ namespace VPB
                 case TitleSearchChipKind.PackAny:
                     return (Polarity == TitleSearchChipPolarity.Exclude ? "-lap:" : "lap:") + v;
                 default:
-                    // Broad: bare word; exclude serializes as -term (honest broad exclude).
                     return Polarity == TitleSearchChipPolarity.Exclude ? "-" + v : v;
             }
         }
@@ -127,7 +123,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Serialize / hydrate title-search chips ↔ <see cref="GallerySearchQuery"/> string.</summary>
     internal static class GalleryTitleSearchChipUtil
     {
         private static readonly StringBuilder _sb = new StringBuilder(64);
@@ -253,7 +248,6 @@ namespace VPB
             string v = value.Trim().ToLowerInvariant();
             if (v.Length == 0) return false;
 
-            // Creator / Status cannot exclude.
             if (polarity == TitleSearchChipPolarity.Exclude
                 && kind != TitleSearchChipKind.Tag
                 && kind != TitleSearchChipKind.Broad
@@ -272,7 +266,6 @@ namespace VPB
                 if (c.Kind != kind) continue;
                 if (!string.Equals(c.Value, v, StringComparison.OrdinalIgnoreCase)) continue;
 
-                // Same kind+value: update polarity (e.g. Shift+Enter / drag Incl↔Excl).
                 c.Polarity = polarity;
                 if (exact) c.Exact = true;
                 dest[i] = c;
@@ -299,10 +292,6 @@ namespace VPB
             return SetPolarity(chips, index, next);
         }
 
-        /// <summary>
-        /// Set include/exclude. Broad stays Broad (<c>-term</c>); Tag stays Tag (<c>-#term</c>).
-        /// Creator/Status cannot exclude.
-        /// </summary>
         internal static bool SetPolarity(List<TitleSearchChip> chips, int index, TitleSearchChipPolarity polarity)
         {
             if (chips == null || index < 0 || index >= chips.Count) return false;

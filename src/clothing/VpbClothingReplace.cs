@@ -188,7 +188,6 @@ namespace VPB
             VpbClothingFootprint outfit = VpbClothingFootprint.Union(parts);
             if (outfit == null || !outfit.IsUsable) return false;
 
-
             return ApplyFootprint(atom, outfit, presetUid, null, itemUids);
         }
 
@@ -372,6 +371,5 @@ namespace VPB
 
             return displaced.Count > 0;
         }
-
     }
 }

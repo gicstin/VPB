@@ -16,9 +16,6 @@ namespace VPB
             public bool Enabled;
         }
 
-        // Internal wrappers so VamHookPlugin quick-menu buttons can trigger existing private actions.
-        // (GalleryPanel is partial, so this file can call private members defined in other parts.)
-
         internal void QuickMenu_Undo()
         {
             try { Undo(); } catch { }
@@ -34,7 +31,6 @@ namespace VPB
             QuickMenu_LoadRandom(null);
         }
 
-        /// <param name="preselected">Hover-preview pick to launch verbatim; null = pick now.</param>
         internal void QuickMenu_LoadRandom(FileEntry preselected)
         {
             try
@@ -57,7 +53,6 @@ namespace VPB
 
         private IEnumerator RandomSceneImportRoutine(FileEntry preselected)
         {
-            // Capture current view state.
             string prevTitle = null;
             string prevExt = null;
             string prevPath = null;
@@ -67,8 +62,6 @@ namespace VPB
 
             bool navigated = false;
 
-            // Navigate to Scenes category when not already there so we get a scene file pool.
-            // A hover-preview pick already names the scene, so the pool trip is only owed without one.
             if (preselected == null && !string.Equals(prevTitle, "Scenes", StringComparison.Ordinal))
             {
                 Gallery.Category cat = default(Gallery.Category);
@@ -101,7 +94,6 @@ namespace VPB
             FileEntry sceneFile = preselected;
             if (sceneFile == null)
             {
-                // Pick from the current scene file pool.
                 var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
                     ? currentFilteredFiles : lastFilteredFiles;
 
@@ -127,7 +119,6 @@ namespace VPB
                 try { VpbRandomHistory.Note(GetRandomHistoryScope(), sceneFile); } catch { }
             }
 
-            // LoadSourceScene is async for full JSON; wait so person ids + scene JSON are ready.
             try { LoadSourceScene(sceneFile); }
             catch (Exception ex) { LogUtil.LogWarning("[VPB] Random Scene Import: LoadSourceScene failed: " + ex.Message); }
 
@@ -144,11 +135,9 @@ namespace VPB
                 yield break;
             }
 
-            // Pick the best female person atom from the scene.
             importSidebarSourceAtomId = PickBestFemalePersonId(
                 importSidebarSourcePersonIds, importSidebarLoadedSceneJSON);
 
-            // Ensure a target atom is selected.
             if (importSidebarTargetAtom == null)
             {
                 try { RefreshTargetCandidates(); } catch { }
@@ -163,11 +152,9 @@ namespace VPB
                 yield break;
             }
 
-            // Apply using current sidebar type/option settings.
             try { OnImportSidebarApplyClicked(); }
             catch (Exception ex) { LogUtil.LogWarning("[VPB] Random Scene Import: apply failed: " + ex.Message); }
 
-            // Status feedback.
             try
             {
                 string sceneName = !string.IsNullOrEmpty(sceneFile.Path)
@@ -180,7 +167,6 @@ namespace VPB
             }
             catch { }
 
-            // Refresh sidebar UI if open.
             if (importSidebarActive)
             {
                 try { RefreshImportSidebarWizardHeader(); } catch { }
@@ -189,16 +175,11 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Selects the most appropriate female Person atom from a scene.
-        /// Priority: geometry storable <c>useFemaleMorphSet=true</c> &gt; id name heuristic &gt; first atom.
-        /// </summary>
         private static string PickBestFemalePersonId(List<string> personIds, JSONClass sceneJSON)
         {
             if (personIds == null || personIds.Count == 0) return null;
             if (personIds.Count == 1) return personIds[0];
 
-            // JSON path: look for geometry storable with useFemaleMorphSet = true.
             if (sceneJSON != null)
             {
                 JSONArray atoms = sceneJSON["atoms"] != null ? sceneJSON["atoms"].AsArray : null;
@@ -228,7 +209,6 @@ namespace VPB
                 }
             }
 
-            // Fallback: atom-id name heuristic — skip atoms whose id looks male.
             foreach (string id in personIds)
             {
                 if (!LooksLikeMalePersonId(id)) return id;
@@ -240,9 +220,9 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(id)) return false;
             string lower = id.ToLowerInvariant();
-            if (lower.Contains("female")) return false; // "female" contains "male" — not male
+            if (lower.Contains("female")) return false;
             if (lower == "male") return true;
-            if (lower.StartsWith("male") || lower.EndsWith("male")) return true;
+            if (lower.StartsWith("male", StringComparison.Ordinal) || lower.EndsWith("male", StringComparison.Ordinal)) return true;
             if (lower.Contains(" male") || lower.Contains("_male") || lower.Contains(".male")) return true;
             return false;
         }
@@ -263,7 +243,6 @@ namespace VPB
             // Wait for category refresh before calling LoadRandom, otherwise we may pick from old list.
             if (string.IsNullOrEmpty(categoryName)) yield break;
 
-            // Capture current panel view state.
             string prevTitle = null;
             string prevExt = null;
             string prevPath = null;
@@ -277,8 +256,6 @@ namespace VPB
                 try { targetUid = QuickMenu_GetSelectedTargetPersonUid(); } catch { targetUid = null; }
             }
 
-            // Resolve category definition without touching UI first.
-            // Note: some categories have display aliases (e.g. "Person Skin").
             string lookupName = categoryName;
             bool catFound = false;
             Gallery.Category cat = default(Gallery.Category);
@@ -286,7 +263,6 @@ namespace VPB
             {
                 if (categories != null)
                 {
-                    // Alias fix: quickmenu "Skin" maps to category name "Person Skin" in some builds.
                     if (string.Equals(lookupName, "Skin", System.StringComparison.OrdinalIgnoreCase))
                     {
                         for (int pass = 0; pass < 2; pass++)
@@ -323,11 +299,8 @@ namespace VPB
             catch { catFound = false; }
             if (!catFound) yield break;
 
-            // Temporarily show category so LoadRandom uses correct pool + auto-action rules.
             try { Show(cat.name, cat.extension, cat.path); } catch { }
 
-            // Wait for async refresh to complete for new category.
-            // At least one frame so RefreshFilesRoutine can start and bind lists.
             yield return null;
             int guard = 0;
             while (refreshCoroutine != null && guard < 600)
@@ -335,7 +308,6 @@ namespace VPB
                 guard++;
                 yield return null;
             }
-            // If RefreshFiles did not run, still allow one more frame for list rebuild.
             if (guard == 0) yield return null;
 
             if (preserveTarget && !string.IsNullOrEmpty(targetUid))
@@ -350,7 +322,6 @@ namespace VPB
 
             if (preserveUi && !string.IsNullOrEmpty(prevTitle))
             {
-                // Restore previous view (best-effort).
                 try { Show(prevTitle, prevExt, prevPath); } catch { }
                 if (preserveTarget && !string.IsNullOrEmpty(targetUid))
                 {
@@ -392,7 +363,6 @@ namespace VPB
 
         internal void QuickMenu_Save()
         {
-            // Save scene from gallery (opens VaM file dialog)
             try { SaveSceneFromGallery(); } catch { }
         }
 
@@ -494,7 +464,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Same as the History side button: toggle History browse / usage filters.</summary>
         internal void QuickMenu_OpenGalleryHistory()
         {
             try
@@ -505,25 +474,21 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Toggle Creator Mode (same as side-rail / Ctrl+Shift+K).</summary>
         internal void QuickMenu_ToggleCreatorMode()
         {
             try { ToggleCreatorMode(); } catch { }
         }
 
-        /// <summary>Open Strip Scene keep selector (enters Creator Mode if needed).</summary>
         internal void QuickMenu_OpenStripScene()
         {
             try { OpenSceneStripKeepSelector(); } catch { }
         }
 
-        /// <summary>Open Cleanup mode using the same entry point as the toolbox Cleanup action.</summary>
         internal void QuickMenu_OpenCleanupMode()
         {
             try { TboxOpenCleanupView(); } catch { }
         }
 
-        /// <summary>Toggle Cleanup mode: open when closed, exit to previous side state when open.</summary>
         internal void QuickMenu_ToggleCleanupMode()
         {
             try
@@ -540,11 +505,9 @@ namespace VPB
             try { ToggleRatingSort(); } catch { }
         }
 
-        /// <summary>True when ★ presence filter is armed (rated or not-rated).</summary>
         internal bool QuickMenu_IsStarFilterEnabled()
         {
             try { return HasRatingPresenceFilter(); } catch { return false; }
         }
     }
 }
-

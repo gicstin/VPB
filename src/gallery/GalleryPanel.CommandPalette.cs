@@ -7,10 +7,6 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>
-    /// Command palette (Ctrl+Shift+P). Cold path overlay — built on open, destroyed on close.
-    /// Recognition-assisted recall: groups, aliases, availability, recent, category type-ahead.
-    /// </summary>
     public partial class GalleryPanel
     {
         private const int CommandPaletteRecentMax = 8;
@@ -63,7 +59,6 @@ namespace VPB
         private string _commandPaletteLastFilter = "";
         private float _commandPaletteBuiltChromeScale;
         private float _commandPaletteRowSpacing;
-        /// <summary>Pixels content scrolled down from top (content pivot top).</summary>
         private float _commandPaletteScrollY;
         private bool _commandPaletteScrollbarSync;
 
@@ -117,10 +112,7 @@ namespace VPB
             });
         }
 
-        /// <summary>
-        /// Named layout presets of the running mode, resolved by id so a rename or reorder cannot
-        /// fire the wrong one. The catalog is rebuilt whenever presets change.
-        /// </summary>
+        /// <summary>Named layout presets of the running mode, resolved by id so a rename or reorder cannot fire the wrong one.</summary>
         private void AddCommandPaletteLayoutPresetEntries(string group)
         {
             var list = new List<GalleryLayoutPreset>(8);
@@ -144,7 +136,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Drops the cached catalog so layout-preset rows rebuild with current names.</summary>
         internal void InvalidateCommandPaletteCatalog()
         {
             _commandPaletteCatalog.Clear();
@@ -169,7 +160,6 @@ namespace VPB
             const string GTools = "Tools";
             const string GHelp = "Help";
 
-            // --- Edit ---
             AddCommandPaletteEntry("undo", "gallery.cmd.undo", "Undo", ScHint(VpbShortcut.Undo), GEdit, "revert back",
                 () => { try { Undo(); } catch { } },
                 CmdPaletteHasUndo);
@@ -180,7 +170,6 @@ namespace VPB
                 () => { try { Redo(); } catch { } },
                 CmdPaletteHasRedo);
 
-            // --- Browse ---
             AddCommandPaletteEntry("search", "gallery.cmd.focus_search", "Focus search", ScHint(VpbShortcut.FocusSearch), GBrowse, "find filter title query",
                 () => { try { FocusTitleSearchInput(); } catch { } });
             AddCommandPaletteEntry("clear_filters", "gallery.cmd.clear_filters", "Clear browse filters", "", GBrowse, "reset chips qf tags",
@@ -219,7 +208,6 @@ namespace VPB
             AddCommandPaletteEntry("load_random", "gallery.cmd.load_random", "Load random (filtered view)", "", GBrowse, "dice chance pick",
                 () => { try { LoadRandom(); } catch { } });
 
-            // --- Modes ---
             AddCommandPaletteEntry("scene_tools", "gallery.cmd.scene_tools", "Toggle Scene Tools", ScHint(VpbShortcut.SceneTools), GModes, "creator strip keep atoms",
                 () => { try { ToggleCreatorMode(); } catch { } });
             AddCommandPaletteEntry("scene_eraser", "gallery.cmd.scene_eraser", "Toggle Scene Eraser", ScHint(VpbShortcut.SceneEraser), GModes, "remove delete atoms erase",
@@ -263,7 +251,6 @@ namespace VPB
             AddCommandPaletteEntry("strip", "gallery.cmd.strip_scene", "Strip Scene window", ScHint(VpbShortcut.StripScene), GModes, "keep recipe",
                 () => { try { HotkeyOpenStripSceneDirect(); } catch { } });
 
-            // --- Selection ---
             AddCommandPaletteEntry("apply", "gallery.cmd.apply", "Apply selection", ScHint(VpbShortcut.Apply), GSel, "load wear use",
                 () => { try { TryKeyboardApplySelection(); } catch { } },
                 () => CmdPaletteHasSelection() || !string.IsNullOrEmpty(selectedPath));
@@ -276,7 +263,6 @@ namespace VPB
                 () => { try { TboxRemoveSelectedFromHistory(); } catch { } },
                 () => CmdPaletteIsHistoryBrowse() && CmdPaletteHasSelection());
 
-            // --- Packages ---
             AddCommandPaletteEntry("delete_packages", "gallery.cmd.delete_packages", "Delete selected packages/scenes", ScHint(VpbShortcut.DeleteSelection), GPkg, "disk remove trash",
                 () => { try { TboxDeleteSelectedPackages(); } catch { } },
                 CmdPaletteHasSelection);
@@ -308,7 +294,6 @@ namespace VPB
             AddCommandPaletteEntry("open_hub", "gallery.cmd.open_hub", "Open Hub browse", "", GPkg, "store packages",
                 () => { try { VamHookPlugin.singleton?.OpenHubBrowse(); } catch { } });
 
-            // --- View ---
             AddCommandPaletteEntry("layout", "gallery.cmd.layout", "Toggle Grid / List layout", "", GView, "rows columns",
                 () => { try { ToggleLayoutMode(); } catch { } });
             AddCommandPaletteEntry("ui_scale_up", "gallery.cmd.ui_scale_up", "UI scale up", ScHint(VpbShortcut.UiScaleUp), GView, "chrome bigger zoom",
@@ -363,7 +348,6 @@ namespace VPB
                 () => { try { OpenSettingsGroup("vr"); } catch { } },
                 () => { try { return XrUtils.IsVrActive(); } catch { return false; } });
 
-            // --- Tools ---
             AddCommandPaletteEntry("exit_scene_tools", "gallery.cmd.exit_scene_tools", "Exit Scene Tools", "Esc", GTools, "leave creator",
                 () => { try { ExitCreatorMode(force: true); } catch { } },
                 () => creatorModeActive || creatorModeStripBusy);
@@ -389,7 +373,6 @@ namespace VPB
                 () => { try { InsightsRescanSelection(); } catch { } },
                 CmdPaletteHasSelection);
 
-            // --- Help ---
             AddCommandPaletteEntry("help", "gallery.cmd.help", "Open help (Hotkeys)", ScHint(VpbShortcut.Help), GHelp, "shortcuts chords",
                 () => { try { OpenInAppHelpToSection("hotkeys"); } catch { try { ToggleInAppHelpPanel(); } catch { } } });
             AddCommandPaletteEntry("help_filtering", "gallery.cmd.help_filtering", "Help: Filtering", "", GHelp, "search chips",
@@ -647,9 +630,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Manual pixel scroller — no Unity ScrollRect (its normalized 0↔1 + Sync fights short lists).
-        /// </summary>
         private GameObject BuildCommandPaletteScrollHost(GameObject panelGO, float sbW, float s)
         {
             GameObject host = UI.CreateChildRT(panelGO, "CmdScroll", AnchorPresets.stretchAll);
@@ -715,7 +695,6 @@ namespace VPB
         private void CommandPaletteWheelStep(float scrollDeltaY, float stepPx)
         {
             if (Mathf.Abs(scrollDeltaY) < 0.01f) return;
-            // Normalize to one notch — some drivers send ±120 and would leap the whole list.
             float dir = scrollDeltaY > 0f ? 1f : -1f;
             CommandPaletteSetScrollY(_commandPaletteScrollY - dir * stepPx);
         }
@@ -729,7 +708,6 @@ namespace VPB
                 CommandPaletteSetScrollY(0f);
                 return;
             }
-            // BottomToTop: value 1 = top, 0 = bottom.
             CommandPaletteSetScrollY((1f - Mathf.Clamp01(value)) * scrollable, fromScrollbar: true);
         }
 
@@ -775,7 +753,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Set content height from row LayoutElements — no ContentSizeFitter.</summary>
         private void FinalizeCommandPaletteContentHeight()
         {
             if (_commandPaletteListRT == null) return;
@@ -805,7 +782,6 @@ namespace VPB
             }
             if (h < 1f) h = 1f;
             _commandPaletteListRT.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
-            // Keep current scroll clamped to new range.
             CommandPaletteSetScrollY(_commandPaletteScrollY);
         }
 
@@ -829,7 +805,6 @@ namespace VPB
             _commandPaletteScrollbar = null;
         }
 
-        /// <summary>Live ChromeScale adapt — rebuild overlay, keep filter text + selection index.</summary>
         private void RescaleCommandPaletteIfOpen()
         {
             if (!_commandPaletteOpen) return;
@@ -894,7 +869,6 @@ namespace VPB
 
             if (browsing)
             {
-                // Recent first
                 bool anyRecent = false;
                 for (int r = 0; r < _commandPaletteRecent.Count; r++)
                 {
@@ -1295,7 +1269,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Apply current grid selection via keyboard (Enter/Space). Settings: toggle row. Warm path.</summary>
         private void TryKeyboardApplySelection()
         {
             if (!IsVisible) return;
@@ -1350,7 +1323,6 @@ namespace VPB
             ApplyFileEntryNow(file);
         }
 
-        /// <summary>Enter/Space on settings list — toggle/cycle selected row (filter preserved).</summary>
         private void TryKeyboardToggleSelectedSetting()
         {
             FileEntry file = null;

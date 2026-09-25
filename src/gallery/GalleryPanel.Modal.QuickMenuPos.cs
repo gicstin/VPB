@@ -355,6 +355,5 @@ namespace VPB
             slider.handleRect = handleRt;
             slider.targetGraphic = handleImg;
         }
-
     }
 }

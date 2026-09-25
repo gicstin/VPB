@@ -12,12 +12,7 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-
-        /// <summary>
-        /// Rebuilds only split-view bottom panes (tags, hub tags, scene/appearance source rows). Used after
-        /// <see cref="UpdateTabsImpl(bool,bool)"/> with <c>rebuildSubPaneSideTabLists: false</c> so heavy tag UI
-        /// can run on the next frame while category/creator strips already match the new category.
-        /// </summary>
+        /// <summary>Rebuilds only split-view bottom panes (tags, hub tags, scene/appearance source rows).</summary>
         private void RebuildSubPaneSideTabListsOnly()
         {
             RebuildSubPaneSideTabListForSide(isLeft: true);
@@ -58,7 +53,6 @@ namespace VPB
                 crList.Clear();
             }
             
-            // Clear virtual pool references
             if (isLeft) _leftCreatorVirtButtons.Clear();
             else _rightCreatorVirtButtons.Clear();
 
@@ -255,7 +249,6 @@ namespace VPB
             return (GalleryUiDesignTokens.SideTabRowHeightRef + GalleryUiDesignTokens.SideTabRowSpacingRef) * s;
         }
 
-        /// <summary>Virtualized side-tab row stride (button height + gap). Same for creators and user tags.</summary>
         private float SideTabVirtRowStridePx()
         {
             return CreatorVirtRowHeight();
@@ -266,7 +259,6 @@ namespace VPB
             if (btn == null) return;
             RoundedRect rr = btn.GetComponent<RoundedRect>();
             if (rr != null) rr.cornerRadiusFraction = frac;
-            // Category icon color chip (TabLeftIcon/Backdrop) — same fraction as rest of chrome.
             Transform iconBackdrop = btn.transform.Find("TabLeftIcon/Backdrop");
             if (iconBackdrop != null)
             {
@@ -338,8 +330,6 @@ namespace VPB
             if (parent == null) return;
             if (desired < 8) desired = 8;
 
-            // If we have buttons in the pool that are parented elsewhere (e.g. returned to shared pool),
-            // we need to clear our local list and start fresh.
             for (int i = 0; i < pool.Count; i++)
             {
                 if (pool[i] == null || pool[i].transform.parent != parent)
@@ -351,8 +341,6 @@ namespace VPB
 
             while (pool.Count < desired)
             {
-                // Create private buttons for the virtual list that are NOT part of the shared tabButtonPool.
-                // This prevents UpdateTabs from stealing them back every frame.
                 GameObject btnGO = UI.CreateUIButton(parent.gameObject,
                     GalleryUiDesignTokens.TabButtonPreferredWidthRef,
                     GalleryUiDesignTokens.SideTabRowHeightRef, "", 18, 0, 0, AnchorPresets.middleLeft, null);
@@ -380,14 +368,10 @@ namespace VPB
             EnsureSideTabVirtPool(isLeft ? _leftCreatorVirtButtons : _rightCreatorVirtButtons, parent, desired);
         }
 
-        /// <summary>
-        /// Binds a pooled button to a specific creator entry.
-        /// </summary>
         private void BindCreatorVirtButton(GameObject btnGO, CreatorCacheEntry creator)
         {
             if (btnGO == null) return;
             string cName = creator.Name ?? "";
-            // Selection highlight — not CreatorFilterContains (that is true for everyone when filter empty).
             bool isActive = ActiveFilterContainsCreatorSelection(cName);
             Color btnColor = isActive ? ColorCreator : ColorInactiveRow;
             string label = cName + " (" + creator.Count + ")";
@@ -438,9 +422,6 @@ namespace VPB
             BindCreatorRatingChrome(btnGO, cName);
         }
 
-        /// <summary>
-        /// Updates the visible creators in the virtualized list based on the current scroll position.
-        /// </summary>
         private void UpdateCreatorVirtualVisible(bool isLeft)
         {
             if (_creatorVirtView == null) return;
@@ -470,14 +451,13 @@ namespace VPB
 
             if (holderLe != null) holderLe.preferredHeight = contentH;
 
-            // Compute scroll position in pixels.
             float scrollRange = Mathf.Max(0f, contentH - viewportH);
             float scrollY = (1f - Mathf.Clamp01(sr.verticalNormalizedPosition)) * scrollRange;
             int firstIdx = (rowH > 0f) ? Mathf.FloorToInt(scrollY / rowH) : 0;
             if (firstIdx < 0) firstIdx = 0;
             if (firstIdx > total - 1) firstIdx = Mathf.Max(0, total - 1);
 
-            int visible = Mathf.CeilToInt(viewportH / rowH) + 10; // buffer
+            int visible = Mathf.CeilToInt(viewportH / rowH) + 10;
             EnsureCreatorVirtPool(isLeft, holder.transform, visible);
 
             List<GameObject> pool = isLeft ? _leftCreatorVirtButtons : _rightCreatorVirtButtons;
@@ -623,8 +603,6 @@ namespace VPB
             string filterUt = userTagFilter ?? "";
             if (string.IsNullOrEmpty(filterUt)) ClearPackBucketCollapseOverrides();
 
-            // "Create Tag" synthetic top row when user typed text in search box.
-            // Uses Count sentinel so BindUserTagVirtButton can render different UI/behavior.
             if (!string.IsNullOrEmpty(filterUt))
             {
                 string normCandidate = VpbLocalDatabase.NormalizeGalleryUserTagName(filterUt);
@@ -667,8 +645,6 @@ namespace VPB
                     continue;
                 }
 
-                // Expanded unused bucket: still hide from main path via ShouldHide=false when expanded;
-                // when collapsed we counted above. When expanded, zero-count rows flow into filteredUt.
                 filteredUt.Add(ut);
             }
 
@@ -724,7 +700,6 @@ namespace VPB
             var pinnedUt = new List<UserTagSideTabEntry>(8);
             var normalUt = new List<UserTagSideTabEntry>(filteredUt.Count);
             PartitionUserTagRowsPinnedFirst(filteredUt, pinnedUt, normalUt);
-            // Coarsest axis first: what the creator listed it as, then who it looks like, then Hub tags.
             AppendHubCategoryFacetToUserTagVirtView(filterUt, sortUt);
             AppendPackFacetToUserTagVirtView(false, filterUt, sortUt);
             AppendPackFacetToUserTagVirtView(true, filterUt, sortUt);
@@ -1096,8 +1071,6 @@ namespace VPB
             bool isOnSelection = !isCreateRow && !isUnusedBucketHeader
                 && (state == UserTagSelectionState.On || state == UserTagSelectionState.Mixed);
             bool preferSelectionColor = hasGridSelection && isOnSelection && !isFilterActive && !isFilterExcluded;
-            // Resting (fully-inactive) slot is tinted by the tag's category color when assigned (US-02);
-            // filter/selection states above still take visual priority.
             Color restingRowColor = ColorInactiveRow;
             if (!isCreateRow && !isUnusedBucketHeader)
             {
@@ -1140,10 +1113,7 @@ namespace VPB
                             {
                                 userTagsCached = false;
                                 _userTagVirtViewSig = null;
-                                // Drop list filter so new tag joins full avail list (not stuck matching typed text).
                                 ClearUserTagSideListFilter(sideLeft);
-                                // Fresh vocabulary rows have Count=0; default Filter Mode hide-unused omits them.
-                                // Land in Tag Mode so Create tag row is visible (same as editor CreateTagRows).
                                 if (_userTagAvailMode == UserTagAvailMode.FilterByTags
                                     && VPBConfig.Instance != null
                                     && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode)
@@ -1156,7 +1126,6 @@ namespace VPB
                         }
                         else if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
                         {
-                            // Tap: Off ↔ Include. Exclude via right-click or drag to title Excl row.
                             if (activeUserTags.Contains(tagSnap))
                             {
                                 activeUserTags.Remove(tagSnap);
@@ -1189,7 +1158,6 @@ namespace VPB
                 {
                     try
                     {
-                        // Right-click cycles the exclude (none-of) state for this tag.
                         if (excludedUserTags.Contains(tagSnap))
                             excludedUserTags.Remove(tagSnap);
                         else
@@ -1517,7 +1485,6 @@ namespace VPB
             else { _lastUserTagVirtFirstIdxRight = firstIdx; _lastUserTagVirtVisibleRight = visible; _lastUserTagVirtTotalRight = total; }
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagVirtVis++;
 
-            // Below the gate so a skipped scroll callback doesn't re-dirty layout; forced and window-shift rebinds still set it.
             if (holderLe != null) holderLe.preferredHeight = contentH;
 
             EnsureUserTagVirtPool(isLeft, holderGo.transform, visible);
@@ -1571,7 +1538,6 @@ namespace VPB
             float scale = ChromeScale;
             return creatorSideTabDataRevision + CreatorConsolidationSignatureFragment() + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R") + "|crR" + CreatorRatingRevisionFragment() + "|crF" + (creatorRatedOnlyFilter ? "1" : "0");
         }
-
 
         /// <summary>All/Addon/Custom row order from persisted <c>SceneSource</c> sort (same 4 modes as icon cycle). Unreferenced: Task 8 replaced BuildSceneSourceTabs with a single toggle.</summary>
         private List<string> GetOrderedSceneSourceFilterLabels()
@@ -1703,7 +1669,6 @@ namespace VPB
             SetLayerRecursive(container, 5);
         }
 
-
         /// <summary>Strip ephemeral User Tags UI blocks when rebuilding a different tab in the same scroll content.</summary>
         private void DestroyEphemeralSideTabBlocksForContentType(Transform container, ContentType contentType)
         {
@@ -1808,7 +1773,6 @@ namespace VPB
                 UnityEngine.Object.Destroy(ch.gameObject);
         }
 
-        /// <summary>Legacy UI Text: shrink with "..." when wider than <paramref name="maxInnerWidth"/> (uses <see cref="Text.preferredWidth"/>).</summary>
         private static string EllipsizeTextPreferredWidth(Text txt, string fullLabel, float maxInnerWidth)
         {
             if (txt == null || string.IsNullOrEmpty(fullLabel)) return fullLabel ?? "";
@@ -1834,9 +1798,7 @@ namespace VPB
             return ell;
         }
 
-        /// <summary>
-        /// Keep "Create Tag: " prefix; ellipsize typed name only (recognition of draft tag beats truncating verb).
-        /// </summary>
+        /// <summary>Keep "Create Tag: " prefix; ellipsize typed name only (recognition of draft tag beats truncating verb).</summary>
         private static string EllipsizeCreateTagLabel(Text txt, string prefix, string tagName, float maxInnerWidth)
         {
             string name = tagName ?? "";
@@ -1890,11 +1852,9 @@ namespace VPB
             if (tabRounded != null)
                 tabRounded.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
             ConfigureSideTabRowHoverBorder(btnGO);
-            // Always ensure hover delegate exists (for both new and pooled buttons)
             var hoverDel = btnGO.GetComponent<UIHoverDelegate>();
             if (hoverDel == null)
                 hoverDel = btnGO.AddComponent<UIHoverDelegate>();
-            // Add hover count tracking handler (ReturnTabButton clears handlers, so this is safe)
             hoverDel.OnHoverChange += (enter) => {
                 if (enter) hoverCount++;
                 else hoverCount--;
@@ -1904,7 +1864,6 @@ namespace VPB
                 currentPointerData = d;
             };
             
-            // Standard Button Configuration
             Button btnComp = btnGO.GetComponent<Button>();
             btnComp.onClick.RemoveAllListeners();
             if (onClick != null)
@@ -1965,7 +1924,6 @@ namespace VPB
                 txtRT.offsetMax = new Vector2(-insetR, 0f);
             }
 
-            // Ensure LayoutElement
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();
             le.minWidth = GalleryUiDesignTokens.TabButtonMinWidthRef * s;
@@ -1975,8 +1933,6 @@ namespace VPB
             le.flexibleWidth = 1;
 
             float pad = 10f * s;
-            // Rows use flexibleWidth and stretch to the side-tab column. preferredWidth (170) is only
-            // a layout hint — using it alone clips labels early once a left icon takes inset space.
             float rowW = le.preferredWidth;
             float stretchW = (GalleryUiDesignTokens.SideTabColumnWidthRef
                 - 2f * GalleryUiDesignTokens.SideTabSideMarginRef
@@ -2096,7 +2052,6 @@ namespace VPB
             RectTransform inputRT = inputGO.GetComponent<RectTransform>();
             inputRT.sizeDelta = new Vector2(width, 35);
             
-            // Text Area
             GameObject textArea = new GameObject("TextArea");
             textArea.transform.SetParent(inputGO.transform, false);
             RectTransform textAreaRT = textArea.AddComponent<RectTransform>();
@@ -2105,7 +2060,6 @@ namespace VPB
             textAreaRT.offsetMin = new Vector2(GalleryUiDesignTokens.SearchTextLeftInsetRef, 0);
             textAreaRT.offsetMax = new Vector2(-GalleryUiDesignTokens.SearchTextRightInsetRef, 0);
 
-            // Search icon (left side of input)
             {
                 var s = UI.LoadIconSprite("search", new Color(0.5f, 0.5f, 0.5f, 1f));
                 if (s != null)
@@ -2123,7 +2077,6 @@ namespace VPB
                 }
             }
             
-            // Placeholder
             GameObject placeholder = new GameObject("Placeholder");
             placeholder.transform.SetParent(textArea.transform, false);
             Text placeholderText = placeholder.AddComponent<Text>();
@@ -2132,21 +2085,19 @@ namespace VPB
             placeholderText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             placeholderText.color = UI.InputFieldPlaceholderColor;
             placeholderText.fontStyle = FontStyle.Italic;
-            placeholderText.alignment = TextAnchor.MiddleLeft; // Vertically centered
+            placeholderText.alignment = TextAnchor.MiddleLeft;
             RectTransform placeholderRT = placeholder.GetComponent<RectTransform>();
             placeholderRT.anchorMin = Vector2.zero;
             placeholderRT.anchorMax = Vector2.one;
             placeholderRT.sizeDelta = Vector2.zero;
             
-            // Text
-            Text textComponent = UI.CreateLabel(textArea, "", GalleryUiDesignTokens.FontBodyRef, UI.InputFieldTextColor, TextAnchor.MiddleLeft, richText: false); // Vertically centered
+            Text textComponent = UI.CreateLabel(textArea, "", GalleryUiDesignTokens.FontBodyRef, UI.InputFieldTextColor, TextAnchor.MiddleLeft, richText: false);
 
             input.textComponent = textComponent;
             input.placeholder = placeholderText;
             input.onValueChanged.AddListener(onValueChanged);
             
             // Clear — flush right, full field height so hover rim meets search border.
-            // Hidden when empty (HIG / own floats). Right inset stays reserved so text does not jump.
             GameObject clearBtn = UI.CreateUIButton(inputGO, GalleryUiDesignTokens.SearchClearBtnSizeRef, GalleryUiDesignTokens.SearchFieldHeightRef, "X", 24, 0, 0, AnchorPresets.middleRight, () => {
                 input.text = "";
                 input.ActivateInputField();
@@ -2181,10 +2132,8 @@ namespace VPB
                 SyncSearchInputClearVisible(clearBtn, input.text);
             }
 
-            // ESC: default clears field; title search passes onEscape to blur without wiping chips.
             Button clearBtnComponent = clearBtn != null ? clearBtn.GetComponent<Button>() : null;
             inputGO.AddComponent<SearchInputESCHandler>().Initialize(input, clearBtnComponent, onEscape);
-            // Standard editor shortcut: Ctrl+Backspace deletes previous word
             inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
             // Tab/Down must not be eaten by Unity Selectable nav before HandleKeyboardInput.
             try
@@ -2207,14 +2156,16 @@ namespace VPB
                 clearGo.SetActive(show);
         }
 
-        /// <summary>
-        /// Side-rail search: consume Tab (and Down in Settings) in OnGUI so EventSystem
-        /// cannot steal focus before <see cref="TryHandleKeyboardFocusTransfer"/>.
-        /// </summary>
+        /// <summary>Side-rail search: consume Tab/Down in OnGUI before EventSystem steals focus.</summary>
         private sealed class SideSearchFocusKeys : MonoBehaviour
         {
             public GalleryPanel Panel;
             public InputField Field;
+
+            private void Awake()
+            {
+                useGUILayout = false;
+            }
 
             private void OnGUI()
             {
@@ -2252,15 +2203,12 @@ namespace VPB
         private void ReturnTabButton(GameObject btn)
         {
             if (btn == null) return;
-            // Drop the active-chip handle if this is the chip being recycled, so a later pool reuse for
-            // a different row can't have its label stamped by UpdateSelectionContextMenu.
             if (_activeSubfilterChipText != null)
             {
                 var textComp = btn.GetComponentInChildren<Text>();
                 if (textComp == _activeSubfilterChipText) { _activeSubfilterChipText = null; _activeSubfilterChipLabelPrefix = null; }
             }
             btn.SetActive(false);
-            // Clear hover event handlers to prevent old handlers from submenu modes persisting when buttons are reused
             var hoverDel = btn.GetComponent<UIHoverDelegate>();
             if (hoverDel != null)
             {
@@ -2270,7 +2218,6 @@ namespace VPB
             var pickDrag = btn.GetComponent<UserTagPickDragSource>();
             if (pickDrag != null)
                 UnityEngine.Object.Destroy(pickDrag);
-            // Keep parented to ensure cleanup on destroy
             if (backgroundBoxGO != null) btn.transform.SetParent(backgroundBoxGO.transform, false);
             tabButtonPool.Push(btn);
         }
@@ -2288,7 +2235,6 @@ namespace VPB
                 btnGO = CreateNewNavButtonGO();
             }
 
-            // Reset/Configure for Navigation
             BindNavigationButton(btnGO, label, action);
             activeButtons.Add(btnGO);
             return btnGO;
@@ -2301,7 +2247,6 @@ namespace VPB
             
             Image img = UI.AddGalleryElementRoundedBg(btnGO, new Color(0.2f, 0.4f, 0.6f, 1f));
 
-            // Add Hover Border
             btnGO.AddComponent<UIHoverBorder>();
             AddHoverDelegate(btnGO);
 
@@ -2315,14 +2260,12 @@ namespace VPB
 
         private void BindNavigationButton(GameObject btnGO, string label, UnityAction action)
         {
-            btnGO.name = "NavButton_" + label.Replace("\n", ""); // Identification for Pool
+            btnGO.name = "NavButton_" + label.Replace("\n", "");
 
-            // Reset common elements
             Button btn = btnGO.GetComponent<Button>();
             btn.onClick.RemoveAllListeners();
             if (action != null) btn.onClick.AddListener(action);
 
-            // Set Text
             Transform navTextT = btnGO.transform.Find("NavText");
             if (navTextT != null)
             {
@@ -2330,17 +2273,10 @@ namespace VPB
                 if (t != null) t.text = label;
             }
 
-            // Set BG Color (Optional reset if changed elsewhere)
             Image img = btnGO.GetComponent<Image>();
             if (img != null) img.color = new Color(0.2f, 0.4f, 0.6f, 1f); 
         }
 
-
-        /// <summary>
-        /// Grid caption strip height in pixels from font metrics.
-        /// One-line when filtered set has no dual captions; two-line when any package/leaf split exists
-        /// (uniform recycle cell height — scan once per layout, not per scroll bind).
-        /// </summary>
         internal float GetGridLabelStripHeightPx()
         {
             if (!GridLabelsStripVisibleForThisPane()) return 0f;
@@ -2378,10 +2314,6 @@ namespace VPB
             _gridCreatorRedundantValid = false;
         }
 
-        /// <summary>
-        /// True when any filtered item needs package+leaf dual caption.
-        /// Warm O(n) once per layout — early-out on first dual; no SQL.
-        /// </summary>
         private bool GridLabelsNeedDualBand()
         {
             if (_gridLabelDualBandValid) return _gridLabelDualBandCached;
@@ -2408,10 +2340,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Label band as fraction of full cell (square thumb + caption under).
-        /// Uses absolute strip px over (cellWidth + strip) so column zoom does not inflate chrome.
-        /// </summary>
         private float GetGridLabelFraction(float cellWidthPx = 0f)
         {
             float stripPx = GetGridLabelStripHeightPx();
@@ -2431,15 +2359,8 @@ namespace VPB
             return stripPx / (w + stripPx);
         }
 
-        /// <summary>
-        /// Grid cell config height in design units (width baseline = 100).
-        /// Thumb stays square; caption band is <see cref="RecyclingGridView.fixedBottomChromePx"/>.
-        /// </summary>
         internal float GetGridCellConfigHeight() => 100f;
 
-        /// <summary>
-        /// Apply square-thumb grid recycle config + font-tight caption chrome height.
-        /// </summary>
         internal void ApplyGridRecyclingLayoutConfig(RecyclingGridView rgv, int cols, bool deferRefresh = false)
         {
             if (rgv == null) return;
@@ -2460,10 +2381,6 @@ namespace VPB
             return BuildGridLabelFullCaption(primary, secondary, creator);
         }
 
-        /// <summary>
-        /// Full untruncated caption for info-bar hover recovery (warm path; reuses panel StringBuilder).
-        /// Format: leaf · creator\npackage (omit empty parts).
-        /// </summary>
         internal string BuildGridLabelFullCaption(string primary, string secondary, string creator)
         {
             System.Text.StringBuilder sb = _gridLabelCaptionSb;
@@ -2483,10 +2400,6 @@ namespace VPB
             return sb.Length > 0 ? sb.ToString() : "";
         }
 
-        /// <summary>
-        /// Best filesystem / VAR path for hover tip + info bar (warm; no SQL).
-        /// Prefer <see cref="FileEntry.Path"/>; else internal path; else package uid.
-        /// </summary>
         private static string ResolveFileDisplayPath(FileEntry file)
         {
             if (file == null) return "";
@@ -2515,10 +2428,6 @@ namespace VPB
             return file.Uid ?? "";
         }
 
-        /// <summary>
-        /// Near-preview sticky tip text: caption + full path (Galitz ToolTip / Johnson fovea).
-        /// Shown via <see cref="AddTooltipPlain"/> on thumbnail — status channel, not Name Card.
-        /// </summary>
         internal string BuildGridItemHoverTooltip(FileEntry file)
         {
             if (file == null) return "";
@@ -2533,11 +2442,6 @@ namespace VPB
             return cap + "\n" + path;
         }
 
-        /// <summary>
-        /// Grid caption: primary = leaf (or sole package name); secondary = package when dual;
-        /// creator = author on primary row right (muted). Scroll-safe — no SQLite, no Package resolve.
-        /// Always cleaned names (creator not repeated in primary); full UID/path stay on hover tip.
-        /// </summary>
         private void GetGridItemLabelLines(FileEntry file, out string primary, out string secondary, out string creator)
         {
             primary = "";
@@ -2549,7 +2453,6 @@ namespace VPB
 
             if (file is VarFileEntry vfe)
             {
-                // Preset_/Plugins_ BA strips stay single-line when pretty presets on.
                 if (prettyPresets && IsPresetLikeFileName(file))
                 {
                     primary = GetPrettyEntryDisplayName(file, currentCategoryTitle);
@@ -2562,7 +2465,6 @@ namespace VPB
                 string leaf;
                 string creatorPart;
                 bool dual;
-                // Grid always uses cleaned package name (creator on right) — not full UID.
                 if (TryGetVarGalleryTitleParts(vfe, prettyPackage: true, out pkgPart, out leaf, out creatorPart, out dual))
                 {
                     creator = creatorPart ?? "";
@@ -2607,7 +2509,6 @@ namespace VPB
                 return;
             }
 
-            // Loose / other rows: filename stem; if stem is Creator.Package.N, clean like a package row.
             string stem = System.IO.Path.GetFileNameWithoutExtension(file.Name ?? "");
             if (string.IsNullOrEmpty(stem) && !string.IsNullOrEmpty(file.Path))
                 stem = System.IO.Path.GetFileNameWithoutExtension(file.Path.Replace('\\', '/'));
@@ -2636,7 +2537,6 @@ namespace VPB
             TryFillCreatorForGridLabel(file, out creator);
         }
 
-        /// <summary>Best-effort creator for non-VAR or fallback rows (uid parse; no Package resolve).</summary>
         private static void TryFillCreatorForGridLabel(FileEntry file, out string creator)
         {
             creator = "";
@@ -2682,7 +2582,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>True when filename matches BA's preset prefix rule (Preset_*.vap or Plugins_*.json). Drives the override-uid-with-pretty-name decision in <see cref="GetGridItemLabelText"/>.</summary>
         internal static bool IsPresetLikeFileName(FileEntry file)
         {
             if (file == null) return false;
@@ -2699,10 +2598,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Ellipsize to width via binary search + TextGenerator (O(log n) measures).
-        /// Warm scroll bind — avoid linear LayoutUtility shrink loop (GC + layout thrash).
-        /// </summary>
         private static string TruncateGridLabelTextByWidth(Text textComponent, string text, float maxWidth)
         {
             if (string.IsNullOrEmpty(text)) return text;
@@ -2765,14 +2660,12 @@ namespace VPB
             
             Image img = UI.AddImage(btnGO, new Color(0.2f, 0.2f, 0.2f, 0.5f));
 
-            // Add Hover Border
             btnGO.AddComponent<UIHoverBorder>();
             AddHoverDelegate(btnGO);
 
             Button btn = btnGO.AddComponent<Button>();
             UI.ConfigButtonFlat(btn);
 
-            // Thumbnail (Fill 1x1)
             GameObject thumbGO = new GameObject("Thumbnail");
             thumbGO.transform.SetParent(btnGO.transform, false);
             RawImage thumbImg = thumbGO.AddComponent<RawImage>();
@@ -2787,7 +2680,6 @@ namespace VPB
             thumbRT.offsetMin = new Vector2(pad, pad);
             thumbRT.offsetMax = new Vector2(-pad, -pad);
 
-            // Scan-whitelist included ring (always inward, parented under thumbnail in grid).
             GameObject scanWlBorderGO = new GameObject("ScanWlBorder");
             scanWlBorderGO.transform.SetParent(thumbGO.transform, false);
             RectTransform swbRT = scanWlBorderGO.AddComponent<RectTransform>();
@@ -2826,7 +2718,6 @@ namespace VPB
             gridLabelRT.offsetMin = Vector2.zero;
             gridLabelRT.offsetMax = Vector2.zero;
 
-            // Opaque bar — legible under square thumb (Johnson/Galitz). Badges keep translucent fill.
             Image gridLabelBg = UI.AddImage(gridLabelGO, GalleryGridLabelBarOpaque, false);
 
             Text gridLabelPrimary = UI.CreateLabel(
@@ -2843,7 +2734,6 @@ namespace VPB
             gridLabelShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
             gridLabelShadow.effectDistance = new Vector2(1f, -1f);
 
-            // Creator on primary row right — secondary metadata, muted (von Restorff: leaf stays primary).
             Text gridLabelCreator = UI.CreateLabel(
                 gridLabelGO, "", GalleryUiDesignTokens.GridLabelSecondaryFontRef, GalleryGridLabelSecondaryColor,
                 TextAnchor.MiddleRight, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow,
@@ -2866,6 +2756,8 @@ namespace VPB
             secondaryRT.offsetMax = new Vector2(-2f, 0f);
             gridLabelSecondary.gameObject.SetActive(false);
 
+            CreateGridQuickLaunchButton(gridLabelGO, gridLabelPrimary);
+
             // Grid-mode inward border after label so bottom rim is not covered by opaque caption.
             GameObject gridInnerBorderGO = new GameObject("GridInnerBorder");
             gridInnerBorderGO.transform.SetParent(btnGO.transform, false);
@@ -2880,11 +2772,9 @@ namespace VPB
             AddBorderEdgeNamed(gridInnerBorderGO, "Right",  new Vector2(1, 0), new Vector2(1, 1), new Vector2(1f, 0.5f), new Vector2(2, 0));
             gridInnerBorderGO.SetActive(false);
 
-            // Hover: footer path + grid badges (no on-cell Name Card — GridLabel strip owns captions).
             UIHoverReveal hover = btnGO.AddComponent<UIHoverReveal>();
             hover.panel = this;
 
-            // List Row (Table mode)
             GameObject listRowGO = new GameObject("ListRow");
             listRowGO.transform.SetParent(btnGO.transform, false);
             listRowGO.SetActive(false);
@@ -2897,18 +2787,16 @@ namespace VPB
 
             VerticalLayoutGroup listVLG = UI.AddVLG(listRowGO, 0f, UI.PadTight(), TextAnchor.MiddleLeft);
 
-            // Name
             Text listNameText = UI.CreateLabel(listRowGO, "", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.LowerLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Name");
             GameObject listNameGO = listNameText.gameObject;
             LayoutElement listNameLE = UI.AddLE(listNameGO, minHeight: 32, flexibleWidth: 1);
+            CreateListQuickLaunchButton(listNameGO, listNameText);
 
-            // Details Row
             GameObject detailsRowGO = new GameObject("Details");
             detailsRowGO.transform.SetParent(listRowGO.transform, false);
             HorizontalLayoutGroup detailsHLG = UI.AddHLG(detailsRowGO, UI.GapRegion(), UI.Pad(0f, 0f, 0f, 0f), childForceExpandWidth: false);
             LayoutElement detailsLE = UI.AddLE(detailsRowGO, minHeight: 24, flexibleWidth: 1);
 
-            // Helper to create detail text
             GameObject CreateDetailText(string name, string placeholder, float width)
             {
                 Text t = UI.CreateLabel(detailsRowGO, placeholder, GalleryUiDesignTokens.FontBodyRef, new Color(0.75f, 0.75f, 0.75f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: name);
@@ -2924,20 +2812,16 @@ namespace VPB
             CreateDetailText("Missing", "M:", 80);
             CreateDetailText("Dependents", "Dn:", 80);
 
-            // List mode: badge strip below Size/Date row (horizontal layout; not over thumbnail)
             GameObject listBadgesGO = new GameObject("ListBadges");
             listBadgesGO.transform.SetParent(listRowGO.transform, false);
-            // Plain VerticalLayoutGroup child like Name/Details: let the group drive position/size.
-            // Custom bottom-stretch anchors here fight the group and mis-place the strip.
             listBadgesGO.AddComponent<RectTransform>();
             HorizontalLayoutGroup listBadgesHLG = UI.AddHLG(listBadgesGO, spacing: UI.GapTight(), childForceExpandWidth: false);
             LayoutElement listBadgesLE = UI.AddLE(listBadgesGO, minHeight: 32f, preferredHeight: 32f, flexibleWidth: 1f, flexibleHeight: 0f);
 
-            // Rating (Top-right corner)
             GameObject ratingGO = new GameObject("Rating");
             ratingGO.transform.SetParent(btnGO.transform, false);
             RectTransform ratingRT = ratingGO.AddComponent<RectTransform>();
-            ratingRT.anchorMin = new Vector2(1, 1); // Top Right
+            ratingRT.anchorMin = new Vector2(1, 1);
             ratingRT.anchorMax = new Vector2(1, 1);
             ratingRT.pivot = new Vector2(1, 1);
             ratingRT.sizeDelta = new Vector2(40, 40);
@@ -2951,7 +2835,6 @@ namespace VPB
             GameObject selectorGO = new GameObject("RatingSelector");
             selectorGO.transform.SetParent(btnGO.transform, false);
             RectTransform selectorRT = selectorGO.AddComponent<RectTransform>();
-            // 3-row × 2-col grid: [X][1] / [2][3] / [4][5] — drops below star icon, aligns to right edge
             selectorRT.anchorMin = new Vector2(1, 1);
             selectorRT.anchorMax = new Vector2(1, 1);
             selectorRT.pivot = new Vector2(1, 1);
@@ -3009,7 +2892,6 @@ namespace VPB
             Button starBtn = starBtnGO.GetComponent<Button>();
             starBtn.onClick.AddListener(() => ratingHandler.ToggleSelector());
             
-            // Drag Logic
             UIDraggableItem draggable = btnGO.AddComponent<UIDraggableItem>();
             draggable.ThumbnailImage = thumbImg;
             draggable.Panel = this;
@@ -3018,7 +2900,7 @@ namespace VPB
             GameObject aiBadgeGO = new GameObject("AutoInstallBadge");
             aiBadgeGO.transform.SetParent(btnGO.transform, false);
             RectTransform aiBadgeRT = aiBadgeGO.AddComponent<RectTransform>();
-            aiBadgeRT.anchorMin = new Vector2(0, 1); // Top Left
+            aiBadgeRT.anchorMin = new Vector2(0, 1);
             aiBadgeRT.anchorMax = new Vector2(0, 1);
             aiBadgeRT.pivot = new Vector2(0, 1);
             aiBadgeRT.sizeDelta = new Vector2(32, 32);
@@ -3042,7 +2924,6 @@ namespace VPB
             LayoutElement hideBadgeLE = UI.AddLE(hideBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             hideBadgeGO.SetActive(false);
 
-            // Scan-whitelist included badge (top-left). Ambient in grid+list; temp gets outline ring.
             GameObject scanExBadgeGO = new GameObject("ScanExcludedBadge");
             scanExBadgeGO.transform.SetParent(btnGO.transform, false);
             RectTransform scanExBadgeRT = scanExBadgeGO.AddComponent<RectTransform>();
@@ -3073,7 +2954,6 @@ namespace VPB
 
             EnsureStartupSceneBadge(btnGO, null);
 
-            // Deps badge (inactive on grid; detail strip owns deps). Kept for pooled-cell layout slots.
             GameObject depsBadgeGO = new GameObject("DepsBadge");
             depsBadgeGO.transform.SetParent(btnGO.transform, false);
             RectTransform depsBadgeRT = depsBadgeGO.AddComponent<RectTransform>();
@@ -3089,7 +2969,6 @@ namespace VPB
             UI.AddLE(depsBadgeGO, minWidth: 48f, minHeight: 28f, preferredWidth: 72f, preferredHeight: 28f);
             depsBadgeGO.SetActive(false);
 
-            // Hub dep download (inactive on grid; detail strip owns hub deps). Kept for pooled-cell layout slots.
             GameObject depsDlGO = new GameObject("DepsDownloadBtn");
             depsDlGO.transform.SetParent(btnGO.transform, false);
             RectTransform depsDlRT = depsDlGO.AddComponent<RectTransform>();
@@ -3112,7 +2991,6 @@ namespace VPB
 
             CreateDepStatusBadge(btnGO);
 
-            // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
             GameObject listHoverBarGO = new GameObject("ListHoverBar");
             listHoverBarGO.transform.SetParent(btnGO.transform, false);
             Image listHoverBarImg = UI.AddImage(listHoverBarGO, UI.White(0.45f), false);
@@ -3124,7 +3002,6 @@ namespace VPB
             listHoverBarRT.anchoredPosition = Vector2.zero;
             listHoverBarGO.SetActive(false);
 
-            // List-mode selection indicator: left accent bar (yellow, opaque)
             GameObject listSelBarGO = new GameObject("ListSelectionBar");
             listSelBarGO.transform.SetParent(btnGO.transform, false);
             Image listSelBarImg = UI.AddImage(listSelBarGO, new Color(1f, 0.85f, 0f, 1f), false);
@@ -3137,7 +3014,6 @@ namespace VPB
             listSelBarGO.SetActive(false);
 
             // Wire hover bar into UIHoverBorder; selection bar is managed by UpdateFileButtonVisuals.
-            // ApplyBorderSettings destroys Awake outward HoverRim once hoverBorderGO is set.
             UIHoverBorder hoverBorderComp = btnGO.GetComponent<UIHoverBorder>();
             if (hoverBorderComp != null)
             {
@@ -3220,7 +3096,6 @@ namespace VPB
             return btnRoot.Find("ScanWlTempBorder");
         }
 
-        /// <summary>Applies inward edge strips on thumbnail (grid) or full row (list).</summary>
         private static void ApplyInwardGalleryEdgeBorder(GameObject borderGO, float thickness, Color tint, float frameInset)
         {
             if (borderGO == null) return;
@@ -3273,7 +3148,6 @@ namespace VPB
             borderGO.SetActive(true);
         }
 
-        /// <summary>Persistent inward ring (folder or persisted UID override).</summary>
         private void ApplyScanWhitelistIncludedBorderVisual(GameObject btnGO, FileEntry file, bool isListRow)
         {
             Transform wlTr = FindScanWlBorderTransform(btnGO != null ? btnGO.transform : null);
@@ -3384,7 +3258,6 @@ namespace VPB
             }
         }
 
-        /// <summary>List: badges in ListBadges (layout packs inactive). Grid: compact top-left slots for visible badges.</summary>
         private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showStartup, bool showAutoInstall, bool showHide, bool showWhitelist, bool showUserTags)
         {
             if (btnGO == null) return;
@@ -3412,30 +3285,22 @@ namespace VPB
             }
         }
 
-        /// <summary>Translucent fill for hover badges (not opaque GridLabel strip).</summary>
         private static readonly Color GalleryItemLabelBarBackdrop = new Color(0f, 0f, 0f, 0.6f);
 
-        /// <summary>Opaque grid caption bar — no text on busy thumbnail pixels (Johnson reading; Galitz imagery).</summary>
         private static readonly Color GalleryGridLabelBarOpaque = GalleryUiColorTokens.SurfaceDark;
 
-        /// <summary>Secondary package line on grid caption (dimmer than primary leaf).</summary>
         private static readonly Color GalleryGridLabelSecondaryColor = new Color(0.78f, 0.78f, 0.82f, 0.95f);
 
-        // Former solid badge fills → letter colors (lifted for readability on translucent black).
         private static readonly Color GalleryBadgeLetterAutoInstall = new Color(0.35f, 0.65f, 1f, 1f);
         private static readonly Color GalleryBadgeLetterHide = new Color(0.78f, 0.78f, 0.84f, 1f);
-        /// <summary>Persistent scan-whitelist inclusion (status teal — not interaction magenta).</summary>
         private static readonly Color GalleryBadgeLetterScanWlPersistent = new Color(0.42f, 0.82f, 0.58f, 1f);
-        /// <summary>Session temporary scan-whitelist (amber + ring — shape, not color alone).</summary>
         private static readonly Color GalleryBadgeLetterScanWlTemporary = new Color(0.95f, 0.72f, 0.28f, 1f);
         private static readonly Color GalleryBadgeScanWlTempRingColor = new Color(0.95f, 0.72f, 0.28f, 0.95f);
         private static readonly Color GalleryBadgeLetterScanWlPulse = new Color(1f, 1f, 1f, 1f);
-        // Legacy alias used by detail-strip create site.
         private static readonly Color GalleryBadgeLetterScanExcluded = GalleryBadgeLetterScanWlPersistent;
         private static readonly Color GalleryBadgeLetterUserTags = new Color(0.35f, 0.88f, 0.92f, 1f);
         private static readonly Color GalleryBadgeLetterDepsDownload = new Color(0.35f, 0.65f, 1f, 1f);
 
-        /// <summary>Badge fill with gallery corner radius + label-bar translucency.</summary>
         private static RoundedRect AddGalleryBadgeBackground(GameObject go)
         {
             RoundedRect rr = go.AddComponent<RoundedRect>();
@@ -3447,7 +3312,6 @@ namespace VPB
             return rr;
         }
 
-        /// <summary>Temp-WL shape cue: inward ring on badge (not full-cell rim).</summary>
         private static void EnsureScanWlBadgeTempRing(GameObject badgeGO)
         {
             if (badgeGO == null) return;
@@ -3469,10 +3333,6 @@ namespace VPB
             ringGO.SetActive(false);
         }
 
-        /// <summary>
-        /// Apply W badge for scan-whitelist inclusion. Persistent = solid letter; temporary = amber letter + ring.
-        /// Returns whether badge is shown.
-        /// </summary>
         private bool ApplyScanWhitelistBadgeVisual(GameObject badgeGO, FileEntry file)
         {
             if (badgeGO == null) return false;
@@ -3582,7 +3442,6 @@ namespace VPB
             _scanWlBadgePulseCoroutine = null;
         }
 
-        /// <summary>Same yellow rim as CreateUIButton / star rating on hover.</summary>
         private static void EnsureGalleryBadgeHoverBorder(GameObject go, Graphic target = null)
         {
             if (go == null) return;
@@ -3609,7 +3468,6 @@ namespace VPB
         {
             int badgeFont = UiMetrics.FontBody();
             digitFont = Mathf.Max(badgeFont + 2, Mathf.RoundToInt(badgeFont * 1.15f));
-            // Square chrome hugs colored digit — old letterBadge*1.3 left empty band above/below glyph.
             ratingBadge = Mathf.Max(24f, digitFont + 6f);
             edge = Mathf.Max(4f, Mathf.Round(ratingBadge * 0.15f));
         }
@@ -3622,7 +3480,6 @@ namespace VPB
             AddTooltipPlain(badgeGO, tip);
         }
 
-        /// <summary>Grid hover: show top-right colored rating digit for quick rate. Other badges stay on detail strip.</summary>
         internal void ShowGridHoverBadges(GameObject btnGO, FileEntry file)
         {
             if (btnGO == null || file == null) return;
@@ -3676,7 +3533,6 @@ namespace VPB
                 if (selectorTr != null)
                 {
                     selectorTr.SetAsLastSibling();
-                    // 2×3 grid: panel size from cell size so option backdrops hug the digits.
                     float cellW = Mathf.Max(28f, ratingBadge * 0.95f);
                     float cellH = Mathf.Max(26f, digitFont + 8f);
                     float gap = 2f;
@@ -3714,7 +3570,6 @@ namespace VPB
                 if (rh != null)
                 {
                     rh.panel = this;
-                    // Digit+color always — same pattern as list / creator ratings.
                     rh.SetShowDigitMode(true);
                     // Don't close if picker already open (re-enter / tooltip child hops).
                     if (!rh.IsSelectorOpen)
@@ -3733,15 +3588,12 @@ namespace VPB
             _gridHoverBadgeBtnGO = btnGO;
         }
 
-        /// <summary>Grid hover exit / recycle: deactivate rating badge on this cell. No-op outside grid.</summary>
-        /// <param name="force">Recycle/disable must force-close even if rating picker is open.</param>
         internal void HideGridHoverBadges(GameObject btnGO, bool force = false)
         {
             if (btnGO == null || layoutMode != GalleryLayoutMode.Grid) return;
             RatingHandler rh = null;
             try { rh = btnGO.GetComponent<RatingHandler>(); } catch { }
 
-            // Keep rating chrome while picker is open — hover-exit used to kill ToggleSelector immediately.
             if (!force && rh != null && rh.IsSelectorOpen)
                 return;
 
@@ -3772,8 +3624,6 @@ namespace VPB
                 _gridHoverBadgeBtnGO = null;
         }
 
-        // Scale list-row fonts + sub-row heights off row height (ref 100) so the stacked content stays
-        // proportional and fits the cell at any zoom; bases are constants so repeated binds don't compound.
         private void ApplyListRowScale(Transform listRowTr, float rowHeight)
         {
             if (listRowTr == null) return;
@@ -3847,9 +3697,6 @@ namespace VPB
             UpdateFileButtonVisuals(btnGO, file, selectionChromeOnly: false);
         }
 
-        /// <param name="selectionChromeOnly">
-        /// Selection refresh path: skip drop/WL/chrome rescale (unchanged by select). Warm Select-All.
-        /// </param>
         public void UpdateFileButtonVisuals(GameObject btnGO, FileEntry file, bool selectionChromeOnly)
         {
             if (btnGO == null)
@@ -3927,7 +3774,6 @@ namespace VPB
             }
             else
             {
-                // Grid: always inset. List: inward when flush-square setting is on.
                 bool rimInward = !isListRow || EffectiveGridBorderInwardForGalleryCell();
                 if (hoverBorder != null)
                 {
@@ -3969,7 +3815,6 @@ namespace VPB
 
         public void BindFileButton(GameObject btnGO, FileEntry file)
         {
-            // Validate inputs
             if (btnGO == null || file == null)
             {
                 LogUtil.LogError("[VPB] BindFileButton: btnGO or file is null");
@@ -3978,20 +3823,15 @@ namespace VPB
 
             FileButtonBinder b = FileButtonBinder.GetOrAdd(btnGO);
 
-            // File rows pooled/reused across modes (including Settings).
-            // Clear prior hover handlers (e.g. settings tooltips) so they don't leak into other categories.
             UIHoverDelegate hoverDelReset = b != null ? b.hoverDelegate : btnGO.GetComponent<UIHoverDelegate>();
             if (hoverDelReset != null)
             {
                 hoverDelReset.OnHoverChange = null;
                 hoverDelReset.OnPointerEnterEvent = null;
             }
-            // Restore baseline hover tracking for this row.
             AddHoverDelegate(btnGO);
             if (b != null) b.hoverDelegate = btnGO.GetComponent<UIHoverDelegate>();
 
-            // Identity key (Path preferred; fall back to Uid). Needed because some rows (e.g. ALL VAR package list)
-            // can arrive from SQLite without a resolved/installed var path hint.
             string idKey = GetSelectionIdentityKey(file, false);
             if (string.IsNullOrEmpty(file.Name) && string.IsNullOrEmpty(idKey))
             {
@@ -4022,7 +3862,6 @@ namespace VPB
             UIFileEntryLeftReleaseSelect lu0 = b != null ? b.leftRelease : btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
             if (lu0 != null) lu0.enabled = true;
 
-            // Update mapping
             Image img = ri0;
             if (img != null)
             {
@@ -4031,16 +3870,13 @@ namespace VPB
                     fileButtonImages[idKey] = img;
             }
 
-            // Color missing entries red
             if (file is VirtualFileEntry && !(file is InternalSettingRowEntry))
             {
-                if (img != null) img.color = new Color(0.4f, 0.15f, 0.15f, 0.8f); // Red shade
+                if (img != null) img.color = new Color(0.4f, 0.15f, 0.15f, 0.8f);
             }
 
-            // Update Visuals
             UpdateFileButtonVisuals(btnGO, file);
 
-            // Button + row pointer routing (left/right/middle)
             UIFileEntryLeftReleaseSelect leftUp = b != null ? b.leftRelease : null;
             if (leftUp == null)
             {
@@ -4074,7 +3910,6 @@ namespace VPB
                     return;
                 }
 
-                // Special settings list-row mode: no package affordances (thumb/rating/badges/meta columns).
                 Transform listRowTrSpecial = b != null ? b.listRowTr : btnGO.transform.Find("ListRow");
                 if (listRowTrSpecial != null)
                 {
@@ -4154,15 +3989,13 @@ namespace VPB
                         }
                         ch.gameObject.SetActive(true);
                     }
-                    // Settings rows deactivate the Details root; the loop only reactivates children, so
-                    // re-enable the root or a normal row recycled from a settings row shows a blank Details line.
+                    // Settings rows deactivate the Details root; the loop only reactivates children.
                     if (!detailsTrReset.gameObject.activeSelf) detailsTrReset.gameObject.SetActive(true);
                 }
             }
 
             EnsureGalleryBadgeParentForLayoutMode(btnGO, isListMode);
 
-            // List Row + Rating selector visibility (List/Table mode)
             Transform listRowTr = b != null ? b.listRowTr : btnGO.transform.Find("ListRow");
             if (listRowTr != null)
             {
@@ -4186,7 +4019,6 @@ namespace VPB
                     gridLabelTr.gameObject.SetActive(false);
             }
 
-            // CloseSelector first — grid picker may be reparented under backgroundBoxGO while open.
             RatingHandler rhSel = b != null ? b.ratingHandler : btnGO.GetComponent<RatingHandler>();
             if (rhSel != null) rhSel.CloseSelector();
             Transform selectorTr = b != null ? b.ratingSelectorTr : btnGO.transform.Find("RatingSelector");
@@ -4198,10 +4030,8 @@ namespace VPB
                     selectorTr.gameObject.SetActive(false);
             }
 
-            // Migrate pooled templates that still carry pre-GridLabel Name Card overlay.
             FileButtonBinder.DestroyLegacyNameCard(btnGO.transform);
 
-            // Thumbnail
             Transform thumbTr = b != null ? b.thumbTr : null;
             if (thumbTr == null)
             {
@@ -4216,7 +4046,6 @@ namespace VPB
 
                 if (isListMode)
                 {
-                    // Full height square on left
                     thumbRT.anchorMin = new Vector2(0, 0);
                     thumbRT.anchorMax = new Vector2(0, 1);
                     thumbRT.pivot = new Vector2(0, 0.5f);
@@ -4239,8 +4068,6 @@ namespace VPB
                 RawImage thumbImg = b != null ? b.thumbRaw : thumbTr.GetComponent<RawImage>();
                 if (thumbImg != null)
                 {
-                    // Let LoadThumbnail decide whether this is a true rebind or the same
-                    // thumbnail; unconditional clearing causes a visible flash on reopen.
                     bool forcePluginLabelsOnly = ShouldForcePluginsCategoryLabelOnly(file);
                     if (forcePluginLabelsOnly)
                         ClearThumbnailTarget(thumbImg);
@@ -4256,7 +4083,6 @@ namespace VPB
                     ApplyPluginThumbPlaceholder(thumbTr, thumbImg, file, isListMode, showThumbLabels);
 
                     // List-layout hover preview: bind hover handler to the thumbnail only.
-                    // (Use the thumbnail rect so the full row doesn't trigger the popup.)
                     UIHoverPreviewTrigger hp = b != null ? b.hoverPreview : null;
                     if (hp == null)
                     {
@@ -4268,7 +4094,6 @@ namespace VPB
                     hp.file = file;
                     hp.SyncHoverPreviewAfterRebind();
                     thumbImg.raycastTarget = true;
-                    // Near-preview sticky tip: full caption + path (Galitz ToolTip; Johnson fovea on thumb).
                     try
                     {
                         string tip = BuildGridItemHoverTooltip(file);
@@ -4276,7 +4101,6 @@ namespace VPB
                             AddTooltipPlain(thumbTr.gameObject, tip);
                     }
                     catch { }
-                    // RawImage steals raycasts; forward to row root handler (UIDraggableItem + slop live on btnGO).
                     try
                     {
                         var staleThumbLu = thumbTr.gameObject.GetComponent<UIFileEntryLeftReleaseSelect>();
@@ -4300,16 +4124,13 @@ namespace VPB
                 }
             }
 
-            // Hide NavText
             Transform navTextTr = b != null ? b.navTextTr : btnGO.transform.Find("NavText");
             if (navTextTr != null && navTextTr.gameObject.activeSelf) navTextTr.gameObject.SetActive(false);
 
-            // Hover Path
             UIHoverReveal hover = b != null ? b.hoverReveal : btnGO.GetComponent<UIHoverReveal>();
             if (hover != null) hover.file = file;
 
             // Hold-to-launch/apply: pointer must stay pressed; duration from VPBConfig.HoldToLaunchHoldSeconds.
-            // Kept always attached for pooling; enabled/disabled by panel toggle at runtime.
             try
             {
                 HoldToApplyOnHover h = b != null ? b.holdToApply : null;
@@ -4353,8 +4174,6 @@ namespace VPB
 
                 ApplyDynamicTopLeftBadgeLayout(btnGO, showStartupBadge, showAutoInstallBadge, showHideBadge, showScanWlBadge, showUserTagsBadge);
 
-                // An empty strip still reserves its row height in the VLG and pushes the Details line
-                // out of a compact row; deactivate it so the group ignores it when no badge shows.
                 bool anyListBadge = showStartupBadge || showAutoInstallBadge || showHideBadge || showScanWlBadge || showUserTagsBadge;
                 if (listRowTr != null)
                 {
@@ -4365,7 +4184,6 @@ namespace VPB
             }
             else
             {
-                // Grid: W + startup-scene badges are ambient status. Other badges stay off.
                 if (ratingTr != null)
                     ratingTr.gameObject.SetActive(false);
 
@@ -4384,7 +4202,6 @@ namespace VPB
 
             ApplyDepStatusBadgeVisual(btnGO, file, b, null);
 
-            // List Row Bind
             if (isListMode)
             {
                 if (listRowTr != null && !listRowTr.gameObject.activeSelf) listRowTr.gameObject.SetActive(true);
@@ -4428,7 +4245,6 @@ namespace VPB
                         }
                         catch { }
                     }
-                    // Keep ScrollRect scrolling even when hovering over clickable text.
                     try
                     {
                         UIScrollPassthrough sp = b != null ? b.EnsureDepsScrollPassthrough() : null;
@@ -4440,7 +4256,6 @@ namespace VPB
                         sp.target = scrollRect;
                     }
                     catch { }
-                    // Make clickable to filter by dependencies using EventTrigger (non-invasive)
                     EventTrigger et = b != null ? b.EnsureDepsEventTrigger() : null;
                     if (et == null)
                     {
@@ -4454,7 +4269,6 @@ namespace VPB
                     });
                     et.triggers.Clear();
                     et.triggers.Add(pointerClickEntry);
-                    // Add tooltip
                     try { AddTooltip(depsTr.gameObject, "gallery.tooltip.dependencies", "Dependencies"); } catch { }
                 }
 
@@ -4480,13 +4294,12 @@ namespace VPB
                             }
                             hv.target = t;
                             hv.useConditionalColoring = true;
-                            hv.zeroValueColor = Color.green;  // Green when no missing
-                            hv.nonZeroValueColor = Color.red; // Red when missing deps exist
+                            hv.zeroValueColor = Color.green;
+                            hv.nonZeroValueColor = Color.red;
                             hv.Set("M: ", v, "  |  ");
                         }
                         catch { }
                     }
-                    // Keep ScrollRect scrolling even when hovering over clickable text.
                     try
                     {
                         UIScrollPassthrough sp = b != null ? b.EnsureMissingScrollPassthrough() : null;
@@ -4498,7 +4311,6 @@ namespace VPB
                         sp.target = scrollRect;
                     }
                     catch { }
-                    // Make clickable to filter by missing dependencies using EventTrigger (non-invasive)
                     EventTrigger et = b != null ? b.EnsureMissingEventTrigger() : null;
                     if (et == null)
                     {
@@ -4520,7 +4332,6 @@ namespace VPB
                     });
                     et.triggers.Clear();
                     et.triggers.Add(pointerClickEntry);
-                    // Add tooltip
                     try { AddTooltip(missingTr.gameObject, "gallery.tooltip.missing_dependencies", "Missing Dependencies"); } catch { }
                 }
 
@@ -4535,10 +4346,9 @@ namespace VPB
 
                         if (isMissing)
                         {
-                            catLabel = "Missing";
-                            t.text = "Missing";
-                            // Color missing label red
-                            try { t.color = new Color(0.8f, 0.2f, 0.2f, 1f); } catch { }
+                            catLabel = VPBTranslation.T("gallery.list.missing", "Missing");
+                            t.text = catLabel;
+                            try { t.color = DetailStripColorMissingBad; } catch { }
                         }
                         else
                         {
@@ -4561,9 +4371,7 @@ namespace VPB
                             }
                             catch { catLabel = ""; }
 
-                            // Display just the category value (no "Cat:" prefix).
                             t.text = string.IsNullOrEmpty(catLabel) ? "" : catLabel;
-                            // Color category label based on type.
                             try { t.color = GetCategoryTintColor(catLabel); } catch { try { t.color = Color.white; } catch { } }
                         }
                     }
@@ -4594,7 +4402,6 @@ namespace VPB
                         }
                         catch { }
                     }
-                    // Keep ScrollRect scrolling even when hovering over clickable text.
                     try
                     {
                         UIScrollPassthrough sp = b != null ? b.EnsureDependentsScrollPassthrough() : null;
@@ -4606,7 +4413,6 @@ namespace VPB
                         sp.target = scrollRect;
                     }
                     catch { }
-                    // Make clickable to filter by dependents using EventTrigger (non-invasive)
                     EventTrigger et = b != null ? b.EnsureDependentsEventTrigger() : null;
                     if (et == null)
                     {
@@ -4620,7 +4426,6 @@ namespace VPB
                     });
                     et.triggers.Clear();
                     et.triggers.Add(pointerClickEntry);
-                    // Add tooltip
                     try { AddTooltip(dependentsTr.gameObject, "gallery.tooltip.dependents", "Dependents"); } catch { }
                 }
 
@@ -4637,21 +4442,17 @@ namespace VPB
                     Text t = b != null && b.dateText != null ? b.dateText : dateTr.GetComponent<Text>();
                     if (t != null)
                     {
-                        // Prefer when we first indexed this uid (= when user actually got it / got the update)
-                        // over file mtime which is often the creator's original build date carried by the .var.
                         try
                         {
                             DateTime dt = GallerySortManager.ResolveDisplayDateForRow(file);
-                            if (dt.Year < 1980) t.text = "Unknown";
+                            if (dt.Year < 1980) t.text = VPBTranslation.T("gallery.list.date_unknown", "Unknown");
                             else t.text = dt.ToString("yy-MM-dd");
                         }
                         catch { t.text = ""; }
                     }
                 }
-
             }
 
-            // Init RatingHandler in both list and grid mode
             {
                 Text starText = b != null ? b.ratingStarText : null;
                 if (starText == null)
@@ -4678,7 +4479,6 @@ namespace VPB
                 }
             }
 
-            // Draggable
             UIDraggableItem draggable = b != null ? b.draggable : btnGO.GetComponent<UIDraggableItem>();
             if (draggable != null) draggable.FileEntry = file;
         }
@@ -4719,7 +4519,6 @@ namespace VPB
                         string ip = names[i];
                         if (string.IsNullOrEmpty(ip)) continue;
 
-                        // ext match
                         string entryExt = System.IO.Path.GetExtension(ip);
                         if (string.IsNullOrEmpty(entryExt) || entryExt.Length < 2) continue;
                         string ext = entryExt.Substring(1);
@@ -4732,7 +4531,6 @@ namespace VPB
                         }
                         if (!extMatch) continue;
 
-                        // path match
                         bool pathOk = false;
                         if (cat.paths != null && cat.paths.Count > 0)
                         {
@@ -4754,7 +4552,7 @@ namespace VPB
                         if (!pathOk) continue;
 
                         hits++;
-                        if (hits >= 8) break; // cap work per category
+                        if (hits >= 8) break;
                     }
 
                     if (hits > bestCount)
@@ -4798,33 +4596,29 @@ namespace VPB
             if (s.Length == 0) return Color.white;
             string sl = s.ToLowerInvariant();
 
-            // Special / meta
             if (sl == "unknown") return new Color(0.65f, 0.65f, 0.65f, 1f);
             if (sl == "mixed") return new Color(0.85f, 0.65f, 0.15f, 1f);
 
-            // Cleanup types
-            if (sl.Contains("stale cache")) return new Color(0.62f, 0.40f, 0.20f, 1f); // brown (matches tab)
-            if (sl.Contains("duplicate")) return new Color(0.80f, 0.35f, 0.15f, 1f);   // reddish-orange
-            if (sl.Contains("damaged")) return new Color(0.85f, 0.20f, 0.20f, 1f);     // red
-            if (sl.Contains("old version")) return new Color(0.55f, 0.55f, 0.55f, 1f); // gray
-            if (sl.Contains("excluded")) return new Color(0.40f, 0.40f, 0.40f, 1f);    // dark gray
+            if (sl.Contains("stale cache")) return new Color(0.62f, 0.40f, 0.20f, 1f);
+            if (sl.Contains("duplicate")) return new Color(0.80f, 0.35f, 0.15f, 1f);
+            if (sl.Contains("damaged")) return new Color(0.85f, 0.20f, 0.20f, 1f);
+            if (sl.Contains("old version")) return new Color(0.55f, 0.55f, 0.55f, 1f);
+            if (sl.Contains("excluded")) return new Color(0.40f, 0.40f, 0.40f, 1f);
 
-            // Common VPB/VaM gallery types (heuristic)
-            if (sl.Contains("scene")) return new Color(0.95f, 0.55f, 0.10f, 1f);     // orange
-            if (sl.Contains("subscene")) return new Color(0.95f, 0.55f, 0.10f, 1f);  // orange
-            if (sl.Contains("hair")) return new Color(0.85f, 0.35f, 0.85f, 1f);      // purple
-            if (sl.Contains("clothing")) return new Color(0.35f, 0.70f, 0.95f, 1f);  // blue
-            if (sl.Contains("skin")) return new Color(0.90f, 0.75f, 0.55f, 1f);      // tan
-            if (sl.Contains("morph")) return new Color(0.40f, 0.85f, 0.65f, 1f);     // green-teal
-            if (sl.Contains("appearance")) return new Color(0.55f, 0.80f, 0.40f, 1f);// green
-            if (sl.Contains("pose")) return new Color(0.95f, 0.85f, 0.30f, 1f);      // yellow
-            if (sl.Contains("asset") || sl.Contains("cua")) return new Color(0.55f, 0.85f, 0.95f, 1f); // cyan
-            if (sl.Contains("plugin") || sl.Contains("script")) return new Color(0.70f, 0.70f, 0.95f, 1f); // lavender
+            if (sl.Contains("scene")) return new Color(0.95f, 0.55f, 0.10f, 1f);
+            if (sl.Contains("subscene")) return new Color(0.95f, 0.55f, 0.10f, 1f);
+            if (sl.Contains("hair")) return new Color(0.85f, 0.35f, 0.85f, 1f);
+            if (sl.Contains("clothing")) return new Color(0.35f, 0.70f, 0.95f, 1f);
+            if (sl.Contains("skin")) return new Color(0.90f, 0.75f, 0.55f, 1f);
+            if (sl.Contains("morph")) return new Color(0.40f, 0.85f, 0.65f, 1f);
+            if (sl.Contains("appearance")) return new Color(0.55f, 0.80f, 0.40f, 1f);
+            if (sl.Contains("pose")) return new Color(0.95f, 0.85f, 0.30f, 1f);
+            if (sl.Contains("asset") || sl.Contains("cua")) return new Color(0.55f, 0.85f, 0.95f, 1f);
+            if (sl.Contains("plugin") || sl.Contains("script")) return new Color(0.70f, 0.70f, 0.95f, 1f);
 
             return Color.white;
         }
 
-        /// <summary>Update filter indicator UI when filter state changes.</summary>
         public void UpdateFilterIndicator()
         {
             // Top filter label removed; keep filter exit control in the footer only.
@@ -4841,7 +4635,6 @@ namespace VPB
             Transform existingIndicator = parent.Find("FilterIndicator");
             if (existingIndicator != null) return existingIndicator.gameObject;
 
-            // Create new filter indicator
             GameObject indicatorGO = new GameObject("FilterIndicator");
             indicatorGO.transform.SetParent(parent, false);
 
@@ -4860,12 +4653,10 @@ namespace VPB
             hgroup.childForceExpandWidth = false;
             hgroup.childForceExpandHeight = false;
 
-            // Description text
             Text descText = UI.CreateLabel(indicatorGO, "Filtered", GalleryUiDesignTokens.FontBodyRef, Color.white, raycastTarget: false, name: "Description");
             GameObject descGO = descText.gameObject;
             UI.AddLE(descGO, preferredWidth: 200);
 
-            // Clear button
             GameObject clearBtnGO = new GameObject("ClearButton");
             clearBtnGO.transform.SetParent(indicatorGO.transform, false);
             Image clearBtnImg = UI.AddGalleryElementRoundedBg(clearBtnGO, new Color(0.8f, 0.2f, 0.2f, 0.8f));
@@ -4878,7 +4669,7 @@ namespace VPB
             clearBtnText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             clearBtnText.fontStyle = FontStyle.Normal;
             clearBtnText.color = Color.white;
-            clearBtnText.text = "Clear Filter";
+            clearBtnText.text = VPBTranslation.T("gallery.list.clear_filter", "Clear Filter");
             clearBtnText.alignment = TextAnchor.MiddleCenter;
             clearBtnText.raycastTarget = false;
 
@@ -4916,9 +4707,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Child graphics (thumbnail, list detail columns) steal raycasts — forward alt-clicks to row root handler.
-        /// </summary>
         private void EnsureFileEntryPointerForwarding(GameObject btnGO, UIFileEntryLeftReleaseSelect handler)
         {
             if (btnGO == null || handler == null) return;
@@ -4940,6 +4728,5 @@ namespace VPB
                 fwd.ForwardLeftPointerUp = string.Equals(gt.name, "Thumbnail", StringComparison.Ordinal);
             }
         }
-
     }
 }

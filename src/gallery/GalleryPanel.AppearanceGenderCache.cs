@@ -32,7 +32,6 @@ namespace VPB
             _appearanceGenderCacheCategory = categoryTitle;
         }
 
-        /// <summary>Fast SQL facet counts so Local / gender sub-pane renders without waiting for parallel scan.</summary>
         private bool TryApplyAppearanceFacetCountsFromSql()
         {
             if (!IsAppearanceCategoryTitle()) return false;
@@ -43,7 +42,7 @@ namespace VPB
                 EnsureAppearanceGenderRefreshCaches(title);
             string extJ = string.IsNullOrEmpty(currentExtension) ? "" : currentExtension;
             var tagCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            VpbLocalDatabase.TagScanTotals sqlFacets;
+            TagFacetCounts sqlFacets;
             if (!VpbLocalDatabase.TryReadTagCounts(
                     title,
                     extJ,
@@ -58,39 +57,37 @@ namespace VPB
                     _appearanceUserTagsByRowKey))
                 return false;
 
-            appearanceSourceCountAll = sqlFacets.AppearanceSourceCountAll;
-            appearanceSourceCountPresets = sqlFacets.AppearanceSourceCountPresets;
-            appearanceSourceCountCustom = sqlFacets.AppearanceSourceCountCustom;
-            appearanceSubfilterCountAll = sqlFacets.AppearanceSubfilterCountAll;
-            appearanceSubfilterCountPresets = sqlFacets.AppearanceSubfilterCountPresets;
-            appearanceSubfilterCountCustom = sqlFacets.AppearanceSubfilterCountCustom;
-            appearanceSubfilterCountMale = sqlFacets.AppearanceSubfilterCountMale;
-            appearanceSubfilterCountFemale = sqlFacets.AppearanceSubfilterCountFemale;
-            appearanceSubfilterCountFuta = sqlFacets.AppearanceSubfilterCountFuta;
-            appearanceSubfilterCountUnknown = sqlFacets.AppearanceSubfilterCountUnknown;
-            appearanceSubfilterFacetCountPresets = sqlFacets.AppearanceSubfilterFacetCountPresets;
-            appearanceSubfilterFacetCountCustom = sqlFacets.AppearanceSubfilterFacetCountCustom;
-            appearanceSubfilterFacetCountMale = sqlFacets.AppearanceSubfilterFacetCountMale;
-            appearanceSubfilterFacetCountFemale = sqlFacets.AppearanceSubfilterFacetCountFemale;
-            appearanceSubfilterFacetCountFuta = sqlFacets.AppearanceSubfilterFacetCountFuta;
-            appearanceSubfilterFacetCountUnknown = sqlFacets.AppearanceSubfilterFacetCountUnknown;
-            appearanceSubfilterCurrentCountAll = sqlFacets.AppearanceSubfilterCurrentCountAll;
-            appearanceSubfilterCurrentCountMale = sqlFacets.AppearanceSubfilterCurrentCountMale;
-            appearanceSubfilterCurrentCountFemale = sqlFacets.AppearanceSubfilterCurrentCountFemale;
-            appearanceSubfilterCurrentCountFuta = sqlFacets.AppearanceSubfilterCurrentCountFuta;
-            appearanceSubfilterCurrentCountUnknown = sqlFacets.AppearanceSubfilterCurrentCountUnknown;
+            tagFacets.AppearanceSourceCountAll = sqlFacets.AppearanceSourceCountAll;
+            tagFacets.AppearanceSourceCountPresets = sqlFacets.AppearanceSourceCountPresets;
+            tagFacets.AppearanceSourceCountCustom = sqlFacets.AppearanceSourceCountCustom;
+            tagFacets.AppearanceSubfilterCountAll = sqlFacets.AppearanceSubfilterCountAll;
+            tagFacets.AppearanceSubfilterCountPresets = sqlFacets.AppearanceSubfilterCountPresets;
+            tagFacets.AppearanceSubfilterCountCustom = sqlFacets.AppearanceSubfilterCountCustom;
+            tagFacets.AppearanceSubfilterCountMale = sqlFacets.AppearanceSubfilterCountMale;
+            tagFacets.AppearanceSubfilterCountFemale = sqlFacets.AppearanceSubfilterCountFemale;
+            tagFacets.AppearanceSubfilterCountFuta = sqlFacets.AppearanceSubfilterCountFuta;
+            tagFacets.AppearanceSubfilterCountUnknown = sqlFacets.AppearanceSubfilterCountUnknown;
+            tagFacets.AppearanceSubfilterFacetCountPresets = sqlFacets.AppearanceSubfilterFacetCountPresets;
+            tagFacets.AppearanceSubfilterFacetCountCustom = sqlFacets.AppearanceSubfilterFacetCountCustom;
+            tagFacets.AppearanceSubfilterFacetCountMale = sqlFacets.AppearanceSubfilterFacetCountMale;
+            tagFacets.AppearanceSubfilterFacetCountFemale = sqlFacets.AppearanceSubfilterFacetCountFemale;
+            tagFacets.AppearanceSubfilterFacetCountFuta = sqlFacets.AppearanceSubfilterFacetCountFuta;
+            tagFacets.AppearanceSubfilterFacetCountUnknown = sqlFacets.AppearanceSubfilterFacetCountUnknown;
+            tagFacets.AppearanceSubfilterCurrentCountAll = sqlFacets.AppearanceSubfilterCurrentCountAll;
+            tagFacets.AppearanceSubfilterCurrentCountMale = sqlFacets.AppearanceSubfilterCurrentCountMale;
+            tagFacets.AppearanceSubfilterCurrentCountFemale = sqlFacets.AppearanceSubfilterCurrentCountFemale;
+            tagFacets.AppearanceSubfilterCurrentCountFuta = sqlFacets.AppearanceSubfilterCurrentCountFuta;
+            tagFacets.AppearanceSubfilterCurrentCountUnknown = sqlFacets.AppearanceSubfilterCurrentCountUnknown;
             return true;
         }
 
-        /// <summary>Populate appearance sub-pane counts immediately (SQL or schedule deferred loose recount).</summary>
         private bool TryPrimeAppearanceSubPaneCounts()
         {
             string cat = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             if (!string.IsNullOrEmpty(cat))
                 EnsureAppearanceGenderRefreshCaches(cat);
 
-            // Source:Local — SQL only here. Sliced loose recount is owned by Deferred phase 2 /
-            // TryRecomputeAppearanceGenderFacetCountsScoped (avoid starting then killing a coroutine).
+            // Source:Local — SQL only here.
             if (IsAppearanceLooseScopedBrowsing())
             {
                 if (TryApplyAppearanceFacetCountsFromSql())
@@ -103,8 +100,6 @@ namespace VPB
 
             if (TryApplyAppearanceFacetCountsFromSql())
             {
-                // Loose .vap merge is deferred to CoMergeLooseVapAppearanceGenderFacetCounts so category
-                // navigation stays interactive (sync ClassifyLooseVapPath over tens of thousands of files froze VAM).
                 tagsCached = true;
                 return true;
             }
@@ -127,14 +122,11 @@ namespace VPB
                 InvalidateTags();
 
             RefreshFilesAndTabs();
-            // Local path already scheduled sliced recount inside TryRecompute; non-Local merge here.
             if (!IsAppearanceLooseScopedBrowsing())
                 ScheduleAppearanceLooseMergeRefresh();
         }
 
-        /// <summary>
-        /// After gallery user-tag assign/remove: refresh gender chips and grid when gender tags change.
-        /// </summary>
+        /// <summary>After gallery user-tag assign/remove: refresh gender chips and grid when gender tags change.</summary>
         internal bool TryHandleAppearanceGenderTagLiveUpdate(List<string> tags, bool remove, List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
         {
             if (!IsAppearanceCategoryTitle() || tags == null || tags.Count == 0) return false;

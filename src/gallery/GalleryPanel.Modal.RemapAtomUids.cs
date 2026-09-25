@@ -57,10 +57,8 @@ namespace VPB
         private List<SceneAtomImporter.BrokenUidRef> _remapAtomUidsRows;
         private readonly Dictionary<string, string> _remapAtomUidsChoices
             = new Dictionary<string, string>(StringComparer.Ordinal);
-        /// <summary>Original → auto-filled choice at open (suggested live / Create new).</summary>
         private readonly Dictionary<string, string> _remapAtomUidsAutoSuggested
             = new Dictionary<string, string>(StringComparer.Ordinal);
-        /// <summary>Original UID → chosen live plugin store id (primary receiver).</summary>
         private readonly Dictionary<string, string> _remapAtomUidsReceiverChoices
             = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _remapAtomUidsReceiverAutoSuggested
@@ -81,21 +79,14 @@ namespace VPB
             = new Dictionary<string, Image>(StringComparer.Ordinal);
         private readonly Dictionary<string, Image> _remapAtomUidsChevronIcons
             = new Dictionary<string, Image>(StringComparer.Ordinal);
-        /// <summary>
-        /// Rows the user explicitly chose to leave unmapped. Kept separate from "empty destination" so a
-        /// deliberate skip reads as settled (neutral row, no gap count) instead of an unanswered error.
-        /// </summary>
         private readonly HashSet<string> _remapAtomUidsSkipped
             = new HashSet<string>(StringComparer.Ordinal);
-        /// <summary>1-based modal pass — >1 means these refs came from atoms co-imported in a prior pass.</summary>
         private int _remapAtomUidsPass = 1;
-        /// <summary>uidRemap, createNew, receiverRemapByOriginalUid.</summary>
         private Action<
             Dictionary<string, string>,
             HashSet<string>,
             Dictionary<string, Dictionary<string, string>>> _remapAtomUidsOnConfirm;
         private string _remapAtomUidsOpenPickerFor;
-        /// <summary>When true, expand lists live plugin receivers for the open row's destination.</summary>
         private bool _remapAtomUidsExpandIsReceiver;
         private float _remapAtomUidsChromeScale = 1f;
         private Vector2? _remapAtomUidsSavedPosCenter;
@@ -147,13 +138,6 @@ namespace VPB
             get { return _remapAtomUidsModalRoot != null && _remapAtomUidsModalRoot.activeInHierarchy; }
         }
 
-        /// <summary>
-        /// Power-user remap table: Original UID → live UID, typed name, or Create new (co-import donor).
-        /// Optional Receiver column remaps trigger <c>plugin#N_Class</c> onto the live destination atom.
-        /// Floating drag/resize chrome (filter-presets pattern). Esc / close / Cancel = cancel.
-        /// Empty <paramref name="broken"/> still opens (Jakob: predictable import gate) with empty state;
-        /// Enter / Import continues with no remaps.
-        /// </summary>
         private void ShowRemapAtomUidsModal(
             List<SceneAtomImporter.BrokenUidRef> broken,
             int pass,
@@ -185,7 +169,6 @@ namespace VPB
             {
                 SceneAtomImporter.BrokenUidRef row = broken[i];
                 if (string.IsNullOrEmpty(row.OriginalUid)) continue;
-                // Live same-type unique → suggest remap; else Create new when donor still has the atom.
                 if (!string.IsNullOrEmpty(row.SuggestedLiveUid))
                 {
                     _remapAtomUidsChoices[row.OriginalUid] = row.SuggestedLiveUid;
@@ -256,7 +239,6 @@ namespace VPB
             bool wasPending = _remapAtomUidsOnConfirm != null;
             _remapAtomUidsOnConfirm = null;
             HideRemapAtomUidsModal();
-            // Cancel aborts the whole import — say so, or the closed window reads as "it imported".
             if (wasPending)
             {
                 SetStatus(VPBTranslation.T(
@@ -265,10 +247,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Esc ladder before InputField gate: clear expand filter → collapse picker →
-        /// expand window if collapsed → cancel float.
-        /// </summary>
+        /// <summary>Esc ladder before InputField gate: clear expand filter → collapse picker → expand window if collapsed → cancel float.</summary>
         internal bool TryHandleRemapAtomUidsEsc()
         {
             if (!IsRemapAtomUidsModalOpen) return false;
@@ -298,9 +277,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Enter after InputField gate: collapse picker, else Import (soft-warn unresolved).
-        /// </summary>
+        /// <summary>Enter after InputField gate: collapse picker, else Import (soft-warn unresolved).</summary>
         internal bool TryHandleRemapAtomUidsEnter()
         {
             if (!IsRemapAtomUidsModalOpen) return false;
@@ -423,10 +400,6 @@ namespace VPB
             return n;
         }
 
-        /// <summary>
-        /// Plugin receivers that need a live dest storable and still have no auto/explicit match.
-        /// Create new / empty dest → not counted (N/A).
-        /// </summary>
         private int CountRemapAtomUidsUnresolvedReceivers()
         {
             int n = 0;
@@ -628,7 +601,6 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(originalUid)) return;
             _remapAtomUidsChoices[originalUid] = RemapAtomUidsDisplayToStored(displayOrStored);
-            // Typing a destination overrides a previous skip.
             if (!string.IsNullOrEmpty(displayOrStored)) _remapAtomUidsSkipped.Remove(originalUid);
             TryAutoSuggestRemapReceiver(originalUid, force: true);
             SyncRemapAtomUidsReceiverInputVisual(originalUid);
@@ -655,9 +627,6 @@ namespace VPB
             return row.SourcePluginReceivers != null && row.SourcePluginReceivers.Count > 0;
         }
 
-        /// <summary>
-        /// Auto-fill Receiver from unique ClassName match on the current Destination live atom.
-        /// </summary>
         private void TryAutoSuggestRemapReceiver(string originalUid, bool force)
         {
             if (string.IsNullOrEmpty(originalUid)) return;
@@ -694,7 +663,7 @@ namespace VPB
                     string autoPrev;
                     if (!_remapAtomUidsReceiverAutoSuggested.TryGetValue(originalUid, out autoPrev)
                         || !string.Equals(existing, autoPrev, StringComparison.Ordinal))
-                        return; // user override
+                        return;
                 }
             }
 
@@ -732,8 +701,7 @@ namespace VPB
             string recv;
             if (!_remapAtomUidsReceiverChoices.TryGetValue(originalUid, out recv)) recv = string.Empty;
 
-            // Input stores raw primary choice; display suffix for multi is via placeholder/status only
-            // when not focused — keep raw store id in field for edit/export.
+            // Input stores raw primary choice; display suffix for multi is via placeholder/status only when not focused.
             if (input.text != recv) input.text = recv ?? string.Empty;
             input.interactable = enabled;
 
@@ -751,7 +719,6 @@ namespace VPB
                 else bg.color = RemapDestNormalBg;
             }
 
-            // Cue multi-plugin state on placeholder when empty / partial (change blindness).
             if (input.placeholder != null)
             {
                 Text ph = input.placeholder as Text;
@@ -799,10 +766,6 @@ namespace VPB
             RefreshRemapAtomUidsUnresolvedUi();
         }
 
-        /// <summary>
-        /// One-line "why am I looking at this" for the context strip. Pass &gt;1 states that these refs came
-        /// from atoms the previous pass co-imported — the only visible difference between passes.
-        /// </summary>
         private string BuildRemapAtomUidsContextLine()
         {
             int rows = _remapAtomUidsRows != null ? _remapAtomUidsRows.Count : 0;
@@ -900,7 +863,6 @@ namespace VPB
             _remapAtomUidsPanelRT = panel.GetComponent<RectTransform>();
             if (_remapAtomUidsPanelRT != null)
             {
-                // Top-left pivot — resize from footer handle keeps title fixed (filter-presets pattern).
                 _remapAtomUidsPanelRT.pivot = new Vector2(0f, 1f);
                 _remapAtomUidsPanelRT.anchorMin = new Vector2(0.5f, 0.5f);
                 _remapAtomUidsPanelRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -908,10 +870,9 @@ namespace VPB
                 Vector2 center = _remapAtomUidsSavedPosCenter.HasValue
                     ? _remapAtomUidsSavedPosCenter.Value
                     : Vector2.zero;
-                _remapAtomUidsPanelRT.anchoredPosition = RemapAtomUidsCenterToTopLeft(center, _remapAtomUidsPanelRT.sizeDelta);
+                _remapAtomUidsPanelRT.anchoredPosition = FloatPanelCoords.CenterToTopLeft(center, _remapAtomUidsPanelRT.sizeDelta);
             }
 
-            // ── Title bar (drag) ───────────────────────────────────────────
             GameObject titleBar = UI.CreateChildRT(panel, "TitleBar", AnchorPresets.hStretchTop,
                 new Vector2(0f, titleH), Vector2.zero);
             Image titleBg = UI.AddImage(titleBar, RemapFloatTitleBarBg);
@@ -946,7 +907,7 @@ namespace VPB
                 font, RemapTitleEmphasis, TextAnchor.MiddleLeft, name: "Title");
             UI.AddLE(title.gameObject, flexibleWidth: 1f, minWidth: 60f * s);
 
-            _remapAtomUidsCollapseBtn = RemapAtomUidsSquareIconButton(
+            _remapAtomUidsCollapseBtn = UI.CreateFloatChromeIconButton(
                 titleBar.transform, chromeSz, "chevron-up",
                 GalleryUiColorTokens.ChromeIconWell, ToggleRemapAtomUidsCollapsed);
             if (_remapAtomUidsCollapseBtn != null)
@@ -967,7 +928,7 @@ namespace VPB
                 };
             }
 
-            GameObject closeBtn = RemapAtomUidsSquareIconButton(
+            GameObject closeBtn = UI.CreateFloatChromeIconButton(
                 titleBar.transform, chromeSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, CancelRemapAtomUidsModal);
             if (closeBtn != null)
@@ -985,8 +946,6 @@ namespace VPB
             headerDrag.Target = _remapAtomUidsPanelRT;
             headerDrag.OnMoved = OnRemapAtomUidsFloatMoved;
 
-            // ── Context strip — why this window is open / which pass ──────
-            // Pass 2+ looks identical to pass 1 without this, so a re-open reads as "Import did nothing".
             float ctxH = Mathf.Max(24f * s, chromeSz * 0.8f);
             GameObject ctxBar = UI.CreateChildRT(panel, "ContextBar", AnchorPresets.hStretchTop,
                 new Vector2(0f, ctxH), new Vector2(0f, -titleH));
@@ -1016,7 +975,6 @@ namespace VPB
             ctxTxt.transform.localScale = Vector3.one;
             UI.AddLE(ctxTxt.gameObject, flexibleWidth: 1f, minWidth: 80f * s, preferredHeight: ctxH - 4f * s);
 
-            // ── Column headers (Source → Destination) ─────────────────────
             float colHdrY = titleH + ctxH;
             GameObject colHdr = UI.CreateChildRT(panel, "ColHeader", AnchorPresets.hStretchTop,
                 new Vector2(0f, colHdrH), new Vector2(0f, -colHdrY));
@@ -1046,7 +1004,6 @@ namespace VPB
                 VPBTranslation.T("gallery.import.remap_uids.col_receiver", "Receiver"),
                 font, s, 1.1f, colHdrH - 8f * s);
 
-            // ── Footer ────────────────────────────────────────────────────
             GameObject footer = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
             _remapAtomUidsFooterGO = footer;
@@ -1066,7 +1023,6 @@ namespace VPB
             if (footer.GetComponent<RectMask2D>() == null)
                 footer.AddComponent<RectMask2D>();
 
-            // Full-footer drag hit (behind Cancel/Import/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(footer);
             if (footerDragArea != null)
             {
@@ -1169,7 +1125,6 @@ namespace VPB
                 else SetStatus(null);
             };
 
-            // ── Scroll list between col header + footer ───────────────────
             GameObject scrollHost = UI.CreateChildRT(panel, "ScrollHost", AnchorPresets.stretchAll);
             _remapAtomUidsScrollHostGO = scrollHost;
             RectTransform scrollRT = scrollHost.GetComponent<RectTransform>();
@@ -1266,10 +1221,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Empty / success surface when import has no broken external UID refs.
-        /// Keeps gate predictable; Enter confirms (Doherty + keyboard path).
-        /// </summary>
         private void BuildRemapAtomUidsEmptyState(int font, float s, float rowH)
         {
             GameObject shell = new GameObject("RemapEmpty");
@@ -1321,7 +1272,6 @@ namespace VPB
             _remapAtomUidsRowShells[original] = shell;
             _remapAtomUidsRowBgs[original] = shellBg;
 
-            // Main hit row — whole row toggles expand (InputField steals for typing).
             GameObject main = new GameObject("Main");
             main.transform.SetParent(shell.transform, false);
             Image mainBg = UI.AddImage(main, new Color(0f, 0f, 0f, 0.01f));
@@ -1380,9 +1330,6 @@ namespace VPB
                 if (shellImg != null) shellImg.color = RemapRowUnresolvedBg;
             }
 
-            // Hand-rolled InputField: text as direct child (CreateTextInput pattern).
-            // Do NOT ApplyFont here — Body font already scaled; ApplyFont localScale + stretch
-            // clips InputField glyphs under RectMask2D (blank destination).
             GameObject inputGO = new GameObject("Input");
             inputGO.transform.SetParent(remapHost.transform, false);
             Image destBgImg = UI.AddGalleryElementRoundedBg(inputGO, destBgColor);
@@ -1471,7 +1418,6 @@ namespace VPB
                 };
             }
 
-            // Click field → expand list (combobox pattern); typing still works.
             EventTrigger et = inputGO.AddComponent<EventTrigger>();
             EventTrigger.Entry entry = new EventTrigger.Entry();
             entry.eventID = EventTriggerType.PointerClick;
@@ -1483,7 +1429,7 @@ namespace VPB
             et.triggers.Add(entry);
 
             float chevronSz = rowH - 10f * s;
-            GameObject pickBtn = RemapAtomUidsSquareIconButton(
+            GameObject pickBtn = UI.CreateFloatChromeIconButton(
                 remapHost.transform, chevronSz, "chevron-down",
                 new Color(0.22f, 0.38f, 0.52f, 1f),
                 () => ToggleRemapAtomUidsExpand(capturedOriginal, capturedType, canCreate));
@@ -1495,7 +1441,6 @@ namespace VPB
                 if (iconImg != null) _remapAtomUidsChevronIcons[original] = iconImg;
             }
 
-            // Receiver column — plugin#N_Class on remapped live atom (Embody slot mismatch).
             bool hasPluginRecv = row.SourcePluginReceivers != null && row.SourcePluginReceivers.Count > 0;
             string recvChoice;
             if (!_remapAtomUidsReceiverChoices.TryGetValue(original, out recvChoice))
@@ -1587,7 +1532,7 @@ namespace VPB
                 });
                 recvEt.triggers.Add(recvEntry);
 
-                GameObject recvPickBtn = RemapAtomUidsSquareIconButton(
+                GameObject recvPickBtn = UI.CreateFloatChromeIconButton(
                     recvHost.transform, chevronSz, "chevron-down",
                     new Color(0.22f, 0.38f, 0.52f, 1f),
                     () =>
@@ -1758,7 +1703,6 @@ namespace VPB
             string filter = _remapAtomUidsExpandFilter ?? string.Empty;
             if (!string.IsNullOrEmpty(filter)) filter = filter.Trim();
 
-            // Keep filter field; wipe option rows.
             for (int c = expandHost.transform.childCount - 1; c >= 0; c--)
             {
                 Transform ch = expandHost.transform.GetChild(c);
@@ -1823,8 +1767,7 @@ namespace VPB
                 optionCount++;
             }
 
-            // Explicit escape hatch — otherwise the only way past an unmappable ref is clearing the field
-            // and pressing Import twice, which reads as an error rather than a choice.
+            // Explicit escape hatch — otherwise the only way past an unmappable ref is clearing the field and pressing Import twice.
             bool skipMatchesFilter = string.IsNullOrEmpty(filter)
                 || "skip".IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0
                 || filter.IndexOf("skip", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -1993,15 +1936,10 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Explicit "leave this reference alone" pick. Clears the destination but records the decision so the
-        /// row reads as settled (neutral, not counted as a gap) instead of an unanswered red field.
-        /// </summary>
         private void ApplyRemapAtomUidsSkip(string originalUid)
         {
             if (string.IsNullOrEmpty(originalUid)) return;
-            // Set first: the pick path repaints the row, and an empty destination is only "settled"
-            // once the skip is recorded.
+            // Set first: the pick path repaints the row, and an empty destination is only "settled" once the skip is recorded.
             _remapAtomUidsSkipped.Add(originalUid);
             ApplyRemapAtomUidsPick(originalUid, string.Empty);
             _remapAtomUidsReceiverChoices.Remove(originalUid);
@@ -2076,7 +2014,6 @@ namespace VPB
             int optionCount = 0;
             string capturedOrig = originalUid;
 
-            // Recognition: list every source plugin receiver + auto status (multi-plugin edge).
             if (row.SourcePluginReceivers != null && row.SourcePluginReceivers.Count > 0)
             {
                 Text hdr = UI.CreateLabel(
@@ -2199,9 +2136,6 @@ namespace VPB
             le.minHeight = height;
         }
 
-        /// <summary>
-        /// Live UI-scale hotkey path: rebuild float chrome at new ChromeScale, keep choices + geometry.
-        /// </summary>
         private void RescaleRemapAtomUidsIfOpen(float chromeScale)
         {
             if (!IsRemapAtomUidsModalOpen) return;
@@ -2283,23 +2217,11 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (VPBConfig.Instance.GalleryRemapAtomUidsPosSaved)
-                {
-                    _remapAtomUidsSavedPosCenter = new Vector2(
-                        VPBConfig.Instance.GalleryRemapAtomUidsPosX,
-                        VPBConfig.Instance.GalleryRemapAtomUidsPosY);
-                }
-                if (VPBConfig.Instance.GalleryRemapAtomUidsSizeSaved)
-                {
-                    float w = VPBConfig.Instance.GalleryRemapAtomUidsWidthRef;
-                    float h = VPBConfig.Instance.GalleryRemapAtomUidsHeightRef;
-                    if (w >= RemapFloatMinWRef && h >= RemapFloatMinHRef)
-                    {
-                        _remapAtomUidsSavedSizeRef = new Vector2(
-                            Mathf.Clamp(w, RemapFloatMinWRef, RemapFloatMaxWRef),
-                            Mathf.Clamp(h, RemapFloatMinHRef, RemapFloatMaxHRef));
-                    }
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GalleryRemapAtomUidsGeometry.Current;
+                _remapAtomUidsSavedPosCenter = slot.SavedPos;
+                _remapAtomUidsSavedSizeRef = slot.SavedSize(
+                    new Vector2(RemapFloatMinWRef, RemapFloatMinHRef),
+                    new Vector2(RemapFloatMaxWRef, RemapFloatMaxHRef));
             }
             catch { }
         }
@@ -2308,7 +2230,7 @@ namespace VPB
         {
             if (_remapAtomUidsPanelRT == null) return;
             float s = _remapAtomUidsChromeScale > 0f ? _remapAtomUidsChromeScale : 1f;
-            _remapAtomUidsSavedPosCenter = RemapAtomUidsTopLeftToCenter(
+            _remapAtomUidsSavedPosCenter = FloatPanelCoords.TopLeftToCenter(
                 _remapAtomUidsPanelRT.anchoredPosition, _remapAtomUidsPanelRT.sizeDelta);
             if (!_remapAtomUidsCollapsed)
             {
@@ -2323,18 +2245,9 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (_remapAtomUidsSavedPosCenter.HasValue)
-                {
-                    VPBConfig.Instance.GalleryRemapAtomUidsPosSaved = true;
-                    VPBConfig.Instance.GalleryRemapAtomUidsPosX = _remapAtomUidsSavedPosCenter.Value.x;
-                    VPBConfig.Instance.GalleryRemapAtomUidsPosY = _remapAtomUidsSavedPosCenter.Value.y;
-                }
-                if (_remapAtomUidsSavedSizeRef.HasValue)
-                {
-                    VPBConfig.Instance.GalleryRemapAtomUidsSizeSaved = true;
-                    VPBConfig.Instance.GalleryRemapAtomUidsWidthRef = _remapAtomUidsSavedSizeRef.Value.x;
-                    VPBConfig.Instance.GalleryRemapAtomUidsHeightRef = _remapAtomUidsSavedSizeRef.Value.y;
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GalleryRemapAtomUidsGeometry.Current;
+                slot.StorePos(_remapAtomUidsSavedPosCenter);
+                slot.StoreSize(_remapAtomUidsSavedSizeRef);
             }
             catch { return; }
             try { ScheduleQuickFiltersConfigSave(); } catch { }
@@ -2431,16 +2344,6 @@ namespace VPB
             }
         }
 
-        private static Vector2 RemapAtomUidsCenterToTopLeft(Vector2 center, Vector2 size)
-        {
-            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
-        }
-
-        private static Vector2 RemapAtomUidsTopLeftToCenter(Vector2 topLeft, Vector2 size)
-        {
-            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
-        }
-
         private static void RemapAtomUidsArrowGlyph(Transform parent, float size, float s, int font)
         {
             float sz = Mathf.Max(16f * s, size);
@@ -2465,12 +2368,6 @@ namespace VPB
             Text fallback = UI.CreateLabel(go, "\u2192", font, new Color(0.55f, 0.62f, 0.70f, 1f),
                 TextAnchor.MiddleCenter, raycastTarget: false, name: "ArrowText");
             GalleryUiMetrics.ApplyFont(fallback, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-        }
-
-        private static GameObject RemapAtomUidsSquareIconButton(
-            Transform parent, float size, string iconPath, Color backdrop, UnityAction onClick)
-        {
-            return UI.CreateFloatChromeIconButton(parent, size, iconPath, backdrop, onClick);
         }
 
         private static GameObject RemapAtomUidsChromeButton(

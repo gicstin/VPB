@@ -4,10 +4,6 @@ using SimpleJSON;
 
 namespace VPB
 {
-    /// <summary>
-    /// Creator Strip Scene keep buckets. Bitmask persisted in <c>VPBConfig.CreatorStripKeepMask</c>.
-    /// CoreControl / CameraRig always kept silently. Environment always dropped (blank sky like new scene).
-    /// </summary>
     [Flags]
     public enum CreatorStripKeepKind
     {
@@ -28,11 +24,9 @@ namespace VPB
 
     public static class SceneUtils
     {
-        /// <summary>Default keep set for Strip Scene selector: persons + lights.</summary>
         public const CreatorStripKeepKind CreatorStripKeepDefault =
             CreatorStripKeepKind.Persons | CreatorStripKeepKind.Lights;
 
-        /// <summary>All user-toggleable keep kinds (excludes None).</summary>
         public const CreatorStripKeepKind CreatorStripKeepAllUser =
             CreatorStripKeepKind.Persons
             | CreatorStripKeepKind.Lights
@@ -64,10 +58,6 @@ namespace VPB
             CreatorStripKeepKind.Other,
         };
 
-        /// <summary>
-        /// VaM character atom types usable as gallery/clothing targets. <c>InvisiblePerson</c> is omitted
-        /// when only <c>Person</c> is checked, which breaks the target picker for invisible characters.
-        /// </summary>
         public static bool IsPersonLikeAtomType(string type)
         {
             if (string.IsNullOrEmpty(type)) return false;
@@ -104,9 +94,6 @@ namespace VPB
             return null;
         }
 
-        /// <summary>
-        /// VaM sound/audio atom types (visible + invisible sources used for scene audio / VPB preview).
-        /// </summary>
         public static bool IsSoundAtomType(string type)
         {
             if (string.IsNullOrEmpty(type)) return false;
@@ -133,12 +120,7 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>
-        /// Scene-critical atoms that must never be stripped, erased, or imported.
-        /// VaM stores the player rig as type <c>VRController</c>, id <c>[CameraRig]</c>.
-        /// <c>WindowCamera</c> and <c>PlayerNavigationPanel</c> are always in the scene.
-        /// <c>CoreControl*</c> kept by uid. Kept silently — not listed in Strip Scene, Scene Eraser, or Scene Importer.
-        /// </summary>
+        /// <summary>Scene-critical atoms that must never be stripped, erased, or imported.</summary>
         public static bool IsSystemProtectedAtom(Atom atom)
         {
             if (atom == null) return false;
@@ -181,10 +163,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// VaM Environment atom (sky/sphere image) — always strip.
-        /// Skyshop sphere on CoreControl blanked separately in keepers JSON / after load.
-        /// </summary>
         public static bool IsCreatorStripAlwaysDropAtomType(string type)
         {
             if (string.IsNullOrEmpty(type)) return false;
@@ -199,17 +177,12 @@ namespace VPB
             try { type = atom.type; } catch { type = null; }
             try { uid = atom.uid; } catch { uid = null; }
             if (IsCreatorStripAlwaysDropAtomType(type)) return true;
-            // Some scenes name the sky atom Environment with a nonstandard type.
             if (!string.IsNullOrEmpty(uid)
                 && string.Equals(uid, "Environment", StringComparison.Ordinal))
                 return true;
             return false;
         }
 
-        /// <summary>
-        /// Map VaM atom <c>type</c> to Strip keep bucket. Unknown types → Other.
-        /// Cold/warm path only — not for Update.
-        /// </summary>
         public static CreatorStripKeepKind ClassifyCreatorStripKeepKind(string type)
         {
             if (string.IsNullOrEmpty(type)) return CreatorStripKeepKind.Other;
@@ -286,14 +259,9 @@ namespace VPB
             if (IsSubSceneAtomType(type))
                 return CreatorStripKeepKind.SubScenes;
 
-            // VaM catalog category on live atoms sometimes helps; type string alone is enough for JSON.
             return CreatorStripKeepKind.Other;
         }
 
-        /// <summary>
-        /// Triggers / Buttons subset — UI buttons/toggles/sliders + type names with Trigger.
-        /// Used by Strip Keep view filter (recognition); still classified under UI/Other kinds.
-        /// </summary>
         public static bool IsCreatorStripTriggerOrButtonType(string type)
         {
             if (string.Equals(type, "UIButton", StringComparison.Ordinal)
@@ -364,7 +332,6 @@ namespace VPB
             return string.Equals(type, "CustomUnityAsset", StringComparison.Ordinal);
         }
 
-        /// <summary>Target type for the CUA category — assetbundle picks apply to these, not to Persons.</summary>
         public static bool IsCustomUnityAssetAtom(Atom atom)
         {
             if (atom == null) return false;
@@ -386,7 +353,6 @@ namespace VPB
 
             Ray ray = cam.ScreenPointToRay(screenPos);
 
-            // Mask out UI layer (5) and Ignore Raycast (2)
             int layerMask = Physics.DefaultRaycastLayers & ~(1 << 5);
 
             if (Physics.Raycast(ray, out hit, 1000f, layerMask))
@@ -397,7 +363,6 @@ namespace VPB
                     statusMsg = $"Target: {atom.name}";
                     return atom;
                 }
-                // Return the atom for drag-drop logic even if it's not a Person, but skip message processing
                 return atom;
             }
             return null;

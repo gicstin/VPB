@@ -4,10 +4,7 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>
-        /// Info-bar hover tip: instant show + tip→tip swap; hide grace only
-        /// (<see cref="GalleryUiDesignTokens.TooltipHideGraceSec"/>). No fade / show dwell.
-        /// </summary>
+        /// <summary>Info-bar hover tip: instant show + tip→tip swap; hide grace only (TooltipHideGraceSec).</summary>
         private void SetHoverTooltip(string msg, GameObject owner)
         {
             if (string.IsNullOrEmpty(msg) || owner == null) return;
@@ -40,7 +37,6 @@ namespace VPB
                 _stickyTipDesiredOwner = null;
             }
 
-            // Sibling already claimed — keep shown tip.
             if (_stickyTipDesiredOwner != null) return;
 
             _stickyTipHidePending = true;

@@ -5,15 +5,10 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>
-    /// Shared float-window move: parent-local pointer tracking (WorldSpace VR + Overlay desktop).
-    /// Screen <see cref="PointerEventData.delta"/> breaks VR laser / parallax — never use for floats.
-    /// </summary>
     public sealed class UIFloatPanelDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public RectTransform Target;
         public Action OnMoved;
-        /// <summary>VR: keep panel near host (parallax safety). Desktop: off.</summary>
         public bool ClampPositionInVr = true;
 
         private Camera _dragCam;
@@ -92,12 +87,6 @@ namespace VPB
             return cam;
         }
 
-        /// <summary>
-        /// Clamp panel geometric center (pivot-aware) — equal room left/right and top/bottom.
-        /// Clamping top-left pivot alone favored right/bottom (window grows that way).
-        /// Origin = (0,0): floats use center anchors on canvas; parent.rect.center can skew bounds.
-        /// Only during drag — collapse does not re-run this.
-        /// </summary>
         internal static Vector2 ClampFloatPosForVr(RectTransform parent, RectTransform target, Vector2 anchoredPos)
         {
             bool vr = false;
@@ -123,7 +112,6 @@ namespace VPB
             return center - toCenter;
         }
 
-        /// <summary>Travel radius along one axis from host origin (local px).</summary>
         private static float ResolveVrTravel(float parentHalfExtent)
         {
             if (parentHalfExtent < 1f)
@@ -137,12 +125,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Shared float-window resize from bottom-right grip.
-    /// Parent-local pointer deltas (not screen delta) so VR WorldSpace works.
-    /// Incremental size — safe for top-left and center pivots.
-    /// Does not re-clamp position (collapse/resize must not yank title).
-    /// </summary>
     public sealed class UIFloatPanelResize : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public RectTransform Target;
@@ -150,9 +132,7 @@ namespace VPB
         public Func<Vector2> GetMaxSize;
         public Vector2 MinSizeFallback = new Vector2(220f, 200f);
         public Vector2 MaxSizeFallback = new Vector2(960f, 900f);
-        /// <summary>Fired each drag tick (live layout).</summary>
         public Action OnResizing;
-        /// <summary>Fired on drag end (persist / rebuild).</summary>
         public Action OnResized;
 
         private Camera _dragCam;

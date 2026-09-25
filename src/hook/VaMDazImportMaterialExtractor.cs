@@ -4,10 +4,6 @@ using SimpleJSON;
 
 namespace VPB
 {
-    /// <summary>
-    /// Extracts texture paths + <see cref="ImageLoaderThreaded.QueuedImage"/> flags from DAZ Studio
-    /// shader_material JSON (<c>MeshVR.DAZImportMaterial</c> in <c>ref/vam</c>).
-    /// </summary>
     internal static class VaMDazImportMaterialExtractor
     {
         internal struct DazTextureEntry
@@ -90,7 +86,6 @@ namespace VPB
 
         private static void ApplyImportOptionsFromNode(JSONClass sm, MaterialState state)
         {
-            // Optional overrides when embedded in a DAZ import preset node (DAZImport fields).
             state.UseSpecularAsGlossMap = ReadBool(sm, "useSpecularAsGlossMap", false);
             state.CopyBumpAsSpecularColorMap = ReadBool(sm, "copyBumpAsSpecularColorMap", false);
             state.ForceBumpAsNormalMap = ReadBool(sm, "forceBumpAsNormalMap", false);
@@ -268,7 +263,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Mirror <see cref="MeshVR.DAZImportMaterial.ImportImages"/> CopyAndImportImage calls.</summary>
         private static void EmitImportImageEntries(MaterialState state, List<DazTextureEntry> outEntries)
         {
             AddEntry(outEntries, state.DiffusePath, CopyAndImportFlags(isNormalMap: false, isTransparency: false, isBumpMap: false, bumpStrength: 1f, isGlossMap: false, forceLinear: false, invert: false));
@@ -299,7 +293,6 @@ namespace VPB
             AddEntry(outEntries, state.TranslucencyStrengthPath, CopyAndImportFlags(isNormalMap: false, isTransparency: false, isBumpMap: false, bumpStrength: 1f, isGlossMap: false, forceLinear: true, invert: false));
         }
 
-        /// <summary>Same assignments as DAZImportMaterial.CopyAndImportImage when building QueuedImage.</summary>
         public static NativeTextureOnDemandCache.TextureFlags CopyAndImportFlags(
             bool isNormalMap,
             bool isTransparency,

@@ -8,8 +8,6 @@ using MVR.FileManagement;
 
 namespace VPB
 {
-    // Persistent cache of a scene's Person-atom JSON, keyed by scene + file signature, so the
-    // Import sidebar populates its picker (and slices one atom at Apply) without re-parsing the scene.
     internal static partial class VpbLocalDatabase
     {
         const int SceneAtomCacheSchemaVersion = 4;
@@ -58,8 +56,6 @@ namespace VPB
         internal static void EnsureSceneAtomCacheSchema(VpbSqlite3.Connection conn)
         {
             if (conn == null) return;
-            // PK leftmost column is scene_key, so WHERE scene_key=? range scans use the PK index;
-            // no separate index needed. A schema/format change self-heals: sig mismatch -> cache miss -> overwrite.
             conn.ExecUtf8(
                 "CREATE TABLE IF NOT EXISTS scene_person_atom (" +
                 "scene_key TEXT NOT NULL," +
@@ -231,8 +227,6 @@ namespace VPB
             }
         }
 
-        // Flips when the scene's on-disk bytes change. For a VAR scene the .var file mtime+size move on
-        // re-install but the zip entry's own mtime is static, so read from the host package not the FileEntry.
         private static string ComputeSceneSig(FileEntry entry)
         {
             long mtime, size;
@@ -250,8 +244,7 @@ namespace VPB
             return mtime.ToString() + ":" + size.ToString();
         }
 
-        // Cache HIT only when scene_key AND current sig both match. Returns false (miss/stale) so the
-        // caller re-parses and overwrites. Populates outIds in scene order.
+        // Cache HIT only when scene_key AND current sig both match.
         internal static bool TryReadSceneAtomIds(FileEntry entry, List<string> outIds)
         {
             return TryReadSceneAtomIds(entry, outIds, null);
@@ -271,8 +264,7 @@ namespace VPB
                 {
                     EnsureSchema(conn);
                     EnsureSceneAtomCacheSchema(conn);
-                    // Accumulate locally and only publish on full success: a throw mid-step must not leave the
-                    // caller's list half-filled, or its miss branch re-appends and duplicates picker rows.
+                    // Accumulate locally and only publish on full success.
                     List<string> found = new List<string>(4);
                     List<int> genders = new List<int>(4);
                     using (var st = conn.Prepare(
@@ -302,7 +294,6 @@ namespace VPB
         }
 
         // Returns the cached atom JSON only if the sig still matches (scene unchanged since the cache write).
-        // null on miss/stale -> caller must re-resolve the atom from the live scene file.
         internal static string TryReadSceneAtomJson(FileEntry entry, string atomId)
         {
             if (entry == null || string.IsNullOrEmpty(atomId)) return null;
@@ -345,8 +336,6 @@ namespace VPB
             return mapReady ? gender : SceneAtomGenderNotComputed;
         }
 
-        // ids[i] is the SAME pid the picker derives (incl. "Person_"+i fallback) so Apply reads by pid with no re-match.
-        // INSERT OR REPLACE tolerates duplicate pids; serialize via JsonSerializationUtil (SimpleJSON .ToString() is O(N^2)).
         internal static void TryWriteSceneAtoms(FileEntry entry, IList<string> ids, IList<JSONClass> nodes)
         {
             if (entry == null || ids == null || nodes == null) return;

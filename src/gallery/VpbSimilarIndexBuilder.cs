@@ -64,8 +64,16 @@ namespace VPB
             {
                 if (ShouldAbort()) return;
 
-                SimilarIndexState state = VpbLocalDatabase.GetSimilarIndexState();
+                string storedSignature, currentSignature;
+                SimilarIndexState state = VpbLocalDatabase.GetSimilarIndexState(out storedSignature, out currentSignature);
                 if (state == SimilarIndexState.Ready) { ok = true; return; }
+                try
+                {
+                    LogUtil.Log("[VPB] similar index rebuild: state=" + state
+                        + " stored_sig=" + (storedSignature ?? "none")
+                        + " current_sig=" + (currentSignature ?? "none"));
+                }
+                catch { }
 
                 for (int attempt = 0; attempt < ContendedWriteAttempts && !ok; attempt++)
                 {

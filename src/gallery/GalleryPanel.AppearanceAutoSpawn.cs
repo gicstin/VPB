@@ -11,10 +11,6 @@ namespace VPB
         private bool _appearanceAutoSpawnBusy;
         private readonly List<string> _appearanceAutoSpawnLightUids = new List<string>(3);
 
-        /// <summary>
-        /// Appearance click/apply: use existing Person target, or spawn one when scene has none.
-        /// Spawn is scene-mutating — confirm first (risk policy: high-cost scene change).
-        /// </summary>
         private bool TryLoadAppearanceAutoSpawningIfNeeded(FileEntry file, UIDraggableItem existingDragger)
         {
             Atom target = GetBestTargetAtom();
@@ -155,7 +151,6 @@ namespace VPB
                 OrientAtomTowardCamera(spawned);
                 SelectSpawnedPersonTarget(spawned);
 
-                // 3-point InvisibleLight rig (MeshedVR defaults) — skip if scene already lit.
                 yield return VpbThreePointLightSetup.SpawnAroundPerson(spawned, _appearanceAutoSpawnLightUids);
 
                 GameObject go = null;
@@ -196,7 +191,6 @@ namespace VPB
                 }
                 catch { }
 
-                // Undo removes lights + Person (forgiveness for accidental blank-scene apply).
                 try
                 {
                     string spawnedUid = null;

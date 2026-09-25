@@ -23,7 +23,6 @@ namespace VPB
         private readonly List<UserTagEditorRowVisual> _userTagEditorRowVisuals = new List<UserTagEditorRowVisual>(1024);
         /// <summary>Scratch for filter/sort build — reused to avoid per-keystroke List alloc (warm UI).</summary>
         private readonly List<UserTagSideTabEntry> _userTagEditorBuildScratch = new List<UserTagSideTabEntry>(1024);
-        /// <summary>Hard cap on Database-mode visible rows (same family as Apply menu). Filter narrows; overflow hint shown.</summary>
         private const int UserTagEditorMaxVisibleRows = 64;
         private static readonly Comparison<UserTagSideTabEntry> UserTagEditorSortNameAsc =
             (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
@@ -47,7 +46,6 @@ namespace VPB
             try { UpdateTabs(); } catch { }
         }
 
-        /// <summary>SQLite row identity for <c>gallery_item_user_tag</c>: vars use pkg_uid + internal path; loose Custom/Saves files use <see cref="VpbLocalDatabase.GalleryUserTagLoosePkgUid"/> + normalized path.</summary>
         private bool TryGetGalleryRowKeysForUserTags(FileEntry fe, out string pkgUid, out string internalPath)
         {
             pkgUid = "";
@@ -95,7 +93,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Show gallery grid «T» badge when SQLite user tags exist for this row in current category.</summary>
         private bool IsGalleryUserTagBadgeVisible(FileEntry file)
         {
             if (file == null) return false;
@@ -104,7 +101,6 @@ namespace VPB
             if (string.IsNullOrEmpty(cat) && titleText != null) cat = titleText.text ?? "";
             if (string.IsNullOrEmpty(cat)) return false;
             // ALL VAR: package row is meta.json, but inherit mode can tag only child items.
-            // Show badge when either package meta row tagged OR any child inside package tagged.
             if (VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat)
                 && string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrEmpty(pkgUid))
@@ -115,14 +111,12 @@ namespace VPB
             return VpbLocalDatabase.TryHasAnyGalleryUserTagsForRow(cat, pkgUid, internalPath);
         }
 
-        /// <summary>Selection changed. Recount tag state for unified panel.</summary>
         private void RefreshAppliedUserTagsPaneAfterSelectionChange()
         {
             userTagAppliedRemoveSelection.Clear();
             userTagAppliedRemoveAnchor = null;
             updatePanelForSelection();
             // Detail strip tags line must refresh when selection (or applied tags) change.
-            // Skip during thumb scrub — commit path rebuilds strip once on idle.
             if (_detailStripScrubActive) return;
             try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
         }
@@ -132,7 +126,6 @@ namespace VPB
             _untaggedTaggedPinKeys.Clear();
         }
 
-        /// <summary>Not Tagged: drop pinned tagged rows the user just deselected (O(deselected) scan, no SQLite).</summary>
         private void PruneUntaggedGridAfterSelectionChange(HashSet<string> deselectedSelKeys)
         {
             if (deselectedSelKeys == null || deselectedSelKeys.Count == 0) return;
@@ -438,7 +431,6 @@ namespace VPB
             float titleBand = Mathf.Max(30f * s, titleFs * 1.22f);
             float hintH = Mathf.Max(22f * s, hintFs * 1.05f);
             float btnH = 36f * s;
-            // title + hint + btn → two VLG gaps
             return padTop + titleBand + spacing + hintH + spacing + btnH + padBottom;
         }
 
@@ -462,7 +454,6 @@ namespace VPB
         private float UserTagsAvailFooterHeightPx()
         {
             float s = ChromeScale;
-            // Match EnsureUserTagInheritVarToChildrenButtonInFooter row height + padding.
             float rowH = Mathf.Max(28f, 34f * s);
             float pad = Mathf.RoundToInt(4f * s);
             return rowH + pad * 2;
@@ -475,11 +466,9 @@ namespace VPB
             return 4f * s + rowH + 8f * s;
         }
 
-        /// <summary>Pins Available / Applied toolbars; shrinks scroll viewports. Defaults restored when not UserTags.</summary>
         private void ApplyUserTagsStickyScrollChrome(float _)
         {
-            // Last-wins: do not first-wins frame-gate. UpdateTabs applies chrome before content settles;
-            // skipping later same-frame applies left one-frame wrong insets (Filter↔Tag flicker).
+            // Last-wins: do not first-wins frame-gate.
             ApplyUserTagsAvailStickyOneSide(true);
             ApplyUserTagsAvailStickyOneSide(false);
             ApplyUserTagsAppliedStickyOneSide(true);
@@ -536,8 +525,7 @@ namespace VPB
                     pinnedStrip.SetActive(false);
             }
 
-            // Measure Def-restored viewport before inset. Never shrink Mask below a usable strip —
-            // over-inset → height≈0, Tags(N) still correct, rows clipped (black empty under chrome).
+            // Measure Def-restored viewport before inset.
             float availH = vp.rect.height;
             if (availH < 1f)
             {
@@ -691,7 +679,6 @@ namespace VPB
                 n, mode);
         }
 
-        /// <summary>Verb-first work-mode hint under Tags title (recognition, not F/T recall).</summary>
         private string GetUserTagWorkModeHint()
         {
             if (ResolveUserTagWorkModeForChrome() == UserTagAvailMode.Tag)
@@ -705,7 +692,6 @@ namespace VPB
                 "Click a tag → filter the grid");
         }
 
-        /// <summary>Pick-row tip uses chrome work mode (Tag vs Filter), not Not-tagged browse.</summary>
         private string GetUserTagWorkModePickTip()
         {
             if (ResolveUserTagWorkModeForChrome() == UserTagAvailMode.FilterByTags)
@@ -869,7 +855,6 @@ namespace VPB
                 rt.offsetMin = Vector2.zero;
                 rt.offsetMax = Vector2.zero;
 
-                // Keep out of VerticalLayoutGroup sizing.
                 LayoutElement le = go.AddComponent<LayoutElement>();
                 le.ignoreLayout = true;
 
@@ -920,7 +905,6 @@ namespace VPB
             ApplyUserTagsToFileEntries(new List<string>(tags), selectedFiles, remove: false);
         }
 
-        /// <summary>Drop tag on row. Selection not touched.</summary>
         internal void UserTagApplyDroppedTagsRespectingGalleryRow(List<string> tags, FileEntry galleryRowHit)
         {
             if (tags == null || tags.Count == 0) return;
@@ -982,9 +966,8 @@ namespace VPB
                 && string.Equals(GetSelectionIdentityKey(file, false), _userTagDropPulseKey, StringComparison.OrdinalIgnoreCase);
             if (dropPulse)
             {
-                // Brief bright flash then fade — clear "applied" cue.
                 float remaining = _userTagDropPulseUntil - Time.unscaledTime;
-                float u = Mathf.Clamp01(remaining / UserTagVisualPulseSeconds); // 1 → 0
+                float u = Mathf.Clamp01(remaining / UserTagVisualPulseSeconds);
                 return Mathf.Lerp(0.08f, 0.55f, u * u);
             }
             if (hover) return 0.22f;
@@ -1222,11 +1205,7 @@ namespace VPB
             iconGo.transform.SetAsLastSibling();
         }
 
-        /// <summary>
-        /// Sticky pin-strip row height only — must match virt/side-tab rows.
-        /// VLG spacing is separate; do not bake <see cref="GalleryUiDesignTokens.SideTabRowSpacingRef"/> here
-        /// (that was double-counting and made pin/filter toggles jump row gaps).
-        /// </summary>
+        /// <summary>Sticky pin-strip row height only — must match virt/side-tab rows.</summary>
         private float UserTagPinnedRowHeightPx()
         {
             return SideTabRowHeightPx(ChromeScale);
@@ -1315,8 +1294,6 @@ namespace VPB
             string pickTip = GetUserTagWorkModePickTip();
             float rowH = UserTagPinnedRowHeightPx();
 
-            // Create rows first, layout stretch, then bind labels.
-            // Bind-before-layout used CreateUIButton width (~170) with scaled font → "Create Tag: ab" then "...".
             var stickyBtns = new GameObject[count];
             for (int ri = 0; ri < count; ri++)
             {
@@ -1390,7 +1367,6 @@ namespace VPB
             }
             catch { }
             // Invent only while sticky chrome is off (Def viewport / layout settling).
-            // Sticky-on + ≤0.5 = collapsed Mask; inventing binds rows that clip forever (Tags(N), black list).
             bool stickyOn = (leftUserTagsAvailStickyGO != null && leftUserTagsAvailStickyGO.activeSelf)
                 || (rightUserTagsAvailStickyGO != null && rightUserTagsAvailStickyGO.activeSelf);
             if (viewportH <= 0.5f && !stickyOn)
@@ -1424,11 +1400,7 @@ namespace VPB
             _userTagVirtLayoutCo = StartCoroutine(CoUserTagVirtLayoutRefresh(isLeft, tabContainer, resetTop, offsetPx));
         }
 
-        /// <summary>
-        /// After collapse/expand, scene load, or cold layout: sticky Mask can stay height≈0 for a few frames
-        /// (invent disabled while sticky on → empty tag list). Mode F↔T workaround only forced this path.
-        /// Preserve Tag/Filter work mode — refresh layout + virt bind only.
-        /// </summary>
+        /// <summary>Sticky Mask can stay zero-height after layout changes; refresh layout + virt bind only.</summary>
         private void RequestUserTagAvailVirtRecoverAfterLayout()
         {
             if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
@@ -1441,7 +1413,6 @@ namespace VPB
 
         private IEnumerator CoUserTagAvailVirtRecoverAfterLayout(bool leftOpen, bool rightOpen)
         {
-            // Scene-load collapse / first open: subtree or viewport may be inactive for several frames.
             const int maxAttempts = 4;
             for (int attempt = 0; attempt < maxAttempts; attempt++)
             {
@@ -1855,9 +1826,6 @@ namespace VPB
             Image iconImg = removeGo.transform.Find("Icon")?.GetComponent<Image>();
             if (iconImg == null && _userTagAppliedRemoveSprite != null)
             {
-                // Pass the red backdrop (not white): AddIconToButton overwrites the button background
-                // with its 4th arg, so Color.white here flashed the button white on the frame the icon
-                // was first created (corrected only on a later refresh once the icon child exists).
                 UI.AddIconToButton(removeGo, _userTagAppliedRemoveSprite, 6f, bgImg != null ? bgImg.color : new Color(0.62f, 0.14f, 0.14f, 1f));
                 iconImg = removeGo.transform.Find("Icon")?.GetComponent<Image>();
             }
@@ -2004,10 +1972,6 @@ namespace VPB
             return "\"" + tags[0] + "\" +" + (tags.Count - 1);
         }
 
-        /// <summary>
-        /// Floating quick-tagger / apply-remove zones sit above the grid.
-        /// RaycastAll still returns gallery rows behind — treat these as occluders.
-        /// </summary>
         internal bool IsUserTagDropOccluder(GameObject go)
         {
             if (go == null) return false;
@@ -2022,12 +1986,10 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Shared by tag-drag hover hint and drop: first gallery file row hit (this panel).</summary>
         internal static bool TryResolveGalleryRowFromRaycastHits(GalleryPanel panel, IList<RaycastResult> hits, out FileEntry file)
         {
             file = null;
             if (panel == null || hits == null) return false;
-            // Hits are front→back. Occluder in front of gallery = no pierce-through.
             for (int i = 0; i < hits.Count; i++)
             {
                 GameObject go = hits[i].gameObject;
@@ -2244,9 +2206,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// After SQLite tag remove while Available filter mode narrows grid: drop visible rows that no longer match AND tag filter (skip full <see cref="RefreshFiles"/>).
-        /// </summary>
+        /// <summary>After SQLite tag remove while Available filter mode narrows grid.</summary>
         private bool TryPruneVisibleGridAfterUserTagRemove(List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
         {
             if (updatedRows == null || updatedRows.Count == 0) return false;
@@ -2346,7 +2306,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Remove grid rows for deselected keys that were pinned as tagged overrides.</summary>
         private bool TryPruneUntaggedGridForDeselectedPins(HashSet<string> deselectedSelKeys)
         {
             if (deselectedSelKeys == null || deselectedSelKeys.Count == 0) return false;
@@ -2575,7 +2534,6 @@ namespace VPB
             if (existingBulkV3 != null)
             {
                 EnsureUserTagUnifiedToolbar(existingBulkV3);
-                // Toggle row moved to pinned footer; remove any legacy copy.
                 try
                 {
                     Transform legacyInherit = existingBulkV3.Find("VPB_UserTagInheritVarToggleRow_v1");
@@ -2615,7 +2573,6 @@ namespace VPB
             titleTxt.fontStyle = FontStyle.Bold;
             LayoutElement titleLe = UI.AddLE(titleTxt.gameObject, minHeight: titleBand, preferredHeight: titleBand, flexibleWidth: 1f);
 
-            // Verb-first hint — replaces tribal F/T letter glyphs (recognition over recall).
             GameObject hintRow = UI.CreateChildRT(root, "TagsModeHintRow");
             UI.AddHLG(hintRow, 0f, childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: true);
             float hintH = Mathf.Max(22f * s, titleFs * 1.05f);
@@ -2626,7 +2583,6 @@ namespace VPB
                 HorizontalWrapMode.Overflow, name: "ModeHint");
             UI.AddLE(hintTxt.gameObject, minHeight: hintH, preferredHeight: hintH, flexibleWidth: 1f);
 
-            // false: segment buttons share width; edit stays square.
             GameObject btnRow = UI.CreateChildRT(root, "BulkBtnRow");
             UI.AddHLG(btnRow, UI.GapTight(s), childForceExpandWidth: false);
             LayoutElement rowLe = UI.AddLE(btnRow, minHeight: 34f * s, preferredHeight: 36f * s, flexibleWidth: 1f);
@@ -2705,7 +2661,6 @@ namespace VPB
                 }
                 WireUserTagInheritVarToChildrenBtnTooltip(bGo.gameObject);
 
-                // Always fill row fully (no empty gray margins from older layout).
                 RectTransform brt = bGo as RectTransform;
                 if (brt != null)
                 {
@@ -2741,7 +2696,6 @@ namespace VPB
             var del = btnGo.GetComponent<UIHoverDelegate>();
             if (del == null) del = btnGo.AddComponent<UIHoverDelegate>();
 
-            // Replace any older tooltip handler with dynamic one (state-aware).
             del.OnHoverChange = (enter) =>
             {
                 if (enter)
@@ -2758,10 +2712,9 @@ namespace VPB
             Image img = btnGo.GetComponent<Image>();
             if (img != null)
             {
-                // Strong, readable state colors.
                 img.color = _userTagInheritVarToChildren
-                    ? new Color(0.20f, 0.50f, 0.25f, 1f)   // ON: green
-                    : new Color(0.22f, 0.28f, 0.36f, 1f);  // OFF: cool gray
+                    ? new Color(0.20f, 0.50f, 0.25f, 1f)
+                    : new Color(0.22f, 0.28f, 0.36f, 1f);
             }
 
             Text t = btnGo.GetComponentInChildren<Text>();
@@ -2774,7 +2727,6 @@ namespace VPB
                     ? VPBTranslation.T("gallery.usertags.inherit_on", "Inherit ON")
                     : VPBTranslation.T("gallery.usertags.inherit_off", "Inherit OFF");
                 t.alignment = TextAnchor.MiddleCenter;
-                // Slight extra padding via text margins not available; keep size readable via font scaling already applied.
                 GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, s * 1.38f, GalleryUiDesignTokens.FontMinRef);
             }
         }
@@ -2791,7 +2743,6 @@ namespace VPB
             }
             catch { }
 
-            // Update both sides if footer visible on either.
             try
             {
                 Transform l = leftUserTagsAvailFooterGO != null ? leftUserTagsAvailFooterGO.transform.Find("VPB_UserTagInheritVarToggleRow_v1/VPB_UserTagInheritVarToChildrenBtn") : null;
@@ -2813,7 +2764,6 @@ namespace VPB
             if (legacyRow != null)
                 UnityEngine.Object.Destroy(legacyRow.gameObject);
 
-            // Legacy F/T letter minis + single cycle toggle — remove if present.
             Transform titleRow = bulkBlockV3.Find("TagsTitleRow");
             if (titleRow != null)
             {
@@ -2914,7 +2864,6 @@ namespace VPB
                 HorizontalWrapMode.Overflow, name: "ModeHint");
             UI.AddLE(hintTxt.gameObject, minHeight: hintH, preferredHeight: hintH, flexibleWidth: 1f);
 
-            // Sit under title row when present.
             Transform titleRow = bulkBlockV3.Find("TagsTitleRow");
             if (titleRow != null)
                 hintRow.transform.SetSiblingIndex(titleRow.GetSiblingIndex() + 1);
@@ -2987,7 +2936,6 @@ namespace VPB
 
         private void AddUserTagFilterButtonIconAndLabel(GameObject filterGo, float s)
         {
-            // Legacy cycle-button chrome — kept so older call sites compile; segments replace it.
             if (filterGo == null) return;
             Transform oldIcon = filterGo.transform.Find("Icon");
             if (oldIcon != null) UnityEngine.Object.Destroy(oldIcon.gameObject);
@@ -3038,7 +2986,6 @@ namespace VPB
             return UserTagAvailMode.FilterByTags;
         }
 
-        /// <summary>True when multi-tag grid filter uses Isolate (all tags); false for Compound (any tag).</summary>
         internal bool UserTagFilterRequiresAllTags()
         {
             try
@@ -3061,10 +3008,6 @@ namespace VPB
                     "Filter grid: tap include on/off (any can match). Right-click or drag to Exclude to hide items with this tag. Drag to Applied below.");
         }
 
-        /// <summary>
-        /// Include/exclude user-tag sets arm the grid filter independent of F/T work mode.
-        /// FilterUntagged browse is exclusive and ignores include/exclude until dismissed.
-        /// </summary>
         private bool IsUserTagIncludeExcludeFilterArmed()
         {
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
@@ -3096,7 +3039,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>True when available tag row should be omitted in filter-by-tags mode (unused in current category).</summary>
         private bool ShouldHideUnusedUserTagInFilterAvailList(UserTagSideTabEntry ut)
         {
             if (_userTagAvailMode != UserTagAvailMode.FilterByTags) return false;
@@ -3106,11 +3048,9 @@ namespace VPB
                     return false;
             }
             catch { return false; }
-            // Side-list search: match full vocabulary (including zero-count).
             if (!string.IsNullOrEmpty(userTagFilter)) return false;
             // Wait until per-category counts are ready; vocabulary-only cache must not hide everything as Count=0.
             if (!_userTagSideTabCountsReady) return false;
-            // Fresh/wiped DB: vocabulary exists but no assignments yet — hide-unused would empty the list.
             if (!_userTagAnyAssignmentExists) return false;
             if (ut.Count == UserTagCreateRowCountSentinel) return false;
             if (ut.Count == UserTagUnusedBucketHeaderSentinel) return false;
@@ -3119,19 +3059,16 @@ namespace VPB
                 || ut.Count == UserTagHubBucketHeaderSentinel
                 || ut.Count == UserTagLooksBucketHeaderSentinel
                 || ut.Count == UserTagHubCatBucketHeaderSentinel) return false;
-            // Expanded Unused bucket shows zero-count rows explicitly.
             if (_userTagShowUnusedBucket) return false;
             if (_userTagSelectionRowCount > 0 && !string.IsNullOrEmpty(ut.Name))
             {
                 UserTagSelectionState st = GetUserTagSelectionState(ut.Name);
                 if (st != UserTagSelectionState.Off) return false;
             }
-            // Armed filter tags stay visible even when Count=0.
             if (UserTagNameIsInIncludeOrExcludeFilter(ut.Name)) return false;
             return ut.Count <= 0;
         }
 
-        /// <summary>When User Tags side panel opens, apply configured default work mode (filter / apply). Not tagged browse filter stays until manual clear.</summary>
         internal void ApplyDefaultUserTagAvailModeOnTagsPanelOpen()
         {
             UserTagAvailMode mode = ResolveDefaultUserTagAvailMode();
@@ -3170,10 +3107,6 @@ namespace VPB
                 RequestUserTagWorkMode(UserTagAvailMode.Tag);
         }
 
-        /// <summary>
-        /// Switch Tag / Filter work mode. While Not tagged browse filter is on, only updates
-        /// remembered work mode + chrome — does not clear the browse filter (manual dismiss only).
-        /// </summary>
         private void RequestUserTagWorkMode(UserTagAvailMode mode)
         {
             if (mode != UserTagAvailMode.Tag && mode != UserTagAvailMode.FilterByTags)
@@ -3264,7 +3197,6 @@ namespace VPB
                 try { UpdateTabs(); } catch { }
             }
 
-            // Cold-path feedback when switching Tag ↔ Filter verbs.
             if ((prev == UserTagAvailMode.Tag || prev == UserTagAvailMode.FilterByTags)
                 && (mode == UserTagAvailMode.Tag || mode == UserTagAvailMode.FilterByTags)
                 && prev != mode)
@@ -3273,7 +3205,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Backdrop colour for Tag / Filter work modes (F/T mini + sticky toggle).</summary>
         private Color UserTagAvailModeColor(UserTagAvailMode mode)
         {
             switch (mode)
@@ -3284,7 +3215,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Work mode shown on side-rail chrome while Not tagged browse filter is on.</summary>
         private UserTagAvailMode ResolveUserTagWorkModeForChrome()
         {
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged
@@ -3322,7 +3252,6 @@ namespace VPB
             if (bulkBlockV3 == null) return;
             Transform row = bulkBlockV3.Find("TagsTitleRow");
             if (row == null) return;
-            // Destroy legacy F/T/N letter minis — replaced by labeled segments.
             Transform legacyF = row.Find("VPB_UserTagModeMiniBtn_" + UserTagAvailMode.FilterByTags);
             if (legacyF != null) UnityEngine.Object.Destroy(legacyF.gameObject);
             Transform legacyT = row.Find("VPB_UserTagModeMiniBtn_" + UserTagAvailMode.Tag);
@@ -3362,7 +3291,6 @@ namespace VPB
             Transform btnRow = bulkBlockV3.Find("BulkBtnRow");
             if (btnRow == null) return;
 
-            // Drop legacy single cycle button if an older pane still has it.
             Transform legacyCycle = btnRow.Find("VPB_UserTagFilterModeBtn");
             if (legacyCycle != null) UnityEngine.Object.Destroy(legacyCycle.gameObject);
 
@@ -3397,12 +3325,6 @@ namespace VPB
             }
         }
 
-        // ShowUserTagListEditor / HideUserTagListEditor / EnsureUserTagEditorUiBuilt live in
-        // GalleryPanel.TagEditor.cs — unified DetailStripTagMenu (Tag | Database modes).
-
-        /// <summary>
-        /// Shared merge/rename name dialog: dim root, centered panel, title, single-line input, Cancel/OK row.
-        /// </summary>
         private static void UserTagEditorBuildNameDialog(
             Transform parent,
             string rootName,
@@ -3499,7 +3421,6 @@ namespace VPB
                 _detailStripTagMenuFilter = "";
                 if (_userTagEditorFilterInput != null)
                 {
-                    // onValueChanged / shared search handler triggers rebuild once
                     try { _userTagEditorFilterInput.text = ""; } catch { }
                     return;
                 }
@@ -3555,7 +3476,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Cave wire multiline Home/End fixer once.</summary>
         private static void FixMultilineHomeEndBehavior(InputField field)
         {
             if (field == null) return;
@@ -3742,7 +3662,6 @@ namespace VPB
                 ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.editor_created_n", "Created {0} tag(s)."), created), 2f);
         }
 
-        /// <summary>Cave push normalized names into SQLite vocabulary; list db rejects honest.</summary>
         private void CreateTagRows(IList<string> validNormalized, bool clearFieldWhenBatchClean, out int created, out List<string> dbRejected)
         {
             created = 0;
@@ -3764,8 +3683,6 @@ namespace VPB
             userTagsCached = false;
             RebuildUserTagEditorRows();
             try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
-            // Fresh vocabulary rows have Count=0; default Filter Mode hide-unused omits them.
-            // Land in Tag Mode so Create tag rows is visible without hunting F/T.
             if (created > 0
                 && _userTagAvailMode == UserTagAvailMode.FilterByTags
                 && VPBConfig.Instance != null
@@ -4225,7 +4142,6 @@ namespace VPB
             UserTagEditorNotifyImportSkippedTags(skippedInvalidTags);
         }
 
-        /// <summary>Cave no silent drop on import: list tag names YAML had but Normalize rejected.</summary>
         private void UserTagEditorNotifyImportSkippedTags(List<string> skippedInvalidTags)
         {
             if (skippedInvalidTags == null || skippedInvalidTags.Count == 0) return;
@@ -4250,7 +4166,6 @@ namespace VPB
                 ShowTemporaryStatus(msg, 5f);
         }
 
-        /// <summary>Merges tag→items and item→tags maps (one usually empty), applies DB assignments.</summary>
         private int UserTagEditorApplyImportedAssignments(
             Dictionary<string, List<string>> tagToItemKeys,
             Dictionary<string, List<string>> itemKeyToTags,
@@ -4354,7 +4269,6 @@ namespace VPB
             int rowFont = GalleryUiMetrics.ScaledFontSize(
                 GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
 
-            // Build into scratch (no full-copy + RemoveAt reverse walk).
             _userTagEditorBuildScratch.Clear();
             string filt = _detailStripTagMenuFilter;
             if (string.IsNullOrEmpty(filt) && _userTagEditorFilterInput != null)
@@ -4473,10 +4387,8 @@ namespace VPB
         public static List<string> PendingTags;
         /// <summary>True when dragging from Applied rows — apply drop zones must ignore <see cref="IDropHandler.OnDrop"/>.</summary>
         public static bool PendingIsAppliedRowRemove;
-        /// <summary>Index into panel title-search chips while dragging a committed chip (Incl↔Excl). −1 = none.</summary>
         public static int PendingTitleSearchChipIndex = -1;
         public static GalleryPanel PendingTitleSearchChipPanel;
-        /// <summary>While chip-move drag active: whether Exclude drop is valid.</summary>
         public static bool PendingTitleSearchChipCanExclude;
 
         public static bool HasPendingTags
@@ -4484,7 +4396,6 @@ namespace VPB
             get { return PendingTags != null && PendingTags.Count > 0; }
         }
 
-        /// <summary>Side/detail tag drag that may land on title-search Incl/Excl (not Applied-remove).</summary>
         public static bool IsTitleSearchTagDropActive
         {
             get { return HasPendingTags && !PendingIsAppliedRowRemove; }
@@ -4536,7 +4447,6 @@ namespace VPB
         private float _nextHoverSampleTime;
         public bool ConsumedByDrag { get; private set; }
         private bool _releaseProcessed;
-        /// <summary>Desktop: small screen slack past press. VR laser+world canvas barely moves screen px — skip (same as UIDraggableItem).</summary>
         private const float DesktopMinScreenPixelsForTagDrag = 10f;
         private const float VrHoldSecondsForTagDrag = 0.25f;
 
@@ -4623,8 +4533,6 @@ namespace VPB
 
             if (!_pressed) return;
 
-            // VR: EventSystem OnBeginDrag starts drag (no extra pixel gate — laser barely moves).
-            // Do not auto-start from hold alone (would steal long taps).
             if (XrUtils.IsVrActive()) return;
 
             Vector2 cur = Input.mousePosition;
@@ -4680,7 +4588,6 @@ namespace VPB
             if (list.Count == 0) return;
 
             UserTagDragSession.PendingTags = list;
-            // Applied-column quick-tagger: treat as remove-mode so strip/gallery apply zones ignore the drag.
             UserTagDragSession.PendingIsAppliedRowRemove = IsAppliedRowDrag || DetailStripAppliedReorder;
             _dragging = true;
             _nextHoverSampleTime = 0f;
@@ -4785,7 +4692,6 @@ namespace VPB
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
 
-            // Front→back: title-search / apply zones / floating tag menu beat gallery behind them.
             for (int i = 0; i < _raycastHits.Count; i++)
             {
                 GameObject go = _raycastHits[i].gameObject;
@@ -4823,7 +4729,6 @@ namespace VPB
                 return;
             }
 
-            // Fallback: drop anywhere inside this panel's canvas applies (selection-targeted).
             try
             {
                 if (Panel.canvas != null)
@@ -4867,7 +4772,6 @@ namespace VPB
                 _hoverPointerData = new PointerEventData(es);
                 _nextHoverSampleTime = 0f;
             }
-            // Hints can lag one sample; actual drops always resolve a fresh full hit list.
             if (!HoverSampleDue(Time.unscaledTime)) return;
             _hoverPointerData.Reset();
             _hoverPointerData.position = _lastScreenPos;
@@ -4890,7 +4794,6 @@ namespace VPB
             _pressed = false;
             _dragging = false;
             _releaseProcessed = false;
-            // Keep ConsumedByDrag until next PointerDown so Button onClick skips post-drag click.
             if (!wasDragging) ConsumedByDrag = false;
             try { if (Panel != null && !IsAppliedRowDrag) Panel.dragHoverItem(null, null); } catch { }
             try { if (Panel != null) Panel.DetailStripClearAppliedReorderHint(); } catch { }
@@ -4969,7 +4872,6 @@ namespace VPB
                 if (textCsf == null) textCsf = _ghostText.gameObject.AddComponent<ContentSizeFitter>();
                 textCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
                 textCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-                // Stretch insets from CreateLabel fight preferred-size fit — clear them.
                 RectTransform trt = _ghostText.rectTransform;
                 if (trt != null)
                 {
@@ -5001,7 +4903,6 @@ namespace VPB
                 return;
             }
 
-            // Overlay: cam null. World/floating: press camera or canvas worldCamera.
             Camera cam = null;
             if (root.renderMode != RenderMode.ScreenSpaceOverlay)
             {

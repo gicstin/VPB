@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using SimpleJSON;
 
@@ -72,7 +73,7 @@ namespace VPB
 
         private static bool IsCuaRelated(string storableId)
         {
-            return !string.IsNullOrEmpty(storableId) && storableId.IndexOf("CustomUnity") >= 0;
+            return !string.IsNullOrEmpty(storableId) && storableId.IndexOf("CustomUnity", StringComparison.Ordinal) >= 0;
         }
     }
 }

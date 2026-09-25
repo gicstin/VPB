@@ -8,8 +8,6 @@ using UnityEngine.Profiling;
 namespace VPB
 {
     // Read-only periodic snapshot for diagnosing progressive FPS degradation.
-    // Off by default; toggled via BepInEx config Logging.LogPerfTelemetry.
-    // Emits one tagged "VPB_PERF_TELEMETRY ..." line every Logging.LogPerfTelemetryIntervalSeconds (1-30); safe to grep.
     static class VpbPerfTelemetry
     {
         const int MinIntervalSeconds = 1;
@@ -464,9 +462,6 @@ namespace VPB
             return valid && previousValid ? DeltaBytes(now, previous, true) : "n/a";
         }
 
-        // UnityEventBase has a private InvokableCallList m_Calls, which holds m_RuntimeCalls
-        // (the list AddListener appends to) plus a mirror of persistent calls. Counting runtime
-        // calls is sufficient to detect AddListener leaks across panel rebuilds.
         static FieldInfo _callsField;
         static FieldInfo _runtimeCallsField;
         static bool _reflectionInitialized;

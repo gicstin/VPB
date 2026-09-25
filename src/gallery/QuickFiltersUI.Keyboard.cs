@@ -6,23 +6,14 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Keyboard path + soft-delete undo + collapse mini palette for filter presets.
-    /// Warm path only (visible panel / key events).
-    /// </summary>
     public partial class QuickFiltersUI
     {
-        /// <summary>
-        /// Esc / arrows / Enter / D / Ctrl+S / U while presets panel visible.
-        /// Returns true when consumed.
-        /// </summary>
         public bool TryHandleKeyboard()
         {
             ExpireSoftDeleteIfNeeded();
 
             if (!IsVisible) return false;
 
-            // Soft-delete undo works even when rename field focused? Prefer when not typing.
             bool inputFocused = IsAnyInputFieldFocused();
 
             if (!inputFocused || renamingEntry == null)
@@ -59,7 +50,6 @@ namespace VPB
 
             if (ctrl && Input.GetKeyDown(KeyCode.S))
             {
-                // Expert: typed list-search becomes name. Else Update if dirty active, else Save+rename.
                 string typed = (listFilter ?? "").Trim();
                 if (typed.Length == 0 && searchInput != null)
                     typed = (searchInput.text ?? "").Trim();
@@ -254,7 +244,6 @@ namespace VPB
         private void SyncCollapsePalette()
         {
             if (collapsePaletteGO == null) return;
-            // Clear children
             for (int i = collapsePaletteGO.transform.childCount - 1; i >= 0; i--)
             {
                 Transform ch = collapsePaletteGO.transform.GetChild(i);
@@ -267,7 +256,6 @@ namespace VPB
 
             var pinned = new List<QuickFilterEntry>(4);
             try { QuickFilterSettings.Instance.CollectPinnedFilters(pinned); } catch { }
-            // Match title collapse/close: design ButtonSizeRef, then ChromeScale via ScaleChromeIconBtn.
             float sq = GalleryUiDesignTokens.ButtonSizeRef;
             float s = panel.ChromeScale > 0f ? panel.ChromeScale : 1f;
             float sortSq = sq * s;

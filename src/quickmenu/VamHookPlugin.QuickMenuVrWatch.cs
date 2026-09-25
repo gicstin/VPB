@@ -41,11 +41,10 @@ namespace VPB
         private const float QuickMenuWatchPosePreviewSec = 2.5f;
         private const float QuickMenuWatchFadeSec = 0.12f;
         private const float QuickMenuWatchFadeScaleFrom = 0.88f;
-        // Reach radii for freeze-on-approach, squared. 0.25 m/0.35 m (the old values) fire when the
-        // hands are merely held together, which reads as the watch pinning itself.
-        private const float QuickMenuWatchFreezeEnterSqr = 0.0196f;  // 0.14 m
-        private const float QuickMenuWatchFreezeExitSqr = 0.04f;     // 0.20 m
-        private const float QuickMenuWatchFreezeBreakSqr = 0.0625f;  // 0.25 m of wrist travel
+        // Reach radii for freeze-on-approach, squared.
+        private const float QuickMenuWatchFreezeEnterSqr = 0.0196f;
+        private const float QuickMenuWatchFreezeExitSqr = 0.04f;
+        private const float QuickMenuWatchFreezeBreakSqr = 0.0625f;
         private const float QuickMenuWatchHoldConfirmSec = 0.4f;
         private const float QuickMenuWatchShoulderOutM = 0.18f;
         private const float QuickMenuWatchShoulderDownM = 0.22f;
@@ -256,11 +255,9 @@ namespace VPB
         private string m_WatchHoverStatus;
         private int m_WatchHoverToken;
         private bool m_WatchAddedToSc;
-        // Set when the retina read-back caught the face inverted; negates the up hint from then on.
         private bool m_WatchFaceAimFlip;
         private bool m_WatchFaceFlipLogged;
         private float m_WatchLastAppliedScale = -1f;
-        /// <summary>Live <see cref="SuperController.worldScale"/>, sampled once per watch update.</summary>
         private float m_WatchWorldScale = 1f;
         private QuickMenuWatchFaceMode m_WatchFaceMode = QuickMenuWatchFaceMode.Compact;
         private QuickMenuWatchFaceMode m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
@@ -382,15 +379,13 @@ namespace VPB
             m_WatchPressIdx = -1;
             m_WatchHoldFired = false;
             m_WatchAddedToSc = false;
-            // Rebuilt canvas may land under a different hand/basis — re-derive the flip from scratch.
             m_WatchFaceAimFlip = false;
             m_WatchLastAppliedScale = -1f;
             m_WatchLayoutApplied = (QuickMenuWatchFaceMode)(-1);
             m_WatchFailLogged = false;
             m_WatchAttachLogged = false;
             m_WatchHudEditShown = false;
-            // Shown-string caches must die with the widgets they mirror: a rebuilt Text starts
-            // empty, so a stale cache would suppress the first assignment and leave it blank.
+            // Shown-string caches must die with the widgets they mirror.
             m_WatchStatusShown = "";
             m_WatchTipFlat = null;
             m_WatchStatusNeedRebuild = true;
@@ -539,11 +534,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Locale change. The assign sheet bakes its section headers, pick labels and per-pick
-        /// tooltips at build time, so a piecemeal refresh cannot retranslate it — drop the whole
-        /// canvas and let the next update rebuild it. Cold path (locale switches are rare).
-        /// </summary>
         internal void QuickMenuInvalidateWatchStrings()
         {
             m_WatchTipSrc = null;
@@ -713,8 +703,7 @@ namespace VPB
             {
                 Transform root = null;
                 try { root = VpbWorldSpaceUiScale.GetPlayerUiRoot(); } catch { }
-                // Never leave a locked/frozen watch parented to the wrist — it would be dragged
-                // along by the hand. With no usable UI root, park it at the scene root instead.
+                // Never leave a locked/frozen watch parented to the wrist — it would be dragged along by the hand.
                 want = (root != null && root != m_WatchHand && root.gameObject.activeInHierarchy)
                     ? root
                     : null;
@@ -765,7 +754,6 @@ namespace VPB
             {
                 m_WatchCfgGripPin = gripPin;
                 m_WatchGripHeldSince = -1f;
-                // Cue and pin tooltip both name the gesture.
                 if (m_WatchCueText != null) m_WatchCueText.text = QuickMenuWatchCueTextValue();
                 m_WatchTipSrc = null;
                 QuickMenuRefreshWatchChromeTips();
@@ -776,7 +764,6 @@ namespace VPB
             m_WatchCfgToward = toward;
             m_WatchCfgOffset = offset;
 
-            // Euler -> quaternion once per edit, not once per frame: this runs every Update.
             if (faceRot != m_WatchCfgFaceRotEuler)
             {
                 m_WatchCfgFaceRotEuler = faceRot;
@@ -837,10 +824,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>
-        /// Active VR controller mounts. Oculus (Quest Link) uses <c>touch*</c>; SteamVR/OpenVR uses
-        /// <c>vive*</c>. VaM disables the unused rig, so <c>touchObject*</c> is dead on SteamVR.
-        /// </summary>
         internal static void GetVamVrHandTransforms(SuperController sc, out Transform left, out Transform right)
         {
             left = null;
@@ -984,13 +967,6 @@ namespace VPB
                 m_WatchGlanced = true;
         }
 
-        /// <summary>
-        /// Squeeze the grip on the hand wearing the watch to take it off and leave it hanging in
-        /// place; squeeze again to put it back on. One-handed, needs no aiming, and works on the
-        /// arm the face is actually strapped to — the Pin chrome button needs the other controller.
-        /// Pinning is gated on the face being turned toward you so a grab elsewhere in the scene
-        /// cannot trip it; unpinning is not, because a pinned face is no longer on the wrist.
-        /// </summary>
         private void QuickMenuTickWatchGripPin(SuperController sc, float now)
         {
             if (!m_WatchCfgGripPin || m_WatchEditMode || m_WatchCalibrating || sc == null)
@@ -1004,7 +980,6 @@ namespace VPB
             catch { held = false; }
             if (!held)
             {
-                // Wands report grip as a digital hold; analog grips can miss the above.
                 try
                 {
                     float v = m_WatchIsLeft ? sc.GetLeftGrabVal() : sc.GetRightGrabVal();
@@ -1034,7 +1009,6 @@ namespace VPB
 
             m_WatchGripHeldSince = -1f;
             m_WatchGripReadyAt = now + QuickMenuWatchGripCooldownSec;
-            // Keep it on screen through the swap so the state change is visible.
             m_WatchGlanced = true;
             QuickMenuSetWatchWorldLocked(!m_WatchWorldLocked);
         }
@@ -1046,8 +1020,6 @@ namespace VPB
             m_WatchPressIdx = -1;
             m_WatchHoldFired = false;
             m_WatchFrozen = false;
-            // A watch that is gone cannot be dragged; a stuck calibrate flag would force it
-            // permanently visible once it comes back.
             m_WatchCalibrating = false;
             m_WatchGlanceCandidateSince = -1f;
             m_WatchHoverStatus = null;
@@ -1073,8 +1045,6 @@ namespace VPB
                 m_WatchCanvas.gameObject.SetActive(active);
             if (!active)
             {
-                // Deactivating swallows the pending OnPointerUp/Exit. A surviving press would
-                // finish its hold timer on the next show and fire a destructive action unasked.
                 m_WatchPressIdx = -1;
                 m_WatchHoldFired = false;
                 m_WatchHoverStatus = null;
@@ -1106,8 +1076,7 @@ namespace VPB
             if (m_WatchCanvasGroup != null)
             {
                 m_WatchCanvasGroup.alpha = m_WatchFade;
-                // A fading-out watch is still a live raycast target; don't let a barely-visible
-                // face eat the pointer (or take a click) on the way out.
+                // Fading-out watch must not eat pointer events.
                 bool hit = wantShow && m_WatchFade >= QuickMenuWatchRaycastFade;
                 if (m_WatchCanvasGroup.blocksRaycasts != hit) m_WatchCanvasGroup.blocksRaycasts = hit;
             }
@@ -1123,8 +1092,7 @@ namespace VPB
         private void QuickMenuEnsureWatchCanvas()
         {
             if (m_WatchCanvas != null) return;
-            // A build that throws leaves nothing behind; without a backoff we would allocate and
-            // destroy the whole widget tree every frame. Retry a few times, then stay down.
+            // A build that throws leaves nothing behind; without a backoff we would allocate and destroy the whole widget tree every frame.
             if (m_WatchCanvasFailCount >= QuickMenuWatchCanvasMaxFails) return;
             if (m_WatchCanvasFailCount > 0 && Time.unscaledTime < m_WatchCanvasRetryAt) return;
             var sc = SuperController.singleton;
@@ -1809,7 +1777,6 @@ namespace VPB
             if (want != null && icon.sprite != want) UI.SetIconSprite(icon, want);
         }
 
-        /// <summary>Action a watch HUD slot would run right now (None while an edit mode owns the click).</summary>
         private QuickMenuAssignableAction QuickMenuWatchHudSlotAction(int hudIdx)
         {
             if (m_QuickMenuEditMode || m_WatchEditMode) return QuickMenuAssignableAction.None;
@@ -2064,8 +2031,6 @@ namespace VPB
             var dstPages = cfg.QuickMenuVrWatchButtonsPages;
             if (dstPages == null || m_WatchPageAssignments == null) return;
             cfg.QuickMenuVrWatchCurrentPage = Mathf.Clamp(m_WatchCurrentPage, 0, QuickMenuPageCount - 1);
-            // QuickMenuPageCount and VPBConfig.QuickMenuVrWatchPageCount are declared apart; clamp
-            // rather than trust them to stay equal.
             int pages = Mathf.Min(dstPages.Length, m_WatchPageAssignments.Length);
             for (int p = 0; p < pages; p++)
             {
@@ -2175,8 +2140,7 @@ namespace VPB
         private void QuickMenuToggleWatchWorldLock()
         {
             bool want = !m_WatchWorldLocked;
-            // Edit mode force-locks and restores the pre-edit value on exit; an explicit pin
-            // press while editing must not be thrown away by that restore.
+            // Edit mode force-locks and restores the pre-edit value on exit.
             if (m_WatchEditMode) m_WatchWorldLockBeforeEdit = want;
             QuickMenuSetWatchWorldLocked(want);
         }
@@ -2422,10 +2386,7 @@ namespace VPB
                 QuickMenuSyncWatchAssignSlot(i);
         }
 
-        /// <summary>
-        /// Per-frame. PerfMode is the only assignable whose icon resolves differently as state
-        /// changes, and a collapsed face shows no slots at all — do nothing in every other case.
-        /// </summary>
+        /// <summary>Per-frame. PerfMode is the only assignable whose icon resolves differently as state changes.</summary>
         private void QuickMenuSyncWatchAssignLiveIcons()
         {
             if (m_WatchAssignGos == null || !m_WatchActive) return;
@@ -2739,10 +2700,7 @@ namespace VPB
             if (m_WatchCfgToward != 0f)
                 offset += (QuickMenuWatchWristLocalRot * Vector3.forward) * m_WatchCfgToward;
             t.localPosition = offset;
-            // Trim rides on the wrist rotation only: with face-user on, the billboard aim below
-            // replaces this rotation outright, so the trim is dead weight and the settings row hides.
-            // Not mirrored on the right hand — unlike the position offset, an explicitly dialled tilt
-            // should not invert when the watch changes hands.
+            // Trim rides on the wrist rotation only: with face-user on, the billboard aim below replaces this rotation outright.
             t.localRotation = m_WatchCfgFaceRotActive
                 ? QuickMenuWatchWristLocalRot * m_WatchCfgFaceRot
                 : QuickMenuWatchWristLocalRot;
@@ -2761,31 +2719,11 @@ namespace VPB
             QuickMenuTickWatchFreeze(t);
         }
 
-        /// <summary>
-        /// Turn the face toward the eye and keep it upright <em>on the player's retina</em>.
-        ///
-        /// Two things make this different from the gallery pane's billboard
-        /// (<c>LookRotation(pos - camPos, Vector3.up)</c>), and both caused the upside-down face:
-        ///
-        /// 1. The pane lives under <c>mainHUDAttachPoint</c> — outside <c>worldScaleTransform</c>, scale ~1.
-        ///    The watch is parented to a live VR controller, i.e. inside VaM's world-scale chain (that is
-        ///    why the scale math above divides by <c>parent.lossyScale.x</c> at all). Assigning
-        ///    <c>Transform.rotation</c> there round-trips the value through the parent's *extracted*
-        ///    rotation, which is not well defined for a scaled/mirrored basis and can land the face a
-        ///    half turn over. So convert the aim into parent space with the parent's inverse MATRIX
-        ///    and assign a local rotation instead.
-        /// 2. Any fixed up-hint (world up, <c>cam.up</c>, or the wrist's own up) bakes in an assumption
-        ///    about VaM's controller basis. Rather than assume one, read the result back off the live
-        ///    world matrix and flip the hint when the face's own up came out pointing down the player's
-        ///    view. The read-back is ground truth, so no rig convention can leave the face inverted.
-        /// </summary>
         private void QuickMenuAimWatchFaceAtEye(Transform t, Vector3 dirWorld, Transform cam)
         {
             Vector3 fwd = dirWorld.normalized;
             Vector3 camUp = cam.up;
 
-            // Eye-relative up, not world up: tilting your head down at your own wrist keeps cam.up
-            // square to the view axis, where world up would be nearly parallel to it and collapse.
             Vector3 up = camUp;
             float par = up.x * fwd.x + up.y * fwd.y + up.z * fwd.z;
             if (par > 0.999f || par < -0.999f) up = cam.forward;
@@ -2793,9 +2731,6 @@ namespace VPB
 
             QuickMenuSetWatchAimLocal(t, fwd, up);
 
-            // Ground truth is the world MATRIX, not t.up: Transform.up/right/forward are defined as
-            // rotation * axis, so they report the same extracted rotation this method is working
-            // around and would happily agree with a wrong result.
             Vector3 faceUp = t.localToWorldMatrix.MultiplyVector(Vector3.up);
             float len2 = faceUp.sqrMagnitude;
             if (len2 < 1e-12f) return;
@@ -2807,13 +2742,7 @@ namespace VPB
             QuickMenuLogWatchAimFlipOnce(t);
         }
 
-        /// <summary>
-        /// Aim <paramref name="t"/> without ever assigning a world rotation — see
-        /// <see cref="QuickMenuAimWatchFaceAtEye"/> for why the parent's extracted rotation is not usable.
-        /// <c>MultiplyVector</c> on the parent's inverse matrix is the exact world-to-parent direction
-        /// map (rotation and scale, no translation); <c>InverseTransformDirection</c> is not — it is
-        /// <c>Quaternion.Inverse(parent.rotation) * v</c>, the same extraction being avoided.
-        /// </summary>
+        /// <summary>Aim via parent inverse matrix MultiplyVector; never assign world rotation.</summary>
         private static void QuickMenuSetWatchAimLocal(Transform t, Vector3 fwd, Vector3 up)
         {
             Transform parent = t.parent;
@@ -2864,17 +2793,11 @@ namespace VPB
                 return;
             }
 
-            // Measure against the live wrist anchor, not the transform: once frozen the transform
-            // stops tracking, so it is a stale reference for its own hysteresis.
             Vector3 anchor = QuickMenuWatchWristAnchorWorld();
             float d2 = (m_WatchOtherHand.position - anchor).sqrMagnitude;
-            // Reach radii are player-relative metres — see QuickMenuWorldScale.
             float ws2 = m_WatchWorldScale * m_WatchWorldScale;
             if (m_WatchFrozen)
             {
-                // Release when the reaching hand leaves, and also when the wrist itself has walked
-                // away — otherwise dropping the watch arm leaves the face hanging in mid-air,
-                // indistinguishable from pin mode.
                 if (d2 > QuickMenuWatchFreezeExitSqr * ws2 ||
                     (anchor - t.position).sqrMagnitude > QuickMenuWatchFreezeBreakSqr * ws2)
                     m_WatchFrozen = false;
@@ -2935,8 +2858,7 @@ namespace VPB
             }
         }
 
-        // Hover text drives the tip panel only; it never feeds the status line, so no status
-        // rebuild (and no StringBuilder.ToString) is owed per pointer enter/exit.
+        // Hover text drives the tip panel only; it never feeds the status line.
         internal int QuickMenuSetWatchHoverStatus(string msg)
         {
             m_WatchHoverStatus = msg;
@@ -3050,19 +2972,7 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Bezel reposition drag.
-    ///
-    /// Measuring against the live bezel rect made this feel like a bow string: on the wrist the
-    /// face re-aims at the user every frame, so the reference plane rotated under the drag and fed
-    /// its own motion back in; and because a laser drag is angular, the further out and the more
-    /// oblique the ray, the more world travel a small wrist rotation produced — including along the
-    /// face normal, which is why the watch kept changing distance.
-    ///
-    /// Fix is three parts: freeze the reference plane at grab time, keep every step in that plane
-    /// so the distance you set stays set, and gear the motion down with smoothing and a per-frame
-    /// cap so it can be nudged instead of flung.
-    /// </summary>
+    /// <summary>Bezel drag: plane frozen at grab, motion kept in-plane, smoothed and capped per frame.</summary>
     internal sealed class VrWatchBezelDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         private const float DragGain = 0.3f;
@@ -3131,7 +3041,6 @@ namespace VPB
             {
                 Ray ray = m_Cam.ScreenPointToRay(eventData.position);
                 float enter;
-                // Ray swung behind the plane: hold position rather than let the hit jump.
                 if (!m_Plane.Raycast(ray, out enter) || enter <= 0f) return false;
                 world = ray.GetPoint(enter);
                 return true;
@@ -3287,8 +3196,7 @@ namespace VPB
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            // Token 0 means we never showed a tip (empty text, or enter went elsewhere); passing
-            // it on would force-clear whichever widget owns the tip right now.
+            // Token 0 means we never showed a tip (empty text, or enter went elsewhere).
             if (owner == null || m_Token == 0) return;
             owner.QuickMenuClearWatchHoverStatus(m_Token);
             m_Token = 0;

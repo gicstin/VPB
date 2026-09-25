@@ -5,12 +5,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Explicit keyboard focus regions for gallery browse + settings float filter.
-    /// Unity Selectables use Navigation.Mode.None — no built-in Tab cycle.
-    /// Browse: TitleSearch ↔ Grid. Settings float (when focused): Filter ↔ settings chrome.
-    /// Warm path only — no per-frame alloc.
-    /// </summary>
     public partial class GalleryPanel
     {
         private enum GalleryKeyboardFocusRegion
@@ -23,10 +17,6 @@ namespace VPB
 
         private float _keyboardFocusStatusUntil;
 
-        /// <summary>
-        /// Tab / Down leave InputField traps into work surface; Tab from list returns to search.
-        /// Call before InputField early-out in <see cref="HandleKeyboardInput"/>.
-        /// </summary>
         private bool TryHandleKeyboardFocusTransfer()
         {
             if (!IsVisible || isCollapsed) return false;
@@ -37,13 +27,10 @@ namespace VPB
             bool down = Input.GetKeyDown(KeyCode.DownArrow);
             if (!tab && !down) return false;
 
-            // Modifiers: Ctrl/Alt Tab left for OS / future chords.
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
             if (ctrl || alt) return false;
 
-            // Settings float is modeless: Tab cycle stays in gallery unless focus already in float.
-            // Legacy middle-pane settings list (if re-enabled) still owns Tab while active.
             if (settingsListViewActive)
                 return TryHandleSettingsKeyboardFocusTransfer(tab, down);
             if (IsSettingsPanelOpen() && IsKeyboardFocusInsideSettingsFloat())
@@ -53,7 +40,6 @@ namespace VPB
 
             if (region == GalleryKeyboardFocusRegion.TitleSearch)
             {
-                // Tab or Down → grid (omnibox pattern; single-line field unused Down).
                 if (tab || down)
                 {
                     FocusGridFromKeyboard(showStatus: true);
@@ -62,16 +48,14 @@ namespace VPB
             }
             else if (region == GalleryKeyboardFocusRegion.OtherInput)
             {
-                // Escape any side/filter field trap into work surface.
                 if (tab)
                 {
                     FocusGridFromKeyboard(showStatus: true);
                     return true;
                 }
             }
-            else // Grid
+            else
             {
-                // Tab ↔ search cycle (Shift+Tab same with two regions).
                 if (tab)
                 {
                     try { FocusTitleSearchFromHotkey(); } catch { }
@@ -82,9 +66,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Settings: side-rail filter ↔ list. Title-search popup never owns settings filter.
-        /// </summary>
         private bool TryHandleSettingsKeyboardFocusTransfer(bool tab, bool down)
         {
             GalleryKeyboardFocusRegion region = ResolveKeyboardFocusRegion();
@@ -92,7 +73,6 @@ namespace VPB
             if (region == GalleryKeyboardFocusRegion.SettingsSideSearch
                 || region == GalleryKeyboardFocusRegion.TitleSearch)
             {
-                // Tab / Down leave filter into settings list (no popup covering first row).
                 if (tab || down)
                 {
                     FocusSettingsListFromKeyboard(showStatus: true);
@@ -111,7 +91,6 @@ namespace VPB
                 return false;
             }
 
-            // Settings list — Tab returns to side filter (Ctrl+F same).
             if (tab)
             {
                 try { FocusSettingsSideSearchFromHotkey(); } catch { }
@@ -152,10 +131,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// True when EventSystem selection lives under the Settings float root.
-        /// Modeless float: only then keyboard transfer targets settings chrome.
-        /// </summary>
         private bool IsKeyboardFocusInsideSettingsFloat()
         {
             if (!IsSettingsPanelOpen() || _settingsFloatRoot == null) return false;
@@ -197,10 +172,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// True when transform lives under this panel canvas (or background box fallback).
-        /// Warm path — no alloc.
-        /// </summary>
         private bool IsTransformUnderThisGalleryUi(Transform t)
         {
             if (t == null) return false;
@@ -216,11 +187,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>
-        /// True when EventSystem has an InputField focused under the main gallery pane.
-        /// Ctrl+F search, filter rename, tag search, etc. count as engagement.
-        /// Modeless float filters (Settings / Plugins / Import / presets) do not — float ≠ mode.
-        /// </summary>
         private bool IsGalleryOwnedTextFocusActive()
         {
             InputField field;
@@ -234,15 +200,7 @@ namespace VPB
             return IsTransformUnderGalleryPaneSubtree(field.transform);
         }
 
-        /// <summary>
-        /// Desktop stay-expanded / opaque engagement (not pointer-only).
-        /// Pointer hover OR owned text focus OR modal work chrome.
-        /// Modeless floats (Settings / Plugins / Import / Filter presets) do not pin the pane —
-        /// open alone never blocks AH (Galitz: float ≠ mode). Typing in a float still engages
-        /// via <see cref="IsGalleryOwnedTextFocusActive"/>.
-        /// Norman locus of control + MacKenzie focus ownership + Shneiderman no surprise collapse mid-task.
-        /// Warm path — no alloc; safe on Unity 2018 Mono.
-        /// </summary>
+        /// <summary>Pane engaged by hover, owned text focus, or modal chrome; modeless floats do not pin. No alloc.</summary>
         private bool IsGalleryInteractionEngaged()
         {
             if (hoverCount > 0) return true;
@@ -267,9 +225,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Blur InputField, close title-search popup, ensure grid selection for arrow nav.
-        /// </summary>
         internal void FocusGridFromKeyboard(bool showStatus)
         {
             if (!IsVisible || isCollapsed) return;
@@ -294,10 +249,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Settings list focus: commit live side filter, blur field, select first/visible row.
-        /// Never opens package detail strip.
-        /// </summary>
         internal void FocusSettingsListFromKeyboard(bool showStatus)
         {
             if (!IsVisible || isCollapsed) return;
@@ -327,9 +278,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Ctrl+F while Settings float expanded: focus settings filter (not title-search popup).
-        /// </summary>
         private void FocusSettingsSideSearchFromHotkey()
         {
             if (!IsVisible || isCollapsed) return;
@@ -352,10 +300,7 @@ namespace VPB
             FocusTitleSearchInputField(side, selectAll: true);
         }
 
-        /// <summary>
-        /// Push side-rail text into <see cref="settingsFilter"/> without letting an empty
-        /// unfocused field wipe a live filter (layout/ConfigChanged races).
-        /// </summary>
+        /// <summary>Push side-rail text into settingsFilter without letting an empty unfocused field wipe a live filter (layout/ConfigChanged races).</summary>
         private void CommitSettingsSideSearchIntoFilter()
         {
             try
@@ -395,9 +340,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Pick visible grid item if none selected so arrow keys have an anchor.
-        /// </summary>
         private void EnsureKeyboardGridSelection()
         {
             if (currentFilteredFiles == null || currentFilteredFiles.Count == 0)
@@ -448,10 +390,6 @@ namespace VPB
             try { UpdatePaginationText(); } catch { }
         }
 
-        /// <summary>
-        /// Up from first list/grid row returns to search (closed keyboard loop).
-        /// Settings → side filter; browse → title search.
-        /// </summary>
         private bool TryKeyboardUpToTitleSearch(int currentIndex, int move, int moveH, bool shift, bool ctrl)
         {
             if (move >= 0 || moveH != 0) return false;

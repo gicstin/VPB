@@ -5,11 +5,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Strip Scene create-fill: pick default SubScene from gallery (SubScenes category).
-    /// Jakob — banner pick pattern. Single selection (one default path).
-    /// Confirm Pick = apply; Cancel Pick = abort (Esc).
-    /// </summary>
     public partial class GalleryPanel
     {
         private bool _stripKeepSubScenePickActive;
@@ -26,7 +21,6 @@ namespace VPB
         {
             if (_stripKeepSubScenePickActive) return;
             if (backgroundBoxGO == null) return;
-
 
             // Collapsed pane deactivates content subtree — must expand for pick (Fitts / visibility).
             try
@@ -50,7 +44,6 @@ namespace VPB
             }
             catch { }
 
-            // Hide strip chrome; keep session (selections / create-fill state).
             if (IsStripKeepSelectorOpen())
             {
                 try { HideStripKeepSelectorInternal(resetSession: false); } catch { }
@@ -94,7 +87,6 @@ namespace VPB
 
         private System.Collections.IEnumerator StripKeepPreselectSavedSubSceneDeferred()
         {
-            // Wait for category Show to populate filtered list.
             yield return null;
             yield return null;
             if (!_stripKeepSubScenePickActive) yield break;
@@ -125,7 +117,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Recognition: if saved path visible in current list, select it.</summary>
         private void StripKeepTryPreselectSavedSubScene()
         {
             if (string.IsNullOrEmpty(_stripKeepDefaultSubScenePath)) return;
@@ -196,13 +187,11 @@ namespace VPB
             }
         }
 
-        /// <summary>Confirm Pick — apply gallery pick as default SubScene path.</summary>
         private void StripKeepEndSubSceneSelection()
         {
             StripKeepFinishSubScenePickMode(apply: true, reopenStrip: true);
         }
 
-        /// <summary>Cancel Pick — abort without changing saved path.</summary>
         private void StripKeepEndSubScenePick()
         {
             StripKeepFinishSubScenePickMode(apply: false, reopenStrip: true);
@@ -226,7 +215,7 @@ namespace VPB
                             "gallery.creator.strip_subscene_pick_need_one",
                             "Select a SubScene, then Confirm Pick / Enter."),
                         2f);
-                    return; // stay in pick mode
+                    return;
                 }
                 FileEntry f = selectedFiles[0];
                 string chosenPath = null;
@@ -283,7 +272,6 @@ namespace VPB
                 return;
             }
 
-            // Cancel Pick / abort
             _stripKeepSubScenePickActive = false;
             _stripKeepSubScenePickExpectedTitle = null;
             StripKeepDestroySubScenePickBanner();
@@ -354,7 +342,6 @@ namespace VPB
                 TextAnchor.MiddleLeft, name: "Label");
             UI.AddLE(_stripKeepSubScenePickBannerLabel.gameObject, minWidth: 120f, flexibleWidth: 1f);
 
-            // Primary: Confirm Pick. Secondary: Cancel Pick.
             UI.CreateChromeLayoutButton(
                 _stripKeepSubScenePickBannerRoot.transform, 130f * s, 38f * s,
                 VPBTranslation.T("gallery.creator.strip_subscene_confirm_pick", "Confirm Pick"),
@@ -409,7 +396,6 @@ namespace VPB
             _stripKeepSubScenePickBannerLabel = null;
         }
 
-        /// <summary>Esc / Enter while SubScene pick banner up.</summary>
         private bool StripKeepHandleSubScenePickKeys()
         {
             if (!_stripKeepSubScenePickActive) return false;

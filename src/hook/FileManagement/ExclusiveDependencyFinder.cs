@@ -6,10 +6,7 @@ using ICSharpCode.SharpZipLib.Zip;
 
 namespace VPB
 {
-    /// <summary>
-    /// Finds installed packages that selected packages depend on and that no remaining
-    /// package still needs. Capture on main; Find on ThreadPool (managed + zip IO only).
-    /// </summary>
+    /// <summary>Finds installed packages that selected packages depend on and that no remaining package still needs.</summary>
     internal static class ExclusiveDependencyFinder
     {
         const int MaxJsonEntryBytes = 2 * 1024 * 1024;
@@ -169,7 +166,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Worker-safe. Zip scan for seeds with no SQL/Recursive tokens.</summary>
         internal static ScanResult Find(ScanInput input, Func<bool> isAborted)
         {
             var result = new ScanResult();
@@ -501,7 +497,6 @@ namespace VPB
                 return ClosestMin(group, minVer, input);
             }
 
-            // Exact pin missing: same as ForceLatest / GetPackageForDependency fallback.
             return NewestInGroup(group, input);
         }
 

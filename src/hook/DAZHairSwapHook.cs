@@ -9,10 +9,6 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Keeps outgoing hair visible until incoming hair finishes loading during preset restore.
-    /// Outgoing hair collisions are disabled first; mesh hide runs only after incoming hair is ready.
-    /// </summary>
     public static class DAZHairSwapHook
     {
         sealed class HairSwapSession
@@ -527,7 +523,6 @@ namespace VPB
             bool fromRestore)
         {
             // Issue #12: UI Assist / SetActive on scan-excluded hair packages (always, not only swap mode).
-            // Object path: register files only. Skip during restore (batched elsewhere).
             if (active && item != null && !fromRestore)
             {
                 try
@@ -877,6 +872,5 @@ namespace VPB
             }
             catch { }
         }
-
     }
 }

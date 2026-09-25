@@ -5,7 +5,6 @@ namespace VPB
 {
     public partial class VamHookPlugin
     {
-        /// <summary>Apply hotkeys edited in gallery Settings; keeps legacy UIKey synced to GalleryKey.</summary>
         public bool TryApplyGalleryPluginHotkeys(
             string galleryKey,
             string createGalleryKey,

@@ -96,7 +96,6 @@ namespace VPB
 		{
 			if (singleton != null)
 			{
-				//LogUtil.Log("CustomAssetLoader QueueLoadAssetBundleFromFile " + abffr.path);
 				if (singleton.assetBundleFromFileQueue == null)
 				{
 					singleton.assetBundleFromFileQueue = new List<MeshVR.AssetLoader.AssetBundleFromFileRequest>();
@@ -125,7 +124,6 @@ namespace VPB
 
 		public static void DoneWithAssetBundleFromFile(string path)
 		{
-			//LogUtil.Log("CustomAssetLoader DoneWithAssetBundleFromFile " + path);
 			int value;
 			if (!(singleton != null) || singleton.assetBundleReferenceCounts == null || !singleton.assetBundleReferenceCounts.TryGetValue(path, out value))
 			{
@@ -236,10 +234,8 @@ namespace VPB
 
 		public static void QueueLoadSceneIntoTransform(MeshVR.AssetLoader.SceneLoadIntoTransformRequest slr)
 		{
-
 			if (singleton != null)
 			{
-				//LogUtil.Log("CustomAssetLoader QueueLoadSceneIntoTransform " + slr.scenePath);
 				if (singleton.sceneLoadIntoTransformQueue == null)
 				{
 					singleton.sceneLoadIntoTransformQueue = new List<MeshVR.AssetLoader.SceneLoadIntoTransformRequest>();
@@ -282,7 +278,6 @@ namespace VPB
             AssetBundle ab = null;
             bool shouldUnload = false;
 
-            // 1. Check if already tracked in our cache
             if (singleton != null && singleton.pathToAssetBundle != null && singleton.pathToAssetBundle.TryGetValue(path, out ab))
             {
                 shouldUnload = false;
@@ -296,9 +291,6 @@ namespace VPB
                     singleton.pathToAssetBundle.TryGetValue(path, out ab);
             }
 
-            // 2. Not in our cache yet, but VaM/another CUA may already hold it. Callers hit this right after
-            // setting assetUrl, so the queued LoadBundleFileAsync for the same file is often still in flight —
-            // loading a second copy here races it and leaves us owning a bundle the live atom is using.
             if (ab == null)
             {
                 ab = FindLoadedAssetBundleByPath(path);
@@ -334,8 +326,7 @@ namespace VPB
                 if (ab != null) shouldUnload = true;
             }
 
-            // 4. Load raced with VaM's own queued load (LoadFromFileAsync returns null for an already-loaded
-            // file). Re-check the loaded set rather than reporting "no assets".
+            // 4. Load raced with VaM's own queued load (LoadFromFileAsync returns null for an already-loaded file).
             if (ab == null)
             {
                 ab = FindLoadedAssetBundleByPath(path);
@@ -345,8 +336,7 @@ namespace VPB
             {
                 string[] names = ab.GetAllAssetNames();
                 List<string> result = new List<string>(names);
-                // Unload(false) only: this listing is metadata-only, and the same bundle may already back a
-                // live CUA. Unload(true) would destroy that atom's loaded objects mid-use.
+                // Unload(false) only: this listing is metadata-only, and the same bundle may already back a live CUA.
                 if (shouldUnload) ab.Unload(false);
                 callback?.Invoke(result);
             }
@@ -371,8 +361,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Find an already-loaded bundle for <paramref name="path"/> by its file name (bundle names
-        /// are the file stem in VaM's packaging). Returns null when nothing matches.</summary>
         private static AssetBundle FindLoadedAssetBundleByPath(string path)
         {
             try

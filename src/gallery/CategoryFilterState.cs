@@ -10,14 +10,12 @@ namespace VPB
         public string Creator = "";
         public List<string> Tags = new List<string>();
         public List<string> UserTags = new List<string>();
-        /// <summary>Excluded (none-of) user tags in filter-by-tags mode.</summary>
         public List<string> ExcludedUserTags = new List<string>();
         /// <summary><see cref="UserTagAvailMode"/> as int (0=tag, 1=filter by tags, 2=untagged only). Legacy: 1 meant filter-by-tags only.</summary>
         public int UserTagAvailFilterMode = 0;
-        /// <summary>1 when ALL VAR user-tag apply/removal also propagates to child items inside VAR.</summary>
         public int UserTagInheritVarToChildren = 0;
-        public string SceneSourceFilter = ""; // Legacy JSON; ignored on apply (migrated to global Local).
-        public string AppearanceSourceFilter = ""; // Legacy JSON; ignored on apply (migrated to global Local).
+        public string SceneSourceFilter = "";
+        public string AppearanceSourceFilter = "";
         public string PackagePathFilter = "";
         public int ClothingSubfilter = 0;
         public int HairSubfilter = 0;
@@ -32,19 +30,14 @@ namespace VPB
         public int BrowseAlwaysLoadedMode = 0;
         /// <summary>Title-bar Filter Old-versions: 0=All versions, 1=Newest only (default), 2=Old only.</summary>
         public int BrowseOldVersionsMode = 1;
-        /// <summary>Title-bar Filter Loaded cycle: 0=Off, 1=All Loaded, 2=All Unloaded.</summary>
         public int BrowseLoadedMode = 0;
         /// <summary>Title-bar Filter Unused cycle: 0=Off, 1=Unused first, 2=Unused only.</summary>
         public int BrowseUnusedMode = 0;
         /// <summary>Title-bar Filter license type (meta.json licenseType). Empty = off.</summary>
         public string LicenseFilter = "";
-        /// <summary>Title-bar Source All/Local/.var. Written when Independent; omitted in JSON when unset.</summary>
         public int SourceFilter = 0;
-        /// <summary>True when <see cref="SourceFilter"/> was stored (not inherited from live synced value).</summary>
         public bool HasSourceFilter;
 
-        // Maps legacy per-category source-filter strings. "" / non-local → ignored.
-        // "local" migrates to title-bar Source Local on Independent restore.
         private static string MigrateLegacySourceFilter(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";
@@ -194,7 +187,6 @@ namespace VPB
                     s.SourceFilter = ClampSourceFilter(node["gsf"].AsInt);
                 }
 
-                // Legacy: exclusive sort modes lived on FileSortState.
                 if (s.FileSortState != null)
                 {
                     if (s.FileSortState.Type == SortType.HiddenOnly)

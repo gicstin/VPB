@@ -48,7 +48,6 @@ namespace VPB
             if (canvas == null) yield break;
             var raycaster = canvas.GetComponent<GraphicRaycaster>();
             if (raycaster == null) yield break;
-            // Toggle to force Unity/VaM to rebuild internal raycast state.
             raycaster.enabled = false;
             raycaster.enabled = true;
         }
@@ -63,9 +62,6 @@ namespace VPB
         {
             if (SuperController.singleton == null) return null;
 
-            // 0. Prefer the target selected in the GalleryPanel dropdown. Every caller here applies a person
-            // preset, so skip a CUA selection (the CUA category repurposes the dropdown) and fall through to
-            // the person lookup below — ResolveCuaTargetAtom is the accessor for asset targets.
             try
             {
                 Atom selectedInDropdown = SelectedTargetAtom;
@@ -74,7 +70,6 @@ namespace VPB
             }
             catch { }
 
-            // 1. Prefer selected atom if it's a Person
             try
             {
                 Atom selected = SuperController.singleton.GetSelectedAtom();
@@ -82,7 +77,6 @@ namespace VPB
             }
             catch { }
 
-            // 2. Fallback: Find any Person atom in the scene
             try
             {
                 List<Atom> allAtoms = SuperController.singleton.GetAtoms();
@@ -106,7 +100,6 @@ namespace VPB
 
             try
             {
-                // Create a lightweight action runner without showing any UI.
                 var go = new GameObject("VPB_AutoActionRunner");
                 go.hideFlags = HideFlags.HideAndDontSave;
 
@@ -120,8 +113,7 @@ namespace VPB
                     string category = CurrentCategoryTitle ?? "";
                     string categoryLower = category.ToLowerInvariant();
 
-                    // Match the primary tab's first action behavior (auto action = first button).
-                    if (pathLower.EndsWith(".var"))
+                    if (pathLower.EndsWith(".var", StringComparison.Ordinal))
                     {
                         try
                         {
@@ -133,7 +125,6 @@ namespace VPB
                         catch { return false; }
                     }
 
-                    // If Appearance category but entry is BreastPhysics/Skin/etc sibling, remap to look .vap.
                     FileEntry remapped = VPB.src.util.AppearanceApplyProbe.TryRemapToAppearanceSibling(file, category);
                     if (remapped != null)
                     {
@@ -142,8 +133,6 @@ namespace VPB
                         pathLower = (file.Path ?? "").ToLowerInvariant();
                     }
 
-                    // Path-first person presets. Category must not swallow Pose/BreastPhysics/etc.
-                    // (log: Appearance tab → Pose path → pose overwrite; Skin tab → BreastPhysics → LoadSkin).
                     string pathNorm = pathLower.Replace('\\', '/');
                     bool pathAppearance = pathNorm.Contains("/appearance/");
                     bool pathPose = pathNorm.Contains("/pose/") || pathNorm.Contains("saves/person/pose");
@@ -176,8 +165,7 @@ namespace VPB
                         return true;
                     }
 
-                    // SubScene path must not run under Appearance/Skin/etc — log proved crash:
-                    // Appearance click → show_Dae SubScene → Replace wiped Anjbgo → RemoveAtom .SELECTIONS hang.
+                    // SubScene path must not run under Appearance/Skin/etc.
                     if (pathSubScene || catSubScene)
                     {
                         if (catPersonPreset && !catSubScene)
@@ -205,7 +193,7 @@ namespace VPB
                         return true;
                     }
 
-                    bool isScene = pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || category.Contains("Scene"));
+                    bool isScene = pathLower.EndsWith(".json", StringComparison.Ordinal) && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || category.Contains("Scene"));
                     if (isScene)
                     {
                         VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadSceneFile",
@@ -243,7 +231,6 @@ namespace VPB
                             pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
                             target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
-                        // ApplyClothingToAtom resolves BreastPhysics/Glute from path.
                         dragger.LoadSkin(target);
                         return true;
                     }
@@ -294,19 +281,19 @@ namespace VPB
 
                     bool isPluginScript =
                         (pathLower.Contains("/custom/scripts/") || pathLower.Contains("\\custom\\scripts\\"))
-                        && (pathLower.EndsWith(".cs") || pathLower.EndsWith(".cslist") || pathLower.EndsWith(".dll"));
+                        && (pathLower.EndsWith(".cs", StringComparison.Ordinal) || pathLower.EndsWith(".cslist", StringComparison.Ordinal) || pathLower.EndsWith(".dll", StringComparison.Ordinal));
                     bool isPluginPreset =
                         pathLower.Contains("/custom/atom/person/plugins/") ||
                         pathLower.Contains("\\custom\\atom\\person\\plugins\\") ||
                         pathLower.Contains("/custom/pluginpresets/") ||
                         pathLower.Contains("\\custom\\pluginpresets\\") ||
-                        (pathLower.EndsWith(".vap") && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset") || categoryLower.Contains("plugins")));
+                        (pathLower.EndsWith(".vap", StringComparison.Ordinal) && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset") || categoryLower.Contains("plugins")));
                     if (isPluginScript || isPluginPreset || categoryLower.Contains("plugins"))
                     {
                         // Category "Plugins" also covers script rows; avoid false-positives on non-script/non-vap.
                         if (isPluginScript || isPluginPreset
-                            || pathLower.EndsWith(".cs") || pathLower.EndsWith(".cslist") || pathLower.EndsWith(".dll")
-                            || pathLower.EndsWith(".vap"))
+                            || pathLower.EndsWith(".cs", StringComparison.Ordinal) || pathLower.EndsWith(".cslist", StringComparison.Ordinal) || pathLower.EndsWith(".dll", StringComparison.Ordinal)
+                            || pathLower.EndsWith(".vap", StringComparison.Ordinal))
                         {
                             Atom target = GetBestTargetAtom();
                             if (target != null && SceneUtils.IsPersonLikeAtom(target))
@@ -314,9 +301,8 @@ namespace VPB
                                 dragger.LoadPlugins(target);
                                 return true;
                             }
-                            // No Person: scripts → session plugin (same as void drop).
                             if (isPluginScript
-                                || pathLower.EndsWith(".cs") || pathLower.EndsWith(".cslist") || pathLower.EndsWith(".dll"))
+                                || pathLower.EndsWith(".cs", StringComparison.Ordinal) || pathLower.EndsWith(".cslist", StringComparison.Ordinal) || pathLower.EndsWith(".dll", StringComparison.Ordinal))
                             {
                                 dragger.LoadPluginsAsSession();
                                 return true;
@@ -334,7 +320,7 @@ namespace VPB
                         return true;
                     }
 
-                    if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle") || pathLower.EndsWith(".unity3d"))
+                    if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle", StringComparison.Ordinal) || pathLower.EndsWith(".unity3d", StringComparison.Ordinal))
                     {
                         Atom target = DragDropReplaceMode ? ResolveCuaTargetAtom() : null;
                         if (target != null) dragger.LoadCUAIntoAtom(target, file.Uid);
@@ -361,10 +347,6 @@ namespace VPB
             LoadRandom(null, null, 0);
         }
 
-        /// <summary>
-        /// Category gates used by <see cref="FilterRandomPoolForCurrentCategory"/>. Split out so the
-        /// quick-menu hover preview can sample the pool by rejection instead of copying it.
-        /// </summary>
         internal bool ComputeRandomPoolCategoryGates(out bool appearanceCat, out bool subSceneCat, out bool sceneCat)
         {
             string cat = currentCategoryTitle ?? "";
@@ -398,9 +380,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Drop rows that cannot belong to the current category (defense if refresh polluted the list).
-        /// </summary>
         private List<FileEntry> FilterRandomPoolForCurrentCategory(List<FileEntry> pool)
         {
             if (pool == null || pool.Count == 0) return pool;
@@ -444,21 +423,11 @@ namespace VPB
             return ApplySimilarRandomBias(filtered);
         }
 
-        /// <param name="excludeIdentityKey">
-        /// When set and pool has 2+ items, never pick this identity (path/uid). Retries then linear scan.
-        /// </param>
         private void LoadRandom(string excludeIdentityKey)
         {
             LoadRandom(excludeIdentityKey, null, 0);
         }
 
-        /// <param name="excludeIdentityKey">
-        /// When set and pool has 2+ items, never pick this identity (path/uid). Retries then linear scan.
-        /// </param>
-        /// <param name="replaceModeOverride">
-        /// Null = persisted Add/Replace. Non-null forces mode for this sync apply only (filter multi-random).
-        /// </param>
-        /// <param name="replaceOverrideToken">Owner token for scoped override clear (filter-randomize gen).</param>
         private void LoadRandom(string excludeIdentityKey, bool? replaceModeOverride, int replaceOverrideToken)
         {
             bool overrideHeld = false;
@@ -506,11 +475,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Select + auto-apply one already-picked entry (same rules as a grid click). Shared by
-        /// <see cref="LoadRandom(string,bool?,int)"/> and the quick-menu hover preview, which pins the
-        /// item at hover time and launches exactly that one.
-        /// </summary>
         internal bool ApplyPickedRandomEntry(FileEntry file)
         {
             if (file == null) return false;
@@ -521,7 +485,6 @@ namespace VPB
                 LogUtil.Log("[VPB] Load Random: pick cat='" + (currentCategoryTitle ?? "")
                     + "' path=" + (file.Path ?? file.Uid ?? "?"));
 
-                // Select it
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
                 selectionAnchorPath = null;
@@ -534,11 +497,9 @@ namespace VPB
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
 
-                // Apply (same logic as click). Scene shortcut only when path is a scene — never via
-                // category.Contains("Scene") (would false-match other titles if wording changes).
                 string pathLower = (file.Path ?? "").ToLowerInvariant().Replace('\\', '/');
                 bool isSubScene = pathLower.Contains("/subscene/");
-                bool isScene = !isSubScene && pathLower.EndsWith(".json")
+                bool isScene = !isSubScene && pathLower.EndsWith(".json", StringComparison.Ordinal)
                     && (pathLower.Contains("/scene/") || pathLower.Contains("saves/scene"));
 
                 if (isScene)
@@ -561,10 +522,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Recency scope every random operation drawing from this panel's view shares, so the quick-menu,
-        /// wrist watch, filter dice and grid button cannot hand out what another just served.
-        /// </summary>
         internal string GetRandomHistoryScope()
         {
             string cat = null;
@@ -575,22 +532,12 @@ namespace VPB
             return historyBrowse ? "hist:" + cat : cat;
         }
 
-        /// <summary>
-        /// Pick a pool entry that is neither <paramref name="excludeIdentityKey"/> nor inside the scope's
-        /// recency window. Relaxes the window in halves before it ever repeats, so a non-empty pool always
-        /// yields something.
-        /// </summary>
         private FileEntry PickRandomFileEntry(List<FileEntry> pool, string excludeIdentityKey, bool historyBrowse)
         {
             if (pool == null || pool.Count == 0) return null;
             return VpbRandomHistory.Pick(GetRandomHistoryScope(), pool, excludeIdentityKey, false);
         }
 
-        /// <summary>
-        /// Title-bar / side Refresh: rescan packages and reload the grid while preserving scroll when possible.
-        /// Needed when <see cref="VPBConfig.GalleryManualRefreshOnly"/> blocks automatic file-manager updates.
-        /// Waits for the async package scan so Path listings / SQL <c>var_path</c> match disk after Explorer moves.
-        /// </summary>
         public void UserRequestedPackageRefresh()
         {
             try
@@ -627,7 +574,6 @@ namespace VPB
 
             try { FileManagerBridge.Refresh("gallery_manual", RefreshScope.Both, init: true); } catch { }
 
-            // Let RefreshCo start (or attach to an in-flight coalesced scan).
             yield return null;
 
             float waited = 0f;
@@ -658,7 +604,6 @@ namespace VPB
             }
             catch { }
 
-            // Deleted/moved Path folder while still selected → clear so RefreshFiles is not empty-filtered.
             try { TryClearStalePackagePathFilter(); } catch { }
 
             GalleryFileListSnapshotCache.InvalidateAll();
@@ -667,8 +612,6 @@ namespace VPB
             tagsCached = false;
             pathsCached = false;
             refreshOnNextShow = true;
-            // RefreshFiles is async: Path tabs need Custom/Saves from the finished grid.
-            // Do not UpdateTabs here — CachePaths would mark pathsCached with SQL AddonPackages only.
             RefreshFiles(true);
             refreshOnNextShow = false;
             try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
@@ -677,10 +620,7 @@ namespace VPB
             _userPackageRefreshCo = null;
         }
 
-        /// <summary>
-        /// Right-click Refresh: native VaM FileManager.Refresh only (catalog / package handlers).
-        /// Does not rescan the VPB package index or reload the gallery grid.
-        /// </summary>
+        /// <summary>Right-click Refresh: native VaM FileManager.Refresh only (catalog / package handlers).</summary>
         public void UserRequestedNativeFileManagerRefresh()
         {
             try
@@ -771,14 +711,12 @@ namespace VPB
             bool registeredBefore = _registeredWithSuperController;
             EnsureCanvasRegisteredWithSuperController();
 
-            // Lazy-load per-category scroll cache; capture key for the category we may be leaving.
             if (!_scrollCacheLoaded) LoadCategoryScrollCache();
             string _prevCategoryKey = MakeCategoryScrollKey(currentCategoryTitle, currentPath);
 
             DateTime pkgRefreshTime = DateTime.MinValue;
             try { pkgRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
-            // Init() often runs before FileManager stamps lastPackageRefreshTime; lastApplied stayed MinValue
-            // and the first Show then treated every open as "packages changed". Adopt the current clock once.
+            // Init() often runs before FileManager stamps lastPackageRefreshTime.
             if (lastAppliedPackageRefreshTime == DateTime.MinValue && pkgRefreshTime > DateTime.MinValue)
                 lastAppliedPackageRefreshTime = pkgRefreshTime;
 
@@ -786,9 +724,7 @@ namespace VPB
             if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryManualRefreshOnly)
                 packageTimestampAdvanced = (pkgRefreshTime > lastAppliedPackageRefreshTime);
 
-            // After the panel has loaded once, package updates should flow through
-            // Gallery.NotifyPackagesChanged -> ApplyPackageDelta instead of forcing
-            // a full RefreshFiles() during Show(). This avoids hide/open race stalls.
+            // After first load, package updates flow via ApplyPackageDelta instead of full RefreshFiles on Show.
             bool packagesChanged = refreshOnNextShow || (!hasLoadedContent && packageTimestampAdvanced);
 
             titleText.text = title;
@@ -797,11 +733,6 @@ namespace VPB
             bool paramsChanged = (currentExtension != extension || currentPath != path) || hubTokenChanging;
             bool categoryTitleChanged = !string.Equals(title, currentCategoryTitle, StringComparison.Ordinal);
 
-            // Navigating to a different category while a Try-On preview is still pending should not
-            // silently discard it. Auto-commit (implicit Keep) so e.g. previewing clothing then moving
-            // to the Appearance category keeps that clothing instead of reverting when the next preset
-            // loads. Only fires on an actual category change, so flipping through looks in the same
-            // category still unstacks normally.
             if (categoryTitleChanged && hasLoadedContent && _tryOnActive)
             {
                 try { TryOnKeep(); } catch { }
@@ -846,7 +777,6 @@ namespace VPB
 
             bool sameViewReopen = hasLoadedContent && !paramsChanged;
 
-            // Save scroll for the category we're leaving; prime the restore target for the new one.
             if (paramsChanged && hasLoadedContent && scrollRect != null)
             {
                 categoryScrollPositions[_prevCategoryKey] = Mathf.Clamp01(scrollRect.verticalNormalizedPosition);
@@ -854,7 +784,6 @@ namespace VPB
                 SaveCategoryScrollCache();
             }
             string nextCategoryKey = MakeCategoryScrollKey(title, path);
-            // Restore scroll from in-memory or disk cache (gallery_scroll.json). Normalized Y stays usable when list length shifts.
             if (categoryScrollPositions.TryGetValue(nextCategoryKey, out float cachedScroll))
             {
                 _pendingScrollRestore = Mathf.Clamp01(cachedScroll);
@@ -866,7 +795,6 @@ namespace VPB
             currentExtension = extension;
             currentPath = path;
             
-            // Set currentPaths
             currentPaths = null;
             if (categories != null) {
                 var cat = categories.FirstOrDefault(c => c.path == path && c.name == title);
@@ -875,7 +803,6 @@ namespace VPB
             if (currentPaths == null) currentPaths = new List<string> { path };
             ApplyHubItemScopePathsToCurrentPaths();
 
-            // Restore per-category filters (or clear to defaults for first visit)
             if (paramsChanged)
                 RestoreCategoryFilterState(title, path);
             if (!string.IsNullOrEmpty(_hubTypeBrowseToken))
@@ -892,10 +819,7 @@ namespace VPB
                     canvas.worldCamera = Camera.main;
             }
 
-            // Decide refresh before UpdateLayout so we can avoid synchronous full-library cache scans
-            // (CacheCreators / CacheCategoryCounts) when RefreshFilesRoutine will rebuild them on a worker thread.
-            // Exiting Settings must always refresh browse rows — same-category Show early-return otherwise
-            // leaves only Sync's async Refresh, which can lose the race to Grid restore (VR tile stick).
+            // Decide refresh before UpdateLayout so we can avoid synchronous full-library cache scans (CacheCreators / CacheCategoryCounts)
             bool shouldRefresh = paramsChanged || !hasLoadedContent || packagesChanged || exitedSettingsMode;
             bool startupDeferredInitialRefresh = false;
             if (shouldRefresh && !hasLoadedContent && !LogUtil.IsStartupReadyLogged())
@@ -919,8 +843,6 @@ namespace VPB
                 LogUtil.LogError($"[VPB] Error checking suppress state: {suppressEx.Message}");
             }
 
-            // Fast reopen path: same already-loaded view should just become visible again.
-            // Do not run layout/tabs/refresh or sync CacheCategoryCounts/CacheCreators here — that was the open/minimize hitch.
             if (sameViewReopen && hasLoadedContent && !shouldRefresh)
             {
                 SetCanvasVisible(true);
@@ -947,15 +869,11 @@ namespace VPB
 
             SetCanvasVisible(true);
 
-            // Refresh raycast on first show (cold-launch VR fix) and on late registration.
-            // On cold launch, VaM's VR pointer system may not have connected to the canvas yet
-            // even when registration succeeded in Init().
             bool isFirstShow = !hasLoadedContent;
             if (isFirstShow || (!registeredBefore && _registeredWithSuperController))
             {
                 try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
             }
-            // Second delayed refresh: VaM's VR pointer system may take ~1 second to fully connect.
             if (isFirstShow)
             {
                 try { StartCoroutine(RefreshRaycasterAfterDelay(1f)); } catch { }
@@ -998,10 +916,8 @@ namespace VPB
 
                 if (targetTransform != null)
                 {
-                    // Place 2.0m in front of camera
                     canvas.transform.position = targetTransform.position + targetTransform.forward * 2.0f;
                     
-                    // Face the user
                     Vector3 lookDir = canvas.transform.position - targetTransform.position;
                     
                     if (lookDir.sqrMagnitude > 0.001f)
@@ -1091,7 +1007,6 @@ namespace VPB
                 try { Settings.Instance.LastGalleryPage.Value = currentCategoryTitle; } catch { }
             }
 
-            // Side rails + Import side: remember which lists were open for Close/recreate.
             if (VPBConfig.Instance != null)
             {
                 string leftTok = ContentTypeToSidePanelString(NormalizePersistableSideTabContent(leftActiveContent));
@@ -1153,8 +1068,6 @@ namespace VPB
                 return;
             }
 
-            // VR cold boot: enabling world-space canvas too early can produce “visible but dead” pointer state.
-            // Defer actual enable until World UI ready and menu visible; then do full refresh + raycaster rebuild.
             if (isVR && Application.isPlaying && !LogUtil.IsStartupReadyLogged())
             {
                 _pendingVisibleAfterStartupReady = true;
@@ -1167,13 +1080,9 @@ namespace VPB
 
             ApplyImmediateVisibility(true);
 
-            // Robust cold-boot fix: if first refresh got deferred while menu-gated hidden,
-            // ensure we run (or schedule) initial refresh on any transition to visible.
             if (visible && Application.isPlaying && !hasLoadedContent && refreshCoroutine == null && !_floatsOnly)
             {
                 // Only auto-Show when no category was selected yet.
-                // Empty path is VALID for ALL VAR / Everything / All — do not treat as unset
-                // (that caused Show→SetCanvasVisible→Show infinite recursion).
                 if (string.IsNullOrEmpty(currentCategoryTitle) && categories != null && categories.Count > 0
                     && _showReentrancyDepth == 0)
                 {
@@ -1197,8 +1106,6 @@ namespace VPB
                                 }
                             }
                         }
-                        // Prefer a category with a real browse path when LastGalleryCategory is
-                        // an empty-path virtual root and we still have no title (pane create path).
                         if (IsVirtualEmptyPathCategory(initial.name, initial.extension)
                             && string.IsNullOrEmpty(initial.path))
                         {
@@ -1212,7 +1119,6 @@ namespace VPB
                     catch { }
                 }
 
-                // If startup not ready yet, schedule deferred refresh (idempotent).
                 if (!LogUtil.IsStartupReadyLogged())
                 {
                     try { ScheduleInitialRefreshAfterStartupReady(); } catch { }
@@ -1223,8 +1129,6 @@ namespace VPB
                 }
             }
 
-            // Cold-boot VR fix when gallery is shown via menu gate (no Show() call).
-            // VaM VR pointer wiring can lag behind canvas enable; force rebuild next frame + after short delay.
             if (visible)
             {
                 if (isVR && Application.isPlaying && !_queuedRaycastRefreshOnVisible)
@@ -1251,16 +1155,10 @@ namespace VPB
             bool wantSubtree = ShouldContentSubtreeBeActive();
             if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != wantSubtree)
                 backgroundBoxGO.SetActive(wantSubtree);
-            // Menu gating can restore a loaded pane without going through Show().
             if (v && !wasVisible && hasLoadedContent)
                 ScheduleDeferredSideTabsFreshAfterReopen();
         }
 
-        // Desired active state for the gallery content subtree (backgroundBoxGO).
-        // A collapsed fixed pane parks its content off-screen, but off-screen UI is still fully
-        // drawn and raycast-walked by the canvas every frame, so a loaded-but-collapsed pane keeps
-        // halving FPS. Deactivate the subtree in that state. Keep it active until the first content
-        // build finishes though: an inactive parent can leave the recycling grid with a zero viewport.
         private bool ShouldContentSubtreeBeActive()
         {
             if (canvas == null || !canvas.enabled) return false;
@@ -1279,7 +1177,6 @@ namespace VPB
             _pendingVisibleAfterStartupReady = false;
             if (canvas == null) yield break;
 
-            // Wait until menu visible too (anchor gate path).
             while (!IsVamMenuVisible())
                 yield return null;
 
@@ -1287,11 +1184,9 @@ namespace VPB
 
             try { EnsureCanvasRegisteredWithSuperController(); } catch { }
 
-            // Force VaM/Unity to rebuild pointer interaction now that UI is ready.
             try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
             try { StartCoroutine(RefreshRaycasterAfterDelay(1f)); } catch { }
 
-            // Ensure initial content refresh runs once we become visible.
             if (!hasLoadedContent && refreshCoroutine == null)
             {
                 if (!LogUtil.IsStartupReadyLogged())
@@ -1303,7 +1198,6 @@ namespace VPB
                     try { RefreshFiles(false); } catch { }
                 }
             }
-
         }
 
         private static bool IsVirtualEmptyPathCategory(string categoryName, string extension)
@@ -1346,7 +1240,6 @@ namespace VPB
         {
             if (VPBConfig.Instance == null || canvas == null) return;
 
-            // Floats sit in world space — menu-gating the host canvas would take them down with the menu.
             if (_floatsOnly)
             {
                 if (_hiddenByMenuGate && !_userHidden)
@@ -1386,7 +1279,6 @@ namespace VPB
 
                     if (!yieldTrigger && aui == SuperController.ActiveUI.SelectedOptions)
                     {
-                        // Edit to Play does not clear selectedController; without gameMode guard VPB stays hidden in Play.
                         try
                         {
                             var ctrl = sc.GetSelectedController();
@@ -1451,25 +1343,20 @@ namespace VPB
             // Priority check: only the first visible panel gets anchored.
             if (GetAnchoredInstance() != this) return;
 
-            // If we are the priority panel, check if menu is visible for snapping.
             if (!IsVamMenuVisible()) return;
 
             var sc = SuperController.singleton;
             Transform vamMenuTrans = sc.mainHUD.transform;
             if (vamMenuTrans == null) return;
 
-            // Land VPB's bottom at the dock's top using mainHUD's own RectTransform; lossyScale captures any HUD or world-scale.
             RectTransform canvasRT = canvas.GetComponent<RectTransform>();
             float heightWorld = canvasRT.rect.height * canvasRT.lossyScale.y;
-            // Origin→bottom along local up (center pivot ⇒ half height).
             float originToBottom = heightWorld * canvasRT.pivot.y;
             RectTransform hudRT = vamMenuTrans.GetComponent<RectTransform>();
             float hudHalfHeight = (hudRT != null) ? (hudRT.rect.height * 0.5f) * hudRT.lossyScale.y : 0.1f;
             float gap = 0.01f;
             Vector3 bottomEdgePos = vamMenuTrans.position + (vamMenuTrans.up * (hudHalfHeight + gap));
 
-            // mainHUD's forward faces away from user; rotate 180 on local Y so the canvas faces the user.
-            // Optional pitch: pivot on bottom edge, top tips toward user (negative local X; UI forward points away).
             float tiltDeg = VPBConfig.ClampGalleryVrMenuAnchorTiltDeg(VPBConfig.Instance.GalleryVrMenuAnchorTiltDeg);
             Quaternion targetRot = vamMenuTrans.rotation * Quaternion.Euler(0f, 180f, 0f);
             if (tiltDeg > 0.001f)
@@ -1477,16 +1364,13 @@ namespace VPB
 
             Vector3 targetPos = bottomEdgePos + (targetRot * Vector3.up) * originToBottom;
 
-            // WorldSpace canvas transform writes force a full canvas rebuild; skip when nothing moved.
             if (canvas.transform.position != targetPos)
                 canvas.transform.position = targetPos;
             if (canvas.transform.rotation != targetRot)
                 canvas.transform.rotation = targetRot;
 
-            // Keep offsets reset so follow mode captures the anchored position when anchoring ends.
             offsetsInitialized = false;
         }
-
 
         private string MakeCategoryScrollKey(string title, string path)
         {
@@ -1514,8 +1398,11 @@ namespace VPB
                 JSONNode root = JSON.Parse(File.ReadAllText(p));
                 if (root == null) return;
                 categoryScrollPositions.Clear();
-                foreach (KeyValuePair<string, JSONNode> kvp in root.AsObject)
-                    categoryScrollPositions[kvp.Key] = kvp.Value.AsFloat;
+                using (VpbNumberText.Invariant())
+                {
+                    foreach (KeyValuePair<string, JSONNode> kvp in root.AsObject)
+                        categoryScrollPositions[kvp.Key] = kvp.Value.AsFloat;
+                }
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] ScrollCache load: " + ex.Message); }
         }
@@ -1528,8 +1415,11 @@ namespace VPB
                 string dir = Path.GetDirectoryName(p);
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 JSONClass root = new JSONClass();
-                foreach (var kvp in categoryScrollPositions)
-                    root[kvp.Key].AsFloat = kvp.Value;
+                using (VpbNumberText.Invariant())
+                {
+                    foreach (var kvp in categoryScrollPositions)
+                        root[kvp.Key].AsFloat = kvp.Value;
+                }
                 File.WriteAllText(p, JsonSerializationUtil.Serialize(root, 4096));
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] ScrollCache save: " + ex.Message); }
@@ -1554,8 +1444,6 @@ namespace VPB
             }
 
             string path = ResolveFileDisplayPath(file);
-            // Grid labels on: prepend full untruncated caption above path (info-bar backup).
-            // Primary recovery when over thumb = sticky tip via BindFileButton AddTooltipPlain.
             bool labelsOn = false;
             try
             {
@@ -1596,10 +1484,6 @@ namespace VPB
             return baseText + "\n" + line;
         }
 
-        /// <summary>
-        /// Pointer entered a gallery item — claim info-bar path ownership and show full path.
-        /// Sibling cell exit (deferred) must not wipe this after claim.
-        /// </summary>
         internal void ClaimHoverPath(UIHoverReveal owner, FileEntry file)
         {
             if (owner == null || file == null)
@@ -1607,14 +1491,11 @@ namespace VPB
                 SetHoverPath(file);
                 return;
             }
-            // Set path first (empty path clears ownership), then claim so deferred sibling exit cannot wipe.
             SetHoverPath(file);
             _hoverPathRevealOwner = owner;
         }
 
-        /// <summary>
-        /// Pointer left a gallery item — restore count fallback only if this reveal still owns the path.
-        /// </summary>
+        /// <summary>Pointer left a gallery item — restore count fallback only if this reveal still owns the path.</summary>
         internal void ReleaseHoverPath(UIHoverReveal owner)
         {
             if (owner == null || _hoverPathRevealOwner != owner) return;
@@ -1628,7 +1509,6 @@ namespace VPB
             int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
             if (sel > 0)
             {
-                // Prefer the selection phrasing used by the tbox label for consistency.
                 string selStr = sel == 1
                     ? VPBTranslation.T("gallery.tbox.selected_one", "1 Selected")
                     : string.Format(VPBTranslation.T("gallery.tbox.selected_many", "{0} Selected"), sel);
@@ -1651,9 +1531,8 @@ namespace VPB
             _hoverPathRevealOwner = null;
             bool hasPath = !string.IsNullOrEmpty(path);
             hoverPathIsCountMode = !hasPath;
-            float targetAlpha = 1f; // pure on/off: always visible (path or count fallback)
+            float targetAlpha = 1f;
 
-            // No fade/transition: snap alpha immediately.
             if (hoverFadeCoroutine != null)
             {
                 StopCoroutine(hoverFadeCoroutine);
@@ -1666,13 +1545,10 @@ namespace VPB
                 if (hasPath)
                 {
                     string displayPath = path;
-                    // Ensure we show full internal paths for .var files without manual line breaks.
-                    // Text wrapping is handled by the UI Text component.
                     hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B");
                 }
                 else
                 {
-                    // Hover-out fallback: show current filtered visible count.
                     RefreshHoverPathCountTextIfNeeded();
                 }
             }
@@ -1687,14 +1563,12 @@ namespace VPB
 
         public void RestoreSelectedHoverPath()
         {
-            // When not hovering an item, always show filtered totals (+ selected count).
             SetHoverPath("");
         }
 
         private void SetNameFilter(string val)
         {
-            // Settings filter is side-rail settingsFilter only. Title search must not
-            // snapshot/filter settings rows — toggle refresh would wipe that ephemeral list.
+            // Settings filter is side-rail settingsFilter only.
             if (settingsListViewActive)
                 return;
 
@@ -1707,8 +1581,6 @@ namespace VPB
                 CancelTitleSearchSqlDebounce();
                 CancelTitleSearchInMemoryDebounce();
 
-                // In package filter mode, keep search scoped to the current filtered list
-                // (do not refresh the whole gallery, which would clear filter mode).
                 if (IsFilterActive)
                 {
                     ApplySearchWithinFilter(f);
@@ -1718,8 +1590,6 @@ namespace VPB
 
                 bool active = HasActiveNameFilter();
 
-                // Outside filter mode: in-memory when base list known; SQL (debounced) for time
-                // windows or when base is dirty. Bare terms OR into user tags via one key lookup.
                 if (topSearchBaseFiles == null)
                 {
                     if (!_topSearchBaseIsClean)
@@ -1729,7 +1599,6 @@ namespace VPB
                             RefreshFiles();
                             return;
                         }
-                        // Narrowing — SQL applies full search AST (name/tag/time).
                         ScheduleTitleSearchSqlRefresh();
                         return;
                     }
@@ -1746,7 +1615,6 @@ namespace VPB
                 }
                 else if (nameFilterQuery.RequiresSqlRefresh)
                 {
-                    // Time / loaded / tagged windows need SQL; keep snapshot for instant clear.
                     ScheduleTitleSearchSqlRefresh();
                     return;
                 }
@@ -1797,7 +1665,6 @@ namespace VPB
         {
             yield return new WaitForSecondsRealtime(0.12f);
             _titleSearchInMemoryDebounceCo = null;
-            // Query may have changed again; apply current AST.
             if (topSearchBaseFiles == null) yield break;
             if (nameFilterQuery != null && nameFilterQuery.RequiresSqlRefresh)
             {
@@ -1830,7 +1697,6 @@ namespace VPB
 
         private void RunTitleSearchSqlRefreshNow()
         {
-            // Preserve in-memory base so clearing search can restore without rebuild.
             if (topSearchBaseFiles != null)
                 _keepTopSearchBaseAcrossRefresh = true;
             else if (_topSearchBaseIsClean && currentFilteredFiles != null)
@@ -1988,7 +1854,6 @@ namespace VPB
         {
             if (file == null || file is InternalSettingRowEntry) return;
 
-            // Right-click: select + open grid actions menu (Apply / whitelist / Select).
             bool applyWhitelistToSelection = PrepareFileEntryGestureSelection(file);
 
             try
@@ -1997,7 +1862,6 @@ namespace VPB
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick grid menu: " + ex); }
 
-            // Preserve middle-button-style temporary whitelist when Ctrl held on RMB.
             if (IsCtrlHeld())
             {
                 try { HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary: true); }
@@ -2042,9 +1906,6 @@ namespace VPB
                 return;
             }
 
-            // Import sidebar active: a single click sets the import source (instead of launching the scene),
-            // but a double click still opens/launches the scene (falls through to the normal handling below).
-            // Source sync lives in RefreshSelectionVisualsCore so keyboard / scrub share the same path.
             if (importSidebarActive)
             {
                 float importClickTime = Time.realtimeSinceStartup;
@@ -2064,7 +1925,6 @@ namespace VPB
                     RefreshSelectionVisuals();
                     return;
                 }
-                // double click: continue to the normal launch path below.
             }
 
             float time = Time.realtimeSinceStartup;
@@ -2077,7 +1937,6 @@ namespace VPB
                 ? SnapshotSelectionIdentityKeys(this)
                 : null;
 
-            // Update selection set (Ctrl toggle / Shift range / single)
             if (shift && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
             {
                 string anchorPath = selectionAnchorPath;
@@ -2151,7 +2010,6 @@ namespace VPB
                 selectionAnchorPath = file.Path;
             }
 
-            // Keep primary selection path for double-click detection / hover path
             if (selectionChanged || !string.Equals(selectedPath, fileKey, StringComparison.OrdinalIgnoreCase))
             {
                 if (selectionChanged && untaggedSelBefore != null)
@@ -2165,7 +2023,6 @@ namespace VPB
                     catch { }
                 }
                 selectedPath = fileKey;
-                // Selection should not "stick" the hover path.
                 SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
@@ -2181,8 +2038,7 @@ namespace VPB
                 return;
             }
 
-            // Apply Logic
-            // Hold-to-launch overrides 1-click apply: clicks should still select, but only 2-click applies while hold mode is on.
+            // Apply Logic Hold-to-launch overrides 1-click apply: clicks should still select, but only 2-click applies while hold mode is on.
             bool shouldApply = holdToLaunchEnabled
                 ? (ItemApplyMode == ApplyMode.DoubleClick && isDoubleClick)
                 : ((ItemApplyMode == ApplyMode.SingleClick) || (ItemApplyMode == ApplyMode.DoubleClick && isDoubleClick));
@@ -2211,10 +2067,9 @@ namespace VPB
                 applyFile = resolvedScene;
 
             string pathLower = (applyFile.Path ?? "").ToLowerInvariant();
-            // Exclude Scenes from auto-apply, but allow SubScenes
             bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\")
                 || (!string.IsNullOrEmpty(currentCategoryTitle) && currentCategoryTitle.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0);
-            bool isScene = !isSubScene && pathLower.EndsWith(".json")
+            bool isScene = !isSubScene && pathLower.EndsWith(".json", StringComparison.Ordinal)
                 && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene")
                     || (!string.IsNullOrEmpty(currentCategoryTitle) && currentCategoryTitle.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0));
 
@@ -2230,10 +2085,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// In Scene categories, package-level rows use <see cref="VarFileEntry"/> with <c>meta.json</c> (Path = .var), so click apply
-        /// must target a real scene JSON inside the zip — otherwise <see cref="ExecuteAutoActionForFile"/> treats the row as a bare .var and runs texture caching.
-        /// </summary>
         private FileEntry TryResolveSceneCategoryPackageRowToSceneJson(FileEntry file)
         {
             if (file == null) return null;
@@ -2291,10 +2142,6 @@ namespace VPB
             return !string.IsNullOrEmpty(file.Path) ? file.Path : (file.Uid ?? "");
         }
 
-        /// <summary>
-        /// Warm-path selection fingerprint for cache keys: O(1) ends + count — no List/Sort/full walk.
-        /// Good enough to invalidate UI caches (Select-All / shift-range always change count or ends).
-        /// </summary>
         private void AppendSelectionIdentityFingerprint(StringBuilder sb, bool historyBrowse)
         {
             if (sb == null) return;
@@ -2377,12 +2224,7 @@ namespace VPB
             RefreshSelectionVisualsCore(runHeavySideEffects: true);
         }
 
-        /// <summary>
-        /// Grid selection chrome only. Heavy side effects (user-tags pane + toolbox/context menu)
-        /// are optional — skip during detail-strip thumb scrub for scroll performance.
-        /// Large selections: paint grid first, defer tags/strip/tbox package work one frame
-        /// (Unity coroutines / Update scheduling — avoid one-frame spike).
-        /// </summary>
+        /// <summary>Grid selection chrome only.</summary>
         private void RefreshSelectionVisualsCore(bool runHeavySideEffects)
         {
             // Walk recycled activeItems only — no Transform foreach / GetComponent storm.
@@ -2399,7 +2241,7 @@ namespace VPB
                     FileButtonBinder binder = rgvItem.binder;
                     if (binder == null) binder = FileButtonBinder.GetOrAdd(btn);
 
-                    if (btn.name.StartsWith("FileButton_"))
+                    if (btn.name.StartsWith("FileButton_", StringComparison.Ordinal))
                     {
                         UIDraggableItem diag = binder != null ? binder.draggable : null;
                         FileEntry feForVisuals = null;
@@ -2419,7 +2261,6 @@ namespace VPB
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
-            // Fallback for non-recycled items (if any legacy usage remains)
             else
             {
                 for (int i = 0; activeButtons != null && i < activeButtons.Count; i++)
@@ -2428,7 +2269,7 @@ namespace VPB
                     if (btn == null) continue;
 
                     FileButtonBinder binder = FileButtonBinder.GetOrAdd(btn);
-                    if (btn.name.StartsWith("FileButton_"))
+                    if (btn.name.StartsWith("FileButton_", StringComparison.Ordinal))
                     {
                         UIDraggableItem diag = binder != null ? binder.draggable : null;
                         RecyclingGridItem rgvItem = binder != null ? binder.gridItem : null;
@@ -2451,7 +2292,6 @@ namespace VPB
             }
             if (!runHeavySideEffects) return;
 
-            // Large multi-select: paint cells now; tags/strip/tbox work next frame (coalesced).
             if (SelectionExceedsHeavyScanBudget())
             {
                 try { UpdateSelectionContextMenuLight(); } catch { }
@@ -2464,15 +2304,9 @@ namespace VPB
 
         private void RunSelectionHeavySideEffectsNow()
         {
-            // Keep toolbox grid-rate selector open during selection visual refresh.
-            // Selector visibility is already managed by RefreshTboxGridRateControlState() (selection count / mode gating)
-            // and by user interaction (ToggleSelector/SetRating). Auto-closing here makes it impossible to use in
-            // some modes where RefreshSelectionVisuals is triggered frequently.
             try { RefreshAppliedUserTagsPaneAfterSelectionChange(); } catch { }
             // Immediate detail-strip / toolbox height sync (avoid waiting for the 250ms poll).
             try { UpdateSelectionContextMenu(); } catch { }
-            // Scene Import source follows gallery selection for all heavy selection paths
-            // (click / keyboard). Scrub uses runHeavySideEffects:false — syncs on commit.
             try { TryLoadSelectedSceneIntoImportSidebar(); } catch { }
             NoteSelectionContextMenuSynced();
         }
@@ -2502,7 +2336,6 @@ namespace VPB
                 RunSelectionHeavySideEffectsNow();
                 yield break;
             }
-            // Still large: run capped heavy path (SharedOrMixed / tags / tbox already budget-aware).
             RunSelectionHeavySideEffectsNow();
         }
 
@@ -2558,9 +2391,7 @@ namespace VPB
             pathsCached = false;
             try { TryClearStalePackagePathFilter(); } catch { }
 
-            // If content is already loaded, Gallery.AutoRefreshAfterPackageScan will apply
-            // an incremental delta immediately. Do not arm refreshOnNextShow here, otherwise
-            // a hide/open race can trigger a one-off full RefreshFiles() stall on Show().
+            // If content is already loaded, Gallery.AutoRefreshAfterPackageScan will apply an incremental delta immediately.
             if (!hasLoadedContent || recyclingGrid == null || scrollRect == null)
             {
                 refreshOnNextShow = true;

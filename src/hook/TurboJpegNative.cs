@@ -8,14 +8,9 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Optional libjpeg-turbo (<c>turbojpeg.dll</c> under BepInEx/plugins/VPB) via TurboJPEG C API.
-    /// Windows MSVC builds use 32-bit <c>unsigned long</c> for <c>jpegSize</c> — delegate uses <c>uint</c>.
-    /// </summary>
     internal static class TurboJpegNative
     {
         private const int TJPF_RGB = 0;
-        /// <summary>Output rows bottom-up to match Unity <see cref="Texture2D.LoadRawTextureData"/> (OpenGL-style: first row = image bottom).</summary>
         private const int TJFLAG_BOTTOMUP = 2;
         private const int TJFLAG_FASTUPSAMPLE = 256;
         private const int TJFLAG_FASTDCT = 2048;
@@ -54,9 +49,7 @@ namespace VPB
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int D_tjDecompressHeader3(IntPtr handle, IntPtr jpegBuf, uint jpegSize, out int width, out int height, out int jpegSubsamp, out int colorspace);
 
-        /// <summary>
-        /// Order per turbojpeg.h: width, <c>pitch</c> (bytes per row), height — pitch required (use width * 3 for packed RGB).
-        /// </summary>
+        /// <summary>Order per turbojpeg.h: width, pitch (bytes per row), height — pitch required (use width * 3 for packed RGB).</summary>
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int D_tjDecompress2(IntPtr handle, IntPtr jpegBuf, uint jpegSize, IntPtr dstBuf, int width, int pitch, int height, int pixelFormat, int flags);
 
@@ -109,7 +102,6 @@ namespace VPB
             return buf != null && len >= 3 && buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF;
         }
 
-        /// <summary>Maps gallery grid column count (1–12) to TurboJPEG integer scale denominator 1, 2, or 4 (more columns → smaller decode; 8+ cols share denom 4).</summary>
         internal static int ScaleDenomFromGridColumns(int gridColumnCount)
         {
             int c = gridColumnCount;
@@ -120,7 +112,6 @@ namespace VPB
             return 4;
         }
 
-        /// <summary>Clamp to supported integer-scale denominators for <c>tjDecompress2</c>.</summary>
         internal static int NormalizeScaleDenom(int denom)
         {
             if (denom <= 1) return 1;
@@ -129,7 +120,6 @@ namespace VPB
             return 8;
         }
 
-        /// <summary>Pick largest supported denominator such that scaled dimensions stay ≥1 pixel.</summary>
         internal static int EffectiveScaleDenom(int requestedDenom, int jpegWidth, int jpegHeight)
         {
             int d = NormalizeScaleDenom(requestedDenom);
@@ -138,7 +128,6 @@ namespace VPB
             return d;
         }
 
-        /// <summary>Exact-length RGB buffers for <see cref="Texture2D.LoadRawTextureData"/>; bounded stacks per size.</summary>
         private static class RgbBytePool
         {
             private static readonly object Gate = new object();
@@ -245,7 +234,6 @@ namespace VPB
             return TryDecodeJpegToTexture2D(jpegBytes, jpegLength, 1, out tex, out error);
         }
 
-        /// <param name="scaleDenom">1 = full resolution; 2, 4, 8 = decode at 1/N per TurboJPEG integer scaling.</param>
         internal static bool TryDecodeJpegToTexture2D(byte[] jpegBytes, int jpegLength, int scaleDenom, out Texture2D tex, out string error)
         {
             tex = null;
@@ -284,10 +272,6 @@ namespace VPB
                 }
 
                 int effDenom = EffectiveScaleDenom(scaleDenom, w, h);
-                // libjpeg-turbo TJSCALED(dim, 1/N) = ceil(dim / N). Floor division under-allocates
-                // by one pixel when dim isn't a multiple of N: tjDecompress2 silently widens output
-                // to its natural scaled width and writes past the row stride we passed, producing
-                // diagonal drift visible as a noise stripe on the right (BOTTOMUP → also on top).
                 int outW = effDenom <= 1 ? w : Math.Max(1, (w + effDenom - 1) / effDenom);
                 int outH = effDenom <= 1 ? h : Math.Max(1, (h + effDenom - 1) / effDenom);
                 int flags = TJFLAG_BOTTOMUP | TJFLAG_FASTUPSAMPLE | TJFLAG_FASTDCT;

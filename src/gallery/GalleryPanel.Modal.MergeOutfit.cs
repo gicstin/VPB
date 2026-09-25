@@ -23,12 +23,6 @@ namespace VPB
         private readonly Dictionary<string, Image> _mergeOutfitCategoryBtnImgs =
             new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
 
-        // Per-category hues: button on/off + matching list row selected/idle.
-
-        /// <summary>
-        /// Per-item picker for Merge Outfit: keep body by default; merge chosen clothing onto current outfit.
-        /// Optional skin/hair rows when "Include skin & hair" is checked.
-        /// </summary>
         public void ShowMergeOutfitPicker(FileEntry sourceEntry, Atom targetAtom, JSONClass presetJC = null)
         {
             if (backgroundBoxGO == null || targetAtom == null) return;
@@ -128,7 +122,6 @@ namespace VPB
             float titleH = Mathf.Max(font + 6f * s, 22f * s);
 
             GameObject panel;
-            // Taller panel — more room for item rows (no redundant Close in header).
             _mergeOutfitModalRoot = UI.CreateModalChrome(
                 backgroundBoxGO, "VPB_MergeOutfitModal",
                 580f * s, 700f * s,
@@ -153,7 +146,6 @@ namespace VPB
             GalleryUiMetrics.ApplyFont(_mergeOutfitTitleText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             UI.AddLE(_mergeOutfitTitleText.gameObject, flexibleWidth: 1f, preferredHeight: titleH);
 
-            // Hint
             _mergeOutfitHintText = UI.CreateLabel(panel,
                 MergeOutfitHintText(),
                 font, new Color(0.75f, 0.75f, 0.78f, 1f), TextAnchor.UpperLeft,
@@ -161,7 +153,6 @@ namespace VPB
             GalleryUiMetrics.ApplyFont(_mergeOutfitHintText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             UI.AddLE(_mergeOutfitHintText.gameObject, minHeight: btnH, preferredHeight: btnH + 8f * s);
 
-            // Bulk: Select All / None
             GameObject bulk = new GameObject("BulkRow");
             bulk.transform.SetParent(panel.transform, false);
             HorizontalLayoutGroup bh = UI.AddHLG(bulk, spacing: UI.GapTight(s), padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: false);
@@ -175,7 +166,6 @@ namespace VPB
                 VPBTranslation.T("gallery.merge_outfit.select_none", "Select None"), font, s,
                 new Color(0.28f, 0.28f, 0.32f, 1f), MergeOutfitSelectNone);
 
-            // Multi-toggle categories (each on/off independently)
             _mergeOutfitCategoryBtnImgs.Clear();
             GameObject cat = new GameObject("CategoryRow");
             cat.transform.SetParent(panel.transform, false);
@@ -195,7 +185,6 @@ namespace VPB
                 VPBTranslation.T("gallery.merge_outfit.cat_skin", "Skin"), 64f * s, btnH, font, s);
             RefreshMergeOutfitCategoryButtons();
 
-            // Include skin & hair toggle
             GameObject includeRow = new GameObject("IncludeSkinHairRow");
             includeRow.transform.SetParent(panel.transform, false);
             UI.AddLE(includeRow, minHeight: btnH, preferredHeight: btnH);
@@ -212,7 +201,6 @@ namespace VPB
                 GalleryUiMetrics.ApplyFont(toggleLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             UI.AddLE(toggleGo, flexibleWidth: 1f, minHeight: btnH, preferredHeight: btnH);
 
-            // Scroll list
             GameObject scrollHost = new GameObject("ScrollHost");
             scrollHost.transform.SetParent(panel.transform, false);
             UI.AddLE(scrollHost, flexibleHeight: 1f, minHeight: 320f * s);
@@ -252,7 +240,6 @@ namespace VPB
             RebuildMergeOutfitRows();
             RefreshMergeOutfitCategoryButtons();
 
-            // Footer
             GameObject footer = new GameObject("FooterRow");
             footer.transform.SetParent(panel.transform, false);
             HorizontalLayoutGroup fh = UI.AddHLG(footer, spacing: UI.GapGroup(s), padding: UI.Pad(0, 0, 0, 0), childForceExpandWidth: true);
@@ -283,7 +270,6 @@ namespace VPB
             Color baseCol = MergeOutfitCategoryHue(category);
             if (on)
                 return Color.Lerp(baseCol, Color.white, 0.12f);
-            // Dimmed same hue so off state still reads as that category.
             return new Color(baseCol.r * 0.45f, baseCol.g * 0.45f, baseCol.b * 0.45f, 1f);
         }
 
@@ -298,15 +284,15 @@ namespace VPB
         private static Color MergeOutfitCategoryHue(string category)
         {
             if (string.Equals(category, "Garment", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.22f, 0.42f, 0.62f, 1f);   // blue
+                return new Color(0.22f, 0.42f, 0.62f, 1f);
             if (string.Equals(category, "Accessory", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.18f, 0.52f, 0.48f, 1f);   // teal
+                return new Color(0.18f, 0.52f, 0.48f, 1f);
             if (string.Equals(category, "Cosmetic", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.52f, 0.28f, 0.55f, 1f);   // purple
+                return new Color(0.52f, 0.28f, 0.55f, 1f);
             if (string.Equals(category, "Hair", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.62f, 0.42f, 0.18f, 1f);   // amber
+                return new Color(0.62f, 0.42f, 0.18f, 1f);
             if (string.Equals(category, "Skin", StringComparison.OrdinalIgnoreCase))
-                return new Color(0.58f, 0.32f, 0.30f, 1f);   // rose
+                return new Color(0.58f, 0.32f, 0.30f, 1f);
             return new Color(0.30f, 0.32f, 0.36f, 1f);
         }
 

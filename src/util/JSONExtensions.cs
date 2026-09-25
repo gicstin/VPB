@@ -39,9 +39,6 @@ namespace VPB.src.util
             return ids;
         }
 
-        /// <summary>
-        /// Remove any non-Person atoms from the "atoms" array, if there is one
-        /// </summary>
         public static JSONClass RemoveNonPersonAtomsMutable(this JSONClass cls)
         {
             if (cls.HasKey("atoms"))
@@ -60,11 +57,6 @@ namespace VPB.src.util
             return cls;
         }
 
-        /// <summary>
-        /// Replaces literal <c>SELF:</c> VaM path prefixes with <paramref name="packageUid"/> without
-        /// serializing/reparsing the entire JSON. Mocap/timeline saves are huge; <see cref="JSONClass.ToString"/>
-        /// + <see cref="JSON.Parse"/> duplicates multi‑MB buffers and fragments Mono (“too many heap sections”).
-        /// </summary>
         public static void ReplaceSelfPrefixWithPackageUidMutable(JSONNode root, string packageUid)
         {
             if (root == null || string.IsNullOrEmpty(packageUid)) return;
@@ -76,8 +68,7 @@ namespace VPB.src.util
         {
             if (node == null) return;
 
-            // JSONArray MUST be handled before JSONClass: some SimpleJSON forks derive JSONArray from JSONClass;
-            // treating arrays as objects corrupts traversal (wrong keys / hung walks on mocap-timeline JSON).
+            // JSONArray MUST be handled before JSONClass: some SimpleJSON forks derive JSONArray from JSONClass.
             JSONArray ja = node as JSONArray;
             if (ja != null)
             {
@@ -105,13 +96,6 @@ namespace VPB.src.util
             }
         }
 
-        /// <summary>
-        /// Rewrites self-referencing atom UIDs in a plugin slice: any string value equal to
-        /// <paramref name="fromUid"/> (a bare atom-reference like a trigger's <c>receiverAtom</c>),
-        /// or prefixed with <c>fromUid:</c> (compound <c>atom:storable</c> / <c>atom:control</c> links),
-        /// becomes the <paramref name="toUid"/> target atom. References to OTHER atoms are left alone.
-        /// In-place (no serialize/reparse) for the same heap-fragmentation reasons as the SELF: rewrite.
-        /// </summary>
         public static void ReplaceAtomUidReferencesMutable(JSONNode root, string fromUid, string toUid)
         {
             if (root == null) return;
@@ -155,10 +139,7 @@ namespace VPB.src.util
             }
         }
 
-        /// <summary>
-        /// Keys that hold atom types / storable ids / paths — never rewrite exact uid equals here.
-        /// Compound <c>uid:</c> prefixes still remapped (they cannot appear as type strings).
-        /// </summary>
+        /// <summary>Keys that hold atom types / storable ids / paths — never rewrite exact uid equals here.</summary>
         public static bool JsonKeyIsNonAtomUidRef(string key)
         {
             if (string.IsNullOrEmpty(key)) return true;
@@ -175,11 +156,7 @@ namespace VPB.src.util
             return false;
         }
 
-        /// <summary>
-        /// Key-aware atom UID remap for scene/atom JSON: skips bare equals under type/id/url/… keys so
-        /// renaming <c>Person</c> cannot corrupt <c>"type":"Person"</c>. Compound <c>uid:storable</c>
-        /// links still rewrite under those keys. Cold path only.
-        /// </summary>
+        /// <summary>Key-aware atom UID remap that never rewrites type/id/url values.</summary>
         public static void RemapAtomUidReferencesKeyAwareMutable(JSONNode root, string fromUid, string toUid)
         {
             if (root == null) return;
@@ -243,13 +220,7 @@ namespace VPB.src.util
             }
         }
 
-        /// <summary>
-        /// Rewrites a plugin slot token in leaf string values: any value equal to <paramref name="fromKey"/>
-        /// (e.g. <c>plugin#0</c>), or prefixed with <c>fromKey_</c> / <c>fromKey:</c> (param storable ids like
-        /// <c>plugin#0_ClassName</c> and references), becomes <paramref name="toKey"/> with the remainder kept.
-        /// Boundary-checked (only <c>_</c> / <c>:</c> after the token) so <c>plugin#1</c> never matches
-        /// <c>plugin#10</c>. Dict KEYS are not touched here (the caller rebuilds those). In-place walk.
-        /// </summary>
+        /// <summary>Rewrites a plugin slot token in leaf string values: any value equal to fromKey (e.g. plugin#0).</summary>
         public static void ReplacePluginKeyTokenMutable(JSONNode root, string fromKey, string toKey)
         {
             if (root == null) return;
@@ -258,12 +229,6 @@ namespace VPB.src.util
             ReplacePluginKeyTokenWalk(root, fromKey, toKey);
         }
 
-        /// <summary>
-        /// Trigger-action aware: only rewrites leaf values under key <c>receiver</c> when the sibling
-        /// <c>receiverAtom</c> equals <paramref name="receiverAtomUid"/> and the receiver value equals
-        /// <paramref name="fromReceiver"/>. Leaves PluginManager dicts / unrelated plugin# tokens alone.
-        /// Cold path (scene atom import remap).
-        /// </summary>
         public static void RemapTriggerReceiverMutable(
             JSONNode root, string receiverAtomUid, string fromReceiver, string toReceiver)
         {
@@ -354,11 +319,6 @@ namespace VPB.src.util
             }
         }
 
-        /// <summary>
-        /// Return the storable with the given id from the "storables" array, or null if not found
-        /// </summary>
-        /// <param name="id">The ID of the storable</param>
-        /// <returns>The storable with the given ID, or null if not found, or if the class has no storables</returns>
         public static JSONClass GetStorable(this JSONClass cls, string id)
         {
             return cls["storables"]
@@ -369,29 +329,16 @@ namespace VPB.src.util
                 ?.AsObject;
         }
 
-        /// <summary>
-        /// Fetch the "id" field of a JSONClass, or null if it doesn't exist
-        /// </summary>
         public static string GetId(this JSONClass cls)
         {
             return cls.HasKey("id") ? cls["id"].Value : null;
         }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="cls"></param>
-        /// <returns></returns>
         public static SimpleTransform GetTransform(this JSONClass cls)
         {
             if (cls.HasKey("rootPosition") && cls.HasKey("rootRotation"))
             {
                 var transform = SimpleTransform.FromJson(cls, positionKey: "rootPosition", rotationKey: "rootRotation");
-
-                //if (cls.HasKey("relativeRootPosition") && cls.HasKey("relativeRootRotation"))
-                //{
-                //    return transform.Combine(Transform.FromJson(cls, positionKey: "relativeRootPosition", rotationKey: "relativeRootRotation"));
-                //}
 
                 return transform;
             }
@@ -427,7 +374,6 @@ namespace VPB.src.util
 
             public void Execute(int index)
             {
-                // Normalize any non-zero truthy values to 1 for cheap branchless consumption later.
                 OutputGenderFlags[index] = InputMaleFlags[index] != 0 ? 1 : 0;
             }
         }

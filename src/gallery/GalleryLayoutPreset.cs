@@ -23,7 +23,6 @@ namespace VPB
         QuickMenuAssign = 6
     }
 
-    /// <summary>Serializable copy of one dock edge, decoupled from the live slot's config key names.</summary>
     public sealed class LayoutDockSlotState
     {
         public bool Occupied;
@@ -215,7 +214,6 @@ namespace VPB
 
     public sealed class LayoutPaneState
     {
-        /// <summary><see cref="GalleryDockSide"/> as int. None = floating.</summary>
         public int DockSlot;
 
         /// <summary>Pose in the player-UI root frame (see VpbWorldSpaceUiScale). Never a world pose.</summary>
@@ -230,7 +228,6 @@ namespace VPB
         public string CategoryPath = "";
         public string CategoryExtension = "";
 
-        /// <summary><see cref="ContentType"/> as int, or -1 when that rail is closed.</summary>
         public int LeftContent = -1;
         public int RightContent = -1;
 
@@ -241,7 +238,6 @@ namespace VPB
         /// <summary>See <see cref="VPBConfig.GalleryFloatsOnlyMode"/>.</summary>
         public bool FloatsOnly;
 
-        /// <summary>Grid columns 1–12. 0 = unset (legacy presets keep the pane's current count).</summary>
         public int GridColumnCount;
 
         public List<LayoutFloatState> Floats = new List<LayoutFloatState>();
@@ -345,10 +341,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// A named window arrangement. <see cref="Mode"/> is stamped at capture and immutable — a VR
-    /// preset never applies on desktop and vice versa (screen-anchor ratios and metre poses do not map).
-    /// </summary>
     public sealed class GalleryLayoutPreset
     {
         public const int CurrentRev = 1;
@@ -363,20 +355,11 @@ namespace VPB
         public long UpdatedUtc;
         public bool RestoreFilters = true;
 
-        /// <summary>False for rows listed without their JSON payload (lazy manager list).</summary>
         public bool PayloadLoaded = true;
 
-        /// <summary>
-        /// Shipped baseline arrangement. Lives in memory only — never written to SQLite, never renamed,
-        /// deleted or reordered. Duplicate produces an ordinary editable copy.
-        /// </summary>
         public bool IsBuiltIn;
 
-        /// <summary>
-        /// Apply writes dock shape only and leaves unrelated chrome (detail strip, follow modes, inner
-        /// scale, VR anchoring) exactly as the user left it. Set on the built-ins, which describe a
-        /// window arrangement rather than a whole settings snapshot.
-        /// </summary>
+        /// <summary>Apply writes dock shape only; other chrome is left as the user set it.</summary>
         public bool DockShapeOnly;
 
         public LayoutGlobalState Global = new LayoutGlobalState();
@@ -436,7 +419,6 @@ namespace VPB
                     e.UpdatedUtc = ticks;
             }
             if (n["RestoreFilters"] != null) e.RestoreFilters = n["RestoreFilters"].AsBool;
-            // IsBuiltIn is deliberately not read back — an exported built-in imports as an ordinary preset.
             if (n["dso"] != null) e.DockShapeOnly = n["dso"].AsBool;
 
             float cr = n["cr"] != null ? n["cr"].AsFloat : UI.ChromePanel.r;
@@ -461,31 +443,33 @@ namespace VPB
 
         public string ToJsonString()
         {
-            try { return VPB.src.util.JsonSerializationUtil.Serialize(ToJSON(), 32768); }
-            catch
+            using (VpbNumberText.Invariant())
             {
-                try { return ToJSON().ToString(); }
-                catch { return "{}"; }
+                try { return VPB.src.util.JsonSerializationUtil.Serialize(ToJSON(), 32768); }
+                catch
+                {
+                    try { return ToJSON().ToString(); }
+                    catch { return "{}"; }
+                }
             }
         }
 
         public static GalleryLayoutPreset FromJsonString(string json)
         {
             if (string.IsNullOrEmpty(json)) return null;
-            try
+            using (VpbNumberText.Invariant())
             {
-                JSONNode n = JSON.Parse(json);
-                return n != null ? FromJSON(n) : null;
+                try
+                {
+                    JSONNode n = JSON.Parse(json);
+                    return n != null ? FromJSON(n) : null;
+                }
+                catch { return null; }
             }
-            catch { return null; }
         }
 
         private static readonly StringBuilder s_SigSb = new StringBuilder(512);
 
-        /// <summary>
-        /// Identity of what a preset would restore. Positions are quantised so drag jitter does not
-        /// leave the active preset permanently marked as modified.
-        /// </summary>
         public static string BuildContentSignature(GalleryLayoutPreset e)
         {
             if (e == null) return "";
@@ -494,8 +478,7 @@ namespace VPB
 
             sb.Append(e.Mode).Append('|');
 
-            // A dock-shape preset restores edges and nothing else, so only edges may mark it modified —
-            // otherwise every unrelated chrome tweak would light it up as drifted the moment it applies.
+            // A dock-shape preset restores edges and nothing else, so only edges may mark it modified.
             if (e.DockShapeOnly)
             {
                 LayoutGlobalState dg = e.Global;

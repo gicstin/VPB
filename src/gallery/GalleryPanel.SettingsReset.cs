@@ -21,7 +21,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Warm path: bind factory defaults once per defs-cache rebuild. Button/action rows stay without Reset.</summary>
         private void BindSettingsRowFactoryDefaults(List<InternalSettingDefinition> defs)
         {
             if (defs == null) return;
@@ -292,7 +291,6 @@ namespace VPB
             {
                 try { NotifyInternalSettingsHoverPreviewChanged(); } catch { }
             }
-            // UI-scale sliders: ApplyInnerPaneScale already rebuilds settings rows.
             bool uiScale = string.Equals(def.Key, "visuals.galleryUiScaleVr", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(def.Key, "visuals.galleryUiScaleDesktop", StringComparison.OrdinalIgnoreCase);
             if (uiScale)

@@ -2,23 +2,16 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Ctrl+Alt+= / Ctrl+Alt+- gallery chrome scale nudge.
-    /// Shared so gallery + external busy chrome never double-step the same frame.
-    /// Warm path: debounce key-repeat; live TriggerChange only; disk save coalesced via <see cref="TickDeferredSave"/>.
-    /// </summary>
     internal static class GalleryUiScaleHotkey
     {
         private static int s_HandledFrame = -1;
         private static float s_LastNudgeUnscaledTime = -999f;
-        /// <summary>Min gap between nudges — kills OS key-repeat storms (~30Hz) that re-ran full ConfigChanged.</summary>
         private const float MinNudgeIntervalSeconds = 0.12f;
         private const float DiskSaveDelaySeconds = 0.35f;
 
         private static bool s_PendingDiskSave;
         private static float s_DiskSaveDueUnscaledTime = -1f;
 
-        /// <returns>True when chord consumed (even if scale already at clamp / debounced).</returns>
         public static bool TryNudgeFromKeyboard()
         {
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
@@ -68,10 +61,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Call from any Update that may own the hotkey path. Writes VPB.cfg once after quiet period.
-        /// Idle: one bool check.
-        /// </summary>
         public static void TickDeferredSave()
         {
             if (!s_PendingDiskSave) return;

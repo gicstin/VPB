@@ -59,7 +59,6 @@ namespace VPB
                 var gallery = Gallery.singleton;
                 var panels = gallery != null ? gallery.Panels : null;
                 if (panels == null || panels.Count == 0) { LogUtil.LogWarning(prefix + "VPB panels=0"); return; }
-                // One representative panel keeps diagnostics bounded even with many galleries.
                 for (int i = 0; i < panels.Count; i++)
                 {
                     if (panels[i] == null || panels[i].canvas == null) continue;

@@ -11,29 +11,22 @@ namespace VPB.src.util
     {
         private sealed class CuaPlan
         {
-            public JSONClass Node;          // source CUA atom node
+            public JSONClass Node;
             public string SourceId;
-            public string LinkAtomId;       // atom uid the control links to (person or another CUA)
-            public string LinkBone;         // rigidbody name within the link atom
+            public string LinkAtomId;
+            public string LinkBone;
             public bool LinksToPerson;
         }
 
         private static readonly Dictionary<string, HashSet<string>> s_importedByTarget =
             new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
-        // Back-compat entry: import every CUA that (transitively) links to the person (horns/tail/earrings).
         public static IEnumerator ImportLinkedCUAsAsAtoms(
             JSONClass sourceScene, string sourcePersonAtomId, Atom targetPerson, string sourceHostUid)
         {
             yield return ImportSelectedCUAsAsAtoms(sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid, null, false, true);
         }
 
-        // Import a chosen set of CUAs. selectedIds == null keeps the legacy behavior (all person-linked CUAs);
-        // a non-null set imports exactly those atom ids. Person-anchored CUAs are placed against the live bone and
-        // ParentLinked. Free-standing CUAs (no link reaching the person): by default keep their raw source world
-        // position; when offPersonRelativeToPerson is set they are re-placed relative to the target person root so
-        // props (e.g. a sword) land in the same spot relative to the person regardless of scene origin.
-        // replaceExisting=false (merge) appends without removing prior VPB imports; true replaces them first.
         public static IEnumerator ImportSelectedCUAsAsAtoms(
             JSONClass sourceScene, string sourcePersonAtomId, Atom targetPerson, string sourceHostUid,
             HashSet<string> selectedIds, bool offPersonRelativeToPerson, bool replaceExisting = true,
@@ -69,7 +62,6 @@ namespace VPB.src.util
             JSONArray atoms = sourceScene["atoms"] != null ? sourceScene["atoms"].AsArray : null;
             if (atoms == null) yield break;
 
-            // Index every CUA atom in the scene by id so chained CUA->CUA links can be resolved.
             var cuaById = new Dictionary<string, JSONClass>(StringComparer.Ordinal);
             for (int i = 0; i < atoms.Count; i++)
             {
@@ -83,8 +75,7 @@ namespace VPB.src.util
             }
             if (cuaById.Count == 0)
             {
-                // A new appearance with no CUAs must still drop CUAs we spawned in a prior import on this target,
-                // otherwise stale horns/tails/etc. persist across appearance swaps.
+                // A new appearance with no CUAs must still drop CUAs we spawned in a prior import on this target.
                 LogUtil.Log("[VPB][CUA] no CUA atoms in source scene.");
                 if (replaceExisting)
                 {
@@ -97,15 +88,12 @@ namespace VPB.src.util
             JSONClass sourcePerson = FindAtom(atoms, sourcePersonAtomId);
             float sourceScale = ReadPersonScale(sourcePerson);
 
-            // Source person root (its scene placement) and the live target root, used to re-place free-standing
-            // CUAs relative to the person. srcPersonRootST is the source person's "control" storable world.
             SimpleTransform srcPersonRootST = ReadPersonRootWorld(sourcePerson);
             SimpleTransform destPersonRootST = targetPerson.mainController != null
                 ? new SimpleTransform(targetPerson.mainController.transform.position, targetPerson.mainController.transform.rotation)
                 : null;
 
             // Decide which CUAs to import (in scene order) and precompute the person-anchor plan for each.
-            // selectedIds == null -> only CUAs that reach the person; otherwise -> exactly the picked ids.
             var importIds = new List<string>();
             var anchorPlanById = new Dictionary<string, CuaPlan>(StringComparer.Ordinal);
             foreach (var kvp in cuaById)
@@ -118,7 +106,6 @@ namespace VPB.src.util
             }
             if (importIds.Count == 0)
             {
-                // Nothing selected/linked in this source, but still clear any CUAs we imported earlier onto this target.
                 LogUtil.Log($"[VPB][CUA] no CUAs to import for '{sourcePersonAtomId}'.");
                 if (replaceExisting)
                 {
@@ -131,11 +118,8 @@ namespace VPB.src.util
             LogUtil.Log($"[VPB][CUA] atom import: {importIds.Count} CUA(s) ({anchorPlanById.Count} anchored) -> target '{targetPerson.uid}'"
                 + (replaceExisting ? " (replace)" : " (merge)"));
 
-            // Settle the target skeleton so bone-based placement isn't sampled mid-morph (first import too low).
             yield return WaitForPersonSettled(targetPerson);
 
-            // Replace mode: drop prior VPB imports on this target and wait until VaM actually destroys them so the
-            // same source uid can be re-spawned (RemoveAtom is not always synchronous).
             if (replaceExisting)
             {
                 List<string> removed = RemovePriorImports(importIds, targetPerson);
@@ -192,15 +176,11 @@ namespace VPB.src.util
                     }
                 }
 
-                // Strip the source link either way: anchored CUAs are re-placed + ParentLinked post-load; free-standing
-                // ones keep their source world (StripNativeLink sets position/rotationState "On" and drops linkTo, so
-                // an unresolvable/non-person link never pins the asset to another atom or the origin).
                 StripNativeLink(node);
                 StripConflictingLinkPlugins(node);
 
                 if (haveOffset)
                 {
-                    // localOffset is in the source DAZBone (joint) frame, so bake against the live DAZBone.
                     Transform liveBone = FindLiveBoneTransform(targetPerson, anchorBone);
                     SimpleTransform destControlWorld = null;
                     if (liveBone != null)
@@ -218,9 +198,6 @@ namespace VPB.src.util
                 }
                 else if (offPersonRelativeToPerson && srcPersonRootST != null && destPersonRootST != null)
                 {
-                    // Re-place the free-standing CUA relative to the target person root: keep its offset from the
-                    // SOURCE person, reapplied against the LIVE target person, so props land in the same relative
-                    // spot no matter where either person sits in world space.
                     JSONClass control = node.GetStorable("control");
                     if (control != null && control.HasKey("position") && control.HasKey("rotation"))
                     {
@@ -238,7 +215,6 @@ namespace VPB.src.util
                 }
                 else
                 {
-                    // Free-standing prop/furniture: keep the source world position baked into the node's control.
                     if (VPBLogger.Verbose) LogUtil.Log($"[VPB][CUA] {id}: free-standing, keeping source world position.");
                 }
                 outAtoms.Add(node);
@@ -246,25 +222,18 @@ namespace VPB.src.util
 
             if (outAtoms.Count == 0) { LogUtil.Log("[VPB][CUA] nothing to import."); yield break; }
 
-            // Spawn each CUA atom directly instead of merge-loading a temp scene file. VaM's LoadMerge shows the
-            // full-screen loading overlay (the "scene reload" blank the user sees during CUA imports); AddAtomByType
-            // only raises the small loading icon, so a direct spawn keeps the live view on screen.
             yield return SpawnCUAAtoms(outAtoms);
 
-            // Attach each anchored CUA to its target bone with a native VaM ParentLink so it rides the body.
-            // Free-standing CUAs have no placement entry and stay at their baked world position.
             yield return EstablishParentLinks(placements, targetPerson);
         }
 
         public struct CuaEntry
         {
             public string Id;
-            public bool LinksToPerson;   // reaches the given person (directly or via a CUA->CUA chain)
+            public bool LinksToPerson;
         }
 
-        // Lists every CustomUnityAsset atom in the scene (in scene order), flagging those that reach the person so
-        // the import picker can tag them. Reuses BuildPlan so the picker's "on person" tag matches what the import
-        // path actually anchors.
+        // Lists every CustomUnityAsset atom in the scene (in scene order).
         public static List<CuaEntry> EnumerateSceneCUAs(JSONClass sourceScene, string sourcePersonAtomId)
         {
             var result = new List<CuaEntry>();
@@ -299,8 +268,7 @@ namespace VPB.src.util
             public SimpleTransform LocalOffset;
         }
 
-        // Poll a stable head/hip bone until the skeleton stops moving (morphs/scale settle over several frames
-        // after an appearance load). Public so the pose import can settle the body before placing controls.
+        // Poll a stable head/hip bone until the skeleton stops moving (morphs/scale settle over several frames after an appearance load).
         public static IEnumerator WaitForPersonSettled(Atom person)
         {
             if (person == null) yield break;
@@ -368,8 +336,7 @@ namespace VPB.src.util
             }
         }
 
-        // Create each CUA atom via AddAtomByType and run VaM's native restore pipeline in the same phase order
-        // its scene loader uses. This mirrors LoadInternal without activating the full-screen loading overlay.
+        // Create each CUA atom via AddAtomByType and run VaM's native restore pipeline in the same phase order its scene loader uses.
         private static IEnumerator SpawnCUAAtoms(JSONArray outAtoms)
         {
             SuperController sc = SuperController.singleton;
@@ -400,8 +367,6 @@ namespace VPB.src.util
             }
             if (created.Count == 0) { LogUtil.LogWarning("[VPB][CUA] no CUA atoms spawned."); yield break; }
 
-            // Phased restore (PreRestore all -> RestoreTransform -> Restore -> LateRestore -> PostRestore) so
-            // chained CUA->CUA references resolve just as they do during a native scene load.
             foreach (var kv in created)
                 try { kv.Key.PreRestore(); } catch (Exception ex) { LogUtil.LogWarning("[VPB][CUA] PreRestore " + kv.Key.uid + ": " + ex.Message); }
             foreach (var kv in created)
@@ -508,7 +473,6 @@ namespace VPB.src.util
             return result != null;
         }
 
-        // Read the source person's uniform scale (rescaleObject.scale). Defaults to 1 when absent/invalid.
         private static float ReadPersonScale(JSONClass person)
         {
             if (person == null) return 1f;
@@ -521,8 +485,6 @@ namespace VPB.src.util
             return 1f;
         }
 
-        // The source person's scene placement (its "control" storable world transform). Null when absent so the
-        // caller falls back to raw world coords for free-standing CUAs.
         private static SimpleTransform ReadPersonRootWorld(JSONClass person)
         {
             if (person == null) return null;
@@ -576,32 +538,29 @@ namespace VPB.src.util
             if (pluginManager == null || !pluginManager.HasKey("plugins")) return;
 
             JSONClass plugins = pluginManager["plugins"].AsObject;
-            // Collect the plugin#<N> slots whose url is a conflicting positioner.
             List<string> killSlots = new List<string>();
             foreach (KeyValuePair<string, JSONNode> kv in plugins.AsObject)
             {
-                if (kv.Key != null && kv.Key.StartsWith("plugin#") && IsConflictingLinkPlugin(kv.Value.Value))
+                if (kv.Key != null && kv.Key.StartsWith("plugin#", StringComparison.Ordinal) && IsConflictingLinkPlugin(kv.Value.Value))
                     killSlots.Add(kv.Key);
             }
             if (killSlots.Count == 0) return;
             foreach (string slot in killSlots) plugins.Remove(slot);
 
-            // Remove the matching param storables ("plugin#<N>_<Type>") for the killed slots.
             for (int i = storables.Count - 1; i >= 0; i--)
             {
                 JSONClass s = storables[i] as JSONClass;
                 if (s == null || !s.HasKey("id")) continue;
                 string id = s["id"].Value;
-                if (id == null || !id.StartsWith("plugin#")) continue;
+                if (id == null || !id.StartsWith("plugin#", StringComparison.Ordinal)) continue;
                 foreach (string slot in killSlots)
                 {
-                    if (id == slot || id.StartsWith(slot + "_")) { storables.Remove(i); break; }
+                    if (id == slot || id.StartsWith(slot + "_", StringComparison.Ordinal)) { storables.Remove(i); break; }
                 }
             }
         }
 
-        // Write a world transform into the spawned CUA's control (and atom/container) so it loads at the correct
-        // spot before the post-load ParentLink is established (no spawn-frame flash).
+        // Write world transform into spawned CUA before ParentLink to avoid a spawn-frame flash.
         private static bool WriteControlWorld(JSONClass node, SimpleTransform world)
         {
             JSONClass control = node.GetStorable("control");
@@ -632,7 +591,6 @@ namespace VPB.src.util
             return null;
         }
 
-        // The bone rigidbody a native ParentLink attaches to (the control's linkToRB is a Rigidbody, not a DAZBone).
         private static Rigidbody FindLiveBoneRigidbody(Atom person, string bone)
         {
             Rigidbody[] rbs = person.GetComponentsInChildren<Rigidbody>();
@@ -694,8 +652,6 @@ namespace VPB.src.util
             return false;
         }
 
-        // The person bone a CUA is (transitively) anchored to: its own link bone if it links to the person,
-        // else follow the CUA->CUA chain until it terminates at the person and return that terminal bone.
         private static string ResolveAnchorBone(CuaPlan p, string personId, Dictionary<string, JSONClass> cuaById)
         {
             if (p.LinksToPerson) return p.LinkBone;
@@ -784,8 +740,6 @@ namespace VPB.src.util
                 LogUtil.Log($"[VPB][CUA][dump:{tag}]   link={linkStr}");
                 LogUtil.Log($"[VPB][CUA][dump:{tag}]   mesh={meshStr}");
 
-                // Both native source loads and our imports carry a live linkToRB now, so the bone-local delta is
-                // directly comparable between them.
                 Transform anchor = link != null ? link.transform : null;
                 string anchorName = link != null ? link.name : null;
 

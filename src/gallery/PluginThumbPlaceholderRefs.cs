@@ -3,7 +3,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>Per thumbnail cell: plugin placeholder overlay (text or baked bitmap label).</summary>
     internal sealed class PluginThumbPlaceholderRefs : MonoBehaviour
     {
         public GameObject Root;

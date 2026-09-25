@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using UnityEngine;
 using System.Linq;
 
@@ -15,8 +14,6 @@ namespace VPB
 		public VarPackage Package { get; protected set; }
 
 		public string InternalPath { get; protected set; }
-
-		//public string InternalSlashPath { get; protected set; }
 
 		public override List<FileEntry> Files
 		{
@@ -67,32 +64,24 @@ namespace VPB
 		public VarDirectoryEntry(VarPackage vp, string entryName, VarDirectoryEntry parent = null)
 		{
 			Package = vp;
-			//InternalSlashPath = entryName;
-			//hidePath = "AddonPackagesFilePrefs/" + vp.Uid + "/" + InternalSlashPath + ".hide";
 			bool flag = false;
 			if (entryName == string.Empty)
 			{
 				flag = true;
 				Name = vp.Uid + ".var:";
 			}
-			InternalPath = entryName;// InternalSlashPath.Replace("/", "\\");
+			InternalPath = entryName;
 			if (flag)
 			{
 				Uid = vp.Uid + ":";
 				Path = vp.Path + ":";
-				//SlashPath = Path.Replace('\\', '/');
-				//FullPath = vp.FullPath + ":";
-				//FullSlashPath = FullPath.Replace('\\', '/');
 			}
 			else
 			{
 				Uid = vp.Uid + ":/" + InternalPath;
 				Path = vp.Path + ":/" + InternalPath;
-				//SlashPath = Path.Replace('\\', '/');
-				//FullPath = vp.FullPath + ":\\" + InternalPath;
-				//FullSlashPath = FullPath.Replace('\\', '/');
 			}
-			Name = Regex.Replace(Path, ".*/", string.Empty);
+			Name = VamPathFastPaths.StripThroughLastSlash(Path);
 			UidLowerInvariant = Uid.ToLowerInvariant();
 			LastWriteTime = vp.LastWriteTime;
 			Parent = parent;
@@ -100,7 +89,6 @@ namespace VPB
 			varFileEntries = new List<VarFileEntry>();
 			if (FileManager.debug)
 			{
-				//Debug.Log("New var directory entry\n Uid: " + Uid + "\n Path: " + Path + "\n FullPath: " + FullPath + "\n SlashPath: " + SlashPath + "\n Name: " + Name + "\n InternalSlashPath: " + InternalSlashPath);
 			}
 		}
 
@@ -114,5 +102,4 @@ namespace VPB
 			varFileEntries.Add(varFileEntry);
 		}
 	}
-
 }

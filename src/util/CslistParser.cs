@@ -7,9 +7,6 @@ namespace VPB.src.util
 {
     internal static class CslistParser
     {
-        // Parses a .cslist (one referenced .cs path per line; '#' and '//' comment lines and
-        // blanks skipped). rootForRelative is the .cslist's own directory. Output paths are
-        // forward-slash and lowercase; empty list on any IO error.
         public static List<string> ParseReferencedCsPaths(Stream cslistStream, string rootForRelative)
         {
             var results = new List<string>(8);
@@ -20,8 +17,7 @@ namespace VPB.src.util
 
             try
             {
-                // No leaveOpen overload on .NET 3.5 StreamReader; caller's outer using on the source
-                // stream still disposes correctly (double-dispose is a no-op on FileStream / zip input).
+                // No leaveOpen overload on .NET 3.5 StreamReader; outer using disposes safely.
                 using (var reader = new StreamReader(cslistStream, Encoding.UTF8, true, 1024))
                 {
                     string line;
@@ -62,7 +58,6 @@ namespace VPB.src.util
             return results;
         }
 
-        // Resolves "a/b/../c" -> "a/c". Returns null if it escapes the root.
         private static string CollapseRelative(string path)
         {
             if (string.IsNullOrEmpty(path)) return path;

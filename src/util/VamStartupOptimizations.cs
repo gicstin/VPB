@@ -6,7 +6,6 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>Cold-start optimizations gated by Settings and logged under [VPB.Startup.Opt].</summary>
     internal static class VamStartupOptimizations
     {
         public const string LogTag = "[VPB.Startup.Opt]";
@@ -229,7 +228,6 @@ namespace VPB
                 + " initNativeDone=" + (IsVpbInitNativeRefreshDone() ? "1" : "0"));
         }
 
-        /// <summary>Prefix on native Refresh: consume one armed bootstrap skip.</summary>
         public static bool TryConsumeBootstrapNativeRefreshSkip()
         {
             if (System.Threading.Interlocked.CompareExchange(ref s_BootstrapNativeRefreshSkipArmed, 0, 1) != 1)
@@ -357,24 +355,13 @@ namespace VPB
             s_VamXKnownAbsent = true;
         }
 
-        /// <summary>
-        /// When core vamX plugin was confirmed absent, skip repeated VPB GetPackage lookups.
-        /// VaM polls <c>vamX.1.latest</c> every frame. Must not match other creators whose names
-        /// start with "vamX" (VamXFan, VAMXOXO) or other vamX.* content packs.
-        /// Allocation-free: this is a GetPackage hot path.
-        /// </summary>
         public static bool TryShortCircuitAbsentVamXGetPackage(string packageUidOrPath)
         {
             if (!s_VamXKnownAbsent || string.IsNullOrEmpty(packageUidOrPath)) return false;
             return IsVamXCorePackageLookup(packageUidOrPath);
         }
 
-        /// <summary>
-        /// True for the core plugin group <c>vamX.1</c> only:
-        /// <c>vamX.1</c>, <c>vamX.1.latest</c>, <c>vamX.1.minN</c>, <c>vamX.1.N</c>,
-        /// plus path / <c>.var</c> / <c>:/entry</c> wrappers. False for <c>vamX.Diner_Environment.1</c>
-        /// and <c>VamXFan.*</c>.
-        /// </summary>
+        /// <summary>True for the core plugin group vamX.1 only: vamX.1, vamX.1.latest, vamX.1.minN, vamX.1.N, plus path / .var / :/entry wrappers.</summary>
         internal static bool IsVamXCorePackageLookup(string packageUidOrPath)
         {
             if (string.IsNullOrEmpty(packageUidOrPath)) return false;
@@ -408,7 +395,7 @@ namespace VPB
                 }
             }
 
-            const int coreLen = 6; // "vamX.1"
+            const int coreLen = 6;
             int segLen = end - start;
             if (segLen < coreLen) return false;
             if (string.Compare(packageUidOrPath, start, "vamX.1", 0, coreLen, StringComparison.OrdinalIgnoreCase) != 0)
@@ -417,7 +404,6 @@ namespace VPB
             return packageUidOrPath[start + coreLen] == '.';
         }
 
-        /// <summary>Suppress noisy GetPackage-not-found logs for basename/icon/scene probes that are not var UIDs.</summary>
         public static bool ShouldLogGetPackageNotFound(string packageUidOrPath)
         {
             if (string.IsNullOrEmpty(packageUidOrPath)) return false;
@@ -505,7 +491,6 @@ namespace VPB
                 && path.IndexOf("vamXBootstrap", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>Skip expensive on-demand rewrite/register for vamX bootstrap FileExists during startup.</summary>
         public static bool ShouldSkipVamXFileExistsWork(string path)
         {
             if (!SkipRedundantSyncVamX || !IsVamXBootstrapPath(path)) return false;
@@ -530,7 +515,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>Fast absent path for SyncVamX when vamX is not registered in VaM (ref SuperController.SyncVamX).</summary>
         public static bool TryApplyFastSyncVamXAbsent(SuperController instance)
         {
             if (!SkipRedundantSyncVamX || instance == null) return false;
@@ -589,8 +573,6 @@ namespace VPB
             SetActiveOnField(instance, "vamXPanel", false);
             SetActiveOnArray(instance, "vamXEnabledGameObjects", false);
             SetActiveOnArray(instance, "vamXEnabledAndAdvancedSceneEditGameObjects", false);
-            // VaM shows one "Create" main-menu tile via vamXDisabledGameObjects when vamX is absent.
-            // Enabling the advanced-scene-edit disabled arrays too duplicates that tile (see startup menu).
             SetActiveOnArray(instance, "vamXDisabledGameObjects", true);
             SetActiveOnArray(instance, "vamXDisabledAndAdvancedSceneEditGameObjects", false);
             SetActiveOnArray(instance, "vamXDisabledAndAdvancedSceneEditDisabledGameObjects", false);
@@ -636,4 +618,3 @@ namespace VPB
         }
     }
 }
-

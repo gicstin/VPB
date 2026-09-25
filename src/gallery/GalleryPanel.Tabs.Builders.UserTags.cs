@@ -130,7 +130,6 @@ namespace VPB
             {
                 UserTagSideTabEntry ae = visibleApplied[vi];
                 bool isSel = userTagAppliedRemoveSelection.Contains(ae.Name);
-                // Always show per-selection hit count (e.g. "(1)" for one package in ALL VAR); selTot>1 alone hid it.
                 string labelA = ae.Name + " (" + ae.Count + ")";
                 string tagFocusSnap = ae.Name;
                 int viCapture = vi;
@@ -152,4 +151,3 @@ namespace VPB
         }
     }
 }
-

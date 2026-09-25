@@ -6,12 +6,6 @@ using UnityEngine.Events;
 
 namespace VPB
 {
-    /// <summary>
-    /// Floating world-space context menu (drop disambiguator / intent router).
-    /// Flat panel layout — options + cancel are direct children of the panel VLG
-    /// (nested list + CSF caused overflow / square buttons). Warm path: button pool,
-    /// Update only while visible.
-    /// </summary>
     public class ContextMenuPanel : MonoBehaviour
     {
         public enum OptionKind
@@ -23,7 +17,6 @@ namespace VPB
             Header = 4
         }
 
-        // --- Design tokens (dense power-user) ---
         private const int FontUI = 16;
         private const int FontMeta = 12;
         private const float SpaceXs = 4f;
@@ -48,7 +41,6 @@ namespace VPB
         private const float SubLineH = 14f;
         private const float CancelGap = SpaceMd;
 
-        /// <summary>Scene drop sticky ids (persisted).</summary>
         public static class SceneActionId
         {
             public const string Load = "load";
@@ -64,7 +56,6 @@ namespace VPB
             public const string FullMergeNear = "full_merge_near";
         }
 
-        /// <summary>Appearance drop sticky ids (persisted).</summary>
         public static class AppearanceActionId
         {
             public const string Spawn = "spawn";
@@ -206,7 +197,6 @@ namespace VPB
             bg.color = PanelBg;
             bg.cornerRadius = CornerRadius;
 
-            // Flat column: header → options → gap → cancel. Panel owns width/height.
             VerticalLayoutGroup vlg = panelGO.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset((int)SpaceSm, (int)SpaceSm, (int)SpaceSm, (int)SpaceSm);
             vlg.spacing = SpaceXs;
@@ -233,7 +223,6 @@ namespace VPB
 
         private void CreateCancelChrome(GameObject panelGO)
         {
-            // Proximity: gap separates actions from dismiss (Fitts / accidental-hit).
             cancelGapGO = new GameObject("CancelGap");
             cancelGapGO.transform.SetParent(panelGO.transform, false);
             cancelGapGO.layer = 5;
@@ -250,7 +239,6 @@ namespace VPB
             cancelGO.SetActive(false);
         }
 
-        /// <summary>Alt or Ctrl held — expert skip past menu (run last sticky action).</summary>
         public static bool IsSkipModifierHeld()
         {
             try
@@ -505,7 +493,7 @@ namespace VPB
 
             headerText = titleGO.AddComponent<Text>();
             headerText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            headerText.text = "Menu";
+            headerText.text = VPBTranslation.T("ctx.menu.header", "Menu");
             headerText.fontSize = FontUI;
             headerText.fontStyle = FontStyle.Bold;
             headerText.alignment = TextAnchor.MiddleLeft;
@@ -699,7 +687,6 @@ namespace VPB
 
         private void ReleasePooledButtons()
         {
-            // Pool visuals, not actions that retain the previous drag target and gallery.
             for (int i = 0; i < buttonPool.Count; i++)
             {
                 buttonPool[i].GetComponent<Button>().onClick.RemoveAllListeners();
@@ -1066,7 +1053,6 @@ namespace VPB
             Image img = btnGO.GetComponent<Image>();
             if (img != null)
             {
-                // Cancel = Quiet tertiary (von Restorff: one primary, dismiss stays quiet).
                 if (isCancel || option.Kind == OptionKind.Quiet)
                     img.color = BtnQuiet;
                 else if (isHeader)

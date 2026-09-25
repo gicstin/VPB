@@ -4,16 +4,8 @@ using UnityEngine.EventSystems;
 
 namespace VPB
 {
-    /// <summary>
-    /// Cached comps/transforms for pooled gallery file rows.
-    /// Resolve once (create or first bind); BindFileButton / visuals reuse fields — no Find/GetComponent storm on scroll.
-    /// Path class: warm → hot on recycle. Unity 2018: cache GetComponent (Unity Game Optimization → Caching component references).
-    /// </summary>
     internal sealed class FileButtonBinder : MonoBehaviour
     {
-        /// <summary>
-        /// Badges hidden in grid bind / hover-exit. Scan whitelist "W" stays ambient in grid (status cue).
-        /// </summary>
         public static readonly string[] GridBadgeHideNames =
         {
             "AutoInstallBadge", "HidePackageBadge", "UserTagsBadge", "DepsBadge", "DepsDownloadBtn"
@@ -123,7 +115,6 @@ namespace VPB
             _resolved = true;
         }
 
-        /// <summary>Force re-resolve if hierarchy rebuilt (rare). Normal recycle keeps transforms valid.</summary>
         public void Invalidate()
         {
             _resolved = false;
@@ -186,7 +177,6 @@ namespace VPB
 
             gridLabelTr = root.Find("GridLabel");
             CacheGridLabel(gridLabelTr);
-            // Legacy Name Card overlay (pre always-on GridLabel) — destroy if pooled template still has it.
             DestroyLegacyNameCard(root);
 
             ratingTr = root.Find("Rating");
@@ -228,7 +218,6 @@ namespace VPB
             eventTrigger = tr.GetComponent<EventTrigger>();
         }
 
-        /// <summary>Cache GridLabel primary/secondary/creator texts (supports legacy single "Text" child).</summary>
         public void CacheGridLabel(Transform gl)
         {
             gridLabelTr = gl;
@@ -247,10 +236,6 @@ namespace VPB
             if (creatorTr != null) gridLabelCreatorText = creatorTr.GetComponent<Text>();
         }
 
-        /// <summary>
-        /// One-shot pool migrate: old hover Name Card under cell root.
-        /// Captions are GridLabel strip + footer path only.
-        /// </summary>
         public static void DestroyLegacyNameCard(Transform btnRoot)
         {
             if (btnRoot == null) return;

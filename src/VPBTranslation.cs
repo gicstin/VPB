@@ -9,10 +9,6 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Loads flat JSON key/value files from vpb_translations next to VPB.dll. UTF-8 only.
-    /// English defaults live in code as the second argument to <see cref="T"/>.
-    /// </summary>
     public static class VPBTranslation
     {
         public static event Action LocaleChanged;
@@ -46,10 +42,6 @@ namespace VPB
             catch { _translationsDir = ""; }
         }
 
-        /// <summary>
-        /// Language switcher labels stay as endonyms. Never follow UI locale —
-        /// translating this list hides languages from users who cannot read current locale.
-        /// </summary>
         public static string GetLocaleDisplayName(string localeId)
         {
             if (string.IsNullOrEmpty(localeId)) return "English";
@@ -78,7 +70,6 @@ namespace VPB
                     }
                     else
                     {
-                        // First run: auto-detect from system locale, save if supported
                         string detected = DetectSystemLocale();
                         if (detected != "en")
                         {
@@ -100,7 +91,6 @@ namespace VPB
             _initialized = true;
         }
 
-        /// <summary>Maps the OS UI culture to a VPB locale id, falling back to "en" if no translation file exists.</summary>
         private static string DetectSystemLocale()
         {
             try
@@ -121,20 +111,15 @@ namespace VPB
             return "en";
         }
 
-        /// <summary>Converts a .NET culture name (e.g. "zh-CN", "ja-JP") to a VPB locale id.</summary>
         private static string MapCultureNameToLocaleId(string cultureName)
         {
             if (string.IsNullOrEmpty(cultureName)) return "en";
             string lower = cultureName.ToLowerInvariant();
-            // Simplified Chinese
-            if (lower == "zh-cn" || lower == "zh-hans" || lower.StartsWith("zh-hans-")) return "zh_cn";
-            // Traditional Chinese
+            if (lower == "zh-cn" || lower == "zh-hans" || lower.StartsWith("zh-hans-", StringComparison.Ordinal)) return "zh_cn";
             if (lower == "zh-tw" || lower == "zh-hk" || lower == "zh-mo" ||
-                lower == "zh-hant" || lower.StartsWith("zh-hant-")) return "zh_tw";
-            // Japanese
-            if (lower == "ja" || lower.StartsWith("ja-")) return "ja";
-            // Korean
-            if (lower == "ko" || lower.StartsWith("ko-")) return "ko";
+                lower == "zh-hant" || lower.StartsWith("zh-hant-", StringComparison.Ordinal)) return "zh_tw";
+            if (lower == "ja" || lower.StartsWith("ja-", StringComparison.Ordinal)) return "ja";
+            if (lower == "ko" || lower.StartsWith("ko-", StringComparison.Ordinal)) return "ko";
             return "en";
         }
 
@@ -174,7 +159,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Locale ids to show in the switcher: always includes en; plus each *.json stem in vpb_translations.</summary>
         public static List<string> GetAvailableLocaleIds()
         {
             var list = new List<string> { "en" };

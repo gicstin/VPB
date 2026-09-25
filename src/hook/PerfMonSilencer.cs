@@ -36,14 +36,13 @@ namespace VPB
             }
             catch (Exception)
             {
-                // We don't log error here to avoid spam if it fails to patch a specific method
-                // as JIT might fail even during patching if the class is severely broken.
+                // No error log here to avoid spam from per-method patch failures.
             }
         }
 
         private static bool Prefix()
         {
-            return false; // Skip original method
+            return false;
         }
     }
 }

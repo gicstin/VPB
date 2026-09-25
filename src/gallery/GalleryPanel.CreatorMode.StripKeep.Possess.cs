@@ -7,13 +7,8 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>
-    /// Strip Scene possessable + person rename modes (Session Plugins parity).
-    /// Options persist in VPBConfig; applied on confirm / after scene rebuild.
-    /// </summary>
     public partial class GalleryPanel
     {
-        /// <summary>Person rename policy applied on Strip confirm (kept Persons).</summary>
         private enum StripKeepPersonRenameMode
         {
             Off = 0,
@@ -130,7 +125,6 @@ namespace VPB
             PersistStripKeepPossessOptionsToConfig();
             RefreshStripKeepRenameModeButtonLabel();
 
-            // Preview renames immediately so list shows outcome (recognition).
             if (_stripKeepPersonRenameMode == StripKeepPersonRenameMode.Off)
             {
                 // Leave existing manual renames; only clear ones we can re-derive? Keep manual.
@@ -153,9 +147,6 @@ namespace VPB
             RefreshStripKeepSummaryAndConfirm();
         }
 
-        /// <summary>
-        /// Apply current rename mode to kept Persons using live scene gender.
-        /// </summary>
         private void StripKeepApplyPersonRenameModeToSelection(bool overwriteExisting)
         {
             if (_stripKeepPersonRenameMode == StripKeepPersonRenameMode.Off) return;
@@ -208,7 +199,6 @@ namespace VPB
                     try { isMale = AtomGenderUtils.IsMale(atom); } catch { isMale = false; }
                     try { isFemale = AtomGenderUtils.IsFemale(atom); } catch { isFemale = false; }
                 }
-                // Fallback: name heuristic when live gender unavailable.
                 if (!isMale && !isFemale)
                 {
                     string probe = it.Name ?? it.Uid ?? "";
@@ -220,7 +210,7 @@ namespace VPB
                         || probe.StartsWith("F_", StringComparison.OrdinalIgnoreCase))
                         isFemale = true;
                 }
-                if (!isMale && !isFemale) continue; // unknown — leave name alone
+                if (!isMale && !isFemale) continue;
 
                 string newName;
                 if (_stripKeepPersonRenameMode == StripKeepPersonRenameMode.PrefixGender)
@@ -236,7 +226,6 @@ namespace VPB
                 }
                 else
                 {
-                    // RenameGender: Male / Male2 / Female / Female2…
                     if (isMale)
                     {
                         maleN++;
@@ -272,7 +261,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Actor# rename used by mode + legacy Actor# chip.</summary>
         private void StripKeepBulkRenameSelectedPersonsInternal(bool overwriteExisting)
         {
             int n = 0;
@@ -300,9 +288,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Possession-ready preset: Persons only + clear possess + gender head/hands + Prefix rename.
-        /// </summary>
+        /// <summary>Possession-ready preset: Persons only + clear possess + gender head/hands + Prefix rename.</summary>
         private void StripKeepApplyPossessionReadyPreset()
         {
             _stripKeepRemovePossessable = true;
@@ -335,7 +321,6 @@ namespace VPB
             v.childForceExpandHeight = false;
             UI.AddLE(_stripKeepPossOptionsHost, flexibleWidth: 1f, flexibleHeight: 0f);
 
-            // Row 1: possessable toggles
             ScrollRect possScroll;
             GameObject possHostGo;
             Transform possContent = StripKeepCreateHScrollChipStrip(
@@ -387,7 +372,6 @@ namespace VPB
                     "gallery.creator.strip_poss_female_tip",
                     "After clear: enable head + hands possessable on female Persons."));
 
-            // Rename mode cycle
             string renLbl = StripKeepPersonRenameModeLabel(_stripKeepPersonRenameMode);
             GameObject renGo = StripKeepChromeButton(
                 possContent, StripKeepChipWidth(renLbl, font, s), btnH * 0.8f,
@@ -479,7 +463,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Append possess/rename summary fragment when options active.</summary>
         private string StripKeepPossessSummarySuffix()
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder(48);

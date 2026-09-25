@@ -3,18 +3,11 @@ using System.Collections.Generic;
 
 namespace VPB
 {
-	/// <summary>
-	/// Honors meta.json <c>standardReferenceVersionOption</c> / <c>scriptReferenceVersionOption</c>
-	/// and user settings when rewriting or resolving versioned package UIDs.
-	/// </summary>
 	internal static class PackageReferenceVersionResolver
 	{
 		private static readonly object s_Lock = new object();
 		private static readonly Stack<string> s_ReferrerUidStack = new Stack<string>();
-		/// <summary>
-		/// Sticky referrer for async scene load (NormalizeLoadPath after Load() returns).
-		/// Volatile: warm-path reads avoid locking when stack empty.
-		/// </summary>
+		/// <summary>Sticky referrer for async scene load (NormalizeLoadPath after Load() returns).</summary>
 		private static volatile string s_ActiveLoadReferrerUid;
 
 		public static void BeginReferrerContext(string packageUid)
@@ -36,10 +29,6 @@ namespace VPB
 			}
 		}
 
-		/// <summary>
-		/// Sticky referrer for scene/preset load. Preloads meta options so NormalizeLoadPath
-		/// does not open zip mid-restore.
-		/// </summary>
 		public static void SetActiveLoadReferrer(string packageUid)
 		{
 			string uid = NormalizePackageUid(packageUid);
@@ -79,9 +68,6 @@ namespace VPB
 			return string.IsNullOrEmpty(uid) ? null : uid;
 		}
 
-		/// <summary>
-		/// Extract host package UID from a VAR entry path / scene path hint.
-		/// </summary>
 		public static string TryExtractPackageUid(string pathOrUid)
 		{
 			if (string.IsNullOrEmpty(pathOrUid)) return null;
@@ -198,8 +184,6 @@ namespace VPB
 			if (referrer == null)
 				return VarPackage.ReferenceVersionOption.Latest;
 
-			// Prefer already-loaded options. Avoid zip I/O on warm NormalizeLoadPath —
-			// SetActiveLoadReferrer preloads; if still cold, keep Latest default.
 			if (!referrer.AreReferenceVersionOptionsLoaded)
 				return VarPackage.ReferenceVersionOption.Latest;
 
@@ -249,9 +233,6 @@ namespace VPB
 			return entryPath.IndexOf(":\\Custom\\Scripts\\", StringComparison.OrdinalIgnoreCase) >= 0;
 		}
 
-		/// <summary>
-		/// When exact UID is missing, pick alternate UID per option. Null = do not rewrite.
-		/// </summary>
 		public static string ResolveMissingVersionUid(
 			string group,
 			int requestedVer,

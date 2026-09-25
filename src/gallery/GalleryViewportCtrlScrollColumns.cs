@@ -4,10 +4,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// On desktop, Ctrl (or Cmd) + wheel changes grid column count like +/- zoom buttons; plain wheel still scrolls.
-    /// Placed on <see cref="ScrollRect.viewport"/> so this handler runs before <see cref="ScrollRect"/> in hierarchy lookup.
-    /// </summary>
     public sealed class GalleryViewportCtrlScrollColumns : MonoBehaviour, IScrollHandler
     {
         private GalleryPanel _panel;
@@ -33,7 +29,6 @@ namespace VPB
 
             if (mod && _panel != null)
             {
-                // Same mapping as footer zoom buttons: wheel up → fewer columns (zoom in); wheel down → more columns (zoom out).
                 int notches = VpbScrollTuning.TakeNotches(ref _zoomNotchAccum, eventData.scrollDelta.y);
                 if (notches == 0) return;
                 _panel.ApplyCtrlScrollToGridColumns(notches > 0 ? -1 : 1);

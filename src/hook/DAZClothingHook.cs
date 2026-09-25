@@ -6,14 +6,7 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Clothing activate hooks + custom-texture rebind after dynamic item load (issue #80).
-    /// VPB's ImageLoadingMgr often finishes MaterialOptions custom textures before skin-wrap /
-    /// cloth materials finish connecting. OnTexture*Loaded then paints a live MaterialOptions whose
-    /// material slots are not ready yet (or get replaced). URL JSON stays correct; GPU tex/scale wrong.
-    /// Fix: postfix DAZSkinWrap.InitMaterials → sync SetAllParameters; deferred multi-pass resync
-    /// for late reconnect; queue only pending URL slots.
-    /// </summary>
+    /// <summary>Issue #80: resync MaterialOptions custom textures after DAZSkinWrap.InitMaterials so early-loaded textures land on live materials.</summary>
     public static class DAZClothingHook
     {
         static readonly HashSet<int> s_PendingCustomTexResync =
@@ -60,8 +53,6 @@ namespace VPB
                     LogUtil.LogWarning("DAZClothingHook: JSONStorableDynamic.OnLoadComplete not found; custom texture resync disabled.");
                 }
 
-                // VaM AppearancePresets / ClothingPresets UI (and any LoadPresetPost path) — items already
-                // loaded skip OnLoadComplete; still need a settle-pass Reload of customTexture URLs.
                 var mLoadPresetPost = AccessTools.Method(typeof(MeshVR.PresetManager), "LoadPresetPost");
                 if (mLoadPresetPost != null)
                 {
@@ -70,8 +61,7 @@ namespace VPB
                         postfix: new HarmonyMethod(typeof(DAZClothingHook), nameof(PostLoadPresetPost)));
                 }
 
-                // Root-cause edge: first InitMaterials clones GPUmaterials after early OnTexture*Loaded
-                // may have painted pre-init / null-wrap slots. Re-push loaded customs onto clones.
+                // Root-cause edge: first InitMaterials clones GPUmaterials after early OnTexture*Loaded may have painted pre-init / null-wrap slots.
                 var mInitMaterials = AccessTools.Method(typeof(DAZSkinWrap), "InitMaterials", Type.EmptyTypes);
                 if (mInitMaterials != null)
                 {
@@ -86,9 +76,7 @@ namespace VPB
                     LogUtil.LogWarning("DAZClothingHook: DAZSkinWrap.InitMaterials not found; GPU-init texture rebind disabled.");
                 }
 
-                // Ordering guard: a garment's own baked customTexture_* urls race the preset's urls
-                // because VPB bypasses VaM's FIFO image queue. Without this, the InitMaterials rebind
-                // above faithfully re-pushes whatever won the race — including the factory texture.
+                // Ordering guard: a garment's own baked customTexture_* urls race the preset's urls because VPB bypasses VaM's FIFO image queue.
                 MaterialOptionsTextureGuard.PatchAll(harmony);
             }
             catch (Exception ex)
@@ -97,11 +85,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Drop per-session bookkeeping. Called at scene-load start and plugin teardown: statics do
-        /// not reset between scene loads, Unity recycles instance ids, and a coroutine killed with
-        /// its host never runs its finally — so a leaked id would silently suppress a later resync.
-        /// </summary>
         public static void ResetTransientState()
         {
             try { s_PendingCustomTexResync.Clear(); } catch { }
@@ -139,7 +122,6 @@ namespace VPB
         public static void PreSetActiveClothingItem(DAZCharacterSelector __instance, DAZClothingItem item, bool active, bool fromRestore)
         {
             // Issue #12: UI Assist / SetActive on scan-excluded clothing packages.
-            // Object path: item already in catalog — register package files only (no Force Refresh).
             if (!active || item == null || fromRestore) return;
             try
             {
@@ -154,7 +136,6 @@ namespace VPB
         public static void PreSetActiveClothingItemByUid(DAZCharacterSelector __instance, string itemId, bool active, bool fromRestore)
         {
             // Issue #12: string-id path — Force Refresh only when catalog miss (UI Assist).
-            // fromRestore: AtomHook batches native refresh; never Force mid-restore.
             if (!active || string.IsNullOrEmpty(itemId)) return;
             try
             {
@@ -173,9 +154,6 @@ namespace VPB
         {
         }
 
-        /// <summary>
-        /// __state = true when this call will perform the one-shot GPUmaterials clone.
-        /// </summary>
         public static void PreInitMaterials(DAZSkinWrap __instance, ref bool __state)
         {
             __state = false;
@@ -193,9 +171,7 @@ namespace VPB
             catch { __state = false; }
         }
 
-        /// <summary>
-        /// After first InitMaterials clone: sync-push MaterialOptions customTexture* onto new GPUmaterials.
-        /// </summary>
+        /// <summary>After first InitMaterials clone: sync-push MaterialOptions customTexture* onto new GPUmaterials.</summary>
         public static void PostInitMaterials(DAZSkinWrap __instance, bool __state)
         {
             if (!__state || __instance == null) return;
@@ -226,10 +202,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// After PostLoadJSONRestore has applied preset material URLs onto freshly spawned
-        /// MaterialOptions, schedule a delayed custom-texture Reload so GPU binds after materials settle.
-        /// </summary>
+        /// <summary>After PostLoadJSONRestore has applied preset material URLs onto freshly spawned MaterialOptions.</summary>
         public static void PostOnLoadComplete(JSONStorableDynamic __instance)
         {
             var clothing = __instance as DAZClothingItem;
@@ -261,8 +234,6 @@ namespace VPB
             if (string.IsNullOrEmpty(storableId)) return;
 
             // Appearance + clothing presets: only ClothingPresets needs atom-wide rebind here.
-            // AppearancePresets with Keep clothing was reloading every custom tex on each look
-            // change (slow). New/replaced garments get OnLoadComplete item resync instead.
             if (!string.Equals(storableId, "ClothingPresets", StringComparison.OrdinalIgnoreCase))
             {
                 return;
@@ -298,10 +269,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Appearance / clothing preset apply path: items already loaded skip OnLoadComplete.
-        /// Resync all active clothing MaterialOptions on the person after a short settle.
-        /// </summary>
         internal static void ScheduleAtomCustomTextureResync(Atom atom)
         {
             if (atom == null) return;
@@ -333,10 +300,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// After SCENE_LOAD_TOTAL: final clothing material reconnect often drops UV tile to 1
-        /// while custom tex path stays (overstretched look). Rebind URL + tile/offset then.
-        /// </summary>
+        /// <summary>After scene load, rebind clothing custom texture URL + tile/offset (UV tile reset).</summary>
         internal static void SchedulePostSceneLoadCustomTextureResync()
         {
             const int key = int.MinValue;

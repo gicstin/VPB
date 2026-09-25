@@ -4,14 +4,7 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Safety net for VaM auto genital blend (<c>autoBlendGenitalTextures</c>).
-    /// Native path: blend torso+genital via CPU GetPixels into a new RAM Texture2D, SetTexture on
-    /// genital materials, Destroy previous lastGenerated*. Never written to .vamcache.
-    /// VPB zstd/RAM serve historically used Apply(makeNoLongerReadable:true), so blend GetPixel
-    /// failed and materials kept unblended/stale genital maps. Primary fix keeps CharacterQueuedImage
-    /// readable in ImageLoadingMgr; this prefix covers any remaining non-readable inputs.
-    /// </summary>
+    /// <summary>Safety net keeping auto genital blend inputs readable so GetPixels does not fail.</summary>
     internal static class DazCharacterTextureBlendHook
     {
         private struct BlendReadableTemps

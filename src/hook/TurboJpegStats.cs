@@ -2,7 +2,6 @@ using System;
 
 namespace VPB
 {
-    /// <summary>One-shot session log when TurboJPEG path succeeds first time.</summary>
     internal static class TurboJpegStats
     {
         private static readonly object Gate = new object();

@@ -7,7 +7,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>Parent .cslist (or orphan .cs/.dll leaf) for Plugins float tree.</summary>
         private sealed class PluginsFloatRoot
         {
             public FileEntry Entry;
@@ -22,7 +21,6 @@ namespace VPB
             public string PackageUid;
         }
 
-        /// <summary>Creator master group — packages nest underneath (Gestalt + browse by author).</summary>
         private sealed class PluginsFloatCreatorGroup
         {
             public string Creator;
@@ -42,15 +40,12 @@ namespace VPB
             lock (_cslistReferencedLock)
             {
                 if (_cslistReferencedPaths != null) return _cslistReferencedPaths;
-                // Never sync SQL here — LIKE over plugins:cslist_referenced_% blocks main/worker
-                // against deferred Persist during deep scan (float stuck on Loading…).
+                // Never sync SQL here; LIKE over plugin keys blocks against deferred Persist.
                 _cslistReferencedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 return _cslistReferencedPaths;
             }
         }
 
-        // Mtime alone suffices: a new VAR version is a different uid, so any mtime change on
-        // this uid means the same file was modified or replaced.
         internal static string PerVarSig(VarPackage pkg)
         {
             if (pkg == null) return "0";
@@ -64,8 +59,6 @@ namespace VPB
             if (string.IsNullOrEmpty(p)) return false;
             if (!p.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return false;
 
-            // VAR entries: writer stored Uid form (author.pkg.1:/custom/scripts/foo.cs).
-            // Loose disk: writer stored relative path (custom/scripts/foo.cs). Use Path for those.
             string norm = (entry is VarFileEntry)
                 ? (entry.UidLowerInvariant ?? string.Empty)
                 : p.Replace('\\', '/').ToLowerInvariant();
@@ -89,8 +82,6 @@ namespace VPB
             }
             catch { }
         }
-
-        // ---- Plugins float tree (warm path; not per-frame) ----
 
         private readonly Dictionary<string, List<FileEntry>> _pluginsFloatChildCache =
             new Dictionary<string, List<FileEntry>>(StringComparer.OrdinalIgnoreCase);
@@ -186,7 +177,6 @@ namespace VPB
             if (!string.IsNullOrEmpty(cacheKey) && _pluginsFloatChildCache.TryGetValue(cacheKey, out var cached) && cached != null)
                 return cached;
 
-            // Preferred: SQL parent→children (written at scan). No OpenStream.
             string parentKey = PluginsFloatParentKey(cslist);
             List<string> sqlKids;
             if (TryGetPluginsFloatChildrenFromSql(parentKey, out sqlKids) && sqlKids != null)
@@ -204,7 +194,6 @@ namespace VPB
                 return result;
             }
 
-            // Cold fallback: parse once (index miss / pre-tree library), then leave for next scan to SQL-fill.
             string dir = PluginsFloatCslistDir(cslist);
             List<string> refs = null;
             try
@@ -285,7 +274,6 @@ namespace VPB
             catch { return 0; }
         }
 
-        /// <summary>Canonical Author.Name.Version for VAR rows; null/empty for loose disk.</summary>
         private static string PluginsFloatPackageUid(FileEntry entry)
         {
             if (entry == null) return null;
@@ -309,12 +297,10 @@ namespace VPB
                 }
             }
             if (string.IsNullOrEmpty(raw)) return null;
-            // Index sometimes stores AddonPackages/Author.Name.N.var — strip so latest compare works.
             string canon = CanonicalVarPackageUidFromPathOrHint(raw);
             return !string.IsNullOrEmpty(canon) ? canon : raw;
         }
 
-        /// <summary>Creator.Name group + integer version via shared VAR uid parser.</summary>
         private static bool TryParsePluginsFloatPackageGroupVersion(string uid, out string group, out int version)
         {
             group = null;
@@ -383,11 +369,9 @@ namespace VPB
         {
             if (entry == null || latestUids == null) return true;
             string uid = PluginsFloatPackageUid(entry);
-            // Loose Custom/Scripts (no package uid) always pass.
             if (string.IsNullOrEmpty(uid)) return true;
             string group;
             int ver;
-            // Non-integer / odd uids: keep (cannot rank). Canonicalize handles AddonPackages/*.var form.
             if (!TryParsePluginsFloatPackageGroupVersion(uid, out group, out ver))
                 return true;
             return latestUids.Contains(uid);
@@ -400,10 +384,6 @@ namespace VPB
             return "c:" + c.ToLowerInvariant();
         }
 
-        /// <summary>
-        /// Build cslist parents + orphan leaves. Children stay lazy until expand
-        /// (OpenStream per cslist on open stalls VaM when library is large).
-        /// </summary>
         private List<PluginsFloatRoot> BuildPluginsFloatRoots(IList<FileEntry> source)
         {
             var roots = new List<PluginsFloatRoot>(64);
@@ -541,7 +521,6 @@ namespace VPB
             return lookup;
         }
 
-        /// <summary>Parse one .cslist on expand — warm path, not open path.</summary>
         private void EnsurePluginsFloatRootChildren(PluginsFloatRoot root, IList<FileEntry> catalog)
         {
             if (root == null || !root.IsCslist || root.ChildrenLoaded) return;

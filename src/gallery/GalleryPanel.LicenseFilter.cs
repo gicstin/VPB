@@ -36,11 +36,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Arm or toggle off license type filter. Re-pick same type clears.
-        /// Forces Source → All (license is .var meta only).
-        /// Filter runs in SQLite via <c>pkg.license</c> (no main-thread ZIP hydrate).
-        /// </summary>
+        /// <summary>Arm or toggle off license type filter.</summary>
         private void SetLicenseFilter(string license, bool refresh)
         {
             if (string.IsNullOrEmpty(license))
@@ -96,7 +92,6 @@ namespace VPB
         private bool PassesLicenseFilter(FileEntry entry)
         {
             if (!HasLicenseFilter()) return true;
-            // SQL path already narrowed cat_mem/pkg rows — skip per-row meta ZIP.
             if (_fileListHadSqlLicenseFilter) return true;
             if (entry == null) return false;
 

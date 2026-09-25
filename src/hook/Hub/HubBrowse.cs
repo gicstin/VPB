@@ -14,7 +14,6 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
 using ZenFulcrum.EmbeddedBrowser;
-//using MVR.Hub;
 
 namespace VPB
 {
@@ -205,8 +204,6 @@ namespace VPB
 
         protected Stack<HubResourceItemDetailUI> resourceDetailStack;
 
-        //public PackageBuilder packageManager;
-
         protected GameObject missingPackagesPanel;
 
         protected RectTransform missingPackagesContainer;
@@ -221,13 +218,10 @@ namespace VPB
 
         protected JSONStorableAction downloadAllMissingPackagesAction;
 
-        // Missing-packages network flow can be expensive (thousands of ids).
-        // Keep it single-flight and rate-limited to avoid tight error loops that stall VaM.
         protected Coroutine missingPackagesCoroutine;
         protected bool missingPackagesRequestInFlight;
         protected float nextMissingPackagesRequestAllowedRealtime;
 
-        // UI: Hide "Not On Hub" missing-package rows
         protected JSONStorableBool hideMissingNotOnHubJSON;
         protected UIDynamicToggle hideMissingNotOnHubToggleUI;
         protected UIDynamicButton copyMissingFromHubButtonUI;
@@ -244,13 +238,11 @@ namespace VPB
             RectTransform closeRt = closeBtn != null ? (closeBtn.transform as RectTransform) : null;
             if (closeRt == null) return;
 
-            // Ensure same parent space as the close button.
             if (toggleRt.parent != closeRt.parent)
             {
                 toggleRt.SetParent(closeRt.parent, worldPositionStays: false);
             }
 
-            // Prevent stretching to full width by forcing fixed anchors/pivot/size.
             toggleRt.anchorMin = closeRt.anchorMin;
             toggleRt.anchorMax = closeRt.anchorMax;
             toggleRt.pivot = new Vector2(0f, 0f);
@@ -263,10 +255,6 @@ namespace VPB
             AlignHideNotOnHubCheckbox(toggleRt.GetComponent<UIDynamicToggle>());
         }
 
-        /// <summary>
-        /// configurableTogglePrefab checkbox sits on a fixed Y; footer height + bottom pivot
-        /// leaves the box high vs the stretched label. Re-anchor box to vertical center.
-        /// </summary>
         private static void AlignHideNotOnHubCheckbox(UIDynamicToggle dyn)
         {
             if (dyn == null) return;
@@ -803,12 +791,8 @@ namespace VPB
             Stopwatch sw = Stopwatch.StartNew();
             using (UnityWebRequest webRequest = UnityWebRequest.Get(uri))
             {
-                // UnityWebRequest can occasionally hang indefinitely on some systems/networks.
-                // Add a hard timeout so the Hub UI doesn't get stuck on "Fetching Hub Info".
                 const int timeoutSeconds = 60;
                 try { webRequest.timeout = timeoutSeconds; } catch { }
-
-                // webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
 
                 long createMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
@@ -911,7 +895,6 @@ namespace VPB
                 }
                 while (!webRequest.isDone)
                 {
-                    
                     if (progressCallback != null)
                     {
                         progressCallback(webRequest.downloadProgress, webRequest.downloadedBytes);
@@ -952,15 +935,12 @@ namespace VPB
             Stopwatch sw = Stopwatch.StartNew();
             using (UnityWebRequest webRequest = UnityWebRequest.Post(uri, postData))
             {
-                // UnityWebRequest can occasionally hang indefinitely on some systems/networks.
-                // Add a hard timeout so the Hub UI doesn't get stuck on "Fetching Hub Info".
                 const int timeoutSeconds = 60;
                 try { webRequest.timeout = timeoutSeconds; } catch { }
 
                 webRequest.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(postData));
                 webRequest.SetRequestHeader("Content-Type", "application/json");
                 webRequest.SetRequestHeader("Accept", "application/json");
-                // webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
                 long createMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
                     LogUtil.Log($"HubBrowse.PostRequest CREATED uri={uri} ms={createMs}");
@@ -1078,7 +1058,7 @@ namespace VPB
                 HubResourceItemDetailUI hubResourceItemDetailUI = resourceDetailStack.Peek();
                 if (hubResourceItemDetailUI.connectedItem != null)
                 {
-                    hubResourceItemDetailUI.gameObject.SetActive(true);//sf
+                    hubResourceItemDetailUI.gameObject.SetActive(true);
                     hubResourceItemDetailUI.connectedItem.NavigateToOverview();
                 }
             }
@@ -1124,7 +1104,6 @@ namespace VPB
                 {
                     return;
                 }
-                // If sorting by Submission Date, we always want to check for new stuff when opening the hub.
                 if (_sortPrimary != SortSubmissionDate && _sortSecondary != SortSubmissionDate)
                 {
                     foreach (HubResourceItemUI item in items)
@@ -1138,8 +1117,6 @@ namespace VPB
                 }
             }
 
-            // If we are opening the hub from a hidden state and sorting by Submission Date, 
-            // reset to page 1 to ensure the user sees the latest submissions.
             if (!alreadyShowing && (_sortPrimary == SortSubmissionDate || _sortSecondary == SortSubmissionDate))
             {
                 _currentPageString = "1";
@@ -1265,8 +1242,6 @@ namespace VPB
 
                             RectTransform rectTransform = UnityEngine.Object.Instantiate(itemPrefab);
                             rectTransform.SetParent(itemContainer, false);
-                            // The built-in Hub item prefab is often kept inactive as a template.
-                            // Ensure the instance is active so HubResourceItemUI.OnEnable runs and queues thumbnails immediately.
                             if (!rectTransform.gameObject.activeSelf) rectTransform.gameObject.SetActive(true);
                             HubResourceItemUI component = rectTransform.GetComponent<HubResourceItemUI>();
                             if (component != null)
@@ -1277,14 +1252,9 @@ namespace VPB
                             }
                         }
                     }
-                    // "total_found" is the server-side total for the query; clientFilteredCount reflects local filters
-                    // (e.g. hide downloaded / only downloadable) applied to the current page payload.
                     if (onlyDl || hideDl)
                     {
                         int totalPages = asObject2["total_pages"].AsInt;
-                        // total_pages comes from the API pagination. In client-filter/backfill mode, the API uses a
-                        // larger perpage (e.g. 192/200) than the UI displays (e.g. 48). The user expects totals in
-                        // UI-page units, so estimate using _numPerPageInt.
                         int estimatedFilteredTotal = (totalPages > 0) ? (totalPages * _numPerPageInt) : totalFound;
                         numResourcesJSON.val = "Total: " + estimatedFilteredTotal;
                     }
@@ -1305,7 +1275,6 @@ namespace VPB
                 }
             }
             string text2 = jsonNode["error"];
-            //LogUtil.Log("Refresh returned error " + text2);
         }
 
         public void RefreshResources()
@@ -1378,7 +1347,6 @@ namespace VPB
                         RefreshErrorCallback));
                 }
 
-                // Track the API perpage used to compute estimated totals quickly.
                 _lastApiPerPage = apiPerPage;
                 if (refreshIndicator != null)
                 {
@@ -1529,8 +1497,6 @@ namespace VPB
             }
         }
 
-        // (removed) full filtered-total scan: replaced by fast estimate using total_pages * perpage
-
         protected void SyncNumResources(string s)
         {
         }
@@ -1639,7 +1605,6 @@ namespace VPB
             if (onlyDownloadable != null) onlyDownloadable.valNoCallback = false;
             if (hideDownloaded != null) hideDownloaded.valNoCallback = false;
 
-            // Persist the cleared state to settings
             if (Settings.Instance != null)
             {
                 if (Settings.Instance.HubHostedOption != null) Settings.Instance.HubHostedOption.Value = "All";
@@ -1837,7 +1802,6 @@ namespace VPB
 
         protected void GetResourceDetailErrorCallback(string err, HubResourceItemDetailUI hridui)
         {
-            //LogUtil.Log("Error during fetch of resource detail from Hub");
             CloseDetail(null);
         }
 
@@ -1903,7 +1867,6 @@ namespace VPB
                 Show();
 
                 HubResourceItemDetailUI hridui;
-                // All detail panels not in the stack are stored in savedResourceDetailsPanels
                 if (savedResourceDetailsPanels.TryGetValue(resource_id, out hridui))
                 {
                     savedResourceDetailsPanels.Remove(resource_id);
@@ -1949,7 +1912,6 @@ namespace VPB
 
         public void CloseDetail(string resource_id)
         {
-            // When closing, if there is still data in the stack
             if (resourceDetailStack.Count > 0)
             {
                 HubResourceItemDetailUI hubResourceItemDetailUI = resourceDetailStack.Pop();
@@ -1961,7 +1923,6 @@ namespace VPB
                 }
                 else
                 {
-                    // If the download is finished, remove it directly
                     if (resource_id != null)
                     {
                         savedResourceDetailsPanels.Remove(resource_id);
@@ -1981,35 +1942,29 @@ namespace VPB
                 HubResourceItemDetailUI hubResourceItemDetailUI2 = resourceDetailStack.Peek();
                 if (hubResourceItemDetailUI2.connectedItem != null)
                 {
-                    // Display the next item in the stack
                     hubResourceItemDetailUI2.gameObject.SetActive(true);
                     hubResourceItemDetailUI2.connectedItem.NavigateToOverview();
                 }
             }
 
-            // Remove all detail panels that are not being downloaded
             List<string> removes = new List<string>();
             foreach (string key in savedResourceDetailsPanels.Keys)
             {
                 var hubResourceItemDetailUI = savedResourceDetailsPanels[key];
                 if (hubResourceItemDetailUI.connectedItem != null && hubResourceItemDetailUI.connectedItem.IsDownloading)
                 {
-                    // Keep it
                 }
                 else
                 {
-                    // Remove it
                     removes.Add(key);
                 }
             }
-            // Remove all detail panels that are not being downloaded
             foreach (var key in removes)
             {
                 var hubResourceItemDetailUI = savedResourceDetailsPanels[key];
                 savedResourceDetailsPanels.Remove(key);
                 UnityEngine.Object.Destroy(hubResourceItemDetailUI.gameObject);
             }
-
         }
 
         protected void CloseAllDetails()
@@ -2057,12 +2012,10 @@ namespace VPB
 
         protected void FindMissingPackagesErrorCallback(string err)
         {
-            //SuperController.LogError("Error during hub request " + err);
         }
 
         protected void FindMissingPackagesCallback(SimpleJSON.JSONNode jsonNode)
         {
-            // Legacy single-request path kept for compatibility; now render via shared renderer.
             if (jsonNode == null) return;
             JSONClass root = jsonNode.AsObject;
             if (root == null) return;
@@ -2107,8 +2060,7 @@ namespace VPB
                     return;
                 }
 
-                // Debounce / single-flight: opening the panel repeatedly (or UI re-entrancy)
-                // must not start multiple concurrent requests.
+                // Debounce / single-flight: opening the panel repeatedly (or UI re-entrancy) must not start multiple concurrent requests.
                 if (missingPackagesRequestInFlight)
                 {
                     return;
@@ -2150,7 +2102,6 @@ namespace VPB
 
         public void CloseMissingPackagesPanel()
         {
-            // Cancel in-flight batched lookups to prevent background CPU/network churn.
             if (missingPackagesCoroutine != null)
             {
                 try { StopCoroutine(missingPackagesCoroutine); } catch { }
@@ -2171,17 +2122,14 @@ namespace VPB
             try
             {
                 // Avoid huge payloads that can yield empty/invalid JSON responses from the hub.
-                // Keep batches modest and add minimal delay between them.
                 const int batchSize = 200;
 
                 // If the hub is having issues, don't hammer it: backoff after errors.
                 int attempts = 0;
                 float backoffSeconds = 1f;
 
-                // Accumulate server results (keyed by missing package id).
                 Dictionary<string, JSONClass> serverPackages = new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase);
 
-                // Clear UI once, then render once at the end.
                 if (missingPackages != null)
                 {
                     foreach (HubResourcePackageUI missingPackage in missingPackages)
@@ -2221,7 +2169,6 @@ namespace VPB
                         e => { ok = false; err = e; done = true; }
                     ));
 
-                    // PostRequest is synchronous in the coroutine sense, but keep this in case of early abort paths.
                     while (!done) yield return null;
 
                     if (!ok || respNode == null)
@@ -2237,7 +2184,6 @@ namespace VPB
                         }
                         yield return new WaitForSeconds(Math.Min(30f, backoffSeconds));
                         backoffSeconds = Math.Min(30f, backoffSeconds * 2f);
-                        // retry same batch
                         i -= batchSize;
                         continue;
                     }
@@ -2260,11 +2206,9 @@ namespace VPB
                         }
                     }
 
-                    // Small yield to keep the UI responsive.
                     yield return null;
                 }
 
-                // Render once using the accumulated results.
                 RenderMissingPackages(serverPackages, missingPackageNames);
             }
             finally
@@ -2277,10 +2221,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Bind Hub findPackages row to a concrete integer .var (esp. for Author.Name.latest).
-        /// Prefer latestUrl, keep valid download URLs even when resource_id is missing.
-        /// </summary>
         public static JSONClass ResolveFindPackagesEntry(string requestedId, JSONClass serverPkg)
         {
             JSONClass j = serverPkg ?? new JSONClass();
@@ -2313,7 +2253,6 @@ namespace VPB
                 Match fm = Regex.Match(filename, "\\.([0-9]+)\\.var$", RegexOptions.IgnoreCase);
                 if (fm.Success) int.TryParse(fm.Groups[1].Value, out concreteVer);
             }
-            // packages.json map: Author.Name → highest known Hub integer version.
             if (concreteVer < 0 && singleton != null && singleton.packageGroupToLatestVersion != null)
             {
                 int mapped;
@@ -2346,11 +2285,9 @@ namespace VPB
                     : requestedId + ".var";
             }
 
-            // Always keep latestUrl field if Hub sent it.
             if (IsHubUrlValid(latestUrl))
                 j["latestUrl"] = latestUrl;
 
-            // Prefer latestUrl when asking for .latest / when downloadUrl is unusable.
             if (requestLatest && IsHubUrlValid(latestUrl))
                 j["downloadUrl"] = latestUrl;
             else if (!IsHubUrlValid(downloadUrl) && IsHubUrlValid(latestUrl))
@@ -2378,9 +2315,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// findPackages may key by requested id OR by concrete version. Match group + highest version.
-        /// </summary>
         public static JSONClass FindBestPackageInResponse(JSONClass pkgsObj, string requestedId)
         {
             if (pkgsObj == null || string.IsNullOrEmpty(requestedId)) return null;
@@ -2539,7 +2473,6 @@ namespace VPB
 
         protected void GetPackagesJSONErrorCallback(string err)
         {
-            //SuperController.LogError("Error during hub request for packages.json " + err);
         }
 
         protected void GetPackagesJSONCallback(SimpleJSON.JSONNode jsonNode)
@@ -2589,7 +2522,6 @@ namespace VPB
 
         protected void FindUpdatesErrorCallback(string err)
         {
-            //LogUtil.Log("Error during hub request " + err);
         }
 
         protected void FindUpdatesCallback(SimpleJSON.JSONNode jsonNode)
@@ -2607,7 +2539,6 @@ namespace VPB
             if (text != null && text == "error")
             {
                 string text2 = jsonNode["error"];
-                //LogUtil.Log("findPackages returned error " + text2);
                 return;
             }
             JSONClass asObject2 = jsonNode["packages"].AsObject;
@@ -2699,7 +2630,6 @@ namespace VPB
             }
             else
             {
-                //LogUtil.Log("Cannot perform action. Hub is disabled in User Preferences");
             }
         }
 
@@ -2756,7 +2686,6 @@ namespace VPB
             GetBrowserCookiesRoutine = null;
         }
 
-        /// <summary>Parallel Hub downloads (gallery + Hub UI share this queue).</summary>
         public const int MaxConcurrentDownloads = 3;
 
         private int _activeDownloadCount;
@@ -2841,10 +2770,6 @@ namespace VPB
             RefreshResources();
         }
 
-        /// <summary>
-        /// Resolve package ids via Hub <c>findPackages</c> (batched). No UI required.
-        /// Callback gets map of requested id → server package JSON (missing ids omitted or null downloadUrl).
-        /// </summary>
         public void FindPackages(IList<string> packageNames, Action<Dictionary<string, JSONClass>> onComplete, Action<string> onError = null)
         {
             if (packageNames == null || packageNames.Count == 0)
@@ -3010,7 +2935,6 @@ namespace VPB
             {
                 return;
             }
-
 
             List<string> shows = new List<string>();
             foreach (string key in savedResourceDetailsPanels.Keys)
@@ -3186,9 +3110,6 @@ namespace VPB
                             }
                         }
 
-                        // VaM Hub supports "Submission Date" sorting on the website; ensure it's available in the in-game UI.
-                        // We only add it if the API didn't include it in the getInfo sort array.
-                        // If present, keep it first to match the VPB UI convention.
                         list6.Remove(SortSubmissionDate);
                         list6.Insert(0, SortSubmissionDate);
 
@@ -3584,7 +3505,6 @@ namespace VPB
             {
             }
 
-
             searchFilterJSON.RegisterInputField(componentInChildren.searchInputField, isAlt);
 
             try
@@ -3626,13 +3546,11 @@ namespace VPB
                 componentInChildren.tagsFilterPopup.useFiltering = true;
                 componentInChildren.tagsFilterPopup.numPopupValues = 30;
                 tagsFilterChooser.RegisterPopup(componentInChildren.tagsFilterPopup, isAlt);
-
             }
             catch (Exception e)
             {
                 LogUtil.LogError("tagsFilterPopup " + e.ToString());
             }
-            //LogUtil.LogWarning("sortPrimaryChooser RegisterPopup");
             try
             {
                 componentInChildren.sortPrimaryPopup.useFiltering = false;
@@ -3643,7 +3561,6 @@ namespace VPB
             {
                 LogUtil.LogError("sortPrimaryPopup " + e.ToString());
             }
-            //LogUtil.LogWarning("sortSecondaryChooser RegisterPopup");
             try
             {
                 componentInChildren.sortSecondaryPopup.useFiltering = false;
@@ -3664,7 +3581,6 @@ namespace VPB
             isDownloadingJSON.RegisterIndicator(componentInChildren.isDownloadingIndicator, isAlt);
             downloadQueuedCountJSON.RegisterText(componentInChildren.downloadQueuedCountText, isAlt);
             openDownloadingAction.RegisterButton(componentInChildren.openDownloadingButton, isAlt);
-
 
             var openMissingPackagesPanelButton = componentInChildren.openMissingPackagesPanelButton;
             var relPos = openMissingPackagesPanelButton.transform.localPosition;
@@ -3701,8 +3617,6 @@ namespace VPB
                     hideToggle.backgroundImage.color = new Color32(163, 111, 214, 255);
                 }
 
-                // Missing-packages panel toggle (bottom): hide "Not On Hub" entries.
-                // (Create once for the main UI. Alt UI can reuse JSONStorable if it binds separately.)
                 if (!isAlt && missingPackagesPanel != null && hideMissingNotOnHubToggleUI == null)
                 {
                     hideMissingNotOnHubJSON = new JSONStorableBool(
@@ -3710,7 +3624,6 @@ namespace VPB
                         true,
                         (JSONStorableBool.SetBoolCallback)(b => ApplyMissingPackagesNotOnHubVisibility()));
 
-                    // Place it next to the panel "Close" button for intuitive UX.
                     var closeBtn = componentInChildren.closeMissingPackagesPanelButton;
                     RectTransform closeBtnRt = closeBtn != null ? closeBtn.transform as RectTransform : null;
                     Transform toggleParent = closeBtnRt != null ? closeBtnRt.parent : missingPackagesPanel.transform;
@@ -3731,10 +3644,8 @@ namespace VPB
                                 hideMissingNotOnHubToggleUI.backgroundImage.color = new Color32(255, 170, 110, 255);
                                 AlignHideNotOnHubCheckbox(hideMissingNotOnHubToggleUI);
                             }
-                            // Apply immediately so the initial ON state takes effect without user interaction.
                             ApplyMissingPackagesNotOnHubVisibility();
 
-                            // Button: copy list of "Not On Hub" items to clipboard.
                             RectTransform btnRt = UnityEngine.Object.Instantiate(manager.configurableButtonPrefab, toggleParent) as RectTransform;
                             if (btnRt != null)
                             {
@@ -3762,7 +3673,6 @@ namespace VPB
                 }
                 else if (!isAlt && hideMissingNotOnHubToggleUI != null)
                 {
-                    // UI can be rebuilt; keep it positioned correctly.
                     PositionHideNotOnHubToggle(componentInChildren, hideMissingNotOnHubToggleUI.transform as RectTransform);
                     if (copyMissingFromHubButtonUI != null)
                         PositionCopyMissingFromHubButton(componentInChildren, copyMissingFromHubButtonUI.transform as RectTransform);
@@ -3775,7 +3685,6 @@ namespace VPB
                 }
             }
             
-
                 LogUtil.LogVerboseUi("HubBrowse Init End " + _uiSw.ElapsedMilliseconds + "ms");
         }
         JSONStorableBool onlyDownloadable;

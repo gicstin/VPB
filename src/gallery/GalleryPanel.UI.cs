@@ -79,7 +79,6 @@ namespace VPB
 
         private void SetSaveSubmenuButtonsVisible(bool visible)
         {
-            // Removed - submenus are now handled by side tabs
         }
 
         private void CloseAtomSubmenuUI()
@@ -144,7 +143,6 @@ namespace VPB
                 Action = () => OverwriteSaveSceneFromGallery()
             });
 
-            // Scene and core presets at the bottom
             options.Add(new SaveMenuOption
             {
                 Label = VPBTranslation.T("gallery.save.scene", "Scene..."),
@@ -157,7 +155,6 @@ namespace VPB
             AddPresetOption(VPBTranslation.T("gallery.save.hair",        "Hair Preset..."),        "HairPresets");
             AddPresetOption(VPBTranslation.T("gallery.save.pose",        "Pose Preset..."),        "PosePresets");
 
-            // Secondary presets above the core ones
             AddPresetOption(VPBTranslation.T("gallery.save.glute_phys",  "Glute Phys Preset..."),  "FemaleGlutePhysicsPresets");
             AddPresetOption(VPBTranslation.T("gallery.save.breast_phys", "Breast Phys Preset..."), "FemaleBreastPhysicsPresets");
             AddPresetOption(VPBTranslation.T("gallery.save.plugin",      "Plugin Preset..."),      "PluginPresets");
@@ -171,7 +168,6 @@ namespace VPB
 
         private void PopulateSaveSubmenuButtons()
         {
-            // Removed - submenus are now handled by side tabs
         }
 
         private bool IsSubmenuContentType(ContentType? type)
@@ -205,8 +201,7 @@ namespace VPB
         private void ToggleSaveSubmenuFromSideButtons(bool? forceLeftSide = null)
         {
             bool useLeftSide = forceLeftSide ?? isFixedLocally;
-            // Unified save UX (issue #62): open the floating Save popup (same as the quick-menu
-            // assignable Save button) instead of the SavePresets side tab.
+            // Issue #62: open floating Save popup instead of SavePresets tab.
             ToggleSaveMenuPopup(useLeftSide);
         }
 
@@ -226,7 +221,7 @@ namespace VPB
         private void BeginSaveMode()
         {
             try { VpbSaveCacheSupport.RegisterPluginSaveWritePathsNoConfirm(); } catch { }
-            if (_canvasesHiddenForSave != null) return; // already in save mode
+            if (_canvasesHiddenForSave != null) return;
             _canvasesHiddenForSave = new List<Canvas>();
             _panelsHiddenForSave = new List<GalleryPanel>();
             if (Gallery.singleton != null)
@@ -267,7 +262,6 @@ namespace VPB
                         }
                         else if (Gallery.singleton != null)
                         {
-                            // Fallback for partially initialized panels.
                             var cats = p.categories;
                             if (cats != null && cats.Count > 0)
                             {
@@ -324,8 +318,7 @@ namespace VPB
 
         private IEnumerator FinalizeSceneSaveModeCoroutine(string path)
         {
-            // Capture the sidecar screenshot's on-disk timestamp before VaM writes the new one,
-            // so we can detect when the fresh .jpg actually lands (see invalidation step below).
+            // Capture the sidecar screenshot's on-disk timestamp before VaM writes the new one.
             string screenshotFull = TryGetSceneScreenshotFullPath(path);
             long screenshotBaselineMtime = GetSceneScreenshotMtimeTicks(screenshotFull);
 
@@ -333,7 +326,6 @@ namespace VPB
             const float waitForScreenshotStartMax = 12f;
             const float waitForScreenshotFinishMax = 45f;
 
-            // Let Save() kick off any async UI/camera flow first.
             yield return null;
 
             while (true)
@@ -351,8 +343,8 @@ namespace VPB
 
                 if (_sceneSaveSawScreenshotCamera)
                 {
-                    if (!screenshotActive) break; // screenshot flow completed
-                    if (Time.unscaledTime - waitStart > waitForScreenshotFinishMax) break; // safety timeout
+                    if (!screenshotActive) break;
+                    if (Time.unscaledTime - waitStart > waitForScreenshotFinishMax) break;
                 }
                 else
                 {
@@ -365,11 +357,7 @@ namespace VPB
 
             _sceneSaveFinalizeCoroutine = null;
 
-            // VaM writes the scene screenshot (.jpg) asynchronously, often a moment after the
-            // screenshot camera disables. Invalidating/reloading too early re-decodes the OLD
-            // image bytes and re-caches them, leaving a stale gallery thumbnail after an overwrite
-            // (issue #44). When a screenshot was captured, wait until the sidecar .jpg actually
-            // changes on disk before invalidating; otherwise fall back to a brief fixed delay.
+            // VaM writes the scene screenshot (.jpg) asynchronously, often a moment after the screenshot camera disables.
             if (_sceneSaveSawScreenshotCamera)
                 yield return WaitForSceneScreenshotWrittenCoroutine(screenshotFull, screenshotBaselineMtime);
             else
@@ -379,25 +367,14 @@ namespace VPB
             EndSaveMode();
             InvalidateSceneSaveGalleryCaches(path);
 
-            // The displayed list still holds the pre-save FileEntry with a stale mtime, so Date
-            // modified/updated sorts don't float the just-saved scene to the top (issue #45).
-            // A full RefreshFiles doesn't help: the list is usually served straight from
-            // GalleryFileListSnapshotCache (which also skips the re-sort), so it returns the same
-            // stale order. Instead refresh the live entry's mtime from disk and re-sort in place.
-            // The snapshot cache shares these FileEntry references, so it stays coherent, and the
-            // SQLite loose-file cache self-heals on the next refresh (its signature keys off the
-            // directory mtime, which the save just bumped).
+            // Issue #45: refresh saved entry mtime from disk and re-sort in place; snapshot cache would return stale order.
             if (CurrentViewListsLocalScenes())
             {
                 try { RefreshSavedLocalSceneEntryAndResort(path); } catch { }
             }
         }
 
-        /// <summary>
-        /// Issue #45: after an overwrite-save, update the displayed loose-scene entry's on-disk
-        /// timestamp and re-sort the current view in place so Date Updated/modified sorts reflect
-        /// the new save time without a full (cache-served, unsorted) rescan.
-        /// </summary>
+        /// <summary>Issue #45: after overwrite-save, refresh entry timestamp and re-sort in place.</summary>
         private void RefreshSavedLocalSceneEntryAndResort(string scenePath)
         {
             if (string.IsNullOrEmpty(scenePath) || currentFilteredFiles == null) return;
@@ -479,7 +456,6 @@ namespace VPB
                 long now = GetSceneScreenshotMtimeTicks(jpgFullPath);
                 if (now > 0 && now > baselineMtime)
                 {
-                    // Timestamp advanced; allow a brief moment for the file body to finish flushing.
                     yield return new WaitForSecondsRealtime(0.15f);
                     yield break;
                 }
@@ -565,11 +541,9 @@ namespace VPB
 
                 object result;
 
-                // Mirror BA behavior first: direct Save(path) tends to preserve native scene screenshot flow.
                 if (TryReflectionSave("Save", new object[] { path }, logPerf, swInner, out result)) { takenPath = "Save(path)"; savedOk = InterpretSaveResult(result); return savedOk; }
                 if (TryReflectionSave("SaveScene", new object[] { path }, logPerf, swInner, out result)) { takenPath = "SaveScene(path)"; savedOk = InterpretSaveResult(result); return savedOk; }
 
-                // Then try richer signatures in case this VaM build exposes them.
                 if (TryReflectionSave("SaveSceneWithScreenshot", new object[] { path, overwriteConfirmed }, logPerf, swInner, out result)) { takenPath = "SaveSceneWithScreenshot(path,ow)"; savedOk = InterpretSaveResult(result); return savedOk; }
                 if (TryReflectionSave("SaveWithScreenshot", new object[] { path, overwriteConfirmed }, logPerf, swInner, out result)) { takenPath = "SaveWithScreenshot(path,ow)"; savedOk = InterpretSaveResult(result); return savedOk; }
                 if (TryReflectionSave("SaveSceneWithScreenshot", new object[] { path }, logPerf, swInner, out result)) { takenPath = "SaveSceneWithScreenshot(path)"; savedOk = InterpretSaveResult(result); return savedOk; }
@@ -675,7 +649,6 @@ namespace VPB
                 }
                 catch
                 {
-                    // Try next overload
                 }
             }
             return false;
@@ -683,7 +656,7 @@ namespace VPB
 
         private static bool InterpretSaveResult(object invokeResult)
         {
-            if (invokeResult == null) return true; // void-returning save APIs
+            if (invokeResult == null) return true;
             if (invokeResult is bool b) return b;
             return true;
         }
@@ -932,8 +905,7 @@ namespace VPB
 
         private IEnumerator SavePresetWithScreenshotCoroutine(JSONStorable presetJS, string path, JSONStorableBool loadOnSelectJSB, bool loadOnSelectPreState)
         {
-            // Panels are already hidden by BeginSaveMode(); wait one frame so the
-            // hide is in effect before VAM captures the screenshot.
+            // Panels are already hidden by BeginSaveMode(); wait one frame so the hide is in effect before VAM captures the screenshot.
             yield return new WaitForEndOfFrame();
 
             bool saved = false;
@@ -986,24 +958,21 @@ namespace VPB
         }
         private void CreatePaginationControls()
         {
-            // Footer Bar
-            GameObject pageContainer = UI.CreateChildRT(backgroundBoxGO, "PaginationContainer", AnchorPresets.hStretchBottom, new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef)); // Footer bar height for buttons
+            GameObject pageContainer = UI.CreateChildRT(backgroundBoxGO, "PaginationContainer", AnchorPresets.hStretchBottom, new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef));
             paginationRT = pageContainer.GetComponent<RectTransform>();
 
             footerHLG = pageContainer.AddComponent<HorizontalLayoutGroup>();
-            footerHLG.padding = new RectOffset(10, 10, 0, 0); // resize handles are real layout children now (no manual reservation)
+            footerHLG.padding = new RectOffset(10, 10, 0, 0);
             {
                 var hlg = footerHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) { hlg.padding = new RectOffset(Mathf.RoundToInt(10 * s), Mathf.RoundToInt(10 * s), 0, 0); } });
             }
             footerHLG.childControlWidth = true;
             footerHLG.childControlHeight = true;
-            // Left/right shrink-wrap; center takes remaining gap (not equal ⅓ panel thirds).
             footerHLG.childForceExpandWidth = false;
             footerHLG.childForceExpandHeight = true;
             footerHLG.childAlignment = TextAnchor.MiddleLeft;
 
-            // Fixed dock "Top": side rail overlay strip (ignoreLayout; parked right of left-aligned quality).
             _footerSideButtonsGroupGO = UI.CreateChildRT(pageContainer, "SideButtonsGroup", AnchorPresets.middleCenter, new Vector2(0f, GalleryUiDesignTokens.ButtonSizeRef));
             _footerSideButtonsGroupRT = _footerSideButtonsGroupGO.GetComponent<RectTransform>();
             {
@@ -1012,7 +981,6 @@ namespace VPB
             }
             _footerSideButtonsGroupGO.SetActive(false);
 
-            // --- Left Section (Undo / Hub / Follow) ---
             GameObject leftSection = new GameObject("LeftSection");
             leftSection.transform.SetParent(pageContainer.transform, false);
             _footerLeftSectionRT = leftSection.AddComponent<RectTransform>();
@@ -1024,7 +992,6 @@ namespace VPB
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
             }
 
-            // Undo / Redo (footer left)
             footerUndoBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Undo);
             footerUndoBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             { var s = UI.LoadIconSprite("arrow-back-up", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerUndoBtnGO, s); }
@@ -1051,7 +1018,6 @@ namespace VPB
             });
             { var s = UI.LoadIconSprite("world-search", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerHubBtnGO, s); }
 
-            // Follow Quick Toggles
             footerFollowAngleBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
             { var s = UI.LoadIconSprite("angle", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerFollowAngleBtn, s); }
@@ -1067,7 +1033,6 @@ namespace VPB
             { var s = UI.LoadIconSprite("ruler-measure-2", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerFollowHeightBtn, s); }
             AddTooltip(footerFollowHeightBtn, "gallery.tooltip.follow_eye_height", "Follow Eye Height");
 
-            // --- Center Section (fills gap between left/right packs; quality ± + filter chrome) ---
             GameObject centerSection = new GameObject("CenterSection");
             centerSection.transform.SetParent(pageContainer.transform, false);
             _footerCenterSectionRT = centerSection.AddComponent<RectTransform>();
@@ -1079,9 +1044,6 @@ namespace VPB
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
             }
 
-            // Quality selector + step buttons as one centered group.
-            // ContentSizeFitter shrink-wraps — without it Unity's default 100×100 RT drops the pack low.
-            // Top dock: pack left-aligns (see ApplyFooterCenterAlignForDock) so side-strip overlay clears it.
             {
                 GameObject perfGroup = new GameObject("FooterPerfGroup");
                 perfGroup.transform.SetParent(centerSection.transform, false);
@@ -1099,7 +1061,6 @@ namespace VPB
                 CreateFooterPerfControls(perfGroup);
             }
 
-            // Filter Mode Label (shown in filter mode, left of clear button)
             {
                 GameObject modeGO = new GameObject("FilterModeLabel");
                 modeGO.transform.SetParent(centerSection.transform, false);
@@ -1141,7 +1102,6 @@ namespace VPB
             { var s = UI.LoadIconSprite("filter-off", Color.white); if (s != null) UI.AddIconToButton(footerClearFilterBtn, s, 4f, new Color(0.8f, 0.2f, 0.2f, 0.9f)); }
             footerClearFilterBtn.SetActive(false);
 
-            // --- Right Section (Utility Controls) ---
             GameObject rightSection = new GameObject("RightSection");
             rightSection.transform.SetParent(pageContainer.transform, false);
             _footerRightSectionRT = rightSection.AddComponent<RectTransform>();
@@ -1191,20 +1151,16 @@ namespace VPB
             { Sprite init = footerFloatsOnlyOffSprite ?? footerFloatsOnlyOnSprite; if (init != null) { UI.AddIconToButton(footerFloatsOnlyBtn, init); footerFloatsOnlyIconImage = footerFloatsOnlyBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerFloatsOnlyBtn, "gallery.tooltip.floats_only", "Hide this pane and keep its floating windows (open the gallery to bring it back)");
 
-            // Sidebar toggle lives on the side-rail Scene Import button (above Tags); no footer button.
-
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
             { var s = UI.LoadIconSprite("zoom-out", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizeMinusBtn, s); }
             gridSizePlusBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
             { var s = UI.LoadIconSprite("zoom-in", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizePlusBtn, s); }
 
-            // Toggle hold-to-launch/apply (hold trigger/button on item; duration in Settings)
             footerHoldToLaunchToggleBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"H", 20, 0, 0, AnchorPresets.middleCenter, ToggleHoldToLaunch);
             footerHoldToLaunchToggleBtnImage = footerHoldToLaunchToggleBtn.GetComponent<Image>();
             footerHoldToLaunchOnSprite  = UI.LoadIconSprite("hand-finger",     UI.BarIconGlyphTint);
             footerHoldToLaunchOffSprite = UI.LoadIconSprite("hand-finger-off", UI.BarIconGlyphTint);
             {
-                // Fallback to old icon if hold icons missing
                 var fallback = UI.LoadIconSprite("player-play", UI.BarIconGlyphTint);
                 var init = (holdToLaunchEnabled ? footerHoldToLaunchOnSprite : footerHoldToLaunchOffSprite) ?? footerHoldToLaunchOnSprite ?? footerHoldToLaunchOffSprite ?? fallback;
                 if (init != null)
@@ -1284,8 +1240,6 @@ namespace VPB
 
             try { EnsureFooterOverflowChrome(rightSection); } catch { }
 
-            // --- Context Actions (Category-aware) ---
-
             AddHoverDelegate(gridSizeMinusBtn);
             AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease columns (Ctrl+scroll wheel over gallery)");
             AddHoverDelegate(gridSizePlusBtn);
@@ -1315,7 +1269,6 @@ namespace VPB
             AddHoverDelegate(footerHeightBtn);
             AddHoverDelegate(footerAutoHideBtn);
 
-            // Register inner pane button scale actions (footer)
             { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef * s); }); }
             {
                 var uRT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponent<RectTransform>() : null;
@@ -1357,7 +1310,6 @@ namespace VPB
                 });
             }
 
-            // Top-dock footer row: same scale path as footer buttons (outer chrome + group layout).
             innerPaneScaleActions.Add(s =>
             {
                 try
@@ -1375,18 +1327,15 @@ namespace VPB
 
             innerPaneScaleActions.Add(s => { try { ApplyFooterOverflowLayout(s); } catch { } });
 
-            // Scale the back button
             {
                 var rt = footerBackBtn != null ? footerBackBtn.GetComponent<RectTransform>() : null;
                 innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); });
             }
-            // Scale the clear filter button
             {
                 var rt = footerClearFilterBtn != null ? footerClearFilterBtn.GetComponent<RectTransform>() : null;
                 innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); });
             }
 
-            // Scale the filter mode label
             {
                 var t = footerFilterModeText;
                 var rt = t != null ? t.GetComponent<RectTransform>() : null;
@@ -1400,7 +1349,6 @@ namespace VPB
                     }
                 });
             }
-            // Scale the spacer
             {
                 var go = footerFilterModeSpacerGO;
                 var rt = go != null ? go.GetComponent<RectTransform>() : null;
@@ -1408,17 +1356,13 @@ namespace VPB
                 innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(12f*s, GalleryUiDesignTokens.ButtonSizeRef * s); if (le != null) { le.preferredWidth = 12f*s; le.minWidth = 12f*s; } });
             }
 
-            // Unified info bar — always visible; hosts hover path, status messages, and tbox label/buttons.
             GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, UI.ChromeDark, AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
             pathGO.name = "HoverPathContainer";
-            pathGO.GetComponent<Image>().raycastTarget = true; // tbox hover delegate needs raycasts
-            // Removed RectMask2D - it was causing visual glitches/flashing during height animation during category switches
+            pathGO.GetComponent<Image>().raycastTarget = true;
             hoverPathRT = pathGO.GetComponent<RectTransform>();
 
             CreateHoverPreviewOverlay(backgroundBoxGO);
 
-            // HoverPathText — anchored to the bottom (tooltip) row; CanvasGroup fades only the text
-            // Bottom-row anchor: pinned to bottom of bar, fixed 60 px tall (updated by scale actions)
             GameObject hoverPathTextGO = UI.CreateChildRT(pathGO, "HoverPathText", AnchorPresets.hStretchBottom, new Vector2(0f, 60f));
             hoverPathCanvasGroup = hoverPathTextGO.AddComponent<CanvasGroup>();
             hoverPathCanvasGroup.alpha = 0;
@@ -1578,14 +1522,12 @@ namespace VPB
             float n = 1f;
             try { n = scrollRect.verticalNormalizedPosition; } catch { n = 1f; }
 
-            // Unity: 1 = top, 0 = bottom. Keep thresholds simple.
             bool atTop = n >= 0.999f;
             bool atBottom = n <= 0.001f;
 
             bool showTop = !atTop;
             bool showBottom = !atBottom;
 
-            // If thumb overlaps button zone, keep button hidden until thumb moves away.
             try
             {
                 var sbt = scrollRect.gameObject != null ? scrollRect.gameObject.transform.Find("Scrollbar") : null;
@@ -1653,14 +1595,10 @@ namespace VPB
             bc.isTrigger = true;
         }
 
-        /// <summary>Place jump top / spring drag / jump bottom in a vertical stack on the scrollbar.</summary>
         private void LayoutScrollbarJumpButtons(float? innerPaneScaleOverride = null)
         {
             float paneS = innerPaneScaleOverride ?? (ChromeScale);
 
-            // The spring scroll button toggles independently of the jump/step buttons, so resize it
-            // first and never gate it behind their existence (otherwise it ignores UI-scale changes
-            // whenever the jump buttons are disabled).
             ApplySpringScrollButtonScale(paneS);
 
             if (footerScrollTopBtn == null || footerScrollBottomBtn == null) return;
@@ -1674,7 +1612,6 @@ namespace VPB
             var downRt = footerScrollStepDownBtn != null ? footerScrollStepDownBtn.GetComponent<RectTransform>() : null;
             if (topRt == null || botRt == null) return;
 
-            // Pin jump buttons to scrollbar top/bottom ends (not relative to spring button).
             topRt.anchorMin = topRt.anchorMax = new Vector2(0.5f, 1f);
             botRt.anchorMin = botRt.anchorMax = new Vector2(0.5f, 0f);
             topRt.pivot = new Vector2(0.5f, 1f);
@@ -1722,7 +1659,6 @@ namespace VPB
             UpdateScrollbarJumpButtonsVisibility();
         }
 
-        /// <summary>Sizes the spring scroll drag button + icon for the given chrome scale. Safe when no spring button exists.</summary>
         private void ApplySpringScrollButtonScale(float paneS)
         {
             if (springScrollButtonGO == null) return;
@@ -1837,7 +1773,6 @@ namespace VPB
                     if (holdToLaunchEnabled)
                     {
                         // Avoid gesture conflicts: hold-to-launch uses pointer-down hold, same as drag start.
-                        // Keep user preference (EnableDragDrop) intact; runtime suppression handled by VPBConfig.EffectiveEnableDragDrop.
                         holdToLaunchPrevEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
                         VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop = holdToLaunchPrevEnableDragDrop;
                         VPBConfig.Instance.HoldToLaunchEnabled = true;
@@ -1869,14 +1804,12 @@ namespace VPB
         {
             if (footerHoldToLaunchToggleBtnImage != null)
             {
-                // Toggle color: green when enabled, dim when disabled
                 footerHoldToLaunchToggleBtnImage.color = holdToLaunchEnabled
                     ? new Color(0.12f, 0.55f, 0.18f, 0.85f)
                     : GalleryUiColorTokens.ChromeIconWell;
             }
             if (footerHoldToLaunchToggleIconImage != null)
             {
-                // Swap icons (hold / hold_off) when available
                 try
                 {
                     Sprite s = holdToLaunchEnabled ? footerHoldToLaunchOnSprite : footerHoldToLaunchOffSprite;
@@ -1892,13 +1825,11 @@ namespace VPB
 
         private void UpdateSpringScrollButtonToggleUI()
         {
-            // If toggle is ON but the GO was lost (e.g. language/UI rebuild), recreate it.
             if (springScrollButtonEnabled && springScrollButtonGO == null)
             {
                 try { EnsureSpringScrollButtonExists(); } catch { }
             }
 
-            // Resize + offset to match fixed vs floating mode
             try
             {
                 if (springScrollButtonGO != null)
@@ -1911,7 +1842,6 @@ namespace VPB
         private void CreateHoverPreviewOverlay(GameObject parentGO)
         {
             if (hoverPreviewGO != null) return;
-            // Parent to canvas so position stays put across left/right/top dock (not gallery pane rect).
             GameObject host = null;
             try { if (canvas != null) host = canvas.gameObject; } catch { host = null; }
             if (host == null) host = parentGO;
@@ -2012,8 +1942,6 @@ namespace VPB
             hoverPreviewFile = null;
             UIHoverPreviewTrigger src = hoverPreviewSource;
             hoverPreviewSource = null;
-            // Panel cleared preview while EventSystem may still be over the thumb — drop local
-            // hover flag so a later enter can show again (VR false-stale recovery).
             try { if (src != null) src.SyncHoverFlagAfterPanelHide(); } catch { }
             if (!hoverPreviewDummyActive)
             {
@@ -2038,9 +1966,6 @@ namespace VPB
 
             if (!stale)
             {
-                // VR: RectangleContainsScreenPoint + worldCamera disagree with VaM laser screen
-                // coords — false stale killed every cell except one lucky rect (#76). Trust
-                // EventSystem enter/exit; if raycast is valid, only dismiss when hit left the cell.
                 bool vr = false;
                 try { vr = XrUtils.IsVrActive(); } catch { }
 
@@ -2075,10 +2000,6 @@ namespace VPB
             if (stale) HideHoverPreview(null);
         }
 
-        /// <summary>
-        /// True when EventSystem hit is the hover-preview thumb or another graphic on the same
-        /// file cell (rating badge, root Image, etc.). Avoids screen-rect tests in VR.
-        /// </summary>
         private static bool IsPointerOverHoverPreviewCell(UIHoverPreviewTrigger source, GameObject hit)
         {
             if (source == null || hit == null) return false;
@@ -2092,7 +2013,6 @@ namespace VPB
                 if (cell.GetComponent<RecyclingGridItem>() != null
                     || cell.GetComponent<FileButtonBinder>() != null)
                     break;
-                // List/grid file button root usually has UIHoverReveal + Button together.
                 if (cell.GetComponent<UIHoverReveal>() != null && cell.GetComponent<Button>() != null)
                     break;
                 cell = cell.parent;
@@ -2167,7 +2087,6 @@ namespace VPB
                 oy = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetY, -4000f, 4000f);
             }
 
-            // Stationary canvas-local position. Default corner (20,12) + user offsets.
             float x = (20f + ox) * s;
             float y = (12f + oy) * s;
             hoverPreviewRT.sizeDelta = new Vector2(size, size);
@@ -2223,10 +2142,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// VR settings placeholder: thumbstick changes preview size when laser is on the dummy.
-        /// Returns true when consumed (caller should not scroll lists).
-        /// </summary>
         internal bool TryApplyVrThumbstickHoverPreviewSize(float stickForward)
         {
             if (!hoverPreviewDummyActive || hoverPreviewGO == null || VPBConfig.Instance == null) return false;
@@ -2302,8 +2217,7 @@ namespace VPB
             if (!hoverPreviewDragging) return;
             hoverPreviewDragging = false;
             hoverPreviewSuppressSettingsClick = true;
-            // Do not TriggerChange / RefreshInternalSettingsListRows — that rebuilds settings rows
-            // and feels like scaling/rearrange while placing the preview.
+            // Do not TriggerChange / RefreshInternalSettingsListRows.
         }
 
         internal void HoverPreviewPlaceholderScroll(PointerEventData eventData)
@@ -2374,13 +2288,11 @@ namespace VPB
         public void UpdatePaginationText()
         {
             {
-                // Package dep/dependent filter chrome lives in ActiveFilterChipBar (not footer/toolbox).
                 if (footerBackBtn != null) footerBackBtn.SetActive(false);
                 if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(false);
                 if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(false);
                 if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(false);
 
-                // Keep the hover-path count fallback in sync with filter/search refreshes.
                 try { RefreshHoverPathCountTextIfNeeded(); } catch { }
 
                 if (tboxSelectAllBtn != null)
@@ -2394,7 +2306,6 @@ namespace VPB
                 }
             }
         }
-
 
         private void ToggleLayoutMode()
         {
@@ -2540,7 +2451,6 @@ namespace VPB
             catch { }
 
             // Config can already be ON while Glance never showed the face (Index / OpenVR).
-            // First click then must SHOW, not flip the flag off.
             bool on = !shown;
             VPBConfig.Instance.QuickMenuVrWatchVisible = on;
             VPBConfig.Instance.Save();
@@ -2771,9 +2681,7 @@ namespace VPB
             del.OnPointerEnterEvent += pe;
         }
 
-        // Like AddTooltipPlain but the text is computed at hover time via the provider, so it can show
-        // live details (version, loaded package count, memory, etc.). Snapshot is taken on hover-enter.
-        // Provider must stay cheap: no sync ZIP/SQL/full package list materialization on enter.
+        // Tooltip text computed at hover-enter via provider; provider must stay cheap.
         private void AddDynamicTooltip(GameObject go, Func<string> provider)
         {
             if (go == null || provider == null) return;
@@ -2906,7 +2814,6 @@ namespace VPB
             if (spr != null) UI.SetIconSprite(footerDockIconImage, spr);
         }
 
-        /// <summary>Camera-follow lives on the facet rail; hide while docked. Title Follow is a duplicate — keep off.</summary>
         private void SyncTitleFollowButtonVisibility()
         {
             bool showRail = !isFixedLocally;
@@ -2928,7 +2835,6 @@ namespace VPB
 
         private void PopulateClothingSubmenuButtons(Atom target)
         {
-            // Removed - submenus are now handled by side tabs
         }
 
         private void ToggleClothingSubmenuFromSideButtons(Atom target, bool? forceLeftSide = null)
@@ -3185,10 +3091,6 @@ namespace VPB
             previewRemoveClothingAllPrevVals.Clear();
         }
 
-        /// <summary>
-        /// Releases this pane's edge and returns it to floating. <see cref="VPBConfig.DesktopFixedMode"/>
-        /// tracks whether ANY pane is still docked, not just this one.
-        /// </summary>
         internal void FloatPaneFromDock()
         {
             if (VPBConfig.Instance == null) return;
@@ -3254,7 +3156,6 @@ namespace VPB
         public void SetCollapsed(bool collapsed)
         {
             if (isCollapsed == collapsed) return;
-            // Keep grid subtree alive for the active item-drag handler (EventSystem + OnDisable cancel).
             if (collapsed)
             {
                 try
@@ -3303,7 +3204,6 @@ namespace VPB
                 }
                 rt.anchoredPosition = collapsed ? off : Vector2.zero;
 
-                // Stop the off-screen content from rendering/raycasting while collapsed (the FPS sink).
                 bool wantSubtree = ShouldContentSubtreeBeActive();
                 if (backgroundBoxGO.activeSelf != wantSubtree)
                     backgroundBoxGO.SetActive(wantSubtree);
@@ -3314,8 +3214,6 @@ namespace VPB
             UpdateSideButtonsVisibility();
             InvalidateFooterOverflowLayout();
             MarkGalleryPaneChromeDirty();
-            // Collapse: skip UpdateLayout — ForceRebuildLayoutImmediate + Canvas.ForceUpdateCanvases on a deactivating tree was the dock minimize hitch.
-            // Expand: defer one frame so SetActive(true) viewport is non-zero before layout (also avoids stacking with activate spike).
             if (collapsed)
             {
                 StopCo(ref _deferredCollapseLayoutCo);
@@ -3343,13 +3241,10 @@ namespace VPB
             yield return null;
             _deferredCollapseLayoutCo = null;
             if (isCollapsed || canvas == null) yield break;
-            // No sync CacheCreators/CacheCategoryCounts — expand is warm path.
             try { UpdateLayout(false, false); } catch { }
             try { RequestUserTagAvailVirtRecoverAfterLayout(); } catch { }
         }
 
-        /// <summary>Select every item in <see cref="currentFilteredFiles"/> when within <see cref="SelectAllSafetyMaxItemCount"/>.</summary>
-        /// <returns>True if selection was applied.</returns>
         private bool TrySelectAllCurrentGalleryView(string source)
         {
             var list = currentFilteredFiles;
@@ -3408,7 +3303,6 @@ namespace VPB
             {
                 selectedPath = selectedFiles[0].Path;
                 selectionAnchorPath = selectedPath;
-                // Selection should not "stick" the hover path.
                 SetHoverPath("");
             }
             else
@@ -3464,8 +3358,6 @@ namespace VPB
             bool isListLike = (layoutMode == GalleryLayoutMode.List);
             if (!isListLike && rgvState != null)
             {
-                // Defensive: if the grid is currently configured as a 1-column fixed-height list,
-                // treat +/- as zoom even if layoutMode is temporarily out of sync.
                 if (rgvState.useFixedHeight) isListLike = true;
             }
 
@@ -3477,8 +3369,6 @@ namespace VPB
                 }
                 catch { }
 
-                // List/Table zoom: +/- changes thumbnail size + row height, NOT columns.
-                // delta: +1 => "-" button (zoom out / smaller), -1 => "+" button (zoom in / larger)
                 float step = 15f;
                 ListRowHeight = Mathf.Clamp(ListRowHeight - (delta * step), 80f, 400f);
 
@@ -3506,7 +3396,6 @@ namespace VPB
                     // Preserve the center item so RecalculateLayout restores it after the column change.
                     rgv.preserveCenterItemIndex = rgv.GetCenterItemIndex();
                     rgv.fixedColumns = GridColumnCount;
-                    // No need to RefreshFiles, rgv handles column changes via its Update/RecalculateLayout
                 }
             }
             RebuildGridLayout();
@@ -3594,10 +3483,6 @@ namespace VPB
 
         private void ToggleLeft(ContentType type) => ToggleSide(isLeft: true, type);
 
-        /// <summary>
-        /// Docked: LMB → left panel, RMB → right panel.
-        /// Floating/VR: panel follows which rail button was pressed (ignore mouse button).
-        /// </summary>
         private bool PreferLeftSidePanelFromRail(bool fromLeftRailButton, bool rightClick)
         {
             if (isFixedLocally) return !rightClick;
@@ -3617,8 +3502,6 @@ namespace VPB
         /// <summary>Single side-panel toggle path — left/right differ only in which rail is primary.</summary>
         private void ToggleSide(bool isLeft, ContentType type)
         {
-            // Sidebar occupies one side column; opening that side's panel closes Import first. Clear intent
-            // (user chose this pane over the sidebar) and reconcile via the gate, else next Show reopens it.
             if (importSidebarActive && importSidebarOnLeft == isLeft)
             {
                 importSidebarOpenIntent = false;
@@ -3691,7 +3574,6 @@ namespace VPB
             bool hasSettingsPanel = IsSettingsPanelOpen();
             if (!hadSettingsPanel && hasSettingsPanel)
             {
-                // Keep title search on browse/grid query; settings filter lives in side rail.
                 try { SyncSettingsSideSearchInputFromFilter(); } catch { }
             }
             else if (hadSettingsPanel && !hasSettingsPanel)
@@ -3704,8 +3586,6 @@ namespace VPB
             try { SyncTitleSearchChromeForActiveMode(); } catch { }
 
             // Chrome only — do not sync CacheCreators / CacheCategoryCounts / CacheUserTags here.
-            // Those scans stall the main thread so rail buttons (incl. Creator) look like they spawn late.
-            // UpdateTabs builders fill the cache for the open facet only.
             UpdateLayout(false, false);
             UpdateTabs();
 
@@ -3774,9 +3654,7 @@ namespace VPB
             UpdateKeepClothingButtonState();
         }
 
-        // Reflect the persisted appearance clothing-apply-mode on the toolbox segmented row
-        // (Preset / Keep / Only / Merge). Single-select: the active mode's button is highlighted, the
-        // others are dimmed.
+        // Reflect the persisted appearance clothing-apply-mode on the toolbox segmented row (Preset / Keep / Only / Merge).
         private void UpdateKeepClothingButtonState()
         {
             string m = AppearanceClothingApplyMode ?? "replace";
@@ -3835,8 +3713,6 @@ namespace VPB
             }
             if (footerApplyModeBtnImage != null) footerApplyModeBtnImage.color = color;
 
-            // Hold-to-launch overrides 1-click apply: disable the toggle button while hold mode is on.
-            // Task chrome sticky suppress also locks the toggle (ApplyTaskChromeApplyHoldPolicy dims peers).
             bool stickySuppress = false;
             try { stickySuppress = TaskChromeSuppressArmedApplyChrome(ResolveTaskChromeState()); } catch { }
             bool disableApplyToggle = holdToLaunchEnabled || stickySuppress;
@@ -3871,7 +3747,6 @@ namespace VPB
             catch { }
             if (holdToLaunchEnabled)
             {
-                // Hold-to-launch overrides single-click apply; keep the toggle disabled until hold mode is off.
                 return;
             }
             ApplyMode oldMode = ItemApplyMode;
@@ -3886,8 +3761,5 @@ namespace VPB
                     : VPBTranslation.T("gallery.apply.mode_2click", "Apply mode: 2-Click"),
                 1.5f);
         }
-
-
     }
-
 }

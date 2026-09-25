@@ -22,10 +22,7 @@ namespace VPB
             public List<string> NewlyRegisteredUids;
         }
 
-        // Person-level preset storables need a synchronous FileManager.Refresh before VaM binds
-        // morph/clothing/hair from on-demand packages. Per-item clothing/hair preset storables
-        // (e.g. Creator:ItemNamePreset) must not trigger sync refresh mid-apply — it runs
-        // "Person refresh clothing and hair" and reverts active items to defaults.
+        // Person-level preset storables need a synchronous FileManager.Refresh before VaM binds morph/clothing/hair from on-demand packages.
         private static readonly HashSet<string> s_SyncRefreshPresetStorables =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -42,21 +39,17 @@ namespace VPB
 
         static bool ShouldSyncRefreshForPresetStorable(string storableId)
         {
-            // "unknown" must not trigger person-level ClothingPresets refresh — that resets
-            // per-item color presets and can clear hair during interactive apply.
+            // "unknown" must not trigger person-level ClothingPresets refresh.
             if (string.IsNullOrEmpty(storableId)) return false;
             if (string.Equals(storableId, "unknown", StringComparison.OrdinalIgnoreCase)) return false;
             return s_SyncRefreshPresetStorables.Contains(storableId);
         }
 
-        // Load-look feature
-        //prefab:TabControlAtom
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Atom), "LoadAppearancePreset", new Type[] { typeof(string) })]
         public static void PreLoadAppearancePreset(Atom __instance, string saveName = "savefile")
         {
             if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]PreLoadAppearancePreset " + saveName);
-            // VAM Browser / Person Load Appearance dialog — not VPB gallery apply path.
             try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "appearance"); } catch { }
             SuperControllerHook.ParsePresetForSimTextures(saveName);
             if (FileManager.FileExists(saveName))
@@ -69,15 +62,11 @@ namespace VPB
             }
         }
 
-        // Clothing-related hooks were moved to DAZClothingHook.cs.
-
-        // ky1001.PresetLoader loads using this method
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Atom), "LoadPreset", new Type[] { typeof(string) })]
         public static void PreLoadPreset(Atom __instance, string saveName = "savefile")
         {
             if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]PreLoadPreset " + saveName);
-            // Full atom presets via browser / PresetLoader plugins.
             try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "appearance"); } catch { }
             SuperControllerHook.ParsePresetForSimTextures(saveName);
             if (FileManager.FileExists(saveName))
@@ -131,7 +120,7 @@ namespace VPB
             if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB hook]PreLoadSubScene " + path);
             if (path.Contains(":"))
             {
-                string packagename = path.Substring(0,path.IndexOf(":"));
+                string packagename = path.Substring(0,path.IndexOf(":", StringComparison.Ordinal));
                 var package = FileManager.GetPackage(packagename);
                 if (package != null)
                 {
@@ -149,7 +138,6 @@ namespace VPB
             {
                 if (File.Exists(path))
                 {
-                    //Debug.Log("Exists " + url);
                     string text = File.ReadAllText(path);
                     FileButton.EnsureInstalledInternal(text);
                 }
@@ -160,8 +148,6 @@ namespace VPB
         [HarmonyPatch(typeof(MeshVR.PresetManager), "LoadPresetPre", new Type[] { typeof(bool) })]
         protected static void PreLoadPresetPre(MeshVR.PresetManager __instance, bool isMerge = false)
         {
-            // Preset panel / loadPresetOnSelect via VAM Browser. Skip scene-load cascades
-            // (person restore fires many LoadPresetPreFromJSON paths; this file-path load is interactive).
             try
             {
                 bool sceneLoad = false;
@@ -251,7 +237,6 @@ namespace VPB
                 }
                 catch (Exception ex)
                 {
-                    // Preserve scene generation when load-state detection is unavailable.
                     sceneLoad = true;
                     if (!s_AppearanceSceneDetectorWarningLogged)
                     {
@@ -268,7 +253,6 @@ namespace VPB
             string presetName = null;
             try { presetName = __instance != null ? __instance.presetName : null; } catch { }
 
-            // Appearance pose-preserve: SubScene browse-sync fires empty-name PosePresets and resets pose.
             if (VPB.src.util.AppearancePresetSuppress.ShouldSkipPosePresetAutoLoad(atomName, storableId, presetName))
             {
                 if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true || Settings.Instance?.LogStartupDetails?.Value == true) LogUtil.Log("[VPB] Appearance pose-preserve: skip empty PosePresets auto-load on " + atomName);
@@ -312,9 +296,6 @@ namespace VPB
                     try { FileManagerBridge.Refresh("preset_json_catalog", RefreshScope.NativeOnly); } catch { }
 
                     // VaM's per-type catalogs (DAZ morph/clothing/hair) only repopulate during MVR FileManager.Refresh.
-                    // Coalesced refresh fires 250ms+ later on a subsequent Update frame, after VaM has already
-                    // applied this preset against stale catalogs. For interactive preset clicks, flush now so
-                    // morphs/clothing/hair bind on first apply. Scene-load cascades stay coalesced to avoid N refreshes.
                     bool sceneLoad = false;
                     try { sceneLoad = VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene; } catch { }
                     bool syncRefreshEnabled = true;
@@ -367,14 +348,15 @@ namespace VPB
             if (results.Count > 0)
             {
                 // Resolve + install (if needed) via FileManager.GetPackage, which also normalizes whitespace.
-                // Keep logs high-signal: only summarize missing packages.
                 var missing = new List<string>();
                 foreach (var key in results)
                 {
                     if (string.IsNullOrEmpty(key)) continue;
 
                     // EnsureInstalled defaults to true; will install recursively if the package exists but is not installed.
-                    var pkg = FileManager.GetPackage(key);
+                    string forcedKey = FileManager.TryForceLatestDependencyUid(key);
+                    var pkg = FileManager.GetPackage(string.IsNullOrEmpty(forcedKey) ? key : forcedKey);
+                    if (pkg == null && !string.IsNullOrEmpty(forcedKey)) pkg = FileManager.GetPackage(key);
                     if (pkg == null && !key.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                     {
                         pkg = FileManager.GetPackage(key + ".latest");
@@ -424,7 +406,6 @@ namespace VPB
 
                 if (missing.Count > 0)
                 {
-                    // Dedup + keep output short by default.
                     var unique = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
                     int shown = 0;
                     var sb = new StringBuilder();

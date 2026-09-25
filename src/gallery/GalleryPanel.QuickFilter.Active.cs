@@ -5,10 +5,6 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Active / recent / dirty / update for filter presets (saved-view recognition).
-    /// Warm path — click/apply only; no per-frame work.
-    /// </summary>
     public partial class GalleryPanel
     {
         private const int QuickFilterRecentMax = 3;
@@ -22,7 +18,6 @@ namespace VPB
             get { return _activeQuickFilter; }
         }
 
-        /// <summary>Session MRU applied presets (newest first), max <see cref="QuickFilterRecentMax"/>.</summary>
         public void CollectRecentQuickFilters(List<QuickFilterEntry> into)
         {
             if (into == null) return;
@@ -41,7 +36,6 @@ namespace VPB
             if (entry == null) return;
             if (!IsQuickFilterStillInSettings(entry))
             {
-                // Applied combined browse clone is not in settings — keep prior active.
                 return;
             }
             _activeQuickFilter = entry;
@@ -72,7 +66,6 @@ namespace VPB
             }
         }
 
-        /// <summary>True when live gallery filters differ from active preset snapshot.</summary>
         public bool IsActiveQuickFilterDirty()
         {
             QuickFilterEntry active = _activeQuickFilter;
@@ -94,10 +87,6 @@ namespace VPB
             return !QuickFilterEntry.ContentSignaturesEqual(live, baseline);
         }
 
-        /// <summary>
-        /// Overwrite active preset from live gallery filters. Keeps Name/Id/Pinned/colors.
-        /// Clears merge membership (Update = single snapshot).
-        /// </summary>
         public bool UpdateActiveQuickFilterFromLive()
         {
             QuickFilterEntry active = _activeQuickFilter;
@@ -167,10 +156,6 @@ namespace VPB
     {
         private static readonly StringBuilder s_ContentSigSb = new StringBuilder(384);
 
-        /// <summary>
-        /// Copy filter/browse fields from <paramref name="src"/> onto <paramref name="dest"/>.
-        /// Does not copy Id, Name, Pinned, colors, or MergeMembers.
-        /// </summary>
         public static void CopyFilterContentFrom(QuickFilterEntry src, QuickFilterEntry dest)
         {
             if (src == null || dest == null) return;
@@ -240,7 +225,6 @@ namespace VPB
             return string.Equals(BuildContentSignature(a), BuildContentSignature(b), StringComparison.Ordinal);
         }
 
-        /// <summary>Stable content fingerprint (excludes Id/Name/Pinned/colors/MergeMembers).</summary>
         public static string BuildContentSignature(QuickFilterEntry e)
         {
             s_ContentSigSb.Length = 0;

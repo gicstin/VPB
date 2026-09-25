@@ -18,8 +18,6 @@ namespace VPB
         private CategoryFilterState CaptureCurrentFilterState()
         {
             var s = new CategoryFilterState();
-            // Chips own the live filter when present — serialize them (heals nameFilter desync).
-            // Else capture nameFilter; fall back to title-field draft if filter state empty.
             if (HasTitleSearchChips())
             {
                 string fromChips = GalleryTitleSearchChipUtil.Serialize(_titleSearchChips) ?? "";
@@ -96,10 +94,6 @@ namespace VPB
                 || string.Equals(state.AppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>
-        /// Settings cycle Independent/Synced. Independent: stamp live source as this category's memory.
-        /// Synced: save current category first so Independent round-trip keeps All/Local/.var.
-        /// </summary>
         private void ApplySourceFilterScopeFromSettings(string label)
         {
             bool nextIndependent = VPBConfig.ParseGallerySourceFilterIndependent(label);
@@ -196,7 +190,6 @@ namespace VPB
             ClearFiltersForNewCategory();
         }
 
-        /// <summary>Gulf of evaluation: category switch restored hidden filters — surface in status.</summary>
         private void NotifyCategoryFiltersRestored(string categoryTitle)
         {
             try
@@ -214,7 +207,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Load filter JSON for this pane; fall back to primary slot so Close/recreate and old single-pane rows still restore.</summary>
         private bool TryLoadPersistedCategoryFilterState(string catKey, out string stateJson)
         {
             stateJson = null;
@@ -228,29 +220,15 @@ namespace VPB
             return false;
         }
 
-        /// <param name="restoreUserTagFilter">
-        /// When true (default for category restore + Quick Filters), restore include/exclude user-tag
-        /// filter sets and work mode. Filter chips make armed filters visible (issue #64: silent hide
-        /// was from restoring FilterUntagged / FilterByTags without clear affordance).
-        /// Pass false only when deliberately wiping user-tag filter while applying other state.
-        /// </param>
-        /// <param name="quietUi">
-        /// When true, apply filter fields for list rebuild but skip chip/button/search chrome updates
-        /// (background filter-randomize).
-        /// </param>
         private void ApplyCategoryFilterState(CategoryFilterState state, bool restoreUserTagFilter = true, bool quietUi = false)
         {
-            // Set search fields directly — RefreshFiles (called after Show returns) will build
-            // currentFilteredFiles using these terms. topSearchBaseFiles must be null so that
-            // the first SetNameFilter call after RefreshFiles captures the correct unfiltered base.
+            // Set search fields directly — RefreshFiles (called after Show returns) will build currentFilteredFiles using these terms.
             topSearchBaseFiles = null;
             string restoredSearch = state.NameFilter ?? "";
             AssignNameFilterState(restoredSearch);
             if (!quietUi)
             {
                 HydrateTitleSearchChipsFromCurrentFilter();
-                // WithoutNotify: assigning .text fires SetNameFilter and can schedule a second SQL refresh.
-                // Chip mode: field stays empty (draft); live mode: show restored string.
                 string fieldText = HasTitleSearchChips() ? "" : restoredSearch;
                 try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, fieldText, _titleBarSearchOnValueChanged); } catch { }
             }
@@ -349,8 +327,6 @@ namespace VPB
             ClearNameFilterState();
             try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged); } catch { }
 
-            // Category navigation reset: creator selection is a filter and should not silently carry
-            // into unrelated categories (causes side-tab counts like ALL VAR to drop to 0).
             currentCreator = "";
             _currentCreatorSetSrc = null;
             try { UpdateTitleCreatorButtonVisual(); } catch { }
@@ -459,7 +435,6 @@ namespace VPB
                 && VpbLocalDatabase.SceneHubSubfilterIsNarrowing(EffectiveSceneHubSubfilter());
         }
 
-        /// <summary>User-driven bucket change: the set stops being the implicit default.</summary>
         private void SetSceneHubSubfilterExplicit(SceneHubSubfilter value)
         {
             sceneHubSubfilter = value;

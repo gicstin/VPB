@@ -3,11 +3,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Mode-conditioned task chrome: one primary + legal peers per panel state.
-    /// Warm/cold only — int cache key, no per-frame alloc, no LINQ.
-    /// Banners name the mode (ModeAmbient); this file makes chrome obey it.
-    /// </summary>
     public partial class GalleryPanel
     {
         private enum TaskChromeState : byte
@@ -27,7 +22,6 @@ namespace VPB
         private int _taskChromeAppliedKey = int.MinValue;
         private TaskChromeState _taskChromeState = TaskChromeState.Browse;
 
-        // Soft-disable alpha for illegal sticky peers (recognition, not vanish of exit affordance).
         private const float TaskChromePeerDisabledAlpha = 0.32f;
 
         private TaskChromeState ResolveTaskChromeState()
@@ -54,7 +48,6 @@ namespace VPB
 
         private int BuildTaskChromeCacheKey(TaskChromeState state)
         {
-            // Pack: state | selBit | stripBit | hold | oneClick | sticky enum
             int key = (int)state & 0xFF;
             if (selectedFiles != null && selectedFiles.Count > 0) key |= 1 << 8;
             if (DetailStripIsExpanded()) key |= 1 << 9;
@@ -68,10 +61,6 @@ namespace VPB
             return key;
         }
 
-        /// <summary>
-        /// Apply rail / apply-hold / detail policies for current task state.
-        /// Call from ModeAmbient funnel and after selection/tbox rebuilds.
-        /// </summary>
         private void RefreshTaskChrome(bool force)
         {
             TaskChromeState state = ResolveTaskChromeState();
@@ -86,7 +75,6 @@ namespace VPB
             try { ApplyTaskChromeDetailStripPolicy(state); } catch { }
         }
 
-        /// <summary>Force next RefreshTaskChrome to re-apply (mode flag flipped mid-frame).</summary>
         private void InvalidateTaskChrome()
         {
             _taskChromeAppliedKey = int.MinValue;
@@ -106,13 +94,11 @@ namespace VPB
             return state == TaskChromeState.StickyTryOn;
         }
 
-        /// <summary>Hide / soft-disable 1-Click + Hold while sticky owns input.</summary>
         private bool TaskChromeSuppressArmedApplyChrome(TaskChromeState state)
         {
             return TaskChromeIsSticky(state) && !TaskChromeIsModelessSticky(state);
         }
 
-        /// <summary>Detail strip Load/Hub/Delete — off when sticky rewrites grid semantics.</summary>
         private static bool TaskChromeAllowDetailStripTools(TaskChromeState state)
         {
             return state == TaskChromeState.Browse
@@ -123,11 +109,6 @@ namespace VPB
                 || state == TaskChromeState.StickyTryOn;
         }
 
-        /// <summary>
-        /// Selection + expanded strip: strip owns Load (one launch primary).
-        /// Delete stays on toolbox too (duplicate ok — Fitts reach from bar).
-        /// Collapsed strip: toolbox owns Load.
-        /// </summary>
         private bool TaskChromeStripOwnsSelectionPrimary()
         {
             return _taskChromeState == TaskChromeState.Selection
@@ -142,13 +123,11 @@ namespace VPB
             bool sticky = TaskChromeIsSticky(state) && !TaskChromeIsModelessSticky(state);
 
             // Competing sticky enters blocked while another sticky or armed-apply owns chrome.
-            // Settings float is modeless — never soft-disables sticky enter rails.
             bool allowCreatorEnter = state == TaskChromeState.StickyCreator
                 || (!sticky && !armed);
             bool allowRemoveEnter = state == TaskChromeState.StickyRemove
                 || (!sticky && !armed);
 
-            // Own-mode rail stays interactive (toggle/exit). Foreign sticky + armed → soft-disable.
             SetTaskChromePeerEnabled(leftRemoveModeSideBtn, allowRemoveEnter || state == TaskChromeState.StickyRemove);
             SetTaskChromePeerEnabled(rightRemoveModeSideBtn, allowRemoveEnter || state == TaskChromeState.StickyRemove);
 
@@ -164,14 +143,12 @@ namespace VPB
         private void ApplyTaskChromeApplyHoldPolicy(TaskChromeState state)
         {
             bool suppress = TaskChromeSuppressArmedApplyChrome(state);
-            // When armed, keep toggles live so user can clear / Esc path stays Fitts-easy.
             bool enableApplyToggle = !suppress && !holdToLaunchEnabled;
             bool enableHoldToggle = !suppress;
 
             SetTaskChromePeerEnabled(footerApplyModeBtn, enableApplyToggle);
             SetTaskChromePeerEnabled(footerHoldToLaunchToggleBtn, enableHoldToggle);
 
-            // Restyle apply buttons when allowed (UpdateApplyModeButtonState owns colors).
             if (!suppress)
             {
                 try { UpdateApplyModeButtonState(); } catch { }
@@ -194,7 +171,6 @@ namespace VPB
 
         private void ApplyTaskChromeDetailStripPolicy(TaskChromeState state)
         {
-            // Expand affordance off when sticky owns input (strip tools gated in SetToolLinksEnabled).
             if (!TaskChromeAllowDetailStripTools(state)
                 && _detailStripExpandBtnGO != null
                 && _detailStripExpandBtnGO.activeSelf)
@@ -203,36 +179,24 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Gate for DetailStripSetToolLinksEnabled — sticky destroy/session modes kill strip actions.
-        /// </summary>
         private bool TaskChromeShouldEnableDetailStripTools(bool wantEnabled)
         {
             if (!wantEnabled) return false;
             return TaskChromeAllowDetailStripTools(ResolveTaskChromeState());
         }
 
-        /// <summary>
-        /// After normal tbox show/enable for browse/selection: demote peers so one primary remains.
-        /// </summary>
+        /// <summary>After normal tbox show/enable for browse/selection: demote peers so one primary remains.</summary>
         private void TaskChromeApplyTboxSelectionPrimary(
             System.Action<GameObject, bool> show)
         {
             if (show == null) return;
 
-            // Expanded detail strip owns Load — hide toolbox Load duplicate (von Restorff).
-            // Keep Delete on toolbox (users expect bar action even with strip open).
             if (TaskChromeStripOwnsSelectionPrimary())
             {
                 show(tboxLoadBtn, false);
             }
         }
 
-        /// <summary>
-        /// Mass-hide browse toolbox peers for sticky tools that rewrite click semantics.
-        /// Mirrors Cleanup/Settings early-out pattern. Returns true if caller should return.
-        /// Creator/Import demotion runs in TaskChromeApplyTboxPostPass (after normal show).
-        /// </summary>
         private bool TaskChromeTryApplyStickyTbox(
             System.Action<GameObject, bool> show)
         {
@@ -249,7 +213,6 @@ namespace VPB
             bool scanWl = false;
             try { scanWl = ScanWhitelistManager.Instance.IsEnabled; } catch { }
 
-            // Point/pick/session owns input — kill browse action peers.
             show(tboxSettingsCancelBtn, false);
             show(tboxSettingsSaveBtn, false);
             show(tboxCleanupBtn, false);
@@ -301,10 +264,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// After normal tbox show/enable: demote Creator/Import peers + selection dual-primary.
-        /// Must run last so earlier show() cannot resurrect illegal peers.
-        /// </summary>
+        /// <summary>After normal tbox show/enable: demote Creator/Import peers + selection dual-primary.</summary>
         private void TaskChromeApplyTboxPostPass(System.Action<GameObject, bool> show)
         {
             if (show == null) return;
@@ -314,7 +274,6 @@ namespace VPB
 
             if (state == TaskChromeState.StickyCreator)
             {
-                // Scene Tools: Strip is primary; demote bulk browse peers.
                 show(tboxCleanupBtn, false);
                 show(tboxLoadBtn, false);
                 show(tboxLoadRandomBtn, false);
@@ -351,14 +310,12 @@ namespace VPB
             }
             else if (state == TaskChromeState.ArmedApply)
             {
-                // Armed apply: grid click is primary — hide competing sticky enter from tbox.
                 show(tboxCleanupBtn, false);
                 show(tboxCreatorStripSceneBtn, false);
                 show(tboxCreatorCompressCacheBtn, false);
             }
             else if (state == TaskChromeState.Browse)
             {
-                // Idle browse: quiet toolbox until selection (Context Bar / Hick).
                 TaskChromeApplyTboxBrowseQuiet(show);
             }
             else
@@ -369,9 +326,6 @@ namespace VPB
             try { RefreshTaskChrome(force: false); } catch { }
         }
 
-        /// <summary>
-        /// No selection: keep find/browse peers; hide selection-bound bulk actions.
-        /// </summary>
         private void TaskChromeApplyTboxBrowseQuiet(System.Action<GameObject, bool> show)
         {
             if (show == null) return;
@@ -395,7 +349,6 @@ namespace VPB
             show(tboxRemoveHistoryBtn, false);
             show(_detailStripExpandBtnGO, false);
 
-            // Keep: Cleanup, SelectAll, LoadRandom (browse without selection), person targets.
             show(tboxCleanupBtn, true);
             show(tboxSelectAllBtn, true);
             show(tboxLoadRandomBtn, true);
@@ -420,7 +373,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Char for tbox conditional cache — sticky + armed bits.</summary>
         private void AppendTaskChromeTboxCacheKey(System.Text.StringBuilder sb)
         {
             if (sb == null) return;

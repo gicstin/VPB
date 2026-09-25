@@ -233,7 +233,6 @@ namespace VPB
             browser = hubBrowse;
             package_id = package["package_id"];
             resource_id = package["resource_id"];
-            // Derive CDN thumbnail URL from resource_id when available
             int ridInt;
             if (!string.IsNullOrEmpty(resource_id) && resource_id != "null" && int.TryParse(resource_id, out ridInt) && ridInt > 0)
                 thumbnailUrl = $"https://1424104733.rsc.cdn77.org/data/resource_icons/{ridInt / 1000}/{ridInt}.jpg";
@@ -300,7 +299,6 @@ namespace VPB
             {
                 latestUrl = downloadUrl;
             }
-            // Dependencies are always "get latest": prefer latestUrl when downloadUrl unusable.
             if (isDependency && !IsUsableHubUrl(downloadUrl) && IsUsableHubUrl(latestUrl))
                 downloadUrl = latestUrl;
             bool startingValue3 = !IsUsableHubUrl(downloadUrl) && !IsUsableHubUrl(latestUrl);
@@ -413,7 +411,6 @@ namespace VPB
             }
             if (licenseTypeBackgroundRect != null)
             {
-                // Slight offset gives it a native button-like feel.
                 licenseTypeBackgroundRect.anchoredPosition = licenseTypeBackgroundBasePosition + new Vector2(1f, -1f);
             }
             if (licenseTypeBackgroundShadowUI != null)
@@ -475,11 +472,9 @@ namespace VPB
                 return cachedColor;
             }
 
-            // Deterministic hash so each category keeps a stable color across sessions.
             int hash = StringComparer.OrdinalIgnoreCase.GetHashCode(category);
             float hue = Mathf.Abs(hash % 360) / 360f;
 
-            // Slightly darker/saturated colors work better as chip backgrounds.
             Color generated = Color.HSVToRGB(hue, 0.62f, 0.68f);
             generated.a = alpha;
             CategoryTextColorCache[category] = generated;
@@ -570,7 +565,6 @@ namespace VPB
                 if (deferRefresh) browser.DeferRefreshUntilQueueDrains();
                 try
                 {
-                    // Hub rows need immediate registration; category indexing waits for the worker scan.
                     registered = FileManager.RegisterHubDownloadedPackage(
                         localPackagePath,
                         notifyInventoryChange: !deferRefresh);
@@ -619,7 +613,6 @@ namespace VPB
             try { if (OnDownloadFailed != null) OnDownloadFailed(err); } catch { }
         }
 
-        // Short labels fit on the Download button; full reason goes to the log.
         private static string FormatDownloadErrorShort(string err)
         {
             if (string.IsNullOrEmpty(err)) return "Failed";
@@ -683,7 +676,6 @@ namespace VPB
                     thumbnailImageUI.color = Color.white;
                 }
                 
-                // If we are currently hovered, update the main thumbnail too
                 var hover = hoverHandler;
                 if (hover != null && hover.IsHovered && hover.package == this)
                 {
@@ -716,7 +708,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(path)) return false;
             string p = path.ToLowerInvariant();
-            return p.EndsWith(".jpg") || p.EndsWith(".jpeg") || p.EndsWith(".png");
+            return p.EndsWith(".jpg", StringComparison.Ordinal) || p.EndsWith(".jpeg", StringComparison.Ordinal) || p.EndsWith(".png", StringComparison.Ordinal);
         }
 
         private string ResolveLocalThumbnailPath()
@@ -782,7 +774,6 @@ namespace VPB
                 return;
             }
 
-            // Prefer local package preview image when available.
             if (!_localThumbnailTried)
             {
                 string localPath = ResolveLocalThumbnailPath();
@@ -811,7 +802,6 @@ namespace VPB
                 return;
             }
 
-            // Already loaded: keep UI synced.
             if (thumbnailTexture != null)
             {
                 SyncThumbnailTexture(new HubImageLoaderThreaded.QueuedImage { tex = thumbnailTexture, imgPath = thumbnailUrl });
@@ -895,7 +885,6 @@ namespace VPB
             VarPackage package = FileManager.GetPackage(nameJSON.val, ensureInstalled: false);
             if (package != null)
             {
-                //SuperController.singleton.OpenPackageInManager(nameJSON.val);
             }
         }
 
@@ -941,7 +930,6 @@ namespace VPB
             if (package != null)
             {
                 alreadyHaveJSON.val = true;
-                // Hub latest integer > local → need download (critical for .latest deps with older .var present).
                 if (LatestVersion != -1 && package.Version < LatestVersion)
                 {
                     updateAvailableJSON.val = true;
@@ -1278,7 +1266,6 @@ namespace VPB
                 SyncLicenseCategoryTextStyle();
 
                 fileSizeJSON.text = ui.fileSizeText;
-                // Make the display area a bit larger
                 ui.fileSizeText.GetComponent<RectTransform>().sizeDelta = new Vector2(-20,0);
 
                 notOnHubJSON.indicator = ui.notOnHubIndicator;
@@ -1363,7 +1350,6 @@ namespace VPB
                     browser.ResolveResourceCategory(resource_id, SyncCategory);
                 }
  
-                // Add Hub thumbnail preview if we have a CDN URL (resource_id was resolved)
                 if (!string.IsNullOrEmpty(thumbnailUrl))
                 {
                     GameObject thumbGO;
@@ -1385,9 +1371,8 @@ namespace VPB
                         thumbnailImageUI = thumbGO.AddComponent<RawImage>();
                     }
                     
-                    thumbnailImageUI.color = new Color(0.25f, 0.25f, 0.25f, 0.8f); // dark placeholder
+                    thumbnailImageUI.color = new Color(0.25f, 0.25f, 0.25f, 0.8f);
                     
-                    // Add hover handler for preview in main thumbnail area
                     hoverHandler = thumbGO.AddComponent<DependencyThumbnailHover>();
                     hoverHandler.package = this;
                     var retryLoader = thumbGO.GetComponent<DependencyThumbnailRetryLoader>();
@@ -1479,5 +1464,4 @@ namespace VPB
             _nextRetryAt = Time.unscaledTime + 0.75f;
         }
     }
-
 }

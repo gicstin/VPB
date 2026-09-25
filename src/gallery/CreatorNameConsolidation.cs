@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace VPB
 {
-    /// <summary>Case-insensitive creator list merge for gallery UI (display name = variant with highest count).</summary>
     internal static class CreatorNameConsolidation
     {
         private struct Group

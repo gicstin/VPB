@@ -143,7 +143,6 @@ namespace VPB
                 type, s, () => InsightsStartFullScan(true));
         }
 
-        /// <summary>Every finding gets its own filter atom, so a row's Show button means what it says.</summary>
         private static string InsightsSearchTokenForIssue(PkgIssueFlags f)
         {
             string key = GallerySearchQuery.IssueKeyFor(f);
@@ -201,7 +200,6 @@ namespace VPB
                     "{0} finding(s) · {1} morph file(s) · {2} script(s) · {3} DLL(s) · {4} assetbundle(s)"),
                 issueCount, rec.MorphCount, rec.ScriptCount, rec.DllCount, rec.AssetBundleCount), type, s);
 
-            // Actions first: this window exists so the user can decide something.
             GameObject actions = UI.CreateChildRT(_insightsBodyParent.gameObject, "PackageActions");
             UI.AddHLG(actions, spacing: 8f * s, childForceExpandWidth: false);
             UI.AddLE(actions, minHeight: 40f * s, preferredHeight: 40f * s);
@@ -240,7 +238,6 @@ namespace VPB
             AddTooltipPlain(showBtn, VPBTranslation.T("insights.tip.show_in_gallery",
                 "Filters the gallery to this package. The window stays open."));
 
-            // Findings.
             AddInsightsSectionHeader(VPBTranslation.T("insights.package.findings", "Findings"), type, s, spacedAbove: true);
             if (issueCount > 0)
             {
@@ -259,7 +256,6 @@ namespace VPB
                     "No integrity findings."), type, s);
             }
 
-            // Plugin content.
             if (rec.HasPluginContent)
             {
                 AddInsightsSectionHeader(VPBTranslation.T("insights.package.plugin_content", "Plugin content"), type, s, spacedAbove: true);
@@ -274,7 +270,6 @@ namespace VPB
                 }
             }
 
-            // Undeclared dependencies.
             if (rec.UndeclaredCount > 0)
             {
                 AddInsightsSectionHeader(string.Format(
@@ -300,7 +295,6 @@ namespace VPB
                 }
             }
 
-            // Raw detail lines.
             if (rec.Details != null && rec.Details.Length > 0)
             {
                 AddInsightsSectionHeader(VPBTranslation.T("insights.package.details", "Detail"), type, s, spacedAbove: true);
@@ -443,7 +437,6 @@ namespace VPB
                 return;
             }
 
-            // User-initiated: allowed to build the path index on first use.
             bool ok = false;
             try { ok = VpbLocalDatabase.TrySearchPackageFiles(_insightsContentQuery, InsightsContentSearchLimit, _insightsContentHits, allowIndexBuild: true); }
             catch { ok = false; }
@@ -680,7 +673,6 @@ namespace VPB
                 TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, name: "EmptyTitle");
             UI.AddLE(t.gameObject, minHeight: 36f * s, preferredHeight: 36f * s);
 
-            // No LayoutElement — see AddInsightsNoteRow: Text sizes itself once width is known.
             UI.CreateLabel(
                 _insightsBodyParent.gameObject, body, type.Body, GalleryUiColorTokens.TextDim,
                 TextAnchor.UpperCenter, HorizontalWrapMode.Wrap, VerticalWrapMode.Overflow, name: "EmptyBody");

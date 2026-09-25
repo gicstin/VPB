@@ -4,19 +4,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Solid-fill <see cref="Image"/> with rounded corners generated in <see cref="OnPopulateMesh"/>
-    /// (no sprite required). Mirrors <see cref="ChamferedRect"/> but tessellates each corner into a
-    /// quarter-circle arc instead of a single bevel cut.
-    /// <para>
-    /// Preferred sizing is <see cref="cornerRadiusFraction"/>: the effective radius is a fraction of the
-    /// control's shorter side, evaluated at mesh-build time. Because Unity re-runs <c>OnPopulateMesh</c>
-    /// whenever the RectTransform's dimensions change, this stays scale-resistant automatically — the
-    /// corner keeps a constant visual proportion at every UI scale with no per-scale plumbing.
-    /// <see cref="cornerRadius"/> (absolute local px) is the fallback when the fraction is 0.
-    /// A resulting radius of 0 renders the stock quad for zero extra vertex cost.
-    /// </para>
-    /// </summary>
     public class RoundedRect : Image
     {
         private static readonly List<RoundedRect> s_Live = new List<RoundedRect>(256);
@@ -48,24 +35,18 @@ namespace VPB
             set { if (_cornerRadius != value) { _cornerRadius = value; SetVerticesDirty(); } }
         }
 
-        /// <summary>Scale-resistant radius as a fraction (0..0.5) of the shorter side. Takes priority when &gt; 0.</summary>
         public float cornerRadiusFraction
         {
             get { return _cornerRadiusFraction; }
             set { float v = Mathf.Clamp(value, 0f, 0.5f); if (_cornerRadiusFraction != v) { _cornerRadiusFraction = v; SetVerticesDirty(); } }
         }
 
-        /// <summary>Arc subdivisions per corner. Higher = smoother; each unit adds 4 vertices.</summary>
         public int cornerSegments
         {
             get { return _cornerSegments; }
             set { int v = Mathf.Max(1, value); if (_cornerSegments != v) { _cornerSegments = v; SetVerticesDirty(); } }
         }
 
-        /// <summary>
-        /// When true, <see cref="UI.ApplyGalleryElementCornerRadiusGlobally"/> leaves this fill alone
-        /// (large preview cards must not inherit the button fraction — it turns them into lozenges).
-        /// </summary>
         public bool excludeFromGlobalRadiusSync
         {
             get { return _excludeFromGlobalRadiusSync; }
@@ -82,7 +63,6 @@ namespace VPB
         {
             Rect r = rectTransform.rect;
             float radius = EffectiveRadius(r);
-            // Sprites (icon fills) or a non-positive radius: defer to the stock quad renderer.
             if (sprite != null || radius <= 0f || _cornerSegments < 1)
             {
                 base.OnPopulateMesh(vh);
@@ -94,7 +74,6 @@ namespace VPB
             vert.color = color;
             vert.uv0 = Vector2.zero;
 
-            // Fan origin at the rect centre.
             vert.position = r.center;
             vh.AddVert(vert);
             const int centerIdx = 0;
@@ -107,7 +86,6 @@ namespace VPB
                 new Vector2(r.xMax - radius, r.yMax - radius),
                 new Vector2(r.xMin + radius, r.yMax - radius),
             };
-            // Each corner sweeps 90° CCW from this start angle (degrees).
             float[] startDeg = { 180f, 270f, 0f, 90f };
 
             int firstRim = -1;
@@ -125,18 +103,11 @@ namespace VPB
                     prevRim = cur;
                 }
             }
-            // Close the ring back to the first rim vertex.
             if (firstRim >= 0 && prevRim >= 0) vh.AddTriangle(centerIdx, prevRim, firstRim);
         }
     }
 
-    /// <summary>
-    /// Hollow rounded-rectangle border ring (used for the gallery hover/selection highlight). Draws a band
-    /// of <see cref="borderThickness"/> px along the inner edge of its rect, with corners rounded to
-    /// <see cref="cornerRadiusFraction"/> of the shorter side — matching a <see cref="RoundedRect"/> fill of
-    /// the same fraction. Scale-resistant for the same reason (radius derived from the live rect).
-    /// A fraction of 0 degrades gracefully to a plain rectangular ring.
-    /// </summary>
+    /// <summary>Hollow rounded-rectangle border ring (used for the gallery hover/selection highlight).</summary>
     public class RoundedRectOutline : Image
     {
         private static readonly List<RoundedRectOutline> s_Live = new List<RoundedRectOutline>(256);
@@ -196,7 +167,6 @@ namespace VPB
             vert.color = color;
             vert.uv0 = Vector2.zero;
 
-            // Outer arc centres (inset by ro) and inner arc centres (inset from the t-shrunk rect by ri).
             Vector2[] outerC =
             {
                 new Vector2(r.xMin + ro, r.yMin + ro),
@@ -235,7 +205,6 @@ namespace VPB
                     prevOuter = io; prevInner = ii;
                 }
             }
-            // Close the band back to the first pair.
             if (firstOuter >= 0 && prevOuter >= 0)
             {
                 vh.AddTriangle(prevOuter, firstOuter, firstInner);

@@ -5,10 +5,6 @@ namespace VPB
 {
     internal static partial class VpbLocalDatabase
     {
-        /// <summary>
-        /// Full <c>pkg_dep</c> edge map for exclusive-dep scan. No gallery-index freshness gate —
-        /// user clicked; answer from whatever SQL currently has. Bulk cache first when ready.
-        /// </summary>
         internal static bool TryLoadPackageDepEdgesUngated(Dictionary<string, List<string>> dest)
         {
             if (dest == null) return false;

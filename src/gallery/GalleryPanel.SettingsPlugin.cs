@@ -14,7 +14,6 @@ namespace VPB
         private string _pluginHotkeyCaptureRowKey;
         private float _pluginHotkeyCaptureIgnoreUntilRealtime;
 
-        /// <summary>True while settings UI is waiting for the user to press a hotkey binding.</summary>
         public bool IsPluginHotkeyCaptureActive()
         {
             return IsSettingsPanelOpen() && !string.IsNullOrEmpty(_pluginHotkeyCaptureRowKey);
@@ -57,6 +56,8 @@ namespace VPB
                 snap.PluginHubKey = s?.HubKey != null ? s.HubKey.Value : "";
                 snap.PluginClearConsoleKey = s?.ClearConsoleKey != null ? s.ClearConsoleKey.Value : "";
                 snap.PluginDownscale8kTo4k = s?.Downscale8kTo4kBeforeZstdCache != null && s.Downscale8kTo4kBeforeZstdCache.Value;
+                snap.PluginForceLatestAllDependencies = s?.ForceLatestAllDependencies != null && s.ForceLatestAllDependencies.Value;
+                snap.PluginForceExactPackageVersions = s?.ForceExactPackageVersions != null && s.ForceExactPackageVersions.Value;
             }
             catch { }
             try { snap.ShortcutPatterns = VpbShortcutMap.CapturePatterns(); }
@@ -78,6 +79,7 @@ namespace VPB
                 if (s?.Downscale8kTo4kBeforeZstdCache != null) s.Downscale8kTo4kBeforeZstdCache.Value = b.PluginDownscale8kTo4k;
             }
             catch { }
+            RestorePackageVersionSettings(b.PluginForceLatestAllDependencies, b.PluginForceExactPackageVersions);
             try
             {
                 if (ScanWhitelistManager.Instance.IsEnabled != b.PluginScanWhitelistEnabled)

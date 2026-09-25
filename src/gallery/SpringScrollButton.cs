@@ -4,10 +4,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// "Spring" drag button: while held, drag up/down from center to scroll with speed proportional to pull distance.
-    /// Stops immediately on release.
-    /// </summary>
     public class SpringScrollButton : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
     {
         public ScrollRect scrollRect;
@@ -15,22 +11,12 @@ namespace VPB
         public Color normalColor = new Color(0.15f, 0.15f, 0.15f, 0.9f);
         public Color heldColor = new Color(0.15f, 0.75f, 0.2f, 0.95f);
 
-        /// <summary>
-        /// Deadzone around center, expressed as a fraction of half the button height (0..1).
-        /// Example: 0.12 means the inner 12% around center does nothing.
-        /// </summary>
         public float deadzoneFraction = 0.12f;
 
-        /// <summary>
-        /// Max scroll speed expressed in viewport-heights per second.
-        /// This keeps the feel consistent across UI scale changes (language, scaling, etc).
-        /// </summary>
         public float maxViewportHeightsPerSecond = 3.5f;
 
-        /// <summary>How quickly the speed eases toward target.</summary>
         public float speedSmoothing = 22f;
 
-        /// <summary>Nonlinear response curve. 1 = linear, 2..4 feels better in VR.</summary>
         public float responsePower = 2.4f;
 
         private bool _held;
@@ -88,7 +74,6 @@ namespace VPB
             if (scrollRect == null) return;
 
             float dt = Time.unscaledDeltaTime;
-            // No smoothing/transition: snap speed immediately.
             _currentSpeedPx = _targetSpeedPx;
 
             float scrollablePx = 0f;
@@ -123,7 +108,6 @@ namespace VPB
             try { cam = eventData != null ? (eventData.pressEventCamera ?? eventData.enterEventCamera) : null; } catch { cam = null; }
             if (cam == null)
             {
-                // ScreenSpaceOverlay (fixed desktop pane) expects null camera; using Camera.main can distort coordinates.
                 Canvas c = null;
                 try { c = GetComponentInParent<Canvas>(); } catch { c = null; }
                 if (c != null && c.renderMode == RenderMode.ScreenSpaceOverlay)
@@ -141,8 +125,6 @@ namespace VPB
                 return;
             }
 
-            // Center-spring: use a scale-invariant pull value based on the button's own height.
-            // local.y is measured from rect center.
             float halfH = 0f;
             try { halfH = _rt != null ? (_rt.rect.height * 0.5f) : 0f; } catch { halfH = 0f; }
             if (halfH <= 0.5f)
@@ -151,7 +133,7 @@ namespace VPB
                 return;
             }
 
-            float yN = Mathf.Clamp(local.y / halfH, -1f, 1f); // [-1..1]
+            float yN = Mathf.Clamp(local.y / halfH, -1f, 1f);
             float dzN = Mathf.Clamp01(deadzoneFraction);
             if (Mathf.Abs(yN) <= dzN)
             {
@@ -159,20 +141,18 @@ namespace VPB
                 return;
             }
 
-            // Remove deadzone so motion ramps from 0 outside center.
             yN = yN > 0f
                 ? (yN - dzN) / Mathf.Max(0.0001f, (1f - dzN))
                 : (yN + dzN) / Mathf.Max(0.0001f, (1f - dzN));
 
-            float t = Mathf.Clamp(yN, -1f, 1f); // [-1..1]
+            float t = Mathf.Clamp(yN, -1f, 1f);
 
-            // Nonlinear response: small pulls are gentle, large pulls ramp up.
             float sign = Mathf.Sign(t);
             float mag = Mathf.Pow(Mathf.Abs(t), Mathf.Max(1f, responsePower));
 
             float viewportH = 0f;
             try { viewportH = scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.rect.height : 0f; } catch { viewportH = 0f; }
-            if (viewportH <= 0.5f) viewportH = 800f; // safe fallback
+            if (viewportH <= 0.5f) viewportH = 800f;
 
             float maxPxPerSec = Mathf.Max(10f, maxViewportHeightsPerSecond) * viewportH;
             _targetSpeedPx = sign * mag * maxPxPerSec;
@@ -180,14 +160,12 @@ namespace VPB
 
         public static GameObject Create(GameObject parent, ScrollRect targetScrollRect, float widthPx = 22f, float heightPx = 22f)
         {
-            // Center on scrollbar; floating callers nudge left via SpringScrollBtnOffsetXFloatRef.
             var go = UI.CreateChildRT(parent, "SpringScrollButton", AnchorPresets.middleCenter, new Vector2(widthPx, heightPx));
 
             var rr = go.AddComponent<RoundedRect>();
             rr.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
             rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
 
-            // Make it reliably hittable in world-space UI.
             var cg = go.AddComponent<CanvasGroup>();
             cg.blocksRaycasts = true;
             cg.interactable = true;
@@ -223,4 +201,3 @@ namespace VPB
         }
     }
 }
-

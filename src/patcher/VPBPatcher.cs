@@ -242,7 +242,6 @@ namespace VPB.Patcher
             try
             {
                 var asmPath = Assembly.GetExecutingAssembly().Location;
-                // VPB.Patcher.dll lives in <gameRoot>/BepInEx/patchers/
                 var patchersDir = Path.GetDirectoryName(asmPath);
                 var bepinDir = Path.GetDirectoryName(patchersDir);
                 var gameRoot = Path.GetDirectoryName(bepinDir);
@@ -250,7 +249,6 @@ namespace VPB.Patcher
                 if (gameRoot != null && File.Exists(Path.Combine(gameRoot, "VaM.exe")))
                     return gameRoot;
 
-                // Fallback: walk up from current directory
                 var cur = Directory.GetCurrentDirectory();
                 if (File.Exists(Path.Combine(cur, "VaM.exe")))
                     return cur;
@@ -278,7 +276,6 @@ namespace VPB.Patcher
             try { if (File.Exists(path)) File.Delete(path); } catch { }
         }
 
-        // Minimal JSON parser — no external deps allowed in patcher
         private static class SimpleJsonParser
         {
             public static PendingUpdate ParsePending(string json)
@@ -286,12 +283,10 @@ namespace VPB.Patcher
                 var result = new PendingUpdate();
                 result.Files = new List<PendingFileEntry>();
 
-                // Parse "version"
                 result.Version = ExtractStringValue(json, "version");
                 result.Branch = ExtractStringValue(json, "branch");
 
-                // Parse "files" array entries
-                int filesStart = json.IndexOf("\"files\"");
+                int filesStart = json.IndexOf("\"files\"", StringComparison.Ordinal);
                 if (filesStart < 0) return result;
 
                 int arrayStart = json.IndexOf('[', filesStart);

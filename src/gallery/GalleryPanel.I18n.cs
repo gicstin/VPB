@@ -6,7 +6,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // ── Colors for the language button ──────────────────────────────────────
         private static readonly Color LangBtnColorNormal = new Color(0f, 0f, 0f, 0.5f);
         private static readonly Color LangBtnColorOpen   = UI.ChromeDark;
 
@@ -37,7 +36,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Short code shown on the language switcher button label.</summary>
         private static string GetLocaleShortCode(string localeId)
         {
             if (string.IsNullOrEmpty(localeId)) return "EN";
@@ -83,9 +81,6 @@ namespace VPB
             }
         }
 
-        // ── Main UI refresh ─────────────────────────────────────────────────────
-
-        /// <summary>Update the first Text child of <paramref name="go"/> with a translated string.</summary>
         private static void RefreshGoText(GameObject go, string key, string fallback)
         {
             if (go == null) return;
@@ -93,7 +88,6 @@ namespace VPB
             if (t != null) t.text = VPBTranslation.T(key, fallback);
         }
 
-        /// <summary>Apply CJK-capable font (if available) to all gallery texts and refresh visible strings.</summary>
         public void RefreshLocalizedUi()
         {
             if (backgroundBoxGO == null) return;
@@ -158,7 +152,6 @@ namespace VPB
             RefreshGoText(footerHubBtnGO, "gallery.side.hub", "Hub");
             try { UpdateTargetDropdownUI(); } catch { }
 
-            // Buttons that store Text refs directly
             if (titleBarSettingsBtnText != null)
             {
                 bool hasIcon = _titleBarSettingsBtnRT != null && _titleBarSettingsBtnRT.Find("Icon") != null;
@@ -182,16 +175,12 @@ namespace VPB
             RefreshGoText(tboxLoadDepsBtn, "gallery.tbox.load_deps", "Load Deps");
             RefreshGoText(tboxCacheTexturesBtn, "gallery.tbox.cache_textures", "Cache Textures");
 
-            // Undo / Redo labels include the stack count – delegate to the dedicated updater
             try { UpdateUndoRedoButtonLabels(); } catch { }
 
-            // Main search bar placeholder
             try { SyncTitleSearchChromeForActiveMode(); } catch { }
 
-            // Pagination text
             try { UpdatePaginationText(); } catch { }
 
-            // Sync language button label to show the active locale
             if (_langBtnText != null)
                 _langBtnText.text = GetLocaleShortCode(VPBTranslation.CurrentLocale);
 
@@ -211,8 +200,6 @@ namespace VPB
             try { RefreshActiveFilterChips(); } catch { }
         }
 
-        // ── Language switcher setup ──────────────────────────────────────────────
-
         private void SetupLanguageSwitcher(GameObject titleBarGO)
         {
             // Keep language beside the settings icon to avoid overlap with floating-mode top-left resize handle.
@@ -227,7 +214,6 @@ namespace VPB
             _langBtnImage = languageSwitcherBtnGO.GetComponent<Image>();
             _langBtnImage.color = LangBtnColorNormal;
 
-            // Icon
             try
             {
                 var icon = UI.LoadIconSprite("language", new Color(1f, 1f, 1f, 1f));
@@ -250,24 +236,19 @@ namespace VPB
             }
 
             RectTransform langRT = languageSwitcherBtnGO.GetComponent<RectTransform>();
-            // Keep button row consistent: Language sits left of Settings (-230) with a 6px gap.
             langRT.anchorMin = new Vector2(0.5f, 0.5f);
             langRT.anchorMax = new Vector2(0.5f, 0.5f);
             langRT.pivot     = new Vector2(0.5f, 0.5f);
             langRT.anchoredPosition = new Vector2(-276f, 0f);
             langRT.sizeDelta = new Vector2(40f, 40f);
-            // Ensure square sizing (defensive; button factory may override later in some layouts)
             if (Mathf.Abs(langRT.sizeDelta.x - langRT.sizeDelta.y) > 0.01f)
                 langRT.sizeDelta = new Vector2(langRT.sizeDelta.x, langRT.sizeDelta.x);
 
             AddTooltip(languageSwitcherBtnGO, "i18n.switcher.tooltip", "Language / 语言 / 言語");
 
-            // ── Full-screen backdrop (click-outside-to-close) ──────────────────
             languageMenuPopupGO = UI.CreatePopupMenuRoot(backgroundBoxGO, "LanguageMenuPopup", CloseLanguageMenu);
             languageMenuPopupGO.SetActive(false);
 
-            // ── Dropdown panel ─────────────────────────────────────────────────
-            // Position below the language button on the left title-bar icon cluster.
             GameObject panel = UI.CreatePopupMenuPanel(
                 languageMenuPopupGO, "LanguageMenuPanel",
                 AnchorPresets.topLeft, new Vector2(230f, 50f), new Vector2(114f, -72f),
@@ -287,8 +268,6 @@ namespace VPB
 
             RebuildLanguageMenuOptions();
         }
-
-        // ── Dropdown options ─────────────────────────────────────────────────────
 
         private void RescaleLanguageMenuInternal(float s)
         {
@@ -326,7 +305,6 @@ namespace VPB
             Transform panel = languageMenuPopupGO.transform.Find("LanguageMenuPanel");
             if (panel == null) return;
 
-            // Remove all previous rows
             for (int i = panel.childCount - 1; i >= 0; i--)
                 UnityEngine.Object.DestroyImmediate(panel.GetChild(i).gameObject);
 
@@ -338,7 +316,6 @@ namespace VPB
                 string id = loc;
                 bool isCurrent = string.Equals(id, currentLocale, StringComparison.OrdinalIgnoreCase);
 
-                // "\u2713" = ✓ checkmark; four spaces align non-active items
                 string label = (isCurrent ? "\u2713  " : "    ") + VPBTranslation.GetLocaleDisplayName(id);
 
                 GameObject row = UI.AddPopupMenuRow(
@@ -359,8 +336,6 @@ namespace VPB
             try { RescaleLanguageMenuInternal(ChromeScale); } catch { }
             LayoutRebuilder.ForceRebuildLayoutImmediate(panel.GetComponent<RectTransform>());
         }
-
-        // ── Toggle / close ───────────────────────────────────────────────────────
 
         private void ToggleLanguageMenu()
         {

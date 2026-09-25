@@ -33,9 +33,7 @@ namespace VPB
         private Text _titleSearchChipExclDropHint;
         private bool _titleSearchChipHostVisible;
         private int _titleSearchChipRowCount;
-        /// <summary>Show Incl/Excl drop rows while a tag or chip drag is in progress.</summary>
         private bool _titleSearchChipDragReveal;
-        /// <summary>True while a committed search chip is being dragged (skip full chip rebuild).</summary>
         private bool _titleSearchChipDragActive;
 
         private void CreateTitleSearchChipHost()
@@ -50,8 +48,6 @@ namespace VPB
             _titleSearchChipHostRT.pivot = new Vector2(0.5f, 1f);
             UI.AddImage(_titleSearchChipHostGO, new Color(0f, 0f, 0f, 0f), false);
 
-            // [Clear-all X] | [Include / Exclude rows] — one square clear for both rows.
-            // childForceExpandHeight false: keep clear square (not stretched to both rows).
             UI.AddHLG(
                 _titleSearchChipHostGO,
                 spacing: UI.GapTight(),
@@ -160,7 +156,6 @@ namespace VPB
                 childForceExpandHeight: true);
 
             label = UI.CreateLabel(rowGO, labelText, GalleryUiDesignTokens.FontBodyRef, labelColor, TextAnchor.MiddleLeft, raycastTarget: false, name: "RowLabel");
-            // CreateLabel defaults to stretch — pin left and size to text so "Include"/"Exclude" fully show.
             RectTransform labelRT = label.rectTransform;
             labelRT.anchorMin = new Vector2(0f, 0.5f);
             labelRT.anchorMax = new Vector2(0f, 0.5f);
@@ -198,7 +193,6 @@ namespace VPB
             ContentSizeFitter contentCsf = contentGO.AddComponent<ContentSizeFitter>();
             contentCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             contentCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            // Left-pack chips — no center alignment.
             UI.AddHLG(
                 contentGO,
                 spacing: UI.GapTight(),
@@ -253,7 +247,6 @@ namespace VPB
             return _titleSearchChips != null && _titleSearchChips.Count > 0;
         }
 
-        /// <summary>Field text shown in title search while browse mode (draft empty when chips committed).</summary>
         private string GetTitleSearchBrowseFieldText()
         {
             if (HasTitleSearchChips()) return "";
@@ -272,7 +265,6 @@ namespace VPB
             GalleryTitleSearchChipUtil.HydrateFromQuery(nameFilterQuery ?? GallerySearchQuery.Empty, _titleSearchChips);
         }
 
-        /// <summary>Ctrl+Backspace on empty draft — remove last committed chip (plain Backspace does not).</summary>
         internal bool TitleSearchTryPopLastChip()
         {
             if (!HasTitleSearchChips()) return false;
@@ -280,7 +272,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Minus on empty draft — toggle polarity of last chip.</summary>
         internal bool TitleSearchTryToggleLastChipPolarity()
         {
             if (!HasTitleSearchChips()) return false;
@@ -297,7 +288,6 @@ namespace VPB
             keys.Field = field;
         }
 
-        /// <summary>Enter: commit draft into Include chips. Shift+Enter: commit into Exclude.</summary>
         internal void TitleSearchOnCommitDraft(InputField sourceField, bool forceExclude = false)
         {
             if (sourceField == null) return;
@@ -413,7 +403,6 @@ namespace VPB
             }, VPBTranslation.T("gallery.undo.search_clear", "Search clear"));
         }
 
-        /// <summary>ESC: clear draft + close popup / unfocus — keep committed chips.</summary>
         private void TitleSearchOnEscape()
         {
             try { SetTitleSearchDraftText("", null); } catch { }
@@ -434,7 +423,6 @@ namespace VPB
                 _titleSearchChipDragReveal = false;
                 _titleSearchChipDragActive = false;
             }
-            // Exact vocab #tag / -#tag → filter sets (source of truth); leave substring tags in title.
             bool filterSetsChanged = false;
             try { filterSetsChanged = BridgeExactTitleTagChipsIntoFilterSets(); } catch { }
             string serialized = GalleryTitleSearchChipUtil.Serialize(_titleSearchChips);
@@ -609,7 +597,6 @@ namespace VPB
             ApplySerializedTitleSearchChips();
         }
 
-        /// <summary>Side / detail tag drag began — reveal Incl/Excl drop rows.</summary>
         internal void TitleSearchOnExternalTagDragBegan()
         {
             if (cleanupModeActive) return;
@@ -621,7 +608,6 @@ namespace VPB
             try { UpdateLayout(); } catch { }
         }
 
-        /// <summary>Committed search chip drag began — keep both rows visible without destroying chips.</summary>
         internal void TitleSearchOnChipDragBegan(int chipIndex)
         {
             if (cleanupModeActive) return;
@@ -736,7 +722,6 @@ namespace VPB
             // Incl hint only while dragging into an empty include row.
             if (_titleSearchChipInclDropHint != null)
                 _titleSearchChipInclDropHint.gameObject.SetActive(dragReveal && !hasInclChips);
-            // Excl hint always when chips exist but none excluded — discoverability.
             if (_titleSearchChipExclDropHint != null)
             {
                 bool showExclHint = !hasExclChips && (HasTitleSearchChips() || dragReveal);
@@ -960,8 +945,6 @@ namespace VPB
             GameObject dismissGO = new GameObject("Dismiss");
             dismissGO.transform.SetParent(go.transform, false);
             AddFilterChipRoundedBg(dismissGO, Color.gray);
-            // Button kept for hover/target graphic; click path is UIChipDismissClick
-            // (owns drag so parent TitleSearchChipDragSource / ScrollRect cannot cancel it).
             Button dismissBtn = dismissGO.AddComponent<Button>();
             dismissBtn.targetGraphic = dismissGO.GetComponent<Image>();
             UI.NeutralizeSelectableColorTint(dismissBtn);
@@ -978,7 +961,6 @@ namespace VPB
             }
             UI.AddLE(dismissGO, minWidth: dismissSize, minHeight: dismissSize, preferredWidth: dismissSize, preferredHeight: dismissSize, flexibleHeight: 0f);
 
-            // Inward rim — chips live under RectMask2D scroll; outward hover clips (Import sidebar same).
             go.AddComponent<UIHoverBorder>();
             try
             {
@@ -1159,6 +1141,11 @@ namespace VPB
             public GalleryPanel Panel;
             public InputField Field;
 
+            private void Awake()
+            {
+                useGUILayout = false;
+            }
+
             private void OnGUI()
             {
                 if (Panel == null || Field == null || !Field.isFocused) return;
@@ -1181,8 +1168,6 @@ namespace VPB
                     return;
                 }
 
-                // Empty draft + Ctrl/Cmd+Backspace pops last chip.
-                // Plain Backspace must not — chips live outside field (filter chrome), not in-field tokens.
                 if (e.keyCode == KeyCode.Backspace && (e.control || e.command) && !e.alt)
                 {
                     string draft = Field.text ?? "";
@@ -1201,7 +1186,6 @@ namespace VPB
                     return;
                 }
 
-                // Empty draft + Minus toggles last chip include/exclude.
                 if ((e.keyCode == KeyCode.Minus || e.keyCode == KeyCode.KeypadMinus) && !e.control && !e.command)
                 {
                     string draft = Field.text ?? "";
@@ -1221,10 +1205,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Exact vocabulary title #tag / -#tag chips move into include/exclude filter sets (one truth).
-        /// Substring / unknown names stay in title search. Returns true when filter sets changed.
-        /// </summary>
         private bool BridgeExactTitleTagChipsIntoFilterSets()
         {
             if (_bridgingUserTagFilterTitleSearch) return false;
@@ -1327,7 +1307,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Drop target for title-search Incl / Excl rows.</summary>
     internal sealed class TitleSearchChipDropZone : MonoBehaviour, IDropHandler
     {
         public GalleryPanel Panel;
@@ -1358,7 +1337,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Raycast gate + hover tint for title-search drop overlays.</summary>
     internal sealed class TitleSearchDropRaycastGate : MonoBehaviour, ICanvasRaycastFilter, IPointerEnterHandler, IPointerExitHandler
     {
         public Image Image;
@@ -1392,7 +1370,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Drag a committed title-search chip to Incl / Excl row (polarity move).</summary>
     internal sealed class TitleSearchChipDragSource : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IPointerUpHandler
     {
         public GalleryPanel Panel;

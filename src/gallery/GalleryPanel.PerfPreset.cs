@@ -103,24 +103,19 @@ namespace VPB
             if (perfWanted)
             {
                 int step = VpbPerfController.StepIndex;
-                // Activate icon child if it was previously hidden
                 if (iconTr != null) iconTr.gameObject.SetActive(true);
                 UI.ApplyBarIconFromPath(footerPerfToggleBtn, "rosette-number-" + step, backdropOverride: backdropColor);
-                // Restore backdrop (ApplyBarIconFromPath may overwrite it)
                 if (footerPerfToggleBtnImage != null) footerPerfToggleBtnImage.color = backdropColor;
-                // Tint the icon to match the perf state color
                 iconTr = footerPerfToggleBtn != null ? footerPerfToggleBtn.transform.Find("Icon") : null;
                 if (iconTr != null)
                 {
                     Image iconImg = iconTr.GetComponent<Image>();
                     if (iconImg != null) iconImg.color = VpbPerfController.GetToggleTextColor();
                 }
-                // Hide text label (icon replaces it)
                 if (footerPerfToggleBtnText != null) footerPerfToggleBtnText.gameObject.SetActive(false);
             }
             else
             {
-                // Hide icon, show "Off" text
                 if (iconTr != null) iconTr.gameObject.SetActive(false);
                 if (footerPerfToggleBtnText != null)
                 {

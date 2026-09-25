@@ -3,11 +3,6 @@ using UnityEngine;
 
 namespace VPB.src.util
 {
-    /// <summary>
-    /// Creator Strip possessable reset — clear all FreeControllerV3.possessable on Person,
-    /// then optionally enable head + hands for VR possess (gender-filtered).
-    /// Cold path only (post scene rebuild).
-    /// </summary>
     public static class VpbCreatorStripPossessable
     {
         private static readonly string[] HeadHandsControlIds =
@@ -17,9 +12,6 @@ namespace VPB.src.util
             "rHandControl",
         };
 
-        /// <summary>
-        /// Clear possessable on every FreeControllerV3 of <paramref name="person"/>.
-        /// </summary>
         public static int ClearAll(Atom person)
         {
             if (person == null) return 0;
@@ -43,9 +35,6 @@ namespace VPB.src.util
             return n;
         }
 
-        /// <summary>
-        /// Enable head + left/right hand possessable (VR possess targets).
-        /// </summary>
         public static int EnableHeadAndHands(Atom person)
         {
             if (person == null) return 0;
@@ -66,11 +55,6 @@ namespace VPB.src.util
             return n;
         }
 
-        /// <summary>
-        /// Apply strip possessable policy to one Person.
-        /// Clear runs first when requested; head/hands only when gender matches add flags.
-        /// Unknown gender: clear only (never auto-add).
-        /// </summary>
         public static void ApplyToPerson(
             Atom person,
             bool clearAll,
@@ -90,7 +74,6 @@ namespace VPB.src.util
             try { male = AtomGenderUtils.IsMale(person); } catch { male = false; }
             try { female = AtomGenderUtils.IsFemale(person); } catch { female = false; }
 
-            // Futa folds to male in AtomGenderUtils — treat as male for possess add.
             bool want =
                 (addForMale && male)
                 || (addForFemale && female);
@@ -99,9 +82,6 @@ namespace VPB.src.util
             EnableHeadAndHands(person);
         }
 
-        /// <summary>
-        /// Apply policy to every Person / InvisiblePerson currently in the scene.
-        /// </summary>
         public static int ApplyToAllPersonsInScene(
             bool clearAll,
             bool addForMale,

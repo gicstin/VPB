@@ -57,7 +57,6 @@ namespace VPB
             };
         }
 
-        /// <summary>Sync side rail search/sort chrome. Returns signed grid inset magnitude (positive left, negative right).</summary>
         private float SyncSideRailChrome(SideRailChrome rail, float closedOffset)
         {
             float openMag = UiMetrics.Px(GalleryUiDesignTokens.SideTabOpenGridInsetRef);

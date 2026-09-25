@@ -23,11 +23,6 @@ namespace VPB
             get { return _layoutUndoSnapshot; }
         }
 
-        /// <summary>
-        /// Starts a layout apply. Multi-frame by design: pane creation drives a grid rebuild and
-        /// thumbnail scheduling, so several panes in one frame is a visible stall — and in VR a stall
-        /// is a comfort event.
-        /// </summary>
         internal bool ApplyLayoutPreset(GalleryLayoutPreset preset, bool takeUndoSnapshot)
         {
             if (preset == null) return false;
@@ -134,7 +129,6 @@ namespace VPB
                     if (this == null || canvas == null) yield break;
                 }
 
-                // Create missing panes one per frame — each one rebuilds a grid.
                 while (_layoutApplyOrder.Count < want)
                 {
                     int before = Gallery.singleton != null ? Gallery.singleton.PanelCount : 0;
@@ -176,7 +170,6 @@ namespace VPB
                     try { target.ApplyPaneDockMode(state); }
                     catch (Exception ex) { LogUtil.LogError("[VPB][Layout] dock mode: " + ex.Message); }
 
-                    // The render-mode flip resets anchors, size and parenting a frame later.
                     yield return null;
                     if (this == null || canvas == null) yield break;
                     if (target == null) continue;
@@ -201,8 +194,6 @@ namespace VPB
                     try { target.ApplyPaneRails(state); }
                     catch (Exception ex) { LogUtil.LogError("[VPB][Layout] rails: " + ex.Message); }
 
-                    // Import sidebar can be docked or floating and changes the usable width other
-                    // floats are placed against, so it must settle before they are positioned.
                     yield return null;
                     if (this == null || canvas == null) yield break;
                     if (target == null) continue;
@@ -428,16 +419,11 @@ namespace VPB
             hasBeenPositioned = true;
         }
 
-        /// <summary>
-        /// Restores the pose inside the player-UI root frame. Assigning a world rotation would round-trip
-        /// through the parent's extracted rotation, which is undefined for a scaled basis.
-        /// </summary>
         private void ApplyPanePose(LayoutPaneState pane)
         {
             if (canvas == null) return;
 
-            // A captured pose is never exactly the origin — that is inside the player's head. The
-            // baselines use it as "no pose recorded", meaning place the pane in front of the user.
+            // A captured pose is never exactly the origin — that is inside the player's head.
             if (pane.LocalPos == Vector3.zero)
             {
                 RepositionInFront();
@@ -481,11 +467,7 @@ namespace VPB
         internal const float LayoutComfortMinHeight = -0.8f;
         internal const float LayoutComfortMaxHeight = 1.0f;
 
-        /// <summary>
-        /// Guard rail only (VR): a pose captured under a different world scale or a broken rig could land
-        /// the pane behind the user or at a hostile distance. Anything inside the envelope is restored
-        /// verbatim — this must never become a routine tidy-up pass.
-        /// </summary>
+        /// <summary>VR guard rail: clamp only poses outside the safe envelope; never a routine tidy-up.</summary>
         private static Vector3 ClampPoseToComfortEnvelope(Vector3 localPos)
         {
             bool vr = false;
@@ -602,7 +584,6 @@ namespace VPB
             if (pane.ImportOpen)
                 importSidebarForceOnLeft = pane.ImportOnLeft;
 
-            // Docked-vs-floating is its own axis; without this the rail reopens on the wrong surface.
             if (pane.ImportOpen && pane.ImportFloating && !importSidebarDetached)
             {
                 try { ToggleFloatingImportSidebar(); } catch { }
@@ -630,7 +611,6 @@ namespace VPB
             return ApplyLayoutPreset(snap, false);
         }
 
-        /// <summary>Implicit per-mode "last layout" — the always-available way back, independent of named presets.</summary>
         internal void SaveLastLayoutSnapshot()
         {
             VPBConfig cfg = VPBConfig.Instance;

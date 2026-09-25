@@ -7,11 +7,9 @@ namespace VPB
 {
     public static partial class NativeTextureOnDemandCache
     {
-        /// <summary>In-flight image coroutines (decode + Finish). Sliding window; RAM-bounded.</summary>
         private const int OnDemandMaxParallelImages = 6;
         /// <summary>Main-thread Finish budget while progress UI open.</summary>
         private const float OnDemandBulkFrameBudgetSec = 0.070f;
-        /// <summary>Pause starting new images when zstd queue is deep.</summary>
         private const int OnDemandZstdBackpressureQueued = 24;
 
         private static long EstimateManagedPass(int width, int height, bool bump, bool zstd)
@@ -28,7 +26,6 @@ namespace VPB
                     if (w == 1 && h == 1) break;
                     w = Math.Max(1, w / 2); h = Math.Max(1, h / 2);
                 }
-                // Includes decoder intermediates, fallback pooled copy and both Finish snapshots.
                 long raw = pixels * (bump ? 8 : 4);
                 if (raw > int.MaxValue || mipBytes > int.MaxValue) throw new OverflowException();
                 long bytes = pixels * (bump ? 18 : 6) + height * 32L + 4096;
@@ -59,7 +56,6 @@ namespace VPB
                 }
                 checked
                 {
-                    // Sum both passes: original payload remains fallback until downscaled decode succeeds.
                     long bytes = sourceBytes + EstimateManagedPass(width, height, flags.createNormalFromBump, zstd);
                     if (secondWidth > 0 && secondHeight > 0)
                         bytes += sourceBytes + EstimateManagedPass(secondWidth, secondHeight, flags.createNormalFromBump, zstd);
@@ -81,7 +77,6 @@ namespace VPB
             }
             catch (Exception)
             {
-                // Preserve formats with unknown headers and oversized routes, but run them alone.
                 return 512L * 1024 * 1024;
             }
         }
@@ -133,10 +128,6 @@ namespace VPB
                 }
             }
 
-            /// <summary>
-            /// Advance until nested work yields a frame wait (null / non-enumerator) or completes.
-            /// Unity coroutine runner auto-pumps nested IEnumerators; manual MoveNext must do the same.
-            /// </summary>
             public bool AdvanceUntilYieldOrDone()
             {
                 while (Stack.Count > 0)
@@ -172,7 +163,6 @@ namespace VPB
                         continue;
                     }
 
-                    // null / WaitForSeconds / etc. — caller yields a frame
                     return true;
                 }
 
@@ -277,7 +267,6 @@ namespace VPB
                 float frameStart = Time.realtimeSinceStartup;
                 float budget = GetOnDemandFrameBudgetSec();
 
-                // Multi-pass: Finish + refill in same frame until everyone waits on decode or budget ends.
                 bool keepPumping = true;
                 while (keepPumping && active.Count > 0 && !s_CancelRequested)
                 {
@@ -325,7 +314,6 @@ namespace VPB
 
                 yield return null;
             }
-
             }
             finally
             {

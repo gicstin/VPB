@@ -6,7 +6,6 @@ using MVR.FileManagement;
 
 namespace VPB
 {
-    /// <summary>SQLite user-tag tables (<c>gallery_user_tag</c> / <c>gallery_item_user_tag</c>), normalization, and queries. Split from <see cref="VpbLocalDatabase"/> for clarity; same static partial type — no call-site or perf change.</summary>
     internal static partial class VpbLocalDatabase
     {
         private static void EnsureGalleryUserTagTables(VpbSqlite3.Connection conn)
@@ -22,10 +21,6 @@ namespace VPB
             BumpMetaSchemaVersionAfterUserTagTables(conn);
         }
 
-        /// <summary>
-        /// v11: FK on <c>gallery_item_user_tag.tag_id</c>, index for ALL‑VAR <c>(pkg_uid, internal_path)</c>, drop redundant <c>idx_giut_lookup</c>.
-        /// Rebuilds link table when existing DB predates FK (SQLite cannot ALTER ADD FK).
-        /// </summary>
         private static void TryEnsureGalleryItemUserTagSchemaV11(VpbSqlite3.Connection conn)
         {
             if (conn == null) return;
@@ -82,7 +77,6 @@ namespace VPB
             }
         }
 
-        /// <summary>v13: add nullable <c>category_id</c> to <c>gallery_user_tag</c> (FK to <c>gallery_user_tag_category</c>). SQLite ALTER ADD COLUMN is safe for a nullable column on existing DBs.</summary>
         private static void TryEnsureGalleryUserTagCategoryColumn(VpbSqlite3.Connection conn)
         {
             if (conn == null) return;
@@ -112,10 +106,8 @@ namespace VPB
         internal const int GalleryUserTagMaxPerItem = 100;
         internal const int GalleryUserTagPasteMaxUniqueNames = 10000;
 
-        /// <summary>pkg_uid for on-disk files outside a .var (Custom/, Saves/, etc.) in <c>gallery_item_user_tag</c>.</summary>
         internal const string GalleryUserTagLoosePkgUid = "__local__";
 
-        /// <summary>Stable relative path (forward slashes) from first VAM root segment for loose file user-tag rows.</summary>
         internal static string NormalizeLoosePathForGalleryUserTag(string path)
         {
             if (string.IsNullOrEmpty(path)) return "";
@@ -129,10 +121,6 @@ namespace VPB
             return p;
         }
 
-        /// <summary>
-        /// Normalize gallery user tag: trim ends, lowercase for stable dedupe, allow unicode/emoji/punctuation/spaces/slashes;
-        /// reject null, line breaks, most control chars (tab allowed); length 1–<see cref="GalleryUserTagNameMaxLength"/>.
-        /// </summary>
         internal static string NormalizeGalleryUserTagName(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";
@@ -149,7 +137,6 @@ namespace VPB
             return s;
         }
 
-        /// <summary>Cave say: some chars bad for Windows file names; DB still store, cave warn honest.</summary>
         internal static bool GalleryUserTagNameHasFilesystemRisk(string normalizedName, out string distinctBadCharsHuman)
         {
             distinctBadCharsHuman = "";
@@ -287,7 +274,6 @@ namespace VPB
             sb.Append("))");
         }
 
-        /// <summary>Restrict <c>cat_mem</c> rows to items with no SQLite user tags (browse category semantics).</summary>
         internal static void AppendSqlNoUserTagExists(StringBuilder sb, string mAlias, string categoryTitle, bool everythingView = false)
         {
             if (sb == null || string.IsNullOrEmpty(mAlias)) return;
@@ -301,7 +287,6 @@ namespace VPB
             sb.Append(')');
         }
 
-        /// <summary>Restrict <c>cat_mem</c> rows to items that have at least one SQLite user tag.</summary>
         internal static void AppendSqlHasAnyUserTagExists(StringBuilder sb, string mAlias, string categoryTitle, bool everythingView = false)
         {
             if (sb == null || string.IsNullOrEmpty(mAlias)) return;
@@ -315,7 +300,6 @@ namespace VPB
             sb.Append(')');
         }
 
-        /// <summary>True when row has no user tags for current browse semantics (ALL VAR package rows use package-wide check).</summary>
         internal static bool TryGalleryRowHasNoUserTags(string categoryTitle, string pkgUid, string internalPath)
         {
             if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle)) return true;
@@ -326,7 +310,6 @@ namespace VPB
             return !TryHasAnyGalleryUserTagsForRow(categoryTitle, pkgUid, internalPath);
         }
 
-        /// <summary>Side tab: distinct user tag names with counts for current category (+ creator/path filters).</summary>
         internal static bool TryReadGalleryUserTagSideTabCounts(
             string categoryTitle,
             string creatorFilter,
@@ -337,10 +320,6 @@ namespace VPB
             if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
             if (string.IsNullOrEmpty(categoryTitle)) return false;
 
-            // Counts INNER JOIN cat_mem. Running before index is ready returns empty rows and
-            // GalleryPanel used to stick that as cached zeros until a tag mutate (issue #84).
-            // Return false so CacheUserTagsSideTab keeps _userTagSideTabCountsReady=false and
-            // EnsureSideTabCountsFreshAfterGridReady retries after SQL index is ready.
             long scanBin = 0;
             try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
             string catSig = null;
@@ -384,8 +363,6 @@ namespace VPB
                     // Path normalize: cat_mem / gut rows may differ by '\' vs '/' only.
                     const string PathNorm = "lower(replace(ifnull(__COL__,''),char(92),'/'))";
                     string pathEqMemGut = PathNorm.Replace("__COL__", "m.internal_path") + "=" + PathNorm.Replace("__COL__", "gut.internal_path");
-                    // ALL VAR: cat_mem has no "ALL VAR" rows; gut.category holds real browse category (Appearance, …).
-                    // Join cat_mem on pkg+path only; DISTINCT avoids double count when same item appears under multiple categories.
                     if (allVarPseudo)
                     {
                         sb.Append("SELECT gt.name, COUNT(DISTINCT gut.pkg_uid || char(31) || lower(replace(ifnull(gut.internal_path,''),char(92),'/')) ) FROM gallery_item_user_tag gut");
@@ -435,7 +412,6 @@ namespace VPB
                     }
 
                     // Loose Custom/Saves use pkg_uid __local__; cat_mem is VAR-only so INNER JOIN above drops them.
-                    // Skip when browsing ALL VAR pseudo-category (grid is VAR-centric; loose rows use real browse categories).
                     if (!allVarPseudo)
                     {
                         var sbLoose = new StringBuilder(220);
@@ -520,7 +496,6 @@ namespace VPB
             }
         }
 
-        /// <summary>One gallery row ↔ user tag link (for YAML export).</summary>
         internal struct GalleryUserTagAssignmentRow
         {
             public string TagName;
@@ -529,7 +504,6 @@ namespace VPB
             public string InternalPath;
         }
 
-        /// <summary>All <c>gallery_item_user_tag</c> rows with tag names (full assignment table).</summary>
         internal static bool TryReadAllGalleryUserTagAssignments(List<GalleryUserTagAssignmentRow> rowsOut)
         {
             rowsOut?.Clear();
@@ -603,7 +577,6 @@ namespace VPB
             return -1;
         }
 
-        /// <summary>Assign normalized tags to one indexed row. Creates tag rows as needed.</summary>
         internal static bool TryAssignGalleryUserTagsToRow(string categoryTitle, string pkgUid, string internalPath, IEnumerable<string> normalizedTagNames, out int inserted)
         {
             inserted = 0;
@@ -714,7 +687,6 @@ namespace VPB
                 {
                     EnsureSchema(conn);
 
-                    // Resolve tag IDs once.
                     tagIds.Clear();
                     foreach (var raw in normalizedTagNames)
                     {
@@ -808,7 +780,6 @@ namespace VPB
                 {
                     EnsureSchema(conn);
 
-                    // Resolve tag IDs once; missing tags => no-op.
                     using (var stSel = conn.Prepare("SELECT tag_id FROM gallery_user_tag WHERE name=?"))
                     {
                         foreach (var n in seen)
@@ -903,24 +874,18 @@ namespace VPB
             }
         }
 
-        /// <summary>Package-level pseudo-category: not represented as <c>cat_mem.category</c>; tags use real browse categories (or this name when applied here).</summary>
         internal static bool IsGalleryAllVarPseudoCategory(string categoryTitle)
         {
             return !string.IsNullOrEmpty(categoryTitle)
                 && string.Equals(categoryTitle.Trim(), "ALL VAR", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>Format for <see cref="TryBuildCatMemRowKeysMatchingAllUserTags"/> / package enumeration lookup (internal path uses /).</summary>
         internal static string FormatCatMemRowLookupKey(string pkgUid, string internalPath)
         {
             string ip = string.IsNullOrEmpty(internalPath) ? "" : internalPath.Replace('\\', '/');
             return string.Concat(pkgUid ?? "", "\x1F", ip);
         }
 
-        /// <summary>
-        /// One query: all cat_mem rows in <paramref name="categoryTitle"/> that satisfy user-tag filter (AND or OR).
-        /// Used when category SQLite bulk query falls back to package scan — avoids per-row <see cref="TryGalleryRowMatchesUserTags"/> on UI thread.
-        /// </summary>
         internal static bool TryBuildCatMemRowKeysMatchingUserTags(
             string categoryTitle,
             HashSet<string> activeUserTags,
@@ -995,9 +960,6 @@ namespace VPB
             return TryBuildCatMemRowKeysMatchingUserTags(categoryTitle, activeUserTags, keysOut, requireAllTags: true);
         }
 
-        /// <summary>
-        /// One query: cat_mem row keys in <paramref name="categoryTitle"/> with no user tags (browse semantics).
-        /// </summary>
         internal static bool TryBuildCatMemRowKeysWithNoUserTags(
             string categoryTitle,
             HashSet<string> keysOut)
@@ -1068,9 +1030,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Distinct (pkg_uid, internal_path) that have every requested tag (AND), ignoring <c>gallery_item_user_tag.category</c>.
-        /// </summary>
         private static bool TryBuildAllVarPkgInternalPathKeysMatchingAllUserTags(
             VpbSqlite3.Connection conn,
             HashSet<string> activeUserTags,
@@ -1119,9 +1078,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Distinct (pkg_uid, internal_path) that have at least one requested tag (OR), ignoring <c>gallery_item_user_tag.category</c>.
-        /// </summary>
         private static bool TryBuildAllVarPkgInternalPathKeysMatchingAnyUserTags(
             VpbSqlite3.Connection conn,
             HashSet<string> activeUserTags,
@@ -1169,7 +1125,6 @@ namespace VPB
             }
         }
 
-        /// <summary>True when row matches listed user tags (AND or OR). Names normalized inside.</summary>
         internal static bool TryGalleryRowMatchesUserTags(string categoryTitle, string pkgUid, string internalPath, HashSet<string> normalizedUserTags, bool requireAllTags)
         {
             if (normalizedUserTags == null || normalizedUserTags.Count == 0) return true;
@@ -1229,15 +1184,12 @@ namespace VPB
             return TryGalleryRowMatchesUserTags(categoryTitle, pkgUid, internalPath, normalizedUserTags, requireAllTags: true);
         }
 
-        /// <summary>True when row carries NONE of <paramref name="excludedUserTags"/> (none-of / exclude filter). Empty set passes.</summary>
         internal static bool TryGalleryRowHasNoneOfUserTags(string categoryTitle, string pkgUid, string internalPath, HashSet<string> excludedUserTags)
         {
             if (excludedUserTags == null || excludedUserTags.Count == 0) return true;
-            // requireAllTags:false → returns true if the row has ANY of the tags; none-of is the negation.
             return !TryGalleryRowMatchesUserTags(categoryTitle, pkgUid, internalPath, excludedUserTags, requireAllTags: false);
         }
 
-        /// <summary>Tags on one indexed row; reuses <paramref name="conn"/> (one connection for many rows — selection pane, batch export).</summary>
         internal static bool TryGetGalleryUserTagsForRow(VpbSqlite3.Connection conn, string categoryTitle, string pkgUid, string internalPath, HashSet<string> outNames)
         {
             outNames?.Clear();
@@ -1245,7 +1197,6 @@ namespace VPB
             try
             {
                 bool allVarPseudo = IsGalleryAllVarPseudoCategory(categoryTitle);
-                // ALL VAR browse: tags live under real categories; union names for this pkg/path (Applied pane, exports).
                 string sql = allVarPseudo
                     ? "SELECT DISTINCT gt.name FROM gallery_item_user_tag gut INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id WHERE gut.pkg_uid=? AND gut.internal_path=?"
                     : "SELECT gt.name FROM gallery_item_user_tag gut INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id WHERE gut.category=? AND gut.pkg_uid=? AND gut.internal_path=?";
@@ -1293,10 +1244,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// One connection: all user tags for a gallery category keyed by <see cref="FormatCatMemRowLookupKey"/>.
-        /// Used during Appearance gender filtering to avoid per-row SQLite opens.
-        /// </summary>
         internal static bool TryLoadGalleryUserTagsForCategory(string categoryTitle, Dictionary<string, HashSet<string>> tagsByRowKey)
         {
             tagsByRowKey?.Clear();
@@ -1337,7 +1284,6 @@ namespace VPB
             }
         }
 
-        /// <summary>True if <c>gallery_item_user_tag</c> has at least one row for this item (lightweight for grid badge).</summary>
         internal static bool TryHasAnyGalleryUserTagsForRow(string categoryTitle, string pkgUid, string internalPath)
         {
             if (!VpbSqlite3.IsAvailable) return false;
@@ -1355,10 +1301,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// True if any row in <c>gallery_item_user_tag</c> exists for this package (any internal_path).
-        /// Used for ALL VAR package rows when tags were applied to child items (inherit mode).
-        /// </summary>
         internal static bool TryHasAnyGalleryUserTagsForPackageAnyPath(string pkgUid)
         {
             if (!VpbSqlite3.IsAvailable) return false;
@@ -1376,7 +1318,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Distinct user-tag names on any path inside a package (ALL VAR package-row tooltip).</summary>
         internal static bool TryGetGalleryUserTagsForPackageAnyPath(string pkgUid, HashSet<string> outNames)
         {
             outNames?.Clear();
@@ -1453,8 +1394,6 @@ namespace VPB
             }
         }
 
-
-        /// <summary>Aggregates tag→how many selected rows have it, single DB connection (vs N opens per row).</summary>
         internal static bool TryAccumulateGalleryUserTagSelectionCounts(
             string categoryTitle,
             List<KeyValuePair<string, string>> uniquePkgInternalPaths,
@@ -1511,7 +1450,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Remove all gallery_item_user_tag rows for tag and delete its gallery_user_tag row.</summary>
         internal static bool TryPurgeGalleryUserTagGlobally(string normalizedName, out int itemLinksRemoved)
         {
             itemLinksRemoved = 0;
@@ -1571,7 +1509,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Move all item assignments from source tags into <paramref name="rawTargetName"/>; delete emptied source tag rows. Target row is created if missing.</summary>
         internal static bool TryMergeGalleryUserTagsInto(IEnumerable<string> sourceDisplayNames, string rawTargetName, out string normalizedTargetOut, out int itemAssignmentsUpdated)
         {
             normalizedTargetOut = "";
@@ -1671,7 +1608,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Shared prefix-rename target list: exact <paramref name="normPrefix"/> row plus rows named <c>normPrefix + " " + …</c>.</summary>
         private static bool TryBuildGalleryUserTagRenameTargets(string normPrefix, string normalizedNewOut, out List<KeyValuePair<long, string>> targetsOut)
         {
             targetsOut = null;
@@ -1733,9 +1669,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// True if some rename target name already exists on another <c>tag_id</c> (assignments would merge into that row).
-        /// </summary>
         internal static bool TryPreviewGalleryUserTagRenameMergeConflict(string rawPrefixName, string rawNewName, out string normalizedNewOut, out bool wouldMergeIntoExistingTag)
         {
             normalizedNewOut = "";
@@ -1779,10 +1712,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Renames <paramref name="rawPrefixName"/> to <paramref name="rawNewName"/> and renames every tag whose name is
-        /// <c>prefix + " " + …</c> so the same prefix is replaced (space-separated “child” tag names in vocabulary).
-        /// </summary>
         internal static bool TryRenameGalleryUserTagPrefixWithChildren(string rawPrefixName, string rawNewName, out string normalizedNewOut, out int itemAssignmentsUpdated)
         {
             normalizedNewOut = "";
@@ -1864,8 +1793,6 @@ namespace VPB
             }
         }
 
-        // --- BA migration helpers ---
-
         internal struct GalleryUserTagImportRow
         {
             public string Category;
@@ -1874,7 +1801,6 @@ namespace VPB
             public string[] Tags;
         }
 
-        /// <summary>Retrieves category membership for a single gallery item from cat_mem.</summary>
         internal static bool TryGetCategoryForItem(string pkgUid, string internalPath, out string category)
         {
             category = null;
@@ -1902,7 +1828,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Bulk-insert gallery user tag assignments; ignores duplicates. Respects <see cref="GalleryUserTagMaxPerItem"/> cap.</summary>
         internal static bool BulkMergeGalleryUserTags(IList<GalleryUserTagImportRow> rows)
         {
             if (rows == null || rows.Count == 0) return true;
@@ -1969,7 +1894,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Remove specific user tags from a gallery item (BA migration reset).</summary>
         internal static bool RemoveGalleryUserTagsForItem(string category, string pkgUid, string internalPath, IEnumerable<string> tags)
         {
             return TryRemoveGalleryUserTagsFromRow(category, pkgUid, internalPath.Replace('\\', '/'), tags, out _);

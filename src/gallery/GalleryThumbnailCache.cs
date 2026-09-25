@@ -14,7 +14,6 @@ namespace VPB
         private const int CACHE_HEADER_SIZE = 20;
         private const string VarCacheKeyPrefix = "VAR:/";
 
-        /// <summary>If <c>gallery_thumbnails.bin</c> exceeds this on open, file is deleted and rebuilt empty (full scan + huge dict OOM/hang).</summary>
         private const long MaxThumbnailCacheFileBytes = 6L * 1024 * 1024 * 1024;
 
         /// <summary>Stop scanning and truncate tail after this many index rows (RAM bound for path strings + dict).</summary>
@@ -50,11 +49,6 @@ namespace VPB
         private Dictionary<string, CacheEntry> index = new Dictionary<string, CacheEntry>(StringComparer.OrdinalIgnoreCase);
         private bool savingDisabled = false;
 
-        /// <summary>
-        /// When true, SaveThumbnail is a no-op. Set from the main thread while the user is
-        /// actively scrolling or thumbnails are loading, to prevent background threads from
-        /// contending on the write lock and stalling disk I/O.
-        /// </summary>
         public volatile bool SavingPaused = false;
 
         private struct CacheEntry
@@ -464,7 +458,6 @@ namespace VPB
         public bool IsPackagePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
-            // Windows drive abs paths contain ":/" (C:/...) — not VaM pkg:/internal.
             if (LocalSceneGallerySupport.IsWindowsDriveAbsolutePath(path)) return false;
             return path.Contains(":/") || path.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
         }
@@ -473,16 +466,11 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(path)) return path;
 
-            // Normalize path separators
             string normalizedPath = path.Replace('\\', '/');
 
-            // Handle .var package paths: AddonPackages/Author.Name.Version.var:/Internal/Path
-            // We want to normalize "AddonPackages/Author.Name.Version.var" and "AllPackages/Author.Name.Version.var"
-            // to a location-independent key like "VAR:/Author.Name.Version:/Internal/Path"
-            
             if (normalizedPath.Contains(":/"))
             {
-                int colonIndex = normalizedPath.IndexOf(":/");
+                int colonIndex = normalizedPath.IndexOf(":/", StringComparison.Ordinal);
                 string pkgPath = normalizedPath.Substring(0, colonIndex);
                 string internalPath = normalizedPath.Substring(colonIndex + 2);
 
@@ -492,7 +480,6 @@ namespace VPB
                     return "VAR:/" + pkgName + ":/" + internalPath;
                 }
             }
-            // Also handle the package file itself being the target (e.g. for scene gallery)
             else if (normalizedPath.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || normalizedPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 if (normalizedPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) || 
@@ -505,7 +492,6 @@ namespace VPB
             return normalizedPath;
         }
 
-        /// <summary>Disk index key; optional <c>|tjN</c> suffix separates TurboJPEG scaled thumbnail tiers (N = 2, 4, 8).</summary>
         public string GetThumbnailCacheKey(string path, int turboJpegScaleDenom = 1)
         {
             string k = GetCacheKey(path);
@@ -513,9 +499,6 @@ namespace VPB
             return k + "|tj" + turboJpegScaleDenom;
         }
 
-        /// <summary>
-        /// Drop disk index rows for <paramref name="path"/> (all TurboJPEG tiers) so the next load re-reads the file from disk.
-        /// </summary>
         public void InvalidateThumbnailForPath(string path)
         {
             if (string.IsNullOrEmpty(path)) return;
@@ -670,8 +653,7 @@ namespace VPB
 
         public void SaveThumbnail(string path, byte[] data, int dataLength, int width, int height, TextureFormat format, long lastWriteTime, int turboJpegScaleDenom = 1)
         {
-            // Checked before acquiring any lock so background threads pay zero cost
-            // when the gallery is actively scrolling or loading thumbnails.
+            // Checked before locking so background threads pay nothing while gallery is busy.
             if (SavingPaused) return;
 
             if (IsPackagePath(path)) lastWriteTime = 0;
@@ -790,12 +772,10 @@ namespace VPB
 
             if (nearSquare)
             {
-                // Center-crop: blit source into square; RawImage uvRect handles sub-pixel precision at display time.
                 Graphics.Blit(sourceTex, squareRT);
             }
             else
             {
-                // Fit entire image inside square, centered, black bars fill the rest.
                 int fitW, fitH;
                 if (ratio > 1f) { fitW = size; fitH = Mathf.Max(1, Mathf.RoundToInt(size / ratio)); }
                 else            { fitH = size; fitW = Mathf.Max(1, Mathf.RoundToInt(size * ratio)); }
@@ -854,15 +834,15 @@ namespace VPB
                         string key = kvp.Key;
                         bool keep = false;
 
-                        if (key.StartsWith("VAR:/"))
+                        if (key.StartsWith("VAR:/", StringComparison.Ordinal))
                         {
-                            int secondSlash = key.IndexOf(":/", 5);
+                            int secondSlash = key.IndexOf(":/", 5, StringComparison.Ordinal);
                             string pkgNameWithExt = "";
                             if (secondSlash > 5)
                             {
                                 pkgNameWithExt = key.Substring(5, secondSlash - 5);
                             }
-                            else if (key.EndsWith(".var") || key.EndsWith(".zip"))
+                            else if (key.EndsWith(".var", StringComparison.Ordinal) || key.EndsWith(".zip", StringComparison.Ordinal))
                             {
                                 pkgNameWithExt = key.Substring(5);
                             }

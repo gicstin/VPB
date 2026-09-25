@@ -5,14 +5,8 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Scene Import detachable float (Filter Presets pattern): one tree reparents dock↔canvas;
-    /// drag / resize / collapse / X hide-keep; Dock reattaches and stays open.
-    /// </summary>
     public partial class GalleryPanel
     {
-        // Float shell colors live in ImportSidebar.Chrome (Settings Surface* ladder).
-
         private bool importSidebarDetached;
         private bool importSidebarFloatCollapsed;
         private float? importSidebarExpandHeightRef;
@@ -32,7 +26,6 @@ namespace VPB
         private Text importSidebarFloatDetachBtnText;
         private Image importSidebarRootBg;
 
-        /// <summary>True when import UI occupies the side column (grid inset / chrome suppress).</summary>
         private bool ImportSidebarOccupiesSideColumn
         {
             get { return importSidebarActive && !importSidebarDetached; }
@@ -40,10 +33,8 @@ namespace VPB
 
         public bool IsImportSidebarDetached { get { return importSidebarDetached; } }
 
-        /// <summary>ALT+I — open/close floating Scene Import (detach if needed; hide keeps float).</summary>
         public void ToggleFloatingImportSidebar()
         {
-            // Already floating: always allow hide-keep regardless of category.
             if (importSidebarActive && importSidebarDetached)
             {
                 HideImportSidebarFloatKeepDetach();
@@ -68,7 +59,6 @@ namespace VPB
             EnsureImportSidebarDetachedAndVisible();
         }
 
-        /// <summary>Esc while floating Scene Import: hide-keep-detach.</summary>
         internal bool TryHandleImportSidebarFloatEsc()
         {
             if (!importSidebarActive || !importSidebarDetached) return false;
@@ -106,7 +96,6 @@ namespace VPB
             PersistImportSidebarOpenIntent();
         }
 
-        /// <summary>Docked header chip → float (reparent to canvas).</summary>
         private void DetachImportSidebar()
         {
             if (importSidebarDetached) return;
@@ -120,20 +109,17 @@ namespace VPB
             }
             ApplyImportSidebarDetachChrome(reposition: true, persist: true);
             ApplyImportSidebarBaseRect(ChromeScale);
-            // Clamp is visual-only now — capture post-layout center so first detach persists
-            // without requiring a drag (matches prior Clamp writeback behavior).
+            // Clamp is visual-only; capture post-layout center so first detach persists.
             CaptureImportSidebarFloatGeometryToMemory();
             PersistImportSidebarFloatGeometry();
             RebuildImportSidebarContent();
             try { UpdateLayout(); } catch { }
             UpdateImportToggleBtnVisual();
-            // Leaving docked sticky → modeless float: restore gallery task chrome.
             try { InvalidateTaskChrome(); } catch { }
             try { RefreshModeAmbientChrome(); } catch { }
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
-        /// <summary>Float footer Dock → reattach side column; stay open (work surface).</summary>
         private void DockImportSidebar()
         {
             if (!ImportSidebarCategoryAllowed())
@@ -312,7 +298,6 @@ namespace VPB
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
 
-            // Full-footer drag hit (behind Dock/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(importSidebarFloatFooterGO);
             if (footerDragArea != null)
             {
@@ -405,7 +390,6 @@ namespace VPB
             SyncImportSidebarFloatCollapseButtonVisual();
         }
 
-        /// <summary>Docked scroll-list row — legacy; header Float chip is preferred (filter-presets pattern).</summary>
         private void BuildImportSidebarFloatDetachRow()
         {
             if (importSidebarScrollContentRT == null) return;
@@ -460,7 +444,6 @@ namespace VPB
             AddTooltip(btn, "gallery.import.tip.detach",
                 "Detach as floating window (move / resize). Toggle float{hint:import_sidebar}");
 
-            // Built while docked; hide if already restoring as float.
             btn.SetActive(!importSidebarDetached);
         }
 
@@ -488,25 +471,11 @@ namespace VPB
             {
                 if (VPBConfig.Instance == null) return;
                 importSidebarDetached = VPBConfig.Instance.GalleryImportSidebarDetached;
-                if (VPBConfig.Instance.GalleryImportSidebarPosSaved)
-                {
-                    importSidebarSavedFloatPosCenter = new Vector2(
-                        VPBConfig.Instance.GalleryImportSidebarPosX,
-                        VPBConfig.Instance.GalleryImportSidebarPosY);
-                }
-                if (VPBConfig.Instance.GalleryImportSidebarSizeSaved)
-                {
-                    float w = VPBConfig.Instance.GalleryImportSidebarWidthRef;
-                    float h = VPBConfig.Instance.GalleryImportSidebarHeightRef;
-                    if (w >= GalleryUiDesignTokens.ImportSidebarFloatMinWidthRef
-                        && h >= GalleryUiDesignTokens.ImportSidebarFloatMinHeightRef)
-                    {
-                        // Prefer absolute ceiling on load (host may not be ready); live layout clamps to host.
-                        importSidebarSavedFloatSizeRef = new Vector2(
-                            Mathf.Clamp(w, GalleryUiDesignTokens.ImportSidebarFloatMinWidthRef, GalleryUiDesignTokens.ImportSidebarFloatAbsoluteMaxWidthRef),
-                            Mathf.Clamp(h, GalleryUiDesignTokens.ImportSidebarFloatMinHeightRef, GalleryUiDesignTokens.ImportSidebarFloatAbsoluteMaxHeightRef));
-                    }
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GalleryImportSidebarGeometry.Current;
+                importSidebarSavedFloatPosCenter = slot.SavedPos;
+                importSidebarSavedFloatSizeRef = slot.SavedSize(
+                    new Vector2(GalleryUiDesignTokens.ImportSidebarFloatMinWidthRef, GalleryUiDesignTokens.ImportSidebarFloatMinHeightRef),
+                    new Vector2(GalleryUiDesignTokens.ImportSidebarFloatAbsoluteMaxWidthRef, GalleryUiDesignTokens.ImportSidebarFloatAbsoluteMaxHeightRef));
             }
             catch { }
         }
@@ -542,21 +511,17 @@ namespace VPB
 
                 if (reposition)
                 {
-                    // Saved center (config / prior float) or pane center when unset.
-                    // Must run only after reparent to float host (canvas-local space).
                     ApplyImportSidebarFloatAnchorsAndPos(ChromeScale > 0f ? ChromeScale : 1f);
                 }
             }
 
             if (importSidebarRoot != null)
                 importSidebarRoot.transform.SetAsLastSibling();
-            // Title/footer above body/apply so drag hits reach chrome.
             if (importSidebarFloatTitleBarGO != null)
                 importSidebarFloatTitleBarGO.transform.SetAsLastSibling();
             if (importSidebarFloatFooterGO != null)
                 importSidebarFloatFooterGO.transform.SetAsLastSibling();
 
-            // Reparent may change host size — clamp saved geometry to new ceiling.
             if (!importSidebarFloatCollapsed && importSidebarSavedFloatSizeRef.HasValue)
             {
                 importSidebarSavedFloatSizeRef = new Vector2(
@@ -607,13 +572,10 @@ namespace VPB
 
         private GameObject ResolveImportSidebarFloatHost()
         {
-            // Canvas sibling of pane — drag outside gallery box; survives dock collapse
-            // (backgroundBoxGO.SetActive(false)). Same host as Filter Presets / Strip Keep.
             if (canvas != null) return canvas.gameObject;
             return backgroundBoxGO;
         }
 
-        /// <summary>Gallery pane center in float-host local space (canvas ≠ pane in fixed overlay).</summary>
         private Vector2 ImportSidebarPaneCenterInFloatHost()
         {
             RectTransform paneRT = backgroundBoxGO != null ? backgroundBoxGO.GetComponent<RectTransform>() : null;
@@ -673,14 +635,10 @@ namespace VPB
             Vector2 center = importSidebarSavedFloatPosCenter.HasValue
                 ? importSidebarSavedFloatPosCenter.Value
                 : ImportSidebarPaneCenterInFloatHost();
-            importSidebarRT.anchoredPosition = ImportSidebarCenterToTopLeft(center, size);
+            importSidebarRT.anchoredPosition = FloatPanelCoords.CenterToTopLeft(center, size);
             ClampImportSidebarFloatIntoHost();
         }
 
-        /// <summary>
-        /// Free float like Settings/Plugins — no host clamp (user may park off-screen).
-        /// Call sites kept for layout/resize hooks; body intentionally empty.
-        /// </summary>
         private void ClampImportSidebarFloatIntoHost()
         {
         }
@@ -749,7 +707,7 @@ namespace VPB
                 float s = ChromeScale > 0f ? ChromeScale : 1f;
                 float w = ResolveImportSidebarFloatWidthRef() * s;
                 float h = ResolveImportSidebarFloatHeightRef() * s;
-                importSidebarSavedFloatPosCenter = ImportSidebarTopLeftToCenter(
+                importSidebarSavedFloatPosCenter = FloatPanelCoords.TopLeftToCenter(
                     importSidebarCollapsedTopLeftPos.Value, new Vector2(w, h));
                 PersistImportSidebarFloatGeometry();
                 return;
@@ -760,10 +718,7 @@ namespace VPB
 
         private void OnImportSidebarFloatResizing()
         {
-            // Capture live size only — full ApplyImportSidebarBaseRect repositions from center and
-            // rebuilds chrome every drag tick (jitter + unnecessary work). End-drag applies layout.
-            // Type-radio grid uses fixed cellSize/preferredWidth — must sync here or 2-col chips lag
-            // until mouse-up (HLG flexibleWidth rows stretch on their own).
+            // Capture live size only during drag; end-drag applies layout. Sync type-radio grid cell size here.
             CaptureImportSidebarFloatGeometryToMemory();
             ClampImportSidebarFloatIntoHost();
             try
@@ -799,7 +754,7 @@ namespace VPB
         {
             if (importSidebarRT == null || importSidebarFloatCollapsed) return;
             float s = ChromeScale > 0f ? ChromeScale : 1f;
-            importSidebarSavedFloatPosCenter = ImportSidebarTopLeftToCenter(
+            importSidebarSavedFloatPosCenter = FloatPanelCoords.TopLeftToCenter(
                 importSidebarRT.anchoredPosition, importSidebarRT.sizeDelta);
             float maxW = ResolveImportSidebarFloatMaxWidthRef();
             float maxH = ResolveImportSidebarFloatMaxHeightRef();
@@ -835,21 +790,11 @@ namespace VPB
         private void PersistImportSidebarFloatGeometryFieldsOnly()
         {
             if (VPBConfig.Instance == null) return;
-            if (importSidebarSavedFloatPosCenter.HasValue)
-            {
-                VPBConfig.Instance.GalleryImportSidebarPosSaved = true;
-                VPBConfig.Instance.GalleryImportSidebarPosX = importSidebarSavedFloatPosCenter.Value.x;
-                VPBConfig.Instance.GalleryImportSidebarPosY = importSidebarSavedFloatPosCenter.Value.y;
-            }
-            if (importSidebarSavedFloatSizeRef.HasValue)
-            {
-                VPBConfig.Instance.GalleryImportSidebarSizeSaved = true;
-                VPBConfig.Instance.GalleryImportSidebarWidthRef = importSidebarSavedFloatSizeRef.Value.x;
-                VPBConfig.Instance.GalleryImportSidebarHeightRef = importSidebarSavedFloatSizeRef.Value.y;
-            }
+            FloatGeometrySlot slot = VPBConfig.Instance.GalleryImportSidebarGeometry.Current;
+            slot.StorePos(importSidebarSavedFloatPosCenter);
+            slot.StoreSize(importSidebarSavedFloatSizeRef);
         }
 
-        /// <summary>Float host rect in local units (canvas or panel). Zero if unavailable.</summary>
         private Vector2 ResolveImportSidebarFloatHostSizeLocal()
         {
             RectTransform hostRT = null;
@@ -867,10 +812,6 @@ namespace VPB
             return new Vector2(Mathf.Abs(r.width), Mathf.Abs(r.height));
         }
 
-        /// <summary>
-        /// Max float size in local px. Ceiling is host−2×margin so clamp can keep title+footer in pane.
-        /// Token is fallback when host rect unknown.
-        /// </summary>
         private Vector2 ResolveImportSidebarFloatMaxSizeLocal()
         {
             float s = ChromeScale > 0f ? ChromeScale : 1f;
@@ -918,16 +859,6 @@ namespace VPB
         private Vector2 GetImportSidebarFloatMaxSizeScaled()
         {
             return ResolveImportSidebarFloatMaxSizeLocal();
-        }
-
-        private static Vector2 ImportSidebarCenterToTopLeft(Vector2 center, Vector2 size)
-        {
-            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
-        }
-
-        private static Vector2 ImportSidebarTopLeftToCenter(Vector2 topLeft, Vector2 size)
-        {
-            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
         }
 
         private static void SetImportSidebarLayerRecursive(GameObject go, int layer)

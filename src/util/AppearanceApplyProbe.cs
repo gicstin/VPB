@@ -6,10 +6,6 @@ using UnityEngine;
 
 namespace VPB.src.util
 {
-    /// <summary>
-    /// Warm-path apply diagnostics for Appearance / person-preset routing.
-    /// Not for per-frame use — string format OK here (Unity GC: temporary allocs on cold/warm only).
-    /// </summary>
     internal static class AppearanceApplyProbe
     {
         const string Prefix = "[VPB.AppApply]";
@@ -99,7 +95,6 @@ namespace VPB.src.util
             catch { }
         }
 
-        /// <summary>One-line route decision for Actions / drag apply.</summary>
         public static void Route(
             string category,
             string path,
@@ -136,7 +131,6 @@ namespace VPB.src.util
                     LogUtil.Log(sb.ToString());
                 }
 
-                // Category vs path mismatch — common "appearance click did nothing useful" case.
                 string cat = category ?? "";
                 if (cat.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
                     && !pathAppearance
@@ -149,10 +143,6 @@ namespace VPB.src.util
             catch { }
         }
 
-        /// <summary>
-        /// If user is in Appearance category but FileEntry points at BreastPhysics/Skin/Morphs/etc
-        /// with the same Preset_*.vap name, prefer the package's Appearance sibling.
-        /// </summary>
         public static FileEntry TryRemapToAppearanceSibling(FileEntry entry, string category)
         {
             if (entry == null) return null;
@@ -191,7 +181,6 @@ namespace VPB.src.util
                 FileEntry sibling = FileManager.GetFileEntry(candidate);
                 if (sibling == null)
                 {
-                    // Try with common package prefix from original uid.
                     int colon = norm.IndexOf(":/", StringComparison.Ordinal);
                     if (colon > 0)
                     {
@@ -248,8 +237,6 @@ namespace VPB.src.util
                     else if (string.Equals(id, "geometry", StringComparison.OrdinalIgnoreCase))
                     {
                         geometry++;
-                        // VaM stores worn item selection inside DAZCharacterSelector's geometry
-                        // storable. Top-level clothingItem/hairItem storables only hold materials.
                         var geometryClothing = s["clothing"] as SimpleJSON.JSONArray;
                         var geometryHair = s["hair"] as SimpleJSON.JSONArray;
                         if (geometryClothing != null) clothing += geometryClothing.Count;

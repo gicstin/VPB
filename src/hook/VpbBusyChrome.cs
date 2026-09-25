@@ -4,13 +4,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// External ScreenSpaceOverlay busy chrome above game layer.
-    /// Driven by <see cref="VpbProgressService"/>. Progress mode: centered row at Screen.width/φ
-    /// + thin bottom progress line. Layout/fonts follow gallery
-    /// <see cref="GalleryUiMetrics.ChromeScale"/> live (Ctrl+Alt+=/− and host monitor UI scale).
-    /// Summary report uses same scale.
-    /// </summary>
     internal sealed class VpbBusyChrome : MonoBehaviour
     {
         private static VpbBusyChrome s_Instance;
@@ -50,15 +43,11 @@ namespace VPB
         private const float IndeterminateStripWidth01 = 0.28f;
         private const float IndeterminateCycleSec = 1.35f;
 
-        // Design refs @ ChromeScale 1.0
-        /// <summary>Progress banner width = Screen.width / φ (golden section of screen).</summary>
         private const float BannerWidthProgressPhi = 1.618f;
         private const float BannerWidthSummaryRef = 900f;
-        /// <summary>Match gallery footer info row height (FontBody at ChromeScale 1).</summary>
         private const float BannerHeightProgressRef = GalleryUiDesignTokens.FooterInfoRowHeightRef;
         private const float BannerHeightSummaryRef = 268f;
         private const float BannerTopInsetRef = GalleryUiDesignTokens.ControlGapRef;
-        /// <summary>Discrete 2px meter — not full-row underlay.</summary>
         private const float BarHeightRef = GalleryUiDesignTokens.HairGapRef;
         private const float ContentAboveBarGapRef = GalleryUiDesignTokens.TightGapRef;
         private const float TextRowPadTopRef = GalleryUiDesignTokens.HairGapRef;
@@ -162,7 +151,6 @@ namespace VPB
         {
             TrySubscribeConfigChanged();
 
-            // Own hotkey path so scale works while busy chrome is up (shared frame guard).
             try { GalleryUiScaleHotkey.TryNudgeFromKeyboard(); } catch { }
             try { GalleryUiScaleHotkey.TickDeferredSave(); } catch { }
 
@@ -260,7 +248,6 @@ namespace VPB
         {
             try
             {
-                // Screen-space overlay — same host/pane factors as fixed desktop dock.
                 float s = GalleryUiMetrics.Resolve(true).ChromeScale;
                 if (s > 0f) return s;
             }
@@ -312,7 +299,6 @@ namespace VPB
 
         private void ApplyScaledFonts(float s)
         {
-            // Same FontBodyRef + ApplyFont path as gallery chrome (size match).
             ApplyGalleryBodyFont(m_VersionText, s);
             if (m_VersionText != null) m_VersionText.fontStyle = FontStyle.Bold;
 
@@ -353,8 +339,6 @@ namespace VPB
             m_Canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             m_Canvas.sortingOrder = 6000;
 
-            // Match gallery pane: ConstantPixelSize + dynamicPixelsPerUnit.
-            // ChromeScale alone drives size — ScaleWithScreenSize was double-scaling vs gallery.
             var scaler = gameObject.AddComponent<CanvasScaler>();
             scaler.dynamicPixelsPerUnit = 4;
 
@@ -368,7 +352,6 @@ namespace VPB
             m_BannerBg.color = BannerBgOpaque;
             m_BannerBg.raycastTarget = false;
 
-            // Thin bottom progress line (discrete meter under the single text row).
             var barBgGO = new GameObject("BarBg");
             barBgGO.transform.SetParent(m_BannerGO.transform, false);
             m_BarBgRT = barBgGO.AddComponent<RectTransform>();
@@ -562,7 +545,6 @@ namespace VPB
         {
             if (m_BannerRT == null) return;
             float s = Scale;
-            // Golden section of screen: W/φ — longer than fixed 720, still not full-bleed.
             float w = Screen.width / BannerWidthProgressPhi;
             if (w < 1f) w = 1f;
             m_BannerRT.anchorMin = new Vector2(0.5f, 1f);
@@ -621,7 +603,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Cancel centered in content band above the thin progress line.</summary>
         private void ApplyCancelButtonLayout()
         {
             if (m_CancelButtonRT == null) return;
@@ -771,8 +752,7 @@ namespace VPB
                 if (m_HeaderSepGO != null) m_HeaderSepGO.SetActive(true);
                 if (m_OkButtonGO != null && !m_OkButtonGO.activeSelf) m_OkButtonGO.SetActive(true);
                 if (m_CancelButtonGO != null && m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(false);
-                // Fonts before layout: ApplyFont may reset Text pivots (center when
-                // FontExtraScale≈1); summary header needs left-top version pivot after.
+                // Fonts before layout: ApplyFont may reset Text pivots (center when FontExtraScale≈1).
                 ApplyScaledFonts(Scale);
                 ApplySummaryBannerFrame();
                 ApplySummaryHeaderLayout();

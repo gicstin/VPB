@@ -17,7 +17,6 @@ namespace VPB
 
     public partial class GalleryPanel
     {
-        // Pretty-name + search-scope diagnostics. Flip to true when investigating label/search behavior.
         internal static bool LogPrettyNameDiagnostics = false;
         private static int s_PrettyNameSampleCount;
         private const int PrettyNameSampleMax = 12;
@@ -43,7 +42,6 @@ namespace VPB
         }
 
         private static readonly Color ColorInactiveRow = GalleryUiColorTokens.RowIdle;
-        /// <summary>Path side row with category count 0 — still listed, visually quieter.</summary>
         private static readonly Color ColorPathZeroCount = GalleryUiColorTokens.RowZero;
         private static readonly Color ColorPathZeroCountText = GalleryUiColorTokens.TextZeroCount;
         private static readonly Color ColorCancelRow = GalleryUiColorTokens.SurfaceMid;
@@ -53,7 +51,6 @@ namespace VPB
         private static readonly Color ColorNewItemRow = GalleryUiColorTokens.AccentNew;
         private static readonly Color ColorFacetActiveRow = GalleryUiColorTokens.AccentFacetGeneric;
 
-        /// <summary>List row label: package uid (Creator.Package.Version) unless legacy file-name mode is on, or pretty mode is on (then the BA-style stripped name wins for every entry kind).</summary>
         private string GetGalleryListRowDisplayName(FileEntry file)
         {
             if (file == null) return "[UNNAMED]";
@@ -70,7 +67,6 @@ namespace VPB
             if (legacy)
                 return string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
 
-            // Non-pretty: Creator.Package.N/leaf (same universal scheme, full uid package part).
             if (file is VarFileEntry vfeTitle)
                 return FormatVarEntryGalleryTitle(vfeTitle, prettyPackage: false);
 
@@ -120,17 +116,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Mirrors BA's resourceDisplayName for every entry kind so pretty mode = stripped label everywhere it renders.
-        /// Order of precedence:
-        ///   1. .vap presets strip 7-char "Preset_" (BA ResourceManifest.cs:4029).
-        ///   2. .json session plugin presets strip 8-char "Plugins_" (BA ResourceManifest.cs:4030).
-        ///   3. VAR package rows (PackageListEntry) render <see cref="VarPackage.Name"/>.
-        ///   4. VarFileEntry (#90 universal): <c>package/leaf</c> (or <c>package.vN/leaf</c> when old versions shown).
-        ///   5. Missing-package rows keep their RequestedUid.
-        ///   6. Loose system files fall back to filename without extension.
-        /// Couples display with search so what users see equals what they can type.
-        /// </summary>
         internal static string GetPrettyEntryDisplayName(FileEntry file)
         {
             return GetPrettyEntryDisplayName(file, null);
@@ -139,7 +124,6 @@ namespace VPB
         internal static string GetPrettyEntryDisplayName(FileEntry file, string categoryHint)
         {
             if (file == null) return "[UNNAMED]";
-            // categoryHint retained for call-site compatibility; dual caption = leaf≠package (no sibling SQL).
 
             string raw = file.Name;
             if (!string.IsNullOrEmpty(raw))
@@ -178,13 +162,7 @@ namespace VPB
             return file.Path ?? "[UNNAMED]";
         }
 
-        /// <summary>
-        /// Universal VAR item title for all categories (#90).
-        /// Pretty: <c>package/leaf</c>; when old versions visible: <c>package.vN/leaf</c>.
-        /// Non-pretty: <c>Creator.Package.N/leaf</c>.
-        /// Leaf = file basename stem (same as thumb placeholder). Scrubs creator prefix then collapses when leaf ≈ package name.
-        /// Scroll-safe: uid parse + string ops only — no SQLite.
-        /// </summary>
+        /// <summary>Universal VAR item title for all categories (#90).</summary>
         private static string FormatVarEntryGalleryTitle(VarFileEntry vfe, bool prettyPackage)
         {
             string pkgPart;
@@ -197,13 +175,6 @@ namespace VPB
             return pkgPart + "/" + leaf;
         }
 
-        /// <summary>
-        /// Split VAR title into package + leaf (+ creator) for grid captions.
-        /// <paramref name="dual"/> false → use <paramref name="pkgPart"/> alone (collapsed / parse-fail leaf-only).
-        /// When dual, primary UI line = leaf, secondary = pkgPart; creator sits on primary row right.
-        /// Creator scrub on package + leaf (prefix/suffix/brackets/glued). Collapse: seps, dots≈underscores, alnum, 1-edit typo.
-        /// Warm-path: uid parse + index compares; Substring/humanize/alnum-key alloc only when needed.
-        /// </summary>
         private static bool TryGetVarGalleryTitleParts(
             VarFileEntry vfe,
             bool prettyPackage,
@@ -239,11 +210,9 @@ namespace VPB
                 return false;
             }
 
-            // Creator lives on the right — strip from package + leaf titles (prefix + suffix).
             packageName = ScrubCreatorFromGalleryName(packageName, creator);
             leaf = ScrubCreatorFromGalleryName(leaf, creator);
 
-            // Collapse when leaf ≈ package (seps / version dots / apostrophe noise / 1-char typo).
             if (string.IsNullOrEmpty(leaf)
                 || GalleryTitlesShouldCollapse(leaf, packageName))
             {
@@ -258,7 +227,6 @@ namespace VPB
                 return true;
             }
 
-            // True dual — different content; still humanize separators for scan.
             if (prettyPackage)
             {
                 leaf = HumanizeGalleryNameSeparators(leaf);
@@ -273,9 +241,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Package-list row caption from deferred UID — no <see cref="PackageListEntry.Package"/> resolve on bind.
-        /// </summary>
         private static bool TryGetPackageListGalleryLabel(
             PackageListEntry ple,
             out string pkgPart,
@@ -312,7 +277,6 @@ namespace VPB
             return packageName + ".v" + version.ToString();
         }
 
-        /// <summary>Prefix then suffix creator scrub.</summary>
         private static string ScrubCreatorFromGalleryName(string name, string creator)
         {
             if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(creator)) return name;
@@ -320,12 +284,6 @@ namespace VPB
             return ScrubCreatorSuffixFromName(name, creator);
         }
 
-        /// <summary>
-        /// Strip leading creator from a package/leaf title when boundary is clear.
-        /// Matches: <c>Creator_rest</c>, <c>Creator.rest</c>, <c>Creator-rest</c>, <c>Creator rest</c>,
-        /// or glued catalog form <c>Creator013_rest</c> (digit immediately after creator).
-        /// No alloc on miss; one Substring on hit. Empty remainder → original.
-        /// </summary>
         private static string ScrubCreatorPrefixFromName(string name, string creator)
         {
             if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(creator)) return name;
@@ -359,11 +317,6 @@ namespace VPB
             return name.Substring(start);
         }
 
-        /// <summary>
-        /// Strip trailing creator: <c>Name_Creator</c>, <c>Name - Creator</c>, <c>Name[Creator]</c>,
-        /// or glued <c>NameCreator</c> when creator length >= 4 and remainder >= 3.
-        /// Mined from local Scenes index (~545 separator-suffix cases).
-        /// </summary>
         private static string ScrubCreatorSuffixFromName(string name, string creator)
         {
             if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(creator)) return name;
@@ -405,10 +358,6 @@ namespace VPB
             return name;
         }
 
-        /// <summary>
-        /// True when leaf and package should share one caption.
-        /// Order: exact → sep-loose (incl. <c>.</c> for 1_1≈1.1) → alnum-key → 1-edit typo (min len 6).
-        /// </summary>
         private static bool GalleryTitlesShouldCollapse(string leaf, string packageName)
         {
             if (string.IsNullOrEmpty(leaf) || string.IsNullOrEmpty(packageName)) return false;
@@ -418,13 +367,11 @@ namespace VPB
             return GalleryNamesAlnumEditDistanceAtMostOne(leaf, packageName);
         }
 
-        /// <summary>Separators for equality walks — includes <c>.</c> so <c>1_1</c> ≈ <c>1.1</c>.</summary>
         private static bool IsGalleryNameCompareSeparator(char c)
         {
             return c == '_' || c == ' ' || c == '-' || c == '.';
         }
 
-        /// <summary>Word separators converted to spaces for display (dots kept for versions).</summary>
         private static bool IsGalleryNameSeparator(char c)
         {
             return c == '_' || c == ' ' || c == '-';
@@ -452,10 +399,6 @@ namespace VPB
             return c;
         }
 
-        /// <summary>
-        /// True when names match ignoring case and treating <c>_</c>/<c> </c>/<c>-</c>/<c>.</c> runs as equivalent.
-        /// Zero alloc. <c>Hero II</c> ≈ <c>Hero_II</c>; <c>marob 4 VAM 1.1</c> ≈ <c>marob_4_VAM_1_1</c>.
-        /// </summary>
         private static bool GalleryNamesEquivalentLoose(string a, string b)
         {
             if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
@@ -486,10 +429,7 @@ namespace VPB
             return i == na && j == nb;
         }
 
-        /// <summary>
-        /// Equality on letters/digits only (apostrophes, brackets, plus signs ignored).
-        /// Zero alloc. <c>Becky's</c> ≈ <c>Beckys</c>; <c>[A3] Saya</c> ≈ <c>A3_saya</c>.
-        /// </summary>
+        /// <summary>Equality on letters/digits only (apostrophes, brackets, plus signs ignored).</summary>
         private static bool GalleryNamesEquivalentAlnum(string a, string b)
         {
             if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
@@ -519,10 +459,6 @@ namespace VPB
             return i == na && j == nb;
         }
 
-        /// <summary>
-        /// One insert/delete/replace on alnum stream (min alnum len 6) — catches <c>Transgender</c>/<c>Trasgender</c>.
-        /// Allocates two short keys only on this rare path.
-        /// </summary>
         private static bool GalleryNamesAlnumEditDistanceAtMostOne(string a, string b)
         {
             string ka = BuildGalleryAlnumKey(a);
@@ -591,10 +527,6 @@ namespace VPB
             return new string(buf, 0, w);
         }
 
-        /// <summary>
-        /// Prefer spaced form and version dots (<c>1.1</c> over <c>1_1</c>); preserve dots when humanizing.
-        /// On near-typo pairs prefer longer alnum (usually correct spelling in package uid).
-        /// </summary>
         private static string PickPreferredGalleryDisplayName(string a, string b)
         {
             int aDots = GalleryVersionDotScore(a);
@@ -667,10 +599,6 @@ namespace VPB
             return n;
         }
 
-        /// <summary>
-        /// Replace <c>_</c>/<c>-</c> with spaces; collapse separator runs; trim. Dots kept (versions).
-        /// No alloc when already clean.
-        /// </summary>
         private static string HumanizeGalleryNameSeparators(string s)
         {
             if (string.IsNullOrEmpty(s)) return s;
@@ -750,10 +678,6 @@ namespace VPB
             return d.ToString("0.0") + " " + suffix[i];
         }
 
-        /// <summary>
-        /// Compact integer for dense chrome (scrub index, badges). Warm/cold only.
-        /// 999 → "999"; 1000 → "1K"; 1200 → "1.2K"; 12_000 → "12K"; 1_000_000 → "1M".
-        /// </summary>
         private static string FormatCompactCount(int value)
         {
             if (value < 0) value = 0;
@@ -761,7 +685,6 @@ namespace VPB
 
             if (value < 10000)
             {
-                // Round to 0.1K for 1.0K..9.9K
                 int tenths = (value + 50) / 100;
                 int whole = tenths / 10;
                 int frac = tenths % 10;
@@ -811,7 +734,6 @@ namespace VPB
             img.raycastTarget = false;
         }
 
-        /// <summary>Removes side-tab rows that pair a primary tab button with optional trailing controls (see <see cref="UI.CreateSideTabSquareIconButton"/>).</summary>
         private static void CleanupSideTabLabeledRows(Transform container)
         {
             if (container == null) return;
@@ -837,10 +759,7 @@ namespace VPB
             }
             ReconcileAutoGenderForCurrentTarget();
             RefreshFiles();
-            // Do NOT call UpdateTabs() here. RefreshFiles bumps _deferredSubPaneSessionId, cancels
-            // tag/loose-merge coroutines, and schedules DeferredGallerySideTabsAfterGridReady — which
-            // rebuilds side strips + facets once the grid is ready. Sync UpdateTabs was a second full
-            // rebuild and restarted cancelled scans (chip/subfilter storm).
+            // Do NOT call UpdateTabs() here.
             try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
@@ -943,7 +862,6 @@ namespace VPB
             if (isLeft) leftActiveContent = leftPrevActiveContent;
             else rightActiveContent = rightPrevActiveContent;
 
-            // Remove Mode's layout sync would reopen the remove list unless we mark dismiss.
             if (_removeModeActive
                 && closing.HasValue
                 && (closing.Value == ContentType.RemoveClothing
@@ -951,7 +869,6 @@ namespace VPB
                     || closing.Value == ContentType.RemoveAtom))
                 _removeModeSiderailDismissed = true;
 
-            // SyncSideRailChrome (inside UpdateLayout) is what hides the tab scroll column.
             UpdateLayout();
             UpdateTabs();
         }
@@ -997,10 +914,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// True when row has no resolvable preview path. Must run after <see cref="GalleryPanel.LoadThumbnail"/>
-        /// so <see cref="ThumbnailBindingTag.ExpectedTag"/> reflects path resolution (texture may still be null while decoding).
-        /// </summary>
         private static bool ShouldShowThumbPlaceholder(FileEntry file, RawImage thumbImg)
         {
             if (thumbImg == null) return true;
@@ -1197,10 +1110,6 @@ namespace VPB
             return result;
         }
 
-        /// <summary>
-        /// Square thumb side for placeholder fonts. Grid: cell width (1:1 region above caption).
-        /// List: list thumb height.
-        /// </summary>
         private float GetCanonicalThumbCellSidePx(bool isListMode)
         {
             if (isListMode)
@@ -1225,7 +1134,6 @@ namespace VPB
         }
 
         private const float ThumbPlaceholderLineHeightMul = 1.12f;
-        /// <summary>~4 lines: creator, name.version, item (+ wrap).</summary>
         private const float ThumbPlaceholderTotalLineBudget = 4f;
 
         private void InvalidateThumbPlaceholderFontCache()
@@ -1604,4 +1512,3 @@ namespace VPB
         }
     }
 }
-

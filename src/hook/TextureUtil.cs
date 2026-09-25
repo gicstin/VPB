@@ -62,7 +62,7 @@ namespace VPB
                 var remove = new List<string>();
                 foreach (var k in s_DownscaledActiveKeys)
                 {
-                    if (k != null && k.StartsWith(prefix))
+                    if (k != null && k.StartsWith(prefix, StringComparison.Ordinal))
                     {
                         remove.Add(k);
                     }
@@ -113,7 +113,6 @@ namespace VPB
             return CanGenerateMipsFromBaseLevel(w, h, fmt);
         }
 
-        /// <summary>Match CustomImageLoader: full mip chain bytes in <paramref name="rawLength"/> require mipChain on Texture2D ctor.</summary>
         public static bool ShouldAllocateMipChainForRawLoad(bool createMipMaps, int rawLength, int w, int h, TextureFormat fmt)
         {
             if (!createMipMaps) return false;
@@ -141,7 +140,6 @@ namespace VPB
             meta["vpbVer"].AsInt = TextureCacheVersion;
         }
 
-
         public static bool IsMipMetaRepairableOnServe(bool createMipMaps, string mipStorage, int w, int h, TextureFormat fmt)
         {
             if (!createMipMaps) return true;
@@ -157,7 +155,6 @@ namespace VPB
             return IsMipMetaRepairableOnServe(createMipMaps, mipStorage, w, h, fmt);
         }
 
-        /// <summary>Unity-style mip count from full size down to 1×1.</summary>
         public static int CountMipLevels(int w, int h)
         {
             if (w <= 0 || h <= 0) return 0;
@@ -174,7 +171,6 @@ namespace VPB
             return count;
         }
 
-        /// <summary>Sum of <see cref="GetExpectedRawDataSize"/> for every mip level (DXT + uncompressed).</summary>
         public static int GetExpectedFullMipChainSize(int w, int h, TextureFormat fmt)
         {
             if (w <= 0 || h <= 0) return 0;
@@ -205,7 +201,6 @@ namespace VPB
             return MipStorageBase;
         }
 
-        /// <summary>Queue intent OR meta OR full-chain storage OR oversized raw vs base.</summary>
         public static bool ResolveCreateMipMaps(bool queueCreateMipMaps, bool metaCreateMipMaps, string mipStorage, int rawLength, int w, int h, TextureFormat fmt)
         {
             if (string.Equals(mipStorage, MipStorageFull, StringComparison.OrdinalIgnoreCase)) return true;
@@ -214,7 +209,6 @@ namespace VPB
             return create;
         }
 
-        /// <summary>Validate raw payload size against base/full mip expectations (<see cref="MipStorageBase"/> / <see cref="MipStorageFull"/>).</summary>
         public static bool ValidateRawLengthForTextureMeta(int w, int h, TextureFormat fmt, int rawLength, string mipStorage)
         {
             if (rawLength <= 0 || w <= 0 || h <= 0) return false;
@@ -239,7 +233,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>True when on-disk meta predates mipStorage fields (pre-refactor zstd caches).</summary>
         public static bool DiskCacheMetaLacksMipFields(string cachePath)
         {
             if (string.IsNullOrEmpty(cachePath)) return false;
@@ -257,7 +250,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Write createMipMaps, mipCount, mipStorage into cache meta JSON.</summary>
         public static void WriteMipFieldsToMeta(JSONNode meta, int w, int h, TextureFormat fmt, int rawLength, bool queueCreateMipMaps)
         {
             if (meta == null || w <= 0 || h <= 0 || rawLength <= 0) return;
@@ -271,7 +263,6 @@ namespace VPB
             meta["mipCount"].AsInt = CountMipLevels(w, h);
             meta["mipStorage"] = storage;
         }
-
 
         private static void LoadRawPinned(Texture2D t, byte[] data, int size)
         {
@@ -331,15 +322,11 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Overload that uses data.Length as the valid data length.
-        /// </summary>
         public static void SafeLoadRawTextureData(Texture2D t, byte[] data, int w, int h, TextureFormat fmt)
         {
             SafeLoadRawTextureData(t, data, data != null ? data.Length : 0, w, h, fmt);
         }
 
-        /// <summary>Apply cached raw (+ optional mip chain) to an existing or new target texture.</summary>
         public static bool ApplyCachedRawToTexture(Texture2D tex, byte[] data, int w, int h, TextureFormat fmt, bool createMipMaps, bool linear, bool markNonReadable, bool forceReadable)
         {
             if (tex == null || data == null || data.Length == 0 || w <= 0 || h <= 0) return false;
@@ -452,7 +439,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(imgPath)) return false;
             string lower = imgPath.Trim().ToLowerInvariant();
-            return lower.EndsWith(".tif") || lower.EndsWith(".tiff");
+            return lower.EndsWith(".tif", StringComparison.Ordinal) || lower.EndsWith(".tiff", StringComparison.Ordinal);
         }
 
         /// <summary>Per-entry size for .var paths; MVR <see cref="MVR.FileManagement.FileEntry.Size"/> can be package size after resolve.</summary>
@@ -495,7 +482,6 @@ namespace VPB
                 + "|" + isReadableVariant;
         }
 
-        /// <summary>Runtime zstd serve: exact FileEntry match first, then sig variant + size-agnostic fallback for legacy caches.</summary>
         public static string ResolveServeZstdCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth, int targetHeight, float bumpStrength, bool isReadable)
         {
             string path = FindZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, targetWidth, targetHeight, bumpStrength, isReadable);
@@ -521,10 +507,6 @@ namespace VPB
             return path;
         }
 
-        /// <summary>
-        /// On-demand may write richer sigs (_C_L, _C_A) than VaM requests at runtime (_C).
-        /// Alpha (_C_A) and normal (_L_N) must never fall back to a weaker sig (e.g. _C for _C_A).
-        /// </summary>
         private static bool ZstdDirectoryIndexCovers(string cacheDir)
         {
             lock (s_ZstdDirIndexLock)
@@ -873,7 +855,6 @@ namespace VPB
             return new[] { sig, "_C", "__C", "_C_L" };
         }
 
-        /// <summary>Find .zvamcache when size token differs (on-demand/bulk use payload or native file size, not always FileEntry.Size).</summary>
         private static string TryFindZstdCacheSizeAgnostic(string cacheDir, string fileName, string sizeStr, string timeStr, string requestedSig)
         {
             if (string.IsNullOrEmpty(cacheDir) || string.IsNullOrEmpty(fileName) || string.IsNullOrEmpty(timeStr))
@@ -961,7 +942,6 @@ namespace VPB
             return thumbAny;
         }
 
-        /// <summary>Returns true when zstd meta exists and width*height is at least minPixels.</summary>
         public static bool IsZstdCachePayloadSane(string zstdPath, int minPixels)
         {
             if (string.IsNullOrEmpty(zstdPath) || !DiskFileExists(zstdPath)) return false;
@@ -1048,7 +1028,6 @@ namespace VPB
             try { string meta = zstdPath + "meta"; if (DiskFileExists(meta)) File.Delete(meta); } catch { }
         }
 
-        /// <summary>Delete all VaM native .vamcache rows for a loose thumbnail (any size/time token).</summary>
         public static void TryDeleteNativeThumbnailDiskCachesForSource(string sourcePath)
         {
             if (string.IsNullOrEmpty(sourcePath)) return;
@@ -1070,7 +1049,6 @@ namespace VPB
                 TryDeleteZstdCacheFile(matches[i]);
         }
 
-        /// <summary>Delete all VPB .zvamcache rows for a loose thumbnail (any size/time token).</summary>
         public static void TryDeleteZstdThumbnailDiskCachesForSource(string sourcePath)
         {
             if (string.IsNullOrEmpty(sourcePath)) return;
@@ -1098,7 +1076,6 @@ namespace VPB
         private static readonly Regex s_NativeCacheSizeSuffix = new Regex(@"_(\d{1,12})$", RegexOptions.Compiled);
         private static readonly Regex s_NativeCacheExtSuffix = new Regex(@"_([a-zA-Z]{2,5})$", RegexOptions.Compiled);
 
-        /// <summary>Resolve VaM texture cache directory to an absolute path for filesystem scans.</summary>
         public static string ResolveTextureCacheDirFullPath()
         {
             string dir = null;
@@ -1111,10 +1088,6 @@ namespace VPB
             catch { return dir; }
         }
 
-        /// <summary>
-        /// Parse VaM native <c>.vamcache</c> filename into source path hint, size/time tokens, and disk flag sig (_C, _L, _C_A, …).
-        /// Format: <c>{name}_{size}_{time}_{sig}</c> where <c>sig</c> may be <c>_C</c>, <c>__L_N</c>, <c>1024_768_C</c>, or placeholder <c>_1</c>.
-        /// </summary>
         public static bool TryParseNativeVamCacheFileName(string cacheFileBase, out string reconstructedPath, out string sizeStr, out string timeStr, out string flagSig)
         {
             reconstructedPath = null;
@@ -1205,7 +1178,6 @@ namespace VPB
             return !string.IsNullOrEmpty(sizeStr) && !string.IsNullOrEmpty(timeStr);
         }
 
-        /// <summary>Target .zvamcache path for bulk compress from a native <c>.vamcache</c> basename (parse + mirror fallback).</summary>
         public static string ResolveBulkZstdTargetPath(string vpbCacheDir, string nativeCacheFileBase, out bool parsed)
         {
             parsed = false;
@@ -1229,7 +1201,6 @@ namespace VPB
             return Path.Combine(vpbCacheDir, nativeCacheFileBase + ".zvamcache");
         }
 
-        /// <summary>Build zstd cache path matching <see cref="GetZstdCachePath"/> layout from parsed native cache tokens.</summary>
         public static string BuildZstdCachePathFromNativeTokens(string vpbCacheDir, string sanitizedSourceFileName, string sizeStr, string timeStr, string flagSig)
         {
             if (string.IsNullOrEmpty(vpbCacheDir) || string.IsNullOrEmpty(sanitizedSourceFileName)
@@ -1261,7 +1232,6 @@ namespace VPB
             return sig;
         }
 
-        /// <summary>VaM native .vamcache path for the given load flags (not the diagnostic _1 placeholder).</summary>
         public static string GetVaMNativeDiskCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f)
         {
             if (string.IsNullOrEmpty(imgPath) || imgPath == "NULL") return null;
@@ -1289,7 +1259,6 @@ namespace VPB
             return DiskFileExists(cachePath) && DiskFileExists(cachePath + "meta");
         }
 
-        /// <summary>Resolve VaM native .vamcache with flag fallbacks (LUT linear, alpha _A, sim compress).</summary>
         public static string FindVaMNativeDiskCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f)
         {
             string path = GetVaMNativeDiskCachePath(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, targetWidth, targetHeight, bumpStrength);
@@ -1369,7 +1338,6 @@ namespace VPB
             return System.IO.Path.Combine(cacheDir, fileName + "_" + sizeStr + "_" + timeStr + sig + ".zvamcache");
         }
 
-        /// <summary>Canonical zstd path for current FileEntry; no variant/size-agnostic aliasing (on-demand writes).</summary>
         public static string BuildExactZstdCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f, bool isReadable = false)
         {
             if (!TryGetZstdCachePathTokens(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, targetWidth, targetHeight, bumpStrength, isReadable,
@@ -1458,7 +1426,6 @@ namespace VPB
             string found = TryResolveZstdCacheOnDisk(cacheDir, fileName, sizeStr, timeStr, sig, isSimReq, isReadable);
             if (!string.IsNullOrEmpty(found)) return found;
 
-            // Pre-refactor caches may have used package Size instead of EntrySize; VPB index resolves both.
             try
             {
                 var fileEntry = FileManager.GetFileEntry(imgPath);
@@ -1477,7 +1444,6 @@ namespace VPB
             return null;
         }
 
-        /// <summary>Exact zstd path for runtime serve or canonical write target on miss (no fuzzy sig aliasing).</summary>
         public static string GetZstdCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f, bool isReadable = false)
         {
             if (string.IsNullOrEmpty(imgPath) || imgPath == "NULL") return null;

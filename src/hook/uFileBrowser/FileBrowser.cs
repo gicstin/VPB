@@ -30,13 +30,11 @@ namespace VPB
 			this.filesScrollRect = ui.filesScrollRect;
 			this.showHiddenToggle = ui.showHiddenToggle;
 
-
             var newgo = GameObject.Instantiate(ui.showHiddenToggle.gameObject, ui.showHiddenToggle.transform.parent);
             Vector3 oldPos = ui.showHiddenToggle.transform.localPosition;
             newgo.transform.localPosition = new Vector3(oldPos.x - 280, oldPos.y, oldPos.z);
             this.showAutoInstallToggle = newgo.GetComponent<Toggle>();
 
-			// Gallery Button
 			if (ui.cancelButton != null)
 			{
 				var galleryBtnGO = GameObject.Instantiate(ui.cancelButton.gameObject, ui.showHiddenToggle.transform.parent);
@@ -49,7 +47,7 @@ namespace VPB
 				});
 				galleryBtnGO.transform.localPosition = new Vector3(oldPos.x - 450, oldPos.y + 300, oldPos.z + 300);
 				var txt = galleryBtnGO.GetComponentInChildren<Text>();
-				if (txt != null) txt.text = "Gallery";
+				if (txt != null) txt.text = VPBTranslation.T("filebrowser.gallery", "Gallery");
 			}
 
 			this.limitSlider = ui.limitSlider;
@@ -63,7 +61,6 @@ namespace VPB
 				this.SearchChanged();
 			});
 
-
 			this.searchCancelButton = ui.searchCancelButton;
 			this.searchCancelButton.onClick.RemoveAllListeners();
 			this.searchCancelButton.onClick.AddListener(() =>
@@ -75,12 +72,9 @@ namespace VPB
 			this.cancelButton.onClick.RemoveAllListeners();
 			this.cancelButton.onClick.AddListener(() =>
 			{
-				//this.CancelButtonClicked();
 				Hide();
-				// Close the top-level UI
 				SuperController.singleton.DeactivateWorldUI();
 			});
-			//this.renameContainer = ui.renameContainer;
 
 			var firstPageButton = this.transform.Find("MainPanel/ShowingGroup/FirstPageButton").GetComponent<Button>();
 			firstPageButton.onClick.RemoveAllListeners();
@@ -142,7 +136,6 @@ namespace VPB
 				filesScrollRect.onValueChanged.AddListener(OnFilesScrollRectValueChanged);
 				_scrollListenerAttached = true;
 			}
-
         }
 
 		public class FileAndDirInfo
@@ -256,7 +249,7 @@ namespace VPB
 			{
 				FileEntry = fEntry;
 				_isDirectory = false;
-				_isWriteable = !(fEntry is VarFileEntry);// && FileManager.IsSecureWritePath(fEntry.FullPath);
+				_isWriteable = !(fEntry is VarFileEntry);
 				Name = fEntry.Name;
 				FullName = fEntry.Uid;
 				LastWriteTime = fEntry.LastWriteTime;
@@ -303,14 +296,6 @@ namespace VPB
 				}
 			}
 
-			//public void SetTemplate(bool b)
-			//{
-			//	if (_isWriteable && FileEntry != null)
-			//	{
-			//		FileEntry.SetFlagFile("template", b);
-			//	}
-			//}
-
 			public void SetHidden(bool b)
 			{
 				if (_isWriteable && FileEntry != null)
@@ -333,7 +318,6 @@ namespace VPB
 			SyncDisplayed();
 		}
 
-
 		public string defaultPath = string.Empty;
 
 		public bool selectDirectory;
@@ -346,12 +330,10 @@ namespace VPB
 
 		public bool showInstallFolderInDirectoryList;
 
-		// Only show templates
 		public bool forceOnlyShowTemplates;
 
 		public bool allowUseFileAsTemplateSelect;
 
-		// Scenes are always JSON files
 		public string fileFormat = string.Empty;
 
 		public bool hideExtension;
@@ -374,12 +356,9 @@ namespace VPB
 		private string slash;
 
 		[SerializeField]
-		//[HideInInspector]
 		private List<string> drives;
 
 		private List<DirectoryButton> dirButtons;
-
-		//private List<ShortCutButton> shortCutButtons;
 
 		private List<GameObject> dirSpacers;
 
@@ -388,8 +367,6 @@ namespace VPB
 		private FileBrowserCallback callback;
 
 		private FileBrowserFullCallback fullCallback;
-
-		//public List<ShortCut> shortCuts;
 
 		public bool manageContentTransform = true;
 
@@ -591,8 +568,6 @@ namespace VPB
 
 		protected bool lastCacheIncludeRegularDirsInFlatten;
 
-		//protected bool lastCacheShowDirs;
-
 		protected bool lastCacheForceOnlyShowTemplates;
 
 		protected DateTime lastCacheTime;
@@ -604,8 +579,6 @@ namespace VPB
 		protected string lastCachePackageFilter;
 
 		protected List<FileAndDirInfo> cachedFiles;
-
-		//protected List<FileAndDirInfo> cachedDirs;
 
 		protected bool threadHadException;
 
@@ -758,7 +731,6 @@ namespace VPB
 					{
 						showHiddenToggle.isOn = _showHidden;
 					}
-					//UpdateDirectoryList();
 					ResetDisplayedPage();
 				}
 			}
@@ -887,12 +859,10 @@ namespace VPB
 				if (queuedThumbnail != null)
 				{
 					queuedThumbnail.cancel = true;
-					//VPB.CustomImageLoaderThreaded.QIPool.Return(queuedThumbnail);
 				}
 			}
 			queuedThumbnails.Clear();
 		}
-
 
 		public void SetDirectoryOption(string dirOptionString)
 		{
@@ -916,7 +886,6 @@ namespace VPB
 				UserPreferences.SortBy fileBrowserSortBy = this.sortBy = (UserPreferences.SortBy)Enum.Parse(typeof(UserPreferences.SortBy), sortByString);
 				if (UserPreferences.singleton != null)
 				{
-					//UserPreferences.singleton.fileBrowserSortBy = fileBrowserSortBy;
 				}
 				sortDirty = true;
 				if (cachedFiles != null)
@@ -1004,7 +973,6 @@ namespace VPB
 		{
 			FileButton component = null;
 			GameObject gameObject = PoolManager.SpawnObject(fileButtonPrefab);
-			//GameObject gameObject = UnityEngine.Object.Instantiate(fileButtonPrefab, Vector3.zero, Quaternion.identity);
 			var component2 = gameObject.GetComponent<uFileBrowser.FileButton>();
             if (component2 != null)
             {
@@ -1052,7 +1020,6 @@ namespace VPB
                                         imgPath = fileEntry.Path + ".png";
                                         text4 = ".png";
                                         break;
-								//case ".vmi":// Character morphs
 								case ".json":
                                     case ".vac":
                                     case ".vap":
@@ -1100,18 +1067,7 @@ namespace VPB
 			return component;
 		}
 
-        //private void SyncFileButtonImages()
-        //{
-        //    foreach (FileButton displayedFileButton in displayedFileButtons)
-        //    {
-        //        SyncFileButtonImage(displayedFileButton);
-        //    }
-        //}
-
-        /// <summary>
-        /// Updates AutoInstall / installed tint on visible rows only. Prefer this over posting
-        /// <see cref="MessageDef.FileManagerRefresh"/>, which notifies the gallery and other global observers.
-        /// </summary>
+        /// <summary>Updates AutoInstall / installed tint on visible rows only.</summary>
         public void RefreshDisplayedInstallStatus()
         {
             if (displayedFileButtons == null || displayedFileButtons.Count == 0) return;
@@ -1147,7 +1103,6 @@ namespace VPB
 			}
 		}
 
-
 		public void SetTitle(string title)
 		{
 			if (titleText != null)
@@ -1177,12 +1132,10 @@ namespace VPB
 				GotoDirectory(defaultPath);
 			}
 			UpdateUI();
-
 		}
 
 		public void Show(string _fileFormat,string _defaultPath,FileBrowserCallback callback, bool changeDirectory = true,bool inGame=false)
 		{
-			// Whether to show clothing tag filtering
 			if(_fileFormat== "vam" && _defaultPath == "Custom/Clothing")
             {
 				SetClothTagsActive(true);
@@ -1211,7 +1164,6 @@ namespace VPB
             if (this.inGame)
             {
                 creatorPopup.gameObject.SetActive(false);
-				// Hide the popup that may have been shown
 				creatorPopup.GetComponent<UIPopup>().visible = false;
 			}
             else
@@ -1305,7 +1257,6 @@ namespace VPB
 		private IEnumerator RenameProcess()
 		{
 			yield return null;
-			//LookInputModule.SelectGameObject(renameField.gameObject);
 			renameField.ActivateInputField();
 		}
 
@@ -1320,15 +1271,15 @@ namespace VPB
 			if (renameField != null)
 			{
 				string text = fb.text;
-				if (text.EndsWith(".json"))
+				if (text.EndsWith(".json", StringComparison.Ordinal))
 				{
 					text = text.Replace(".json", string.Empty);
 				}
-				else if (text.EndsWith(".vac"))
+				else if (text.EndsWith(".vac", StringComparison.Ordinal))
 				{
 					text = text.Replace(".vac", string.Empty);
 				}
-				else if (text.EndsWith(".vap"))
+				else if (text.EndsWith(".vap", StringComparison.Ordinal))
 				{
 					text = text.Replace(".vap", string.Empty);
 				}
@@ -1360,7 +1311,6 @@ namespace VPB
 					}
 					catch (Exception ex)
 					{
-						//LogUtil.LogError("Could not move directory " + fullPath + " to " + text + " Exception: " + ex.Message);
 						if (statusField != null)
 						{
 							statusField.text = ex.Message;
@@ -1374,34 +1324,33 @@ namespace VPB
 					string fullPath2 = renameFileButton.fullPath;
 					bool flag = false;
 					string oldValue = string.Empty;
-					if (fullPath2.EndsWith(".json"))
+					if (fullPath2.EndsWith(".json", StringComparison.Ordinal))
 					{
 						flag = true;
 						oldValue = ".json";
-						if (!text.EndsWith(".json"))
+						if (!text.EndsWith(".json", StringComparison.Ordinal))
 						{
 							text += ".json";
 						}
 					}
-					else if (fullPath2.EndsWith(".vac"))
+					else if (fullPath2.EndsWith(".vac", StringComparison.Ordinal))
 					{
 						flag = true;
 						oldValue = ".vac";
-						if (!text.EndsWith(".vac"))
+						if (!text.EndsWith(".vac", StringComparison.Ordinal))
 						{
 							text += ".vac";
 						}
 					}
-					else if (fullPath2.EndsWith(".vap"))
+					else if (fullPath2.EndsWith(".vap", StringComparison.Ordinal))
 					{
 						flag = true;
 						oldValue = ".vap";
-						if (!text.EndsWith(".vap"))
+						if (!text.EndsWith(".vap", StringComparison.Ordinal))
 						{
 							text += ".vap";
 						}
 					}
-					//LogUtil.Log("Rename file " + fullPath2 + " to " + text);
 					try
 					{
 						FileManager.AssertNotCalledFromPlugin();
@@ -1409,7 +1358,6 @@ namespace VPB
 					}
 					catch (Exception ex2)
 					{
-						//LogUtil.LogError("Could not move file " + fullPath2 + " to " + text + " Exception: " + ex2.Message);
 						if (statusField != null)
 						{
 							statusField.text = ex2.Message;
@@ -1429,7 +1377,6 @@ namespace VPB
 							}
 							catch (Exception ex3)
 							{
-								//LogUtil.LogError("Could not move file " + text2 + " to " + text3 + " Exception: " + ex3.Message);
 								if (statusField != null)
 								{
 									statusField.text = ex3.Message;
@@ -1446,7 +1393,6 @@ namespace VPB
 							}
 							catch (Exception ex4)
 							{
-								//LogUtil.LogError("Could not move file " + text4 + " to " + text5 + " Exception: " + ex4.Message);
 								if (statusField != null)
 								{
 									statusField.text = ex4.Message;
@@ -1480,15 +1426,15 @@ namespace VPB
 			if (deleteField != null)
 			{
 				string text = fb.text;
-				if (text.EndsWith(".json"))
+				if (text.EndsWith(".json", StringComparison.Ordinal))
 				{
 					text = text.Replace(".json", string.Empty);
 				}
-				else if (text.EndsWith(".vac"))
+				else if (text.EndsWith(".vac", StringComparison.Ordinal))
 				{
 					text = text.Replace(".vac", string.Empty);
 				}
-				else if (text.EndsWith(".vap"))
+				else if (text.EndsWith(".vap", StringComparison.Ordinal))
 				{
 					text = text.Replace(".vap", string.Empty);
 				}
@@ -1520,7 +1466,6 @@ namespace VPB
 						}
 						catch (Exception ex)
 						{
-							//LogUtil.LogError("Could not delete directory " + fullPath + " Exception: " + ex.Message);
 							if (statusField != null)
 							{
 								statusField.text = ex.Message;
@@ -1541,7 +1486,6 @@ namespace VPB
 						}
 						catch (Exception ex2)
 						{
-							//LogUtil.LogError("Could not delete file " + fullPath + " Exception: " + ex2.Message);
 							if (statusField != null)
 							{
 								statusField.text = ex2.Message;
@@ -1551,15 +1495,15 @@ namespace VPB
 						}
 					}
 					string text = string.Empty;
-					if (fullPath.EndsWith(".json"))
+					if (fullPath.EndsWith(".json", StringComparison.Ordinal))
 					{
 						text = ".json";
 					}
-					else if (fullPath.EndsWith(".vac"))
+					else if (fullPath.EndsWith(".vac", StringComparison.Ordinal))
 					{
 						text = ".vac";
 					}
-					else if (fullPath.EndsWith(".vap"))
+					else if (fullPath.EndsWith(".vap", StringComparison.Ordinal))
 					{
 						text = ".vap";
 					}
@@ -1574,7 +1518,6 @@ namespace VPB
 							}
 							catch (Exception ex3)
 							{
-								//LogUtil.LogError("Could not delete file " + text2 + " Exception: " + ex3.Message);
 								if (statusField != null)
 								{
 									statusField.text = ex3.Message;
@@ -1591,7 +1534,6 @@ namespace VPB
 						}
 						catch (Exception ex4)
 						{
-							//LogUtil.LogError("Could not delete file " + text3 + " Exception: " + ex4.Message);
 							if (statusField != null)
 							{
 								statusField.text = ex4.Message;
@@ -1627,7 +1569,6 @@ namespace VPB
 			}
 			else if (!FileManager.DirectoryExists(path) && !flatten)
 			{
-				//LogUtil.LogError("uFileBrowser: Directory doesn't exist:\n" + path);
 				currentPath = string.Empty;
 			}
 			else
@@ -1713,7 +1654,6 @@ namespace VPB
 				if (browserPage == null)
 					browserPage = new Dictionary<string, int>();
 
-
 				string key = SavedKey;
                 float value;
                 if (directoryScrollPositions.TryGetValue(key, out value))
@@ -1737,7 +1677,7 @@ namespace VPB
             get
             {
                 string text = currentPath ?? string.Empty;
-                if (!text.EndsWith("\\"))
+                if (!text.EndsWith("\\", StringComparison.Ordinal))
                 {
                     text += "\\";
                 }
@@ -1841,16 +1781,7 @@ namespace VPB
 					return;
 				}
 			}
-			//if (fb == selected && selectDirectory && fb.isDir)
-			//{
-			//	GotoDirectory(fb.fullPath, currentPackageFilter);
-			//}
-			//else
 			{
-				//if (!fb.isDir && selectDirectory)
-				//{
-				//	return;
-				//}
 				if (selected != null)
 				{
 					selected.Unselect();
@@ -1861,15 +1792,15 @@ namespace VPB
 				if (fileEntryField != null)
 				{
 					fileEntryField.text = selected.text;
-					if (fileEntryField.text.EndsWith(".json"))
+					if (fileEntryField.text.EndsWith(".json", StringComparison.Ordinal))
 					{
 						fileEntryField.text = fileEntryField.text.Replace(".json", string.Empty);
 					}
-					else if (fileEntryField.text.EndsWith(".vac"))
+					else if (fileEntryField.text.EndsWith(".vac", StringComparison.Ordinal))
 					{
 						fileEntryField.text = fileEntryField.text.Replace(".vac", string.Empty);
 					}
-					else if (fileEntryField.text.EndsWith(".vap"))
+					else if (fileEntryField.text.EndsWith(".vap", StringComparison.Ordinal))
 					{
 						fileEntryField.text = fileEntryField.text.Replace(".vap", string.Empty);
 					}
@@ -2021,7 +1952,6 @@ namespace VPB
 		private IEnumerator ActivateFileNameFieldProcess()
 		{
 			yield return null;
-			//LookInputModule.SelectGameObject(fileEntryField.gameObject);
 			fileEntryField.ActivateInputField();
 		}
 
@@ -2035,7 +1965,6 @@ namespace VPB
 
 		public void SelectButtonClicked()
 		{
-			//LogUtil.Log("SelectButtonClicked");
 			if (!selectOnClick && fileEntryField != null)
 			{
 				if (fileEntryField.text != string.Empty)
@@ -2143,7 +2072,6 @@ namespace VPB
 
 		protected void HideButton(FileButton fb)
 		{
-			// manageContentTransform is true here
 			if (manageContentTransform && displayedFileButtons.Contains(fb))
 			{
 				fb.gameObject.SetActive(false);
@@ -2163,10 +2091,8 @@ namespace VPB
 				info.button = null;
             }
         }
-		//int lastSyncFrame = 0;
 		private void SyncDisplayed()
 		{
-
 			if (sortedFilesAndDirs == null)
 			{
 				return;
@@ -2263,7 +2189,6 @@ namespace VPB
                                 }
                                 if (!pass)
                                 {
-									// If "no tag" is included, handle it specially
                                     if (includeNoTag)
                                     {
 										if (varFileEntry.ClothingTags == null||varFileEntry.ClothingTags.Count==0)
@@ -2339,47 +2264,36 @@ namespace VPB
 
 						if (_onlyInstalled && !sortedFilesAndDir.isInstalled)
 						{
-                            //HideButton(button);
 							HideButton(sortedFilesAndDir);
 							continue;
 						}
 						if (_onlyAutoInstall && !sortedFilesAndDir.isAutoInstall)
 						{
-							//HideButton(button);
 							HideButton(sortedFilesAndDir);
 							continue;
 						}
-						//if (_onlyTemplates && !sortedFilesAndDir.isTemplate)
-						//{
-						//	HideButton(button);
-						//	continue;
-						//}
 						if (!string.IsNullOrEmpty(searchLower) && !fileEntry.UidLowerInvariant.Contains(searchLower))
 						{
 							VarFileEntry searchVarFileEntry = fileEntry as VarFileEntry;
 							if (searchVarFileEntry == null)
                             {
-                                //HideButton(button);
 								HideButton(sortedFilesAndDir);
                                 continue;
 							}
 							if (!searchVarFileEntry.Package.UidLowerInvariant.Contains(searchLower))
 							{
-								//HideButton(button);
 								HideButton(sortedFilesAndDir);
 								continue;
 							}
                         }
-						// Needs filtering
 						if (!inGame && _creatorFilter != "All")
                         {
                             string creator = _creatorFilter.Substring(0, _creatorFilter.IndexOf('('));
                             if (fileEntry is VarFileEntry)
                             {
 								VarFileEntry creatorVarFileEntry = fileEntry as VarFileEntry;
-								if (!creatorVarFileEntry.Package.Uid.StartsWith(creator + "."))
+								if (!creatorVarFileEntry.Package.Uid.StartsWith(creator + ".", StringComparison.Ordinal))
                                 {
-                                    //HideButton(button);
 								HideButton(sortedFilesAndDir);
                                     continue;
 							}
@@ -2391,7 +2305,6 @@ namespace VPB
                                 {
                                     if (systemFileEntry.package.Creator != creator)
                                     {
-                                        //HideButton(button);
 							HideButton(sortedFilesAndDir);
                                         continue;
 									}
@@ -2402,7 +2315,6 @@ namespace VPB
                     num++;
 					if (num < num5 || num > num6)
 					{
-						//HideButton(button);
 							HideButton(sortedFilesAndDir);
 					}
 					else
@@ -2435,7 +2347,6 @@ namespace VPB
 								rectTransform.localRotation = Quaternion.identity;
 								rectTransform.localScale = Vector3.one;
 
-
 								Vector2 anchoredPosition = default(Vector2);
 								anchoredPosition.x = (float)num4 * vector.x;
 								anchoredPosition.y = (float)(-num3) * vector.y;
@@ -2449,12 +2360,6 @@ namespace VPB
 								num2++;
 							}
 						}
-						//else
-						//{
-						//	button.gameObject.SetActive(true);
-						//	button.transform.SetParent(fileContent, false);
-						//	num2++;
-						//}
 						displayedFileButtons.Add(button);
 						SyncFileButtonImage(button);
 					}
@@ -2701,7 +2606,6 @@ namespace VPB
 			foreach (var qi in toRemove)
 			{
 				queuedThumbnails.Remove(qi);
-                //CustomImageLoaderThreaded.QIPool.Return(qi);
 			}
 		}
 
@@ -2985,7 +2889,7 @@ namespace VPB
 				if (fileEntry is VarFileEntry)
 				{
 					VarFileEntry varFileEntry = fileEntry as VarFileEntry;
-					if (!varFileEntry.Package.Uid.StartsWith(creator + "."))
+					if (!varFileEntry.Package.Uid.StartsWith(creator + ".", StringComparison.Ordinal))
 					{
 						return false;
 					}
@@ -3187,12 +3091,12 @@ namespace VPB
 					string item = fileList[i];
 					if (fileFormat == "vap")
 					{
-						if (item.EndsWith(fileFormat) && File.Exists(item.Substring(0, item.Length - 3) + "jpg"))
+						if (item.EndsWith(fileFormat, StringComparison.Ordinal) && File.Exists(item.Substring(0, item.Length - 3) + "jpg"))
 							list3.Add(new SystemFileEntry(item));
 					}
 					else if (fileFormat == "json")
 					{
-						if (item.EndsWith(fileFormat) && File.Exists(item.Substring(0, item.Length - 4) + "jpg"))
+						if (item.EndsWith(fileFormat, StringComparison.Ordinal) && File.Exists(item.Substring(0, item.Length - 4) + "jpg"))
 							list3.Add(new SystemFileEntry(item));
 					}
 				}
@@ -3238,27 +3142,27 @@ namespace VPB
 						continue;
 					if (sceneFilterOther)
 					{
-						if (varFileEntry.InternalPath.StartsWith("Saves/scene/"))
+						if (varFileEntry.InternalPath.StartsWith("Saves/scene/", StringComparison.Ordinal))
 							continue;
 					}
 					else if (presetFilterOther)
 					{
-						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/"))
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/", StringComparison.Ordinal))
 							continue;
-						if (varFileEntry.InternalPath.StartsWith("Custom/Hair/"))
+						if (varFileEntry.InternalPath.StartsWith("Custom/Hair/", StringComparison.Ordinal))
 							continue;
-						if (varFileEntry.InternalPath.StartsWith("Custom/Clothing/"))
+						if (varFileEntry.InternalPath.StartsWith("Custom/Clothing/", StringComparison.Ordinal))
 							continue;
-						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/"))
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/", StringComparison.Ordinal))
 							continue;
 					}
 					else if (presetFilterPerson)
 					{
-						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/"))
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/", StringComparison.Ordinal))
 							continue;
-						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Hair/"))
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Hair/", StringComparison.Ordinal))
 							continue;
-						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Clothing/"))
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Clothing/", StringComparison.Ordinal))
 							continue;
 					}
 				}
@@ -3719,14 +3623,14 @@ namespace VPB
 			if (showHiddenToggle != null)//onlyInstalled
 			{
 				showHiddenToggle.isOn = _onlyInstalled;
-				showHiddenToggle.transform.Find("Label").GetComponent<Text>().text = "Only Installed";
+				showHiddenToggle.transform.Find("Label").GetComponent<Text>().text = VPBTranslation.T("filebrowser.only_installed", "Only Installed");
 				showHiddenToggle.onValueChanged.AddListener(SetOnlyInstalled);
 			}
 
 			if (showAutoInstallToggle != null)//onlyInstalled
 			{
 				showAutoInstallToggle.isOn = _onlyAutoInstall;
-				showAutoInstallToggle.transform.Find("Label").GetComponent<Text>().text = "Only AutoInstall";
+				showAutoInstallToggle.transform.Find("Label").GetComponent<Text>().text = VPBTranslation.T("filebrowser.only_autoinstall", "Only AutoInstall");
 				showAutoInstallToggle.onValueChanged.AddListener(SetOnlyAutoInstall);
 			}
 
@@ -3782,22 +3686,14 @@ namespace VPB
 			{
 				sortByPopup.currentValueNoCallback = _sortBy.ToString();
 				UIPopup uIPopup = sortByPopup;
-				uIPopup.onValueChangeHandlers = SetSortBy;// (UIPopup.OnValueChange)Delegate.Combine(uIPopup.onValueChangeHandlers, new UIPopup.OnValueChange(SetSortBy));
+				uIPopup.onValueChangeHandlers = SetSortBy;
 			}
 			if (directoryOptionPopup != null)
 			{
 				directoryOptionPopup.currentValueNoCallback = _directoryOption.ToString();
 				UIPopup uIPopup2 = directoryOptionPopup;
-				uIPopup2.onValueChangeHandlers = SetDirectoryOption;// (UIPopup.OnValueChange)Delegate.Combine(uIPopup2.onValueChangeHandlers, new UIPopup.OnValueChange(SetDirectoryOption));
+				uIPopup2.onValueChangeHandlers = SetDirectoryOption;
 			}
-
-			//JSONStorableFloat jsf = new JSONStorableFloat("UI Scale", 1, 0.9f, 1f, true, true);
-			//CreateRightSlider(jsf, 0-10);
-			//jsf.setCallbackFunction = val =>
-			//{
-			//	var rt = this.window.GetComponent<RectTransform>();
-			//	rt.localScale = new Vector3(val,val,val);
-			//};
 
 			int offset = 0;
 			CreateRightHeader("Custom", 0-10+ offset, Color.black);
@@ -3863,23 +3759,19 @@ namespace VPB
 				VamHookPlugin.singleton.OpenMiscAll();
 			});
 
-
-			//left
 			InitTags();
 
-#region Hair
             {
-
-				var container = CreateUIContainer(-420, -240-120, 200, 1460 - 120);// Total height is 1700
+				var container = CreateUIContainer(-420, -240-120, 200, 1460 - 120);
 				HairTagsUIList.Add(container);
 				var container2 = CreateUIContainer(-210, -240 - 120, 210, 1460 - 120);
 				HairTagsUIList.Add(container2);
 				var container0 = CreateUIContainer(-420, -130, 420, 100 + 120);
 				HairTagsUIList.Add(container0);
 
-				CreateLabel(container0, "Hair Tags Filter", Color.black, true);// Height 40
+				CreateLabel(container0, "Hair Tags Filter", Color.black, true);
 				hairOnlyAllowSingleFilter = new JSONStorableBool("Only Allow Single Filter", false, SetHairOnlyAllowSingleFilter);
-				CreateToggle(container0, hairOnlyAllowSingleFilter);// Height 50
+				CreateToggle(container0, hairOnlyAllowSingleFilter);
 
 				var list = new List<string>();
 				foreach (var item in TagFilter.HairUnknownTags)
@@ -3887,7 +3779,7 @@ namespace VPB
 					list.Add(item);
 				}
 				unknownHairTagFilterChooser = new JSONStorableStringChooser("Unknown Tags", list, list[0], "Unknown Tags", SyncUnknownHairFilter);
-				CreateFilterablePopup(container0, unknownHairTagFilterChooser);// Height 120
+				CreateFilterablePopup(container0, unknownHairTagFilterChooser);
 
 				CreateLabel(container, "Region Tags", Color.black, true);
 				for (int i = 0; i < TagFilter.HairRegionTags.Count; i++)
@@ -3896,8 +3788,6 @@ namespace VPB
 					HairRegionTagsJsonStorable[i].setJSONCallbackFunction = OnHairTagChange;
 				}
 				CreateLabel(container, "Other Tags", Color.black, true);
-				//CreateToggle(container, HairNoTagJsonStorable);
-				//HairNoTagJsonStorable.setJSONCallbackFunction = OnHairTagChange;
 				for (int i = 0; i < TagFilter.HairOtherTags.Count; i++)
 				{
 					CreateToggle(container, HairOtherTagsJsonStorable[i]);
@@ -3910,33 +3800,26 @@ namespace VPB
 					CreateToggle(container2, HairTypeTagsJsonStorable[i]);
 					HairTypeTagsJsonStorable[i].setJSONCallbackFunction = OnHairTagChange;
 				}
-
-
-				
 			}
-#endregion
 
-#region Clothing
 			{
-
-				// Distance from the left panel to the file browser; smaller means farther.
-				var container = CreateUIContainer(-420, -240 - 120, 200, 1460 - 120);// Total height is 1700
+				var container = CreateUIContainer(-420, -240 - 120, 200, 1460 - 120);
                 ClothingTagsUIList.Add(container);
 				var container2 = CreateUIContainer(-210, -240 - 120, 210, 1460 - 120);
 				ClothingTagsUIList.Add(container2);
 				var container0 = CreateUIContainer(-420, -130, 420, 100 + 120);
 				ClothingTagsUIList.Add(container0);
 
-				CreateLabel(container0, "Clothing Tags Filter", Color.black, true);// Height 40
+				CreateLabel(container0, "Clothing Tags Filter", Color.black, true);
 				onlyAllowSingleFilter = new JSONStorableBool("Only Allow Single Filter", false, SetClothingOnlyAllowSingleFilter);
-				CreateToggle(container0, onlyAllowSingleFilter);// Height 50
+				CreateToggle(container0, onlyAllowSingleFilter);
 
 				var genderList = new List<string>();
 				genderList.Add("All");
 				genderList.Add("Female");
 				genderList.Add("Male");
 				clothingGenderFilterChooser = new JSONStorableStringChooser("Gender", genderList, "All", "Gender", SyncClothingGenderFilter);
-				CreateFilterablePopup(container0, clothingGenderFilterChooser);// Height 120
+				CreateFilterablePopup(container0, clothingGenderFilterChooser);
 
 				var list = new List<string>();
 				foreach (var item in TagFilter.ClothingUnknownTags)
@@ -3944,7 +3827,7 @@ namespace VPB
 					list.Add(item);
 				}
 				unknownClothingTagFilterChooser = new JSONStorableStringChooser("Unknown Tags", list, list[0], "Unknown Tags", SyncUnknownClothingFilter);
-				CreateFilterablePopup(container0, unknownClothingTagFilterChooser);// Height 120
+				CreateFilterablePopup(container0, unknownClothingTagFilterChooser);
 
 				CreateLabel(container, "Region Tags", Color.black, true);
                 for (int i = 0; i < TagFilter.ClothingRegionTags.Count; i++)
@@ -3958,10 +3841,6 @@ namespace VPB
                     CreateToggle(container, ClothingOtherTagsJsonStorable[i]);
                     ClothingOtherTagsJsonStorable[i].setJSONCallbackFunction = OnClothingTagChange;
                 }
-                //CreateLabel(container, "Extra Tags", Color.black, true);
-                //CreateToggle(container, ClothingNoTagJsonStorable);
-                //ClothingNoTagJsonStorable.setJSONCallbackFunction = OnClothingTagChange;
-
 
                 CreateLabel(container2, "Type Tags", Color.black, true);
                 for (int i = 0; i < TagFilter.ClothingTypeTags.Count; i++)
@@ -3969,16 +3848,10 @@ namespace VPB
                     CreateToggle(container2, ClothingTypeTagsJsonStorable[i]);
                     ClothingTypeTagsJsonStorable[i].setJSONCallbackFunction = OnClothingTagChange;
                 }
-
-
-				
 			}
-#endregion
-
 
             {
-				// Put this last because it pops a popup window; otherwise it can be occluded
-				// Creator filter
+				// Put this last because it pops a popup window; otherwise it can be occluded Creator filter
 				var createrContainter = CreateUIContainer(-420, 0, 420, 120);
 				var list = new List<string>();
 				list.Add("All");
@@ -3986,10 +3859,8 @@ namespace VPB
 				creatorFilterChooser = new JSONStorableStringChooser("creator", choicesList4, _creatorFilter, "Creator", SyncCreatorFilter);
 				creatorFilterChooser.isStorable = false;
 				creatorFilterChooser.isRestorable = false;
-				creatorPopup = CreateFilterablePopup(createrContainter, creatorFilterChooser);// Height 120
-
+				creatorPopup = CreateFilterablePopup(createrContainter, creatorFilterChooser);
 			}
-
 		}
 		JSONStorableStringChooser unknownClothingTagFilterChooser;
 		JSONStorableStringChooser clothingGenderFilterChooser;
@@ -4011,7 +3882,6 @@ namespace VPB
         {
             if (hairOnlyAllowSingleFilter.val && jsb.val)
             {
-				// Clear all other selections
                 foreach (var item in HairRegionTagsJsonStorable)
                 {
                     if (item != jsb) item.valNoCallback = false;
@@ -4024,7 +3894,6 @@ namespace VPB
 				{
 					if (item != jsb) item.valNoCallback = false;
 				}
-				//if (ClothingNoTagJsonStorable != jsb) ClothingNoTagJsonStorable.valNoCallback = false;
 			}
             ResetDisplayedPage();
 		}
@@ -4032,7 +3901,6 @@ namespace VPB
         {
             if (onlyAllowSingleFilter.val && jsb.val)
             {
-				// Clear all other selections
                 foreach (var item in ClothingRegionTagsJsonStorable)
                 {
                     if (item != jsb) item.valNoCallback = false;
@@ -4055,7 +3923,6 @@ namespace VPB
             if (val)
             {
 				bool have = false;
-				// Clear all other selections
                 foreach (var item in ClothingRegionTagsJsonStorable)
                 {
                     if (!have)
@@ -4089,15 +3956,6 @@ namespace VPB
                         item.valNoCallback = false;
                     }
                 }
-                // "no tag" has the lowest priority
-                //if (!have)
-                //{
-                //    if (ClothingNoTagJsonStorable.val) ClothingNoTagJsonStorable.valNoCallback = true;
-                //}
-                //else
-                //{
-                //    ClothingNoTagJsonStorable.valNoCallback = false;
-                //}
             }
             ResetDisplayedPage();
 		}
@@ -4106,7 +3964,6 @@ namespace VPB
             if (val)
             {
                 bool have = false;
-				// Clear all other selections
                 foreach (var item in HairRegionTagsJsonStorable)
                 {
                     if (!have)
@@ -4153,6 +4010,4 @@ namespace VPB
 			ResetDisplayedPage();
 		}
 	}
-
-
 }

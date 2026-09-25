@@ -103,6 +103,5 @@ namespace VPB
             }
             return VpbBodyRegion.Other;
         }
-
     }
 }

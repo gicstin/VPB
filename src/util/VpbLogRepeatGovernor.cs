@@ -41,11 +41,9 @@ namespace VPB.src.util
         private readonly Dictionary<Key, Entry> entries = new Dictionary<Key, Entry>();
         internal int Count { get { lock (gate) return entries.Count; } }
 
-        // A negative summary means the first suppression notice; positive means omitted copies.
         internal bool Accept(Key key, double now, out long summary)
         {
             summary = 0;
-            // Preserve evidence rather than truncate or merge oversized/overflow messages.
             if (key.Source.Length + key.Message.Length > MaxKeyCharacters) return true;
             lock (gate)
             {
@@ -74,7 +72,6 @@ namespace VPB.src.util
             lock (gate)
             {
                 var expired = new List<Key>();
-                // ponytail: scan at most 4096 keys once per second; use expiry queue if cap grows.
                 foreach (var pair in entries)
                 {
                     if (!all && now - pair.Value.Started < WindowSeconds) continue;

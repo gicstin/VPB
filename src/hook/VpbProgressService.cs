@@ -3,7 +3,6 @@ using UnityEngine;
 
 namespace VPB
 {
-        /// <summary>Unified long-task progress for external <see cref="VpbBusyChrome"/>.</summary>
     internal static class VpbProgressService
     {
         internal enum GalleryPhase
@@ -204,10 +203,7 @@ namespace VPB
             s_SceneLoadDepTotal = 0;
         }
 
-        /// <summary>
-        /// Tier B: main thread may stall. Start OS heartbeat. Unity strip stays enabled when frames pump.
-        /// Nestable — pair with <see cref="ExitBlocking"/>.
-        /// </summary>
+        /// <summary>Tier B: main thread may stall.</summary>
         internal static bool IsHubFetchActive => s_HubFetchActive;
 
         internal static void BeginHubFetch(string title)
@@ -375,7 +371,6 @@ namespace VPB
             snapshot.Visible = true;
             snapshot.Blocking = true;
             snapshot.Cancellable = false;
-            // Indeterminate strip when frames still pump (e.g. between sync cliffs).
             snapshot.ShowMovingStrip = true;
             snapshot.Progress01 = -1f;
             snapshot.Title = string.IsNullOrEmpty(title) ? "Working" : title;
@@ -465,10 +460,6 @@ namespace VPB
             try { NativeTextureOnDemandCache.RequestCancel(); } catch { }
         }
 
-        /// <summary>
-        /// Baseline quit stoppers for singletons that have no natural start hook to self-register from.
-        /// Everything else enrolls with <see cref="VpbShutdown.Register"/> when it starts.
-        /// </summary>
         internal static void RegisterShutdownHooks()
         {
             VpbShutdown.Register("progress-service", () =>
@@ -487,10 +478,6 @@ namespace VPB
             });
         }
 
-        /// <summary>
-        /// Deterministic process-exit teardown. Delegates to the single shutdown gate so every
-        /// registered subsystem stops, whether or not this class knows it exists.
-        /// </summary>
         internal static void ShutdownForQuit()
         {
             VpbShutdown.Begin();
@@ -543,7 +530,6 @@ namespace VPB
                     return;
                 }
 
-                // Job finished — hand off to summary report (same chrome as on-demand cache).
                 if (s_BulkZstdWasRunning && stats.Completed)
                 {
                     try { NativeTextureOnDemandCache.PresentBulkZstdSummary(stats); } catch { }
@@ -593,7 +579,6 @@ namespace VPB
                 }
                 catch { }
 
-                // Quiet live line: counts / ETA / bytes — no per-texture names.
                 snapshot.Subtitle = NativeTextureOnDemandCache.FormatLiveProgressLine(
                     done, total, elapsed, null, includeThroughput: true, includeOnDemandZstdTail: false);
 

@@ -267,14 +267,12 @@ namespace VPB
             {
                 string seg = segs[i];
                 if (seg == "eye" || seg == "eyes") return true;
-                if (seg.StartsWith("eye") && seg != "eyelet") return true;
+                if (seg.StartsWith("eye", StringComparison.Ordinal) && seg != "eyelet") return true;
             }
             return false;
         }
 
-        // Physical wearable accessories (eyewear, jewelry, headwear) that some heuristics flag as
-        // "cosmetic" but which belong WITH an outfit, not with the face. Used by Outfit Only import to
-        // carry preset accessories while still keeping the target's face cosmetics (eye overlays, makeup).
+        // Wearable accessories that belong with an outfit rather than face cosmetics (Outfit Only import).
         private static readonly string[] AccessoryClothingKeywords =
         {
             "glasses", "sunglasses", "goggles", "monocle", "eyewear",
@@ -312,7 +310,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Loose path under <c>Custom/Clothing/</c> or <c>Saves/Person/Clothing/</c> (items, not atom outfit presets).</summary>
         public static bool IsLooseCustomClothingItemPath(string path)
         {
             string norm = NormalizeLooseGalleryPath(path);
@@ -323,14 +320,12 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Loose full-outfit preset under <c>Custom/Atom/Person/Clothing/</c>.</summary>
         public static bool IsLooseCustomClothingPresetPath(string path)
         {
             string norm = NormalizeLooseGalleryPath(path);
             return norm.IndexOf("Custom/Atom/Person/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>Loose path under <c>Custom/Hair/</c> (items, not atom hair presets).</summary>
         public static bool IsLooseCustomHairItemPath(string path)
         {
             string norm = NormalizeLooseGalleryPath(path);
@@ -341,7 +336,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Loose full hair preset under <c>Custom/Atom/Person/Hair/</c>.</summary>
         public static bool IsLooseCustomHairPresetPath(string path)
         {
             string norm = NormalizeLooseGalleryPath(path);
@@ -566,8 +560,6 @@ namespace VPB
             RemoveClothingByWearClass(target, ClothingWearClass.RealGarment);
         }
 
-        // Disable the target's worn clothing whose wear class matches classToRemove (live geometry
-        // clothing:<uid> bools); other classes, including Unknown, stay on.
         public static void RemoveClothingByWearClass(Atom target, ClothingWearClass classToRemove)
         {
             if (target == null)
@@ -624,11 +616,7 @@ namespace VPB
             gender = ResourceGender.Unknown;
             if (string.IsNullOrEmpty(pathOrUid)) return;
 
-            // Expected patterns include:
-            // - Custom/Clothing/Female/...
-            // - Custom/Clothing/Male/...
-            // - package.var:/Custom/Clothing/Female/...
-            // We keep this allocation-free: no Replace/ToLower/Substring.
+            // Matches Custom/Clothing/{Female,Male}/ with or without package prefix; allocation-free.
 
             int start = 0;
             int idx = pathOrUid.IndexOf(":/", StringComparison.Ordinal);
@@ -640,7 +628,6 @@ namespace VPB
             }
             if (start < pathOrUid.Length && (pathOrUid[start] == '/' || pathOrUid[start] == '\\')) start++;
 
-            // Also handle cases where we get full paths that contain "/Custom/..." somewhere in the middle.
             int customIdx = pathOrUid.IndexOf("Custom/", start, StringComparison.OrdinalIgnoreCase);
             if (customIdx < 0) customIdx = pathOrUid.IndexOf("Custom\\", start, StringComparison.OrdinalIgnoreCase);
             if (customIdx >= 0) start = customIdx;
@@ -674,7 +661,6 @@ namespace VPB
                 return;
             }
 
-            // Atom-level preset folders (used by VaM for person clothing/hair presets)
             if (pathOrUid.IndexOf("Custom/Atom/Person/Clothing", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
                 pathOrUid.IndexOf("Custom\\Atom\\Person\\Clothing", start, StringComparison.OrdinalIgnoreCase) >= 0)
             {
@@ -722,16 +708,12 @@ namespace VPB
         {
             if (atom == null) yield break;
 
-            // Conservative settle: give VaM more frames for load/skin/physics/collider init.
-            // Clothing items need extra time to properly attach colliders and physics to the body.
             for (int i = 0; i < 5; i++)
             {
                 yield return new WaitForEndOfFrame();
             }
             yield return new WaitForSeconds(0.1f);
 
-            // Best-effort refresh hooks. These are intentionally minimal and guarded:
-            // only call if an action exists on the storable.
             string[] actionNames = new string[]
             {
                 "Refresh",
@@ -743,7 +725,6 @@ namespace VPB
 
             try
             {
-                // If we have a stable inferred base id, probe common companion storables.
                 if (!string.IsNullOrEmpty(inferredBaseId))
                 {
                     string[] candidateStorables = new string[]
@@ -1247,7 +1228,6 @@ namespace VPB
                             ClothingApplyMode.Replace, presetJC: presetJSON, storableNameOverride: storableId,
                             skipDependencyPrewarm: true, updateLastRestoredData: false);
 
-                        // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
                         SchedulePostApplyFixup(atom, inferredBaseId, isClothing);
                         yield break;
                     }
@@ -1287,7 +1267,7 @@ namespace VPB
                 for (int i = 0; i < names.Count; i++)
                 {
                     string n = names[i];
-                    if (string.IsNullOrEmpty(n) || !n.StartsWith(prefix)) continue;
+                    if (string.IsNullOrEmpty(n) || !n.StartsWith(prefix, StringComparison.Ordinal)) continue;
                     string actualItemName = n.Substring(prefix.Length);
                     if (GetItemKeyForMatching(actualItemName).Equals(inferredKey, StringComparison.OrdinalIgnoreCase))
                         return actualItemName;
@@ -1302,7 +1282,7 @@ namespace VPB
             for (int i = 0; i < names.Count; i++)
             {
                 string n = names[i];
-                if (string.IsNullOrEmpty(n) || !n.StartsWith(prefix)) continue;
+                if (string.IsNullOrEmpty(n) || !n.StartsWith(prefix, StringComparison.Ordinal)) continue;
                 string actualItemName = n.Substring(prefix.Length);
                 if (GetItemKeyForMatching(actualItemName).Equals(itemName, StringComparison.OrdinalIgnoreCase))
                     return actualItemName;
@@ -1373,7 +1353,7 @@ namespace VPB
             {
                 foreach (string paramName in geometry.GetBoolParamNames())
                 {
-                    if (!paramName.StartsWith(prefix)) continue;
+                    if (!paramName.StartsWith(prefix, StringComparison.Ordinal)) continue;
                     string actualItemName = paramName.Substring(prefix.Length);
                     string actualKey = GetItemKeyForMatching(actualItemName);
                     if (actualKey.Equals(inferredKey, StringComparison.OrdinalIgnoreCase))
@@ -1396,15 +1376,15 @@ namespace VPB
 
             foreach (string paramName in geometry.GetBoolParamNames())
             {
-                if (paramName.StartsWith(prefix))
+                if (paramName.StartsWith(prefix, StringComparison.Ordinal))
                 {
                     string actualItemName = paramName.Substring(prefix.Length);
                     string actualKey = GetItemKeyForMatching(actualItemName);
 
                     bool packageMatch = string.IsNullOrEmpty(packageName) ||
-                                       actualItemName.StartsWith(packageName + ".") ||
-                                       actualItemName.StartsWith(packageName + ":") ||
-                                       actualItemName.StartsWith(packageName + ":/");
+                                       actualItemName.StartsWith(packageName + ".", StringComparison.Ordinal) ||
+                                       actualItemName.StartsWith(packageName + ":", StringComparison.Ordinal) ||
+                                       actualItemName.StartsWith(packageName + ":/", StringComparison.Ordinal);
 
                     if (packageMatch)
                     {
@@ -1421,7 +1401,7 @@ namespace VPB
             {
                 foreach (string paramName in geometry.GetBoolParamNames())
                 {
-                    if (paramName.StartsWith(prefix))
+                    if (paramName.StartsWith(prefix, StringComparison.Ordinal))
                     {
                         string actualItemName = paramName.Substring(prefix.Length);
                         string actualKey = GetItemKeyForMatching(actualItemName);
@@ -1441,7 +1421,7 @@ namespace VPB
 
                 foreach (string paramName in geometry.GetBoolParamNames())
                 {
-                    if (paramName.StartsWith(prefix))
+                    if (paramName.StartsWith(prefix, StringComparison.Ordinal))
                     {
                         string actualItemName = paramName.Substring(prefix.Length);
                         string actualKey = GetItemKeyForMatching(actualItemName);
@@ -1623,10 +1603,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Clear all hair on person (Hair.Clear, else geometry hair: bools via DAZCharacterSelector).
-        /// Warm/cold path — not per-frame.
-        /// </summary>
         public static void RemoveAllHair(Atom target)
         {
             if (target == null)
@@ -1991,12 +1967,7 @@ namespace VPB
             }
         }
 
-        // Clothing-only variant used by the "Clothes: Keep" appearance load. Snapshots the material /
-        // customization state (textures, colors, sim, etc.) of the currently-active clothing item
-        // storables so it can be re-applied after a non-merge appearance preset load. The ClothingPresets
-        // lock preserves which items are worn, but a non-merge load still resets unlisted storables to
-        // default, which strips the customization from the kept clothing. Hair and aggregate storables are
-        // intentionally excluded so the incoming preset's hair still applies normally.
+        // Clothing-only variant used by the "Clothes: Keep" appearance load.
         internal static List<JSONClass> CaptureActiveClothingStorableSnapshots(Atom atom)
         {
             var snapshots = new List<JSONClass>();
@@ -2038,7 +2009,6 @@ namespace VPB
                 if (string.IsNullOrEmpty(sid)) continue;
                 if (s_ClothingHairAggregateStorables.Contains(sid)) continue;
                 if (IsBodyControlOrPhysicsStorableId(sid)) continue;
-                // Exclude hair item storables and hair aggregates so the new preset's hair still loads.
                 if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) continue;
 
                 bool include = sid.IndexOf("clothingItem", StringComparison.OrdinalIgnoreCase) >= 0
@@ -2102,13 +2072,7 @@ namespace VPB
         const int CustomTextureSlotCount = 6;
         const int CustomTextureResyncPasses = 3;
 
-        /// <summary>
-        /// Issue #80: re-bind MaterialOptions customTexture* after clothing materials settle.
-        /// VPB cache often finishes OnTexture*Loaded before DAZSkinWrap.InitMaterials clones
-        /// GPUmaterials (or while skinWrap is still null). URL/fields stay correct; GPU slots wrong.
-        /// Prefer sync MaterialOptions.SetAllParameters (push already-loaded Texture2D), queue only
-        /// pending URL slots, then multi-pass across frames for late wrap reconnect.
-        /// </summary>
+        /// <summary>Issue #80: re-bind MaterialOptions customTexture* after clothing materials settle.</summary>
         internal static IEnumerator DeferredClothingItemCustomTextureResyncCoroutine(
             DAZClothingItem item,
             Action onComplete)
@@ -2165,10 +2129,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Scene-load total end: materials/cloth settle after our early OnLoadComplete passes.
-        /// Multi-pass sync rebind so tiles stick on final GPU materials (no forceReload decode).
-        /// </summary>
+        /// <summary>Scene-load total end: materials/cloth settle after our early OnLoadComplete passes.</summary>
         internal static IEnumerator DeferredPostSceneLoadClothingCustomTextureResyncCoroutine()
         {
             for (int pass = 0; pass < CustomTextureResyncPasses; pass++)
@@ -2207,9 +2168,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// True when any customTexture*Url is set (non-empty, not NULL).
-        /// </summary>
         internal static bool MaterialOptionsHasCustomTextureUrl(MaterialOptions mo)
         {
             if (mo == null) return false;
@@ -2237,10 +2195,7 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// After DAZSkinWrap.InitMaterials clones GPUmaterials: push loaded customTexture* + params.
-        /// Does not queue image loads (safe inside SetMaterialTexture → InitMaterials).
-        /// </summary>
+        /// <summary>After DAZSkinWrap.InitMaterials clones GPUmaterials: push loaded customTexture* + params.</summary>
         internal static void ReapplyMaterialOptionsAfterGpuInit(MaterialOptions mo)
         {
             if (mo == null) return;
@@ -2291,10 +2246,6 @@ namespace VPB
             s_SetAllParametersMethod.Invoke(mo, null);
         }
 
-        // VaM registers custom texture URL params as "customTexture" + textureGroup1.<name>, i.e.
-        // customTexture_MainTex / _SpecTex / _GlossTex / _AlphaTex / _BumpMap / _DecalTex. Only the
-        // tile/offset FLOAT params are numbered (customTexture1TileX). Resolving the slot needs the
-        // owning MaterialOptions' texture group, not a digit.
         static int TryGetCustomTextureSlotIndex(MaterialOptions mo, string urlParamName)
         {
             return MaterialOptionsTextureGuard.GetCustomTextureSlotForUrlParam(mo, urlParamName);
@@ -2408,13 +2359,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Issue #80 rebind:
-        /// 1) Sync MaterialOptions.SetAllParameters — push already-loaded customTexture* onto current
-        ///    DAZSkinWrap.GPUmaterials (no image queue, no forceReload).
-        /// 2) Queue only slots whose URL is set but Texture2D field still null (load never finished).
-        /// Avoid JSONStorableUrl.Reload (valueSetFromBrowse → forceReload → cache eviction).
-        /// </summary>
+        /// <summary>Issue #80 rebind: sync GPU params from loaded textures, queue only slots whose load never finished.</summary>
         internal static void ReloadMaterialOptionsCustomTextures(MaterialOptions mo)
         {
             if (mo == null) return;
@@ -2444,8 +2389,7 @@ namespace VPB
 
             if (!anyCustomUrl && !HasAnyLoadedCustomTexture(mo)) return;
 
-            // Sync GPU push first — fixes the common case where OnTexture*Loaded already filled
-            // customTexture* fields but skin-wrap materials were not ready / were replaced.
+            // Sync GPU push first: covers textures loaded before skin-wrap materials were ready.
             try { InvokeSetAllParameters(mo); }
             catch (Exception ex)
             {
@@ -2467,15 +2411,13 @@ namespace VPB
                 if (string.IsNullOrEmpty(val)) continue;
                 if (string.Equals(val, "NULL", StringComparison.OrdinalIgnoreCase)) continue;
 
-                // Skip only when this slot's loaded texture is the one THIS url produced. A slot that
-                // holds a texture from an older url (newest load never arrived, or its callback was
-                // dropped as stale) must still be re-queued.
+                // Skip only when this slot's loaded texture is the one THIS url produced.
                 int slot = TryGetCustomTextureSlotIndex(mo, name);
                 if (slot >= 0
                     && GetLoadedCustomTexture(mo, slot) != null
                     && MaterialOptionsTextureGuard.IsSlotAppliedForUrl(mo, slot, val))
                 {
-                    continue; // already in RAM and current; SetAllParameters pushed it
+                    continue;
                 }
 
                 try { ForceUrlCallback(url); }
@@ -2486,11 +2428,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Push WrapControl Offset/Thickness onto DAZSkinWrap after settle.
-        /// PostLoadJSONRestore can run before wrap is assigned; Sync then no-ops and wrap
-        /// keeps asset defaults. Re-fire stored floats once wrap exists (issue #80).
-        /// </summary>
+        /// <summary>Push WrapControl Offset/Thickness onto DAZSkinWrap after settle.</summary>
         internal static void ResyncWrapOffsetThicknessUnder(Transform root)
         {
             if (root == null) return;
@@ -2527,10 +2465,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Re-fire Tile/Offset Sync without changing stored values. After material reconnect,
-        /// GPU scale often falls back to 1 while JSON still shows 20 — looks overstretched.
-        /// </summary>
         internal static void ResyncMaterialOptionsCustomTextureTiles(MaterialOptions mo)
         {
             if (mo == null) return;
@@ -2563,7 +2497,6 @@ namespace VPB
         static void ForceUrlCallback(JSONStorableUrl url)
         {
             if (url == null) return;
-            // Intentionally leave valueSetFromBrowse false so QueueCustomTexture gets forceReload=false.
             try
             {
                 if (url.setJSONCallbackFunction != null)

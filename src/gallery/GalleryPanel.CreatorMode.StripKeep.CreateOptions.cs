@@ -10,16 +10,11 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Strip Scene post-rebuild create options: Default 3P Lights XOR Import SubScene.
-    /// Shown when no lights kept. Path + last mode persist in VPBConfig (recognition).
-    /// </summary>
     public partial class GalleryPanel
     {
         /// <summary>Synthetic uid: spawn SubScene atom + load path after strip rebuild.</summary>
         private const string StripKeepSyntheticImportSubSceneUid = "VPB_SYNTH_IMPORT_SUBSCENE";
 
-        /// <summary>0=none, 1=3P, 2=SubScene — last create-fill choice for auto-seed.</summary>
         private enum StripKeepCreateFillMode
         {
             None = 0,
@@ -131,10 +126,7 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// External create-options block — pinned above atom list. Visible when lights stripped.
-        /// Two exclusive fills: Default 3P XOR Import SubScene (Hick: one path).
-        /// </summary>
+        /// <summary>External create-options block — pinned above atom list.</summary>
         private void BuildStripKeepCreateOptionsSection(Transform parent, float btnH, int font, float s)
         {
             _stripKeepCreateOptionsHost = new GameObject("CreateOptions");
@@ -375,7 +367,6 @@ namespace VPB
         {
             if (_stripKeepCreateOptionsHost == null)
             {
-                // Legacy single-row rebuild path.
                 RefreshStripKeepDefault3PChromeLegacy();
                 return;
             }
@@ -405,7 +396,6 @@ namespace VPB
             RefreshStripKeepImportSubScenePathLabel();
         }
 
-        /// <summary>Fallback if create-options host missing (partial rebuild).</summary>
         private void RefreshStripKeepDefault3PChromeLegacy()
         {
             if (_stripKeepDefault3PHost == null) return;
@@ -435,10 +425,6 @@ namespace VPB
             RefreshStripKeepImportSubScenePathLabel();
         }
 
-        /// <summary>
-        /// Auto-pick create fill when Lights kept in mask but scene has none.
-        /// Prefer last mode (SubScene if path set, else 3P).
-        /// </summary>
         private void StripKeepSeedCreateFillWhenNoLights()
         {
             if (!StripKeepShouldShowDefault3P()) return;
@@ -453,7 +439,6 @@ namespace VPB
                 return;
             }
 
-            // Default / remembered 3P / SubScene with empty path → offer 3P.
             _stripKeepSelectedUids.Add(StripKeepSyntheticDefault3PUid);
             if (_stripKeepCreateFillMode == StripKeepCreateFillMode.None)
                 _stripKeepCreateFillMode = StripKeepCreateFillMode.Default3P;
@@ -500,11 +485,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// After strip rebuild: EnsureInstalled → AddAtom SubScene → LoadSubSceneWithPath.
-        /// Uses MoveNext spawn loop (Unity 2018 nested IEnumerator-safe) + preferred uid.
-        /// Warm path only.
-        /// </summary>
+        /// <summary>After strip rebuild: EnsureInstalled → AddAtom SubScene → LoadSubSceneWithPath.</summary>
         private IEnumerator CreatorStripImportDefaultSubSceneRoutine(string path)
         {
             if (string.IsNullOrEmpty(path)) yield break;
@@ -571,7 +552,6 @@ namespace VPB
             }
             catch { }
 
-            // Prefer stable uid; reuse if strip left one from prior import.
             Atom subSceneAtom = null;
             try { subSceneAtom = sc.GetAtomByUid(preferredUid); } catch { subSceneAtom = null; }
             if (subSceneAtom != null && !SceneUtils.IsSubSceneAtom(subSceneAtom))
@@ -636,7 +616,6 @@ namespace VPB
             catch { sub = null; }
             if (sub == null)
             {
-                // Component may appear a frame late — yield outside try/catch (CS1626).
                 yield return null;
                 yield return new WaitForEndOfFrame();
                 try { sub = subSceneAtom.GetComponentInChildren<SubScene>(true); }
@@ -677,7 +656,6 @@ namespace VPB
                 yield break;
             }
 
-            // Wait for nested load / package resolve.
             float loadDeadline = Time.realtimeSinceStartup + 180f;
             while (Time.realtimeSinceStartup < loadDeadline)
             {

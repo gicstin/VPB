@@ -29,11 +29,10 @@ namespace VPB
 			{
 				throw new Exception("Null path in DirectoryEntry constructor");
 			}
-			Path = path.Replace('\\', '/'); //path.Replace('/', '\\');
-											//FullPath = Path;
-			Uid = Path;// SlashPath;
+			Path = path.Replace('\\', '/');
+			Uid = Path;
 			UidLowerInvariant = Uid.ToLowerInvariant();
-			Name = Regex.Replace(Path, ".*/", string.Empty);
+			Name = VamPathFastPaths.StripThroughLastSlash(Path);
 		}
 
 		public override string ToString()
@@ -83,33 +82,11 @@ namespace VPB
 
 		public virtual bool IsHidden()
 		{
-			//return hidePath != null && File.Exists(hidePath);
 			return false;
 		}
 
 		public virtual void SetHidden(bool b)
 		{
-			//if (hidePath == null)
-			//{
-			//	return;
-			//}
-			//if (File.Exists(hidePath))
-			//{
-			//	if (!b)
-			//	{
-			//		FileManager.DeleteFile(hidePath);
-			//	}
-			//}
-			//else if (b)// Hidden
-			//{
-			//	string directoryName = FileManager.GetDirectoryName(hidePath);
-			//	if (!FileManager.DirectoryExists(directoryName))
-			//	{
-			//		FileManager.CreateDirectory(directoryName);
-			//	}
-			//	FileManager.WriteAllText(hidePath, string.Empty);
-			//}
 		}
 	}
-
 }

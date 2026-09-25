@@ -2,22 +2,16 @@ using System;
 
 namespace VPB
 {
-    /// <summary>
-    /// Lightweight list entry representing a VarPackage (not an internal file).
-    /// Used by dependency filtering when we want to show packages regardless of category ext/path filters.
-    /// </summary>
     public class PackageListEntry : FileEntry
     {
         private VarPackage _packageStore;
 
-        /// <summary>When set, <see cref="Package"/> is resolved on first use via <see cref="FileManager.TryResolveVarPackageForIndexedGalleryRow"/>.</summary>
         private string _deferredPackageUid;
         private string _deferredVarPathHint;
 
         /// <summary>Per-uid <c>pkg.first_scanned</c> from SQLite; avoids resolving <see cref="Package"/> for DateAdded/DateUpdated sort.</summary>
         private long _galleryIndexedFirstScannedTicks = long.MinValue;
 
-        /// <summary>NTFS creation time from SQLite <c>pkg.pctime</c>; bounds package New/Updated dates.</summary>
         private long _galleryIndexedFileCreationTicks = long.MinValue;
 
         public VarPackage Package
@@ -45,8 +39,6 @@ namespace VPB
             Package = pkg;
             if (pkg != null)
             {
-                // Ratings are keyed by FileEntry.Uid. For packages on disk that is the package path
-                // (e.g. AddonPackages/Foo.Bar.1.var), not the VarPackage.Uid. Use pkg.Path when available.
                 Path = pkg.Path;
                 Uid = !string.IsNullOrEmpty(Path) ? Path : pkg.Uid;
                 Name = pkg.Uid + ".var";
@@ -66,15 +58,11 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// SQLite fast path: listing fields come from the local index; <see cref="Package"/> is resolved lazily when package state is needed.
-        /// </summary>
         public PackageListEntry(string packageUid, string indexedVarPathHint, DateTime lastWriteTime, long size, long packageCreationTicksOrMin)
             : this(packageUid, indexedVarPathHint, lastWriteTime, size, packageCreationTicksOrMin, long.MinValue)
         {
         }
 
-        /// <summary>SQLite fast path with first_scanned for DateAdded/DateUpdated sort.</summary>
         public PackageListEntry(string packageUid, string indexedVarPathHint, DateTime lastWriteTime, long size, long packageCreationTicksOrMin, long firstScannedTicksOrMin)
             : this(packageUid, indexedVarPathHint, lastWriteTime, size, packageCreationTicksOrMin, firstScannedTicksOrMin, long.MinValue)
         {
@@ -90,8 +78,6 @@ namespace VPB
             _galleryIndexedFileCreationTicks = packageFileCreationTicksOrMin;
             Package = null;
 
-            // Ratings are keyed by FileEntry.Uid. For packages on disk that is the package path.
-            // Use the indexed var path hint when available; else fall back to the package UID.
             Path = _deferredVarPathHint.Replace('\\', '/');
             Uid = !string.IsNullOrEmpty(Path) ? Path : packageUid;
             Name = packageUid + ".var";
@@ -215,4 +201,3 @@ namespace VPB
         }
     }
 }
-

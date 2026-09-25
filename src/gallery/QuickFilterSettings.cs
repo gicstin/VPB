@@ -10,10 +10,8 @@ namespace VPB
     [Serializable]
     public partial class QuickFilterEntry
     {
-        /// <summary>SQLite row id; 0 = not yet assigned.</summary>
         public int Id;
         public string Name;
-        /// <summary>Pinned presets appear as one-click randomize actions in title-bar overflow.</summary>
         public bool Pinned;
         public string CategoryPath;
         public string CategoryTitle;
@@ -25,10 +23,6 @@ namespace VPB
         /// <summary><see cref="UserTagAvailMode"/> as int (0=tag, 1=filter by tags, 2=untagged only).</summary>
         public int UserTagAvailFilterMode = 0;
         public int UserTagInheritVarToChildren = 0;
-        /// <summary>
-        /// Title-bar Source filter: 0=All, 1=Local, 2=Var (<see cref="VPBConfig.GlobalSourceFilterValue"/>).
-        /// Legacy presets without this field migrate from Scene/Appearance "local" → Local, else All.
-        /// </summary>
         public int GlobalSourceFilter = 0;
         public string SceneSourceFilter = "";
         public string AppearanceSourceFilter = "";
@@ -48,22 +42,14 @@ namespace VPB
         /// <summary>Title-bar Filter license type. Empty = off.</summary>
         public string LicenseFilter = "";
 
-        /// <summary>
-        /// Embedded leaf snapshots for a merged multi-random preset.
-        /// Browse applies OR-combined leaf filters; dice applies each member in order.
-        /// Null/empty = normal single preset.
-        /// </summary>
         public List<QuickFilterEntry> MergeMembers;
 
-        /// <summary>True when this preset randomizes multiple leaf filter sets in sequence. Browse applies OR-combined leaves.</summary>
         public bool IsMerged
         {
             get { return MergeMembers != null && MergeMembers.Count >= 2; }
         }
 
-        /// <summary>True when side-tab layout was captured with this preset (distinguishes legacy presets).</summary>
         public bool HasSideTabState = false;
-        /// <summary><see cref="ContentType"/> as int, or -1 when that side panel was closed.</summary>
         public int LeftActiveContent = -1;
         public int RightActiveContent = -1;
         public string CategorySideFilter = "";
@@ -75,7 +61,6 @@ namespace VPB
         public int HistoryFilterMode = 0;
         public List<QuickFilterSideTabSortEntry> SideTabSortStates = new List<QuickFilterSideTabSortEntry>();
         
-        // Visual customization
         public Color ButtonColor = UI.ChromePanel;
         public Color TextColor = Color.white;
 
@@ -159,7 +144,6 @@ namespace VPB
             }
             node["SideTabSortStates"] = sideSortArr;
 
-            // Colors
             node["ButtonColor"] = ColorToHex(ButtonColor);
             node["TextColor"] = ColorToHex(TextColor);
 
@@ -181,7 +165,6 @@ namespace VPB
             return node;
         }
 
-        /// <summary>Deep-ish clone via JSON for merge snapshots (strips nested MergeMembers).</summary>
         public static QuickFilterEntry CloneLeafSnapshot(QuickFilterEntry src)
         {
             if (src == null) return null;
@@ -207,9 +190,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Flatten merge sources into leaf snapshots (cap). Nested merges expand.
-        /// </summary>
         public static void CollectMergeLeaves(QuickFilterEntry src, List<QuickFilterEntry> into, int maxLeaves)
         {
             if (src == null || into == null || maxLeaves <= 0) return;
@@ -229,14 +209,8 @@ namespace VPB
             if (leaf != null) into.Add(leaf);
         }
 
-        // Warm browse-apply for merged presets — reuse buffer (Unity scripting / GC).
         private static readonly StringBuilder s_MergeBrowseSb = new StringBuilder(128);
 
-        /// <summary>
-        /// Browse snapshot from merge leaves: OR of each leaf's search/tags/creator (title-search
-        /// branches), union of user tags, shared session filters. Not IsMerged — apply as one filter.
-        /// Dice still walks leaves via <see cref="CollectMergeLeaves"/>.
-        /// </summary>
         public static QuickFilterEntry BuildCombinedBrowseEntry(IList<QuickFilterEntry> leaves)
         {
             if (leaves == null || leaves.Count == 0) return null;
@@ -271,7 +245,6 @@ namespace VPB
                 }
             }
 
-            // OR-combine per-leaf clauses into title search (AND within leaf, OR across leaves).
             s_MergeBrowseSb.Length = 0;
             bool anyClause = false;
             for (int i = 0; i < leaves.Count; i++)
@@ -285,12 +258,10 @@ namespace VPB
                 anyClause = true;
             }
             dest.SearchText = anyClause ? s_MergeBrowseSb.ToString() : "";
-            // Package tags live in OR search as #tag — clear AND side-tab tags.
             if (dest.Tags != null) dest.Tags.Clear();
             else dest.Tags = new List<string>();
             dest.Creator = "";
 
-            // User tags: union (Compound = any; Isolate = all — global setting).
             var utSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var xutSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             dest.UserTags = new List<string>();
@@ -302,7 +273,7 @@ namespace VPB
                 QuickFilterEntry L = leaves[i];
                 if (L == null) continue;
                 if (L.UserTagAvailFilterMode == 2 || L.UserTagAvailFilterMode == 3)
-                    utMode = L.UserTagAvailFilterMode; // presence browse wins if any leaf
+                    utMode = L.UserTagAvailFilterMode;
                 else if (utMode != 2 && utMode != 3 && L.UserTagAvailFilterMode == 1) utMode = 1;
                 if (L.UserTagInheritVarToChildren != 0) utInherit = 1;
                 AppendUniqueStrings(dest.UserTags, utSeen, L.UserTags);
@@ -311,7 +282,6 @@ namespace VPB
             dest.UserTagAvailFilterMode = utMode;
             dest.UserTagInheritVarToChildren = utInherit;
 
-            // Session filters: agree → keep; else least restrictive / first.
             dest.GlobalSourceFilter = AgreeIntField(leaves, 0, 0);
             dest.PackagePathFilter = AgreePackagePath(leaves);
             dest.LicenseFilter = AgreeLicense(leaves);
@@ -398,7 +368,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>field: 0=GlobalSource 1=BrowseHidden 2=AlwaysLoaded 3=OldVersions 4=Loaded 5=Unused 6=Clothing 7=Hair 8=Appearance 9=PosePeople 10=SceneHub</summary>
         private static int AgreeIntField(IList<QuickFilterEntry> leaves, int field, int fallback)
         {
             bool have = false;
@@ -534,7 +503,6 @@ namespace VPB
                     entry.SortState = new SortState((SortType)ti, (SortDirection)di);
             }
 
-            // Legacy exclusive sort → browse filter cycles
             if (entry.SortState != null)
             {
                 if (entry.SortState.Type == SortType.HiddenOnly)
@@ -621,7 +589,7 @@ namespace VPB
                         if (m == null) continue;
                         m.Id = 0;
                         m.Pinned = false;
-                        m.MergeMembers = null; // flatten: stored members are leaves
+                        m.MergeMembers = null;
                         entry.MergeMembers.Add(m);
                     }
                     catch { }
@@ -707,7 +675,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Restore a soft-deleted preset at a clamped index.</summary>
         public void InsertFilterAt(QuickFilterEntry entry, int index)
         {
             if (entry == null) return;
@@ -777,7 +744,6 @@ namespace VPB
         {
             Filters.Clear();
 
-            // Prefer SQLite; migrate legacy JSON once when table empty.
             try
             {
                 if (VpbSqlite3.IsAvailable)
@@ -821,7 +787,6 @@ namespace VPB
 
         public void Save()
         {
-            // SQL is source of truth when available; JSON kept as portable mirror.
             bool sqlOk = false;
             try
             {

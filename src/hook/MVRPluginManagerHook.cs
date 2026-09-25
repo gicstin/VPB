@@ -5,8 +5,7 @@ namespace VPB
 {
     class MVRPluginManagerHook
     {
-        // Runs before the plugin compiles/instantiates; mvrp.pluginURLJSON.val gives the parent
-        // package, so we register declared deps and ingest morphs before the plugin resolves by name.
+        // Runs before the plugin compiles/instantiates; mvrp.pluginURLJSON.val gives the parent package.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVRPluginManager), "SyncPluginUrlInternal")]
         public static void PreSyncPluginUrl(object mvrp)

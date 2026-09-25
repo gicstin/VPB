@@ -78,9 +78,6 @@ namespace VPB
             _config.Save();
             PinnedRefMissing = false;
 
-            // Each branch publishes its own releases/index.json, so the list belongs to the branch
-            // that was selected when it was fetched. Dropping it first means the picker hides
-            // rather than offering builds that do not exist on the newly chosen branch.
             if (changed)
             {
                 _catalog = null;
@@ -230,8 +227,6 @@ namespace VPB
                 || VpbUpdateManifest.StagingHasPending(GetLegacyStagingDir());
         }
 
-        // ── Coroutine-based update flow using UnityWebRequest ──
-
         private IEnumerator CheckAndStageCoroutine()
         {
             string branch = _config.EffectiveRef;
@@ -366,7 +361,6 @@ namespace VPB
                 yield break;
             }
 
-            // 6. Download to staging
             Status = VpbUpdateStatus.Downloading;
             string stagingDir = GetStagingDir();
             string filesDir = Path.Combine(stagingDir, "files");
@@ -437,7 +431,6 @@ namespace VPB
                 doneBytes += item.Size;
             }
 
-            // 7. Write pending.json (and mirror for pre-subfolder VPB.Patcher.dll)
             Progress = 1f;
             WritePendingJson(stagingDir, remoteVersion, branch, pendingEntries);
             if (!VpbUpdateManifest.CopyStaging(stagingDir, GetLegacyStagingDir()))
@@ -468,8 +461,6 @@ namespace VPB
             try { OnStatusChanged?.Invoke(); } catch { }
         }
 
-        // ── UnityWebRequest helpers ──
-
         private IEnumerator DownloadText(string url, bool githubApi, Action<string> callback, bool expectMissing = false)
         {
             using (var req = UnityWebRequest.Get(url))
@@ -483,9 +474,6 @@ namespace VPB
 
                 if (req.isNetworkError || req.isHttpError)
                 {
-                    // Some of these are ordinary: a branch need not publish a release index, and
-                    // patch_manifest2.json is absent from every ref older than it. Logging those
-                    // as errors trains people to ignore the log.
                     if (expectMissing)
                         LogUtil.LogWarning("[VpbUpdater] GET " + url + " unavailable: " + req.error);
                     else
@@ -568,8 +556,6 @@ namespace VPB
             }
             return result;
         }
-
-        // ── JSON helpers ──
 
         private void WritePendingJson(string stagingDir, string version, string branch, List<PendingStagedFile> entries)
         {
@@ -679,9 +665,7 @@ namespace VPB
             string json = null;
             yield return DownloadText(url, false, r => json = r, true);
 
-            // A branch that has never published a release index is a normal state, not an error:
-            // every branch looked like this before the index existed, and side branches may never
-            // carry one. Updating still works there - only the rollback list is missing.
+            // A branch that has never published a release index is a normal state, not an error.
             if (string.IsNullOrEmpty(json))
             {
                 FinishCatalogFetch(channel, null);
@@ -694,7 +678,6 @@ namespace VPB
 
         private void FinishCatalogFetch(string channel, VpbReleaseCatalog catalog)
         {
-            // A branch switch during the request wins; this result describes the old branch.
             string current = string.IsNullOrEmpty(_config.Branch) ? VpbUpdateConfig.DefaultBranch : _config.Branch;
             if (!string.Equals(channel, current, StringComparison.Ordinal)) return;
 
@@ -785,8 +768,6 @@ namespace VPB
                 return BitConverter.ToString(sha1.Hash).Replace("-", "").ToLowerInvariant();
             }
         }
-
-        // ── Branch fetching ──
 
         public string[] GetAvailableBranches()
         {

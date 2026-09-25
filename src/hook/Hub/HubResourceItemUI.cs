@@ -23,7 +23,6 @@ namespace VPB
             this.hubHostedIndicator = ui.hubHostedIndicator;
             this.hubHostedNegativeIndicator = ui.hubHostedNegativeIndicator;
 
-
             this.hasDependenciesIndicator = ui.hasDependenciesIndicator;
             this.hasDependenciesNegativeIndicator = ui.hasDependenciesNegativeIndicator;
             this.inLibraryIndicator = ui.inLibraryIndicator;
@@ -78,5 +77,4 @@ namespace VPB
         public Text quickDownloadAllButtonLabel;
         public Image quickDownloadAllButtonBackground;
     }
-
 }

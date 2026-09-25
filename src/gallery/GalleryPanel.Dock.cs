@@ -15,7 +15,6 @@ namespace VPB
             _dockSideCacheVersion = -1;
         }
 
-        /// <summary>Edge this pane owns, or None while it holds no claim.</summary>
         internal GalleryDockSide DockSide
         {
             get
@@ -30,7 +29,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Pane's own edge, falling back to the configured default while undocked so chrome still orients.</summary>
         internal GalleryDockSide EffectiveDockSide
         {
             get
@@ -145,10 +143,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Distinct sort order per edge so an expanded dock's popups draw above a neighbour's
-        /// background where they overhang. Three overlay canvases at one order draw in undefined order.
-        /// </summary>
+        /// <summary>Distinct sort order per edge so an expanded dock's popups draw above a neighbour's background where they overhang.</summary>
         internal void ApplyDockSortingOrder()
         {
             if (canvas == null) return;
@@ -196,10 +191,6 @@ namespace VPB
                 bgRT.anchoredPosition = new Vector2(w, 0f);
         }
 
-        /// <summary>
-        /// Stops a side dock from eating the space the opposite dock needs. Returns the free-fraction
-        /// to store, floored so both docks keep at least <see cref="GalleryDockLayout.MinSideWidth"/>.
-        /// </summary>
         internal static float ClampDockWidthFreeAgainstOpposite(GalleryDockSide side, float widthFree)
         {
             VPBConfig cfg = VPBConfig.Instance;
@@ -219,7 +210,6 @@ namespace VPB
             return 1f - own;
         }
 
-        /// <summary>Claims a free edge for this pane, preferring <paramref name="preferred"/>. Returns the edge taken.</summary>
         internal GalleryDockSide ClaimDockSide(GalleryDockSide preferred)
         {
             GalleryDockSide side = GalleryDockLayout.FirstFreeSide(preferred, PanelId);
@@ -241,7 +231,6 @@ namespace VPB
             InvalidateDockSideCache();
         }
 
-        /// <summary>Resolves the edge a dock request should target, honouring enforcement then the caller's hint.</summary>
         internal GalleryDockSide ResolvePreferredDockSide(string hintOrNull)
         {
             VPBConfig cfg = VPBConfig.Instance;
@@ -260,10 +249,6 @@ namespace VPB
             return GalleryDockLayout.Parse(cfg.DesktopFixedDefaultDockSide);
         }
 
-        /// <summary>
-        /// Parks this pane on an explicit edge, docking it first if it was floating.
-        /// Never falls back to another edge — the caller picked one.
-        /// </summary>
         internal void DockPaneToSide(GalleryDockSide side)
         {
             if (VPBConfig.Instance == null) return;
@@ -333,11 +318,6 @@ namespace VPB
 
         private int _triggerBandVersion = -1;
 
-        /// <summary>
-        /// Keeps each dock's hover-to-expand strip inside the band its neighbours leave free, so a
-        /// reveal strip never lies across another dock's chrome. Runs from Update, so it is gated on the
-        /// dock version — anchor writes dirty the layout and this must not be a per-frame cost.
-        /// </summary>
         private void SyncCollapseTriggerBands()
         {
             int v = GalleryDockLayout.Version;
@@ -373,6 +353,5 @@ namespace VPB
                 rightRT.anchoredPosition = Vector2.zero;
             }
         }
-
     }
 }

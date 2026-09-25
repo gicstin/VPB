@@ -4,10 +4,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Allows a child UI element to be clickable while still forwarding scroll/drag events
-    /// to a parent ScrollRect (so the list keeps scrolling when hovered).
-    /// </summary>
     public class UIScrollPassthrough : MonoBehaviour, IScrollHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public ScrollRect target;
@@ -37,4 +33,3 @@ namespace VPB
         }
     }
 }
-

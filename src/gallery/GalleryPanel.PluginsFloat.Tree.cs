@@ -11,7 +11,6 @@ namespace VPB
     {
         private static readonly Color PluginsFloatCreatorRowBg = GalleryUiColorTokens.SurfaceDark;
 
-        /// <summary>One visible tree line (creator / package / child) for Plugins float virtualization.</summary>
         private sealed class PluginsFloatFlatRow
         {
             public FileEntry Entry;
@@ -22,15 +21,14 @@ namespace VPB
             public string ExpandKey;
             public string CreatorName;
             public string DisplayName;
-            public int Version; // -1 = none / loose
-            public int IndentLevel; // 0 creator, 1 package, 2 child
-            public int ChildCountDisplay; // -1 unknown, else known count
+            public int Version;
+            public int IndentLevel;
+            public int ChildCountDisplay;
         }
 
         private List<PluginsFloatCreatorGroup> _pluginsFloatCreators = new List<PluginsFloatCreatorGroup>();
         private string[] _pluginsFloatFilterTerms = new string[0];
         private readonly StringBuilder _pluginsFloatHaystackSb = new StringBuilder(128);
-        /// <summary>One-shot: seed expand set when filter text changes (user can still collapse).</summary>
         private bool _pluginsFloatSearchAutoExpandPending;
 
         private void RefreshPluginsFloatTree(bool resetScroll)
@@ -133,8 +131,6 @@ namespace VPB
             _pluginsFloatFilterTerms = SplitSearchTerms(filter);
             bool hasFilter = _pluginsFloatFilterTerms != null && _pluginsFloatFilterTerms.Length > 0;
 
-            // One catalog pass for multi-level hits. Never OpenStream/Ensure all cslists on keystroke
-            // (that froze/crashed VaM on large libraries).
             HashSet<string> pkgsHitByCatalog = null;
             if (hasFilter)
                 pkgsHitByCatalog = BuildPluginsFloatPackageUidsMatchingTerms(source, _pluginsFloatFilterTerms);
@@ -148,7 +144,6 @@ namespace VPB
                 if (group == null || group.Roots == null || group.Roots.Count == 0) continue;
                 if (_pluginsFloatRatedOnly && group.MaxRating <= 0) continue;
 
-                // Real creator key for scoring (not translated "Loose / Custom" label).
                 string creatorKeyName = group.Creator ?? "";
                 string creatorLabel = string.IsNullOrEmpty(creatorKeyName)
                     ? VPBTranslation.T("gallery.plugins.creator_loose", "Loose / Custom")
@@ -321,10 +316,6 @@ namespace VPB
             _pluginsFloatSearchAutoExpandPending = false;
         }
 
-        /// <summary>
-        /// Rank search hits: real creator field ≫ package/entry name ≫ path/uid leftovers.
-        /// So "CreatorX PluginY" prefers CreatorX's PluginY over CreatorZ's CreatorX_PluginY rename.
-        /// </summary>
         private static int ScorePluginsFloatSearchMatch(
             string creator, string packageName, string entryName, string[] terms)
         {
@@ -361,7 +352,6 @@ namespace VPB
                 }
             }
 
-            // Split roles: at least one term on creator AND one on package/name.
             if (termsInCreator > 0 && termsInPkg > 0)
                 score += 50000;
 
@@ -493,10 +483,6 @@ namespace VPB
             return _pluginsFloatHaystackSb.ToString();
         }
 
-        /// <summary>
-        /// Single O(n) catalog scan: package UIDs where any file matches all terms.
-        /// Covers nested script names without parsing every .cslist on the main thread.
-        /// </summary>
         private HashSet<string> BuildPluginsFloatPackageUidsMatchingTerms(IList<FileEntry> source, string[] terms)
         {
             var hit = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -716,7 +702,6 @@ namespace VPB
             GameObject expandBtn = UI.CreateUIButton(
                 row, expandW, rowH, "", font, 0, 0, AnchorPresets.middleLeft, null);
             expandBtn.name = "Expand";
-            // Square well — same ratio as Strip Keep (expandW == rowH).
             UI.AddLE(expandBtn, minWidth: expandW, preferredWidth: expandW, flexibleWidth: 0f,
                 minHeight: expandW, preferredHeight: expandW, flexibleHeight: 0f);
 
@@ -754,7 +739,6 @@ namespace VPB
             UI.AddLE(verGapGo, minWidth: verGap, preferredWidth: verGap, flexibleWidth: 0f,
                 minHeight: 1f, preferredHeight: 1f);
 
-            // Compact star badge (creator-row style: ★ when unrated, digit when rated).
             GameObject starBtnGO = UI.CreateUIButton(row, starSz, starSz, "", font, 0, 0,
                 AnchorPresets.middleCenter, null);
             starBtnGO.name = "Star";
@@ -805,7 +789,6 @@ namespace VPB
                 digitRT.offsetMax = Vector2.zero;
             }
 
-            // Home under star; open reparents to float panel (escape ScrollRect mask) with world pose.
             GameObject selectorGO = new GameObject("RatingSelector");
             selectorGO.transform.SetParent(starBtnGO.transform, false);
             RectTransform selectorRT = selectorGO.AddComponent<RectTransform>();
@@ -971,7 +954,6 @@ namespace VPB
                 if (verLe != null)
                 {
                     float verW = GalleryUiDesignTokens.PluginsFloatVersionWidthRef * s;
-                    // Hide width on creator/child so name gets space; keep column on packages.
                     float w = (isCreator || isChild || data.Version < 0) ? 0f : verW;
                     verLe.minWidth = w;
                     verLe.preferredWidth = w;
@@ -1075,7 +1057,6 @@ namespace VPB
                 if (rd != 0) return rd;
             }
 
-            // Loose (empty creator) last.
             bool aLoose = string.IsNullOrEmpty(a.Creator);
             bool bLoose = string.IsNullOrEmpty(b.Creator);
             if (aLoose != bLoose) return aLoose ? 1 : -1;
@@ -1156,9 +1137,6 @@ namespace VPB
             RefreshPluginsFloatTree(false);
         }
 
-        /// <summary>
-        /// Expand all creator rows (shows packages). Skips mass .cslist OpenStream (QoS).
-        /// </summary>
         private void ExpandAllPluginsFloatCreators()
         {
             if (_pluginsFloatCreators == null) return;

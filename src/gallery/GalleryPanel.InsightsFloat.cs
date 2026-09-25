@@ -232,7 +232,7 @@ namespace VPB
                     ? _insightsFloatSavedPosCenter.Value
                     : new Vector2(120f, 20f);
                 _insightsFloatPanelRT.anchoredPosition =
-                    InsightsFloatCenterToTopLeft(center, _insightsFloatPanelRT.sizeDelta);
+                    FloatPanelCoords.CenterToTopLeft(center, _insightsFloatPanelRT.sizeDelta);
             }
 
             BuildInsightsFloatTitleBar(panel, font, s, titleH, chromeSz);
@@ -633,24 +633,11 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (VPBConfig.Instance.GalleryInsightsFloatPosSaved)
-                {
-                    _insightsFloatSavedPosCenter = new Vector2(
-                        VPBConfig.Instance.GalleryInsightsFloatPosX,
-                        VPBConfig.Instance.GalleryInsightsFloatPosY);
-                }
-                if (VPBConfig.Instance.GalleryInsightsFloatSizeSaved)
-                {
-                    float w = VPBConfig.Instance.GalleryInsightsFloatWidthRef;
-                    float h = VPBConfig.Instance.GalleryInsightsFloatHeightRef;
-                    if (w >= GalleryUiDesignTokens.InsightsFloatMinWidthRef
-                        && h >= GalleryUiDesignTokens.InsightsFloatMinHeightRef)
-                    {
-                        _insightsFloatSavedSizeRef = new Vector2(
-                            Mathf.Clamp(w, GalleryUiDesignTokens.InsightsFloatMinWidthRef, GalleryUiDesignTokens.InsightsFloatMaxWidthRef),
-                            Mathf.Clamp(h, GalleryUiDesignTokens.InsightsFloatMinHeightRef, GalleryUiDesignTokens.InsightsFloatMaxHeightRef));
-                    }
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GalleryInsightsFloatGeometry.Current;
+                _insightsFloatSavedPosCenter = slot.SavedPos;
+                _insightsFloatSavedSizeRef = slot.SavedSize(
+                    new Vector2(GalleryUiDesignTokens.InsightsFloatMinWidthRef, GalleryUiDesignTokens.InsightsFloatMinHeightRef),
+                    new Vector2(GalleryUiDesignTokens.InsightsFloatMaxWidthRef, GalleryUiDesignTokens.InsightsFloatMaxHeightRef));
             }
             catch { }
         }
@@ -659,7 +646,7 @@ namespace VPB
         {
             if (_insightsFloatPanelRT == null) return;
             float s = _insightsFloatChromeScale > 0f ? _insightsFloatChromeScale : 1f;
-            _insightsFloatSavedPosCenter = InsightsFloatTopLeftToCenter(
+            _insightsFloatSavedPosCenter = FloatPanelCoords.TopLeftToCenter(
                 _insightsFloatPanelRT.anchoredPosition, _insightsFloatPanelRT.sizeDelta);
             if (!_insightsFloatCollapsed)
             {
@@ -674,18 +661,9 @@ namespace VPB
             try
             {
                 if (VPBConfig.Instance == null) return;
-                if (_insightsFloatSavedPosCenter.HasValue)
-                {
-                    VPBConfig.Instance.GalleryInsightsFloatPosSaved = true;
-                    VPBConfig.Instance.GalleryInsightsFloatPosX = _insightsFloatSavedPosCenter.Value.x;
-                    VPBConfig.Instance.GalleryInsightsFloatPosY = _insightsFloatSavedPosCenter.Value.y;
-                }
-                if (_insightsFloatSavedSizeRef.HasValue)
-                {
-                    VPBConfig.Instance.GalleryInsightsFloatSizeSaved = true;
-                    VPBConfig.Instance.GalleryInsightsFloatWidthRef = _insightsFloatSavedSizeRef.Value.x;
-                    VPBConfig.Instance.GalleryInsightsFloatHeightRef = _insightsFloatSavedSizeRef.Value.y;
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GalleryInsightsFloatGeometry.Current;
+                slot.StorePos(_insightsFloatSavedPosCenter);
+                slot.StoreSize(_insightsFloatSavedSizeRef);
             }
             catch { return; }
             try { ScheduleQuickFiltersConfigSave(); } catch { }
@@ -703,16 +681,6 @@ namespace VPB
             CaptureInsightsFloatGeometryToMemory();
             PersistInsightsFloatGeometry();
             RebuildInsightsFloatBody();
-        }
-
-        private static Vector2 InsightsFloatCenterToTopLeft(Vector2 center, Vector2 size)
-        {
-            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
-        }
-
-        private static Vector2 InsightsFloatTopLeftToCenter(Vector2 topLeft, Vector2 size)
-        {
-            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
         }
 
         private void RescaleInsightsFloatIfOpen(float chromeScale)

@@ -7,16 +7,12 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>Resolved chrome scale for this panel instance (pane × host × DPI).</summary>
         internal GalleryUiMetrics UiMetrics => GalleryUiMetrics.ForPanel(this);
 
-        /// <summary>Single layout/font scale factor for gallery chrome on this panel.</summary>
         internal float ChromeScale => UiMetrics.ChromeScale;
 
-        /// <summary>In-app help uses chrome scale with a readability floor.</summary>
         internal float InAppHelpChromeScale => UiMetrics.HelpChromeScale();
 
-        /// <summary>Last HostScale applied via <see cref="ApplyInnerPaneScale"/> (desktop live VaM monitorUIScale sync).</summary>
         private float _lastAppliedHostScale = float.NaN;
 
         internal bool IsFixedLocallyForUiScale() => isFixedLocally;
@@ -123,15 +119,11 @@ namespace VPB
             try { RebuildGridLayout(); } catch { }
         }
 
-        /// <summary>Scales hover-path tooltip text, collapsed tbox labels, and detail strip chrome.</summary>
         private void RescaleFooterInfoBarInternal(float s)
         {
             if (s <= 0f) s = 1f;
-            // Keep expand-height math on the same scale as chrome (ConfigChanged used to ApplyInnerPaneScale
-            // before UpdateLayout, leaving stale tboxTopOffsetBase → crushed/shifted InfoBar).
             tboxTopOffsetBase = GalleryUiDesignTokens.FooterToolboxTopRef * s;
             tboxInfoRowHeight = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
-            // Same global chrome font as rest of gallery UI.
             if (hoverPathText != null)
                 GalleryUiMetrics.ApplyFont(hoverPathText, GalleryUiDesignTokens.FooterHoverPathFontRef, s, GalleryUiDesignTokens.FontMinRef);
             if (statusBarText != null)
@@ -144,10 +136,6 @@ namespace VPB
             try { UpdateSelectionContextMenu(); } catch { }
         }
 
-        /// <summary>
-        /// Grid label under square thumb (not overlay). Cell taller via absolute strip px; thumb region 1:1.
-        /// Primary row: leaf left + creator right; secondary: package. Warm path + binary truncate.
-        /// </summary>
         internal void ApplyGridLabelStripLayout(GameObject btnGO, FileEntry file = null)
         {
             if (btnGO == null || layoutMode == GalleryLayoutMode.List || settingsListViewActive) return;
@@ -289,7 +277,6 @@ namespace VPB
                 try { if (GridCreatorLabelIsRedundant()) showCreator = false; } catch { }
             }
 
-            // Creator first (right): reserve width so leaf truncation keeps discriminator.
             float creatorUsed = 0f;
             float creatorMax = innerW * GalleryUiDesignTokens.GridLabelCreatorMaxFrac;
             if (showCreator)
@@ -378,7 +365,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Preferred width via TextGenerator — no LayoutUtility thrash on warm bind.</summary>
         private static float MeasureGridLabelTextWidth(Text textComponent, string text)
         {
             if (textComponent == null || textComponent.font == null || string.IsNullOrEmpty(text)) return 0f;
@@ -391,14 +377,10 @@ namespace VPB
             return textComponent.cachedTextGeneratorForLayout.GetPreferredWidth(text, settings) / ppu;
         }
 
-        /// <summary>
-        /// Migrate pooled GridLabel chrome: opaque bg + Primary/Secondary/Creator texts.
-        /// </summary>
         private static void EnsureGridLabelChrome(Transform gridLabelTr, FileButtonBinder binder)
         {
             if (gridLabelTr == null) return;
 
-            // Pool migrate: destroy pre-GridLabel Name Card sibling if still present.
             Transform btnRoot = gridLabelTr.parent;
             if (btnRoot != null) FileButtonBinder.DestroyLegacyNameCard(btnRoot);
 
@@ -441,7 +423,6 @@ namespace VPB
             if (binder != null) binder.CacheGridLabel(gridLabelTr);
         }
 
-        /// <summary>Scales row height + fonts on a vertical popup menu panel.</summary>
         internal static void ScaleVerticalPopupMenuRows(GameObject panelGO, float s, float rowHeightRef, int fontRef, float panelWidthRef = 0f)
         {
             if (panelGO == null) return;
@@ -773,9 +754,6 @@ namespace VPB
             RescaleTabButtonList(_leftCreatorVirtButtons, metrics);
             RescaleTabButtonList(_rightCreatorVirtButtons, metrics);
 
-            // Tab buttons size via LayoutElement inside a VerticalLayoutGroup; force the side-tab
-            // list containers to reflow now so the new row height/width applies on slider release
-            // instead of waiting for the next layout-invalidating event.
             ForceReflowTabContainer(leftTabContainerGO);
             ForceReflowTabContainer(rightTabContainerGO);
             ForceReflowTabContainer(leftSubTabContainerGO);
@@ -823,10 +801,6 @@ namespace VPB
                 rt.sizeDelta = new Vector2(rt.sizeDelta.x, GalleryUiDesignTokens.SideTabRowHeightRef * s);
         }
 
-        /// <summary>
-        /// Live-scale category/side-tab left icons from <c>ApplyTabLeftIcon</c>.
-        /// Create-time refs: 28 (+backdrop) / 20, left 4, gap 6.
-        /// </summary>
         private static void RescaleTabLeftIcon(GameObject btnGO, float s)
         {
             if (btnGO == null) return;
@@ -930,7 +904,6 @@ namespace VPB
                 }
             }
 
-            // Match pane height so tall floating/VR stacks stay inside rail hit bounds.
             float containerH = 700f;
             try
             {
@@ -992,7 +965,6 @@ namespace VPB
                 try { SyncSideRailFacetCaptions(); } catch { }
         }
 
-        /// <summary>Scales grid labels from cell size.</summary>
         internal void ApplyGridCellChromeScale(GameObject btnGO)
         {
             if (btnGO == null || layoutMode == GalleryLayoutMode.List || settingsListViewActive) return;

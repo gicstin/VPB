@@ -77,11 +77,9 @@ namespace VPB
             return CollectActiveTagFilter(HairRegionTagsJsonStorable, HairTypeTagsJsonStorable, HairOtherTagsJsonStorable);
         }
 
-        // If nothing is selected, it means we need to filter clothing
         HashSet<string> GetClothingFilter()
         {
             return CollectActiveTagFilter(ClothingRegionTagsJsonStorable, ClothingTypeTagsJsonStorable, ClothingOtherTagsJsonStorable);
         }
-
     }
 }

@@ -3,15 +3,12 @@ using System.IO;
 
 namespace VPB
 {
-
-    // 1. Package names cannot be corrected.
     class GlobalInfo
     {
         static readonly object InitLock = new object();
         static bool pathsInitialized;
         static string pluginInfoDirectory;
 
-        /// <summary>VPB persistence root under Saves (not Custom/PluginData/sfishere).</summary>
         public static string PluginInfoDirectory
         {
             get
@@ -33,7 +30,6 @@ namespace VPB
             return Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
         }
 
-        /// <summary>Resolves paths, migrates known legacy files once, ensures VPB folder exists.</summary>
         public static void EnsurePluginDataInitialized()
         {
             if (pathsInitialized) return;

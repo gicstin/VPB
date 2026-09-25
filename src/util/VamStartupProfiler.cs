@@ -6,10 +6,6 @@ using SimpleJSON;
 
 namespace VPB
 {
-    /// <summary>
-    /// Cold-start timing for VaM native paths and VPB package refresh. Enable via
-    /// BepInEx Logging.LogStartupTiming (or LogStartupDetails).
-    /// </summary>
     internal static class VamStartupProfiler
     {
         public const string LogTag = "[VPB.Startup.Timing]";
@@ -73,7 +69,6 @@ namespace VPB
             }
         }
 
-        /// <summary>VPB package scan finished and MessageKit posted — start of pre-SuperController.Awake wait.</summary>
         public static void MarkVpbPackageScanComplete()
         {
             try { s_VpbPackageScanCompleteSec = LogUtil.GetSecondsSinceProcessStart(); } catch { }
@@ -491,6 +486,5 @@ namespace VPB
             }
             catch { }
         }
-
     }
 }

@@ -1,24 +1,14 @@
-﻿// uncomment this line to enable the MessageKitManager. It provides a single clearAllMessageTables method that
-// will clear every single observer that was ever added
-//#define ENABLE_MESSAGE_KIT_MANAGER
-
-using UnityEngine;
+﻿using UnityEngine;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 
-
 namespace Prime31.MessageKit
 {
-	/// <summary>
-	/// think of MessageKit as a safe, fast replacement for SendMessage. Decoupled messages identified by an int. It is recommended to define
-	/// your messages as const so they can be easily referenced and identified when you read your code (see the demo scene for an example)
-	/// </summary>
 	public static class MessageKit
 	{
 		private static Dictionary<int, List<Action>> _messageTable = new Dictionary<int, List<Action>>();
-
 
 #if ENABLE_MESSAGE_KIT_MANAGER
 		static MessageKit()
@@ -26,7 +16,6 @@ namespace Prime31.MessageKit
 			MessageKitManager.registerMessageKitInstance( _messageTable );
 		}
 #endif
-
 
 		public static void addObserver( int messageType, Action handler )
 		{
@@ -41,7 +30,6 @@ namespace Prime31.MessageKit
 				_messageTable[messageType].Add( handler );
 		}
 
-
 		public static void removeObserver( int messageType, Action handler )
 		{
 			List<Action> list = null;
@@ -51,7 +39,6 @@ namespace Prime31.MessageKit
 					list.Remove( handler );
 			}
 		}
-
 
 		public static void post( int messageType )
 		{
@@ -63,13 +50,11 @@ namespace Prime31.MessageKit
 			}
 		}
 
-
 		public static void clearMessageTable( int messageType )
 		{
 			if( _messageTable.ContainsKey( messageType ) )
 				_messageTable.Remove( messageType );
 		}
-
 
 		public static void clearMessageTable()
 		{
@@ -97,11 +82,9 @@ namespace Prime31.MessageKit
 		}
 	}
 
-
 	public static class MessageKit<U>
 	{
 		private static Dictionary<int, List<Action<U>>> _messageTable = new Dictionary<int, List<Action<U>>>();
-
 
 #if ENABLE_MESSAGE_KIT_MANAGER
 		static MessageKit()
@@ -109,7 +92,6 @@ namespace Prime31.MessageKit
 			MessageKitManager.registerMessageKitInstance( _messageTable );
 		}
 #endif
-
 
 		public static void addObserver( int messageType, Action<U> handler )
 		{
@@ -124,7 +106,6 @@ namespace Prime31.MessageKit
 				_messageTable[messageType].Add( handler );
 		}
 
-
 		public static void removeObserver( int messageType, Action<U> handler )
 		{
 			List<Action<U>> list = null;
@@ -134,7 +115,6 @@ namespace Prime31.MessageKit
 					list.Remove( handler );
 			}
 		}
-
 
 		public static void post( int messageType, U param )
 		{
@@ -146,19 +126,16 @@ namespace Prime31.MessageKit
 			}
 		}
 
-
 		public static void clearMessageTable( int messageType )
 		{
 			if( _messageTable.ContainsKey( messageType ) )
 				_messageTable.Remove( messageType );
 		}
 
-
 		public static void clearMessageTable()
 		{
 			_messageTable.Clear();
 		}
-
 
 		public static void logObservers( int messageType )
 		{
@@ -181,11 +158,9 @@ namespace Prime31.MessageKit
 		}
 	}
 
-
 	public static class MessageKit<U, V>
 	{
 		private static Dictionary<int, List<Action<U, V>>> _messageTable = new Dictionary<int, List<Action<U, V>>>();
-
 
 #if ENABLE_MESSAGE_KIT_MANAGER
 		static MessageKit()
@@ -193,7 +168,6 @@ namespace Prime31.MessageKit
 			MessageKitManager.registerMessageKitInstance( _messageTable );
 		}
 #endif
-
 
 		public static void addObserver( int messageType, Action<U, V> handler )
 		{
@@ -208,7 +182,6 @@ namespace Prime31.MessageKit
 				_messageTable[messageType].Add( handler );
 		}
 
-
 		public static void removeObserver( int messageType, Action<U, V> handler )
 		{
 			List<Action<U, V>> list = null;
@@ -218,7 +191,6 @@ namespace Prime31.MessageKit
 					list.Remove( handler );
 			}
 		}
-
 
 		public static void post( int messageType, U firstParam, V secondParam )
 		{
@@ -230,19 +202,16 @@ namespace Prime31.MessageKit
 			}
 		}
 
-
 		public static void clearMessageTable( int messageType )
 		{
 			if( _messageTable.ContainsKey( messageType ) )
 				_messageTable.Remove( messageType );
 		}
 
-
 		public static void clearMessageTable()
 		{
 			_messageTable.Clear();
 		}
-
 
 		public static void logObservers( int messageType )
 		{
@@ -265,19 +234,16 @@ namespace Prime31.MessageKit
 		}
 	}
 
-
 #if ENABLE_MESSAGE_KIT_MANAGER
 	public static class MessageKitManager
 	{
 		// we store a list of any MessageKits that got created so that we can clear them out when a level loads
 		private static List<IDictionary> _messageKitMessageTables = new List<IDictionary>();
 
-
 		public static void registerMessageKitInstance( IDictionary messageKitMessageTable )
 		{
 			_messageKitMessageTables.Add( messageKitMessageTable );
 		}
-
 
 		public static void clearAllMessageTables()
 		{

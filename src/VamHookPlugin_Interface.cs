@@ -56,7 +56,6 @@ namespace VPB
         private void TryFillLastGalleryPageFromPersisted(ref string lastPageName)
         {
             if (!string.IsNullOrEmpty(lastPageName)) return;
-            // Prefer in-memory (just updated on Close/Hide) over disk — disk can lag a write or stay on Initial Scenes.
             if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
             {
                 lastPageName = VPBConfig.Instance.LastGalleryCategory;
@@ -81,7 +80,6 @@ namespace VPB
 
         public void OpenGallery()
         {
-            // 1. Try to restore using category name (supports "Scenes", "Clothing" etc. stored by Gallery UI)
             if (Gallery.singleton != null)
             {
                 if (!m_GalleryCatsInited) InitGalleryCategories();
@@ -95,8 +93,6 @@ namespace VPB
 
                 string lastPageName = "";
 
-                // InitialGalleryCategory applies once per VaM process. Close() destroys panes so
-                // AnyPanelHasLoadedContent goes false — that must NOT re-trigger Initial.
                 bool isFirstOpen = !Gallery.SessionInitialCategoryApplied;
                 if (!isFirstOpen)
                     TryFillLastGalleryPageFromPersisted(ref lastPageName);
@@ -119,10 +115,6 @@ namespace VPB
                 {
                     string rawLastPageName = lastPageName;
 
-                    // Normalize common variants written by legacy callers:
-                    // "Category Hair" / "CategoryHair" -> "Hair"
-                    // "Preset Hair" / "PresetHair" -> "Hair"
-                    // "Scene" -> "Scenes"
                     lastPageName = lastPageName.Trim();
                     if (lastPageName.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
                         lastPageName = lastPageName.Substring("Category ".Length);
@@ -157,7 +149,6 @@ namespace VPB
                 }
             }
 
-            // 2. Fallback to Enum-based restore (supports "CategoryScene" etc. stored by hotkeys/legacy)
             switch (GetLastGalleryPage())
             {
                 case GalleryPage.CategoryScene: OpenCategoryScene(); break;
@@ -197,7 +188,6 @@ namespace VPB
             }
         }
 
-		// liu modification: show/hide
 		public void LgShow()
 		{
 			ToggleGalleryVisibility();
@@ -230,26 +220,20 @@ namespace VPB
                 m_GalleryCategories = new List<Gallery.Category>();
                 var catDict = new Dictionary<string, CategoryInfo>(StringComparer.OrdinalIgnoreCase);
 
-                // Helper to add categories while tracking names
                 Action<string, string, string> addCat = (name, ext, path) => {
-                    // Consolidate names
-                    // Keep hair presets as separate category (used to be separate "subcategory" in side list)
                     if (name.Equals("Person Hair", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Hair", StringComparison.OrdinalIgnoreCase)) name = "Hair Presets";
                     if (name.Equals("Person Clothing", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Clothing", StringComparison.OrdinalIgnoreCase)) name = "Clothing";
                     if (name.Equals("Person Appearance", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Appearance", StringComparison.OrdinalIgnoreCase)) name = "Appearance";
                     if (name.Equals("Person AppearancePresets", StringComparison.OrdinalIgnoreCase) || name.Equals("Person Appearance Presets", StringComparison.OrdinalIgnoreCase)) name = "Appearance";
                     if (name.Equals("Person Pose", StringComparison.OrdinalIgnoreCase)) name = "Pose";
-                    if (name.Equals("Person", StringComparison.OrdinalIgnoreCase)) name = "Pose"; // Merge Person into Pose as requested
+                    if (name.Equals("Person", StringComparison.OrdinalIgnoreCase)) name = "Pose";
 
-                    // Short-name aliases for remaining Person preset subfolders (matches BA's naming).
                     if (name.Equals("Person AnimationPresets", StringComparison.OrdinalIgnoreCase)) name = "Animation";
                     if (name.Equals("Person General", StringComparison.OrdinalIgnoreCase)) name = "General";
                     if (name.Equals("Person Morphs", StringComparison.OrdinalIgnoreCase)) name = "Morphs";
                     if (name.Equals("Person Skin", StringComparison.OrdinalIgnoreCase)) name = "Skin";
-                    // Distinguish from main "Plugins" (Custom/Scripts), which is for .cs/.cslist/.dll script files.
                     if (name.Equals("Person Plugins", StringComparison.OrdinalIgnoreCase)) name = "Plugin Presets";
 
-                    // Consolidate physics categories
                     if (name.Equals("Person GlutePhysics", StringComparison.OrdinalIgnoreCase)) name = "Body Physics";
                     if (name.Equals("Person BreastPhysics", StringComparison.OrdinalIgnoreCase)) name = "Body Physics";
 
@@ -262,7 +246,6 @@ namespace VPB
                         entry.paths.Add(path);
                     }
                     
-                    // Merge extensions
                     var currentExts = new HashSet<string>(entry.ext.Split('|'), StringComparer.OrdinalIgnoreCase);
                     var newExts = ext.Split('|');
                     bool changed = false;
@@ -274,10 +257,8 @@ namespace VPB
                         entry.ext = string.Join("|", extList.ToArray());
                     }
                     
-                    // catDict[name] = entry; // Class is reference type, no need to reassign
                 };
 
-                // 1. Static/Legacy Categories
                 addCat("Scenes", "json", "Saves/scene");
                 addCat("SubScenes", "json", "Custom/SubScene");
                 addCat("Plugins", "cs|cslist|dll", "Custom/Scripts");
@@ -288,14 +269,12 @@ namespace VPB
                 // Include hair presets saved under Person preset folders (Issue #101 hair parity).
                 addCat("Hair", "vap", "Custom/Atom/Person/Hair");
                 addCat("Hair", "vam|vap", "Saves/Person/Hair");
-                addCat("Pose", "json", "Saves/Person"); // Was Person
+                addCat("Pose", "json", "Saves/Person");
                 addCat("Pose", "vap", "Custom/Atom/Person/Pose");
                 addCat("Appearance", "json|vap", "Saves/Person/appearance");
                 addCat("Appearance", "vap", "Custom/Atom/Person/Appearance");
-                // Clothing/Hair presets are included in the unified Clothing/Hair categories.
                 addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
 
-                // 2. Dynamic Discovery from Custom/Atom
                 string atomRoot = "Custom/Atom";
                 if (Directory.Exists(atomRoot))
                 {
@@ -370,29 +349,21 @@ namespace VPB
                             {
                                 string resourceName = Path.GetFileName(resourcePath);
 
-                                // Textures holds .png/.jpg image assets, not presets. Skip from preset discovery.
                                 if (atomType.Equals("Person", StringComparison.OrdinalIgnoreCase)
                                     && resourceName.Equals("Textures", StringComparison.OrdinalIgnoreCase))
                                     continue;
 
                                 string finalName = resourceName;
 
-                                // Handle name collisions (e.g. if "Clothing" exists in Atom/Person/Clothing, rename to "Person Clothing")
-                                // But here we want to consolidate, so we might strip "Person" if present?
-                                // Actually, standard logic was adding "atomType + resourceName".
-                                // Now we just let addCat handle normalization.
                                 if (atomType.Equals("Person", StringComparison.OrdinalIgnoreCase))
                                 {
-                                     // "Person" + "Hair" -> "Person Hair" -> "Hair"
                                      finalName = atomType + " " + resourceName;
                                 }
 
-                                // Determine extension
                                 string ext = "vap";
                                 if (string.Equals(resourceName, "Pose", StringComparison.OrdinalIgnoreCase))
                                     ext = "json|vap";
                                 
-                                // Use forward slashes for path to maintain consistency
                                 string finalPath = resourcePath.Replace("\\", "/");
                                 
                                 addCat(finalName, ext, finalPath);
@@ -406,9 +377,7 @@ namespace VPB
                 }
 
                 addCat("All", "var", "");
-                // List all .var packages as rows (no internal scan). Uses PackageListEntry rows in gallery.
                 addCat("ALL VAR", "varpkg", "");
-                // Union of all VAR-internal paths (all types) + loose roots below.
                 addCat(Gallery.EverythingCategoryName, Gallery.EverythingExtensionToken, "");
 
                 if (catDict.TryGetValue(Gallery.EverythingCategoryName, out CategoryInfo everythingInfo))
@@ -425,7 +394,6 @@ namespace VPB
                     }
                 }
 
-                // Build list
                 foreach(var kvp in catDict)
                 {
                     m_GalleryCategories.Add(new Gallery.Category { 
@@ -447,8 +415,7 @@ namespace VPB
             {
                 if (!m_GalleryCatsInited) InitGalleryCategories();
 
-                // Persist only on explicit navigation (hotkeys/menu). Do NOT persist in GalleryPanel.Show()
-                // to avoid overwriting saved state during initial open/restore.
+                // Persist only on explicit navigation (hotkeys/menu).
                 try
                 {
                     if (VPBConfig.Instance != null)
@@ -485,11 +452,7 @@ namespace VPB
             Refresh(null);
         }
 
-        /// <summary>
-        /// Refresh with an explicit reason tag (e.g. "autoload", "autoinstall", "manual").
-        /// Reasons propagate to FileManager scan-stats logging so coalesced startup passes
-        /// can be diagnosed without a stack trace.
-        /// </summary>
+        /// <summary>Refresh with an explicit reason tag (e.g. "autoload", "autoinstall", "manual").</summary>
         public void Refresh(string reason)
         {
             FileManagerBridge.Refresh(reason, RefreshScope.Both, init: true);
@@ -503,7 +466,6 @@ namespace VPB
         {
             FileManagerBridge.Refresh("remove_old_version", RefreshScope.Both, init: true, clean: true, removeOldVersion: true);
         }
-        //https://stackoverflow.com/questions/2811509/c-sharp-remove-all-empty-subdirectories
         private static void RemoveEmptyFolder(string startLocation)
         {
             // Cache listing to avoid repeated recursion costs during bulk uninstall cleanup.
@@ -531,8 +493,6 @@ namespace VPB
 
         public void UninstallAll()
         {
-            // ScanPackageManagerPackages(); // Removed
-            // OpenPackageManagerGallery(); // Removed
         }
         public void OpenHubBrowse()
         {
@@ -617,7 +577,6 @@ namespace VPB
             {
                 if (Gallery.singleton == null || Gallery.singleton.Panels == null || Gallery.singleton.Panels.Count == 0)
                 {
-                    // Ensure a pane exists without forcing Plugins grid.
                     string title = "Scenes";
                     string ext = "json";
                     string path = "Saves/scene";

@@ -204,9 +204,6 @@ namespace VPB
                 bool purgeCache = IsCtrlShiftHeldForTextureCachePurge();
                 if (purgeCache)
                 {
-                    // Purge supports:
-                    // - .var packages (purges package texture caches)
-                    // - local scenes (purges only local disk texture caches referenced by the scene)
                     if (packagePaths.Count == 1 && scenePaths.Count == 0)
                     {
                         NativeTextureOnDemandCache.TryPurgePackageCacheOnDemand(this, packagePaths[0]);
@@ -230,7 +227,6 @@ namespace VPB
                     ShowTemporaryStatus("Rewriting existing zstd texture cache...", 2f);
                 }
 
-                // Single target: keep single-mode so UI totals are correct.
                 if (scenePaths.Count == 1 && packagePaths.Count == 0)
                 {
                     NativeTextureOnDemandCache.TryBuildSceneCacheOnDemand(this, scenePaths[0]);
@@ -242,7 +238,6 @@ namespace VPB
                     return;
                 }
 
-                // Multi / mixed selection: batch mode to process each item sequentially.
                 StartCoroutine(TboxCacheTexturesMultiBatchCoroutine(scenePaths, packagePaths));
             }
             catch (Exception ex)
@@ -314,7 +309,6 @@ namespace VPB
             NativeTextureOnDemandCache.BeginBatchJob("Caching Textures...", total);
             try
             {
-                // Scenes first
                 if (scenePaths != null)
                 {
                     for (int i = 0; i < scenePaths.Count; i++)
@@ -332,7 +326,6 @@ namespace VPB
                     }
                 }
 
-                // Packages second
                 if (packagePaths != null)
                 {
                     for (int i = 0; i < packagePaths.Count; i++)
@@ -411,7 +404,6 @@ namespace VPB
                     }
                 }
 
-                // Packages second
                 if (packagePaths != null)
                 {
                     for (int i = 0; i < packagePaths.Count; i++)
@@ -451,7 +443,6 @@ namespace VPB
                     continue;
                 if (string.IsNullOrEmpty(rel)) continue;
 
-                // Use the gallery-relative path (Saves/scene/...) so FileManager.ReadAllText can open it.
                 string p = rel.Replace('\\', '/');
                 if (!seen.Add(p)) continue;
                 outPaths.Add(p);
@@ -467,10 +458,7 @@ namespace VPB
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
-        /// <summary>
-        /// <see cref="VarPackage.InstallSelf"/> updates package disk path, but gallery <see cref="FileEntry.Path"/> was fixed at ctor.
-        /// Refresh selected rows, <see cref="selectedFilePaths"/>, and hover path so UI shows AddonPackages (or AllPackages after unload).
-        /// </summary>
+        /// <summary>InstallSelf updates package disk path, but gallery Path was fixed at ctor.</summary>
         private void ResyncTboxSelectionPathsAfterVarMoves()
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return;
@@ -544,7 +532,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Unique <see cref="VarPackage"/> instances for selected rows (skips local scene JSON and missing packages).</summary>
         private void TryCollectUniqueVarPackagesFromSelection(List<VarPackage> outList)
         {
             outList.Clear();

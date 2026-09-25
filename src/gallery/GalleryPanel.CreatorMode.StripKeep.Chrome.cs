@@ -4,13 +4,8 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Strip keep floating chrome: titlebar drag, X close, corner resize, size/pos persist.
-    /// Same float family as Settings / Plugins — work surface first, not locked modal.
-    /// </summary>
     public partial class GalleryPanel
     {
-        // Neutral gallery greys — match Settings / Plugins / filter-presets floats.
         private static readonly Color StripKeepTitleBarBg = GalleryUiColorTokens.SurfaceDark;
         private static readonly Color StripKeepFooterBarBg = GalleryUiColorTokens.SurfaceDarker;
         private static readonly Color StripKeepPanelBg = GalleryUiColorTokens.SurfaceDeep;
@@ -21,9 +16,6 @@ namespace VPB
         private GameObject _stripKeepResizeGO;
         private Coroutine _stripKeepPanelSaveCo;
 
-        /// <summary>
-        /// Chip/preset width = glyph advances + pad. No fixed cell — short labels stay tight.
-        /// </summary>
         private static float StripKeepChipWidth(string label, int fontSize, float s)
         {
             float pad = 14f * s;
@@ -52,9 +44,6 @@ namespace VPB
             return Mathf.Max(minW, textW + pad);
         }
 
-        /// <summary>
-        /// Clamp UI.Text into its layout cell — no wrap bleed. Parent should RectMask2D.
-        /// </summary>
         private static void StripKeepClampText(Text t)
         {
             if (t == null) return;
@@ -67,7 +56,6 @@ namespace VPB
         {
             if (go == null) return;
             // No RectMask2D on button root — clips outward/inward hover rim (sides-only bug).
-            // Truncate on Text is enough for glyph overflow.
             Text t = go.GetComponentInChildren<Text>(true);
             if (t == null) return;
             GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
@@ -84,9 +72,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Persist config as panel-center coords (stable across pivot). Runtime uses top-left pivot.
-        /// </summary>
         private static Vector2 StripKeepCenterPosToTopLeft(Vector2 centerPos, Vector2 size)
         {
             return new Vector2(centerPos.x - size.x * 0.5f, centerPos.y + size.y * 0.5f);
@@ -103,10 +88,11 @@ namespace VPB
             float h = GalleryUiDesignTokens.StripKeepFloatDefaultHeightRef;
             try
             {
-                if (VPBConfig.Instance != null && VPBConfig.Instance.CreatorStripPanelSizeSaved)
+                FloatGeometrySlot slot = VPBConfig.Instance != null ? VPBConfig.Instance.CreatorStripPanelGeometry.Current : null;
+                if (slot != null && slot.SizeSaved)
                 {
-                    w = VPBConfig.Instance.CreatorStripPanelWidthRef;
-                    h = VPBConfig.Instance.CreatorStripPanelHeightRef;
+                    w = slot.WidthRef;
+                    h = slot.HeightRef;
                 }
             }
             catch { }
@@ -125,12 +111,8 @@ namespace VPB
         {
             try
             {
-                if (VPBConfig.Instance != null && VPBConfig.Instance.CreatorStripPanelPosSaved)
-                {
-                    return new Vector2(
-                        VPBConfig.Instance.CreatorStripPanelPosX,
-                        VPBConfig.Instance.CreatorStripPanelPosY);
-                }
+                if (VPBConfig.Instance != null)
+                    return VPBConfig.Instance.CreatorStripPanelGeometry.Current.SavedPos ?? Vector2.zero;
             }
             catch { }
             return Vector2.zero;
@@ -146,18 +128,17 @@ namespace VPB
                 if (VPBConfig.Instance == null) return;
                 Vector2 center = StripKeepTopLeftPosToCenter(
                     _stripKeepPanelRT.anchoredPosition, _stripKeepPanelRT.sizeDelta);
-                VPBConfig.Instance.CreatorStripPanelPosSaved = true;
-                VPBConfig.Instance.CreatorStripPanelPosX = center.x;
-                VPBConfig.Instance.CreatorStripPanelPosY = center.y;
-                VPBConfig.Instance.CreatorStripPanelSizeSaved = true;
-                VPBConfig.Instance.CreatorStripPanelWidthRef = Mathf.Clamp(
-                    _stripKeepPanelRT.sizeDelta.x / s,
-                    GalleryUiDesignTokens.StripKeepFloatMinWidthRef,
-                    GalleryUiDesignTokens.StripKeepFloatMaxWidthRef);
-                VPBConfig.Instance.CreatorStripPanelHeightRef = Mathf.Clamp(
-                    _stripKeepPanelRT.sizeDelta.y / s,
-                    GalleryUiDesignTokens.StripKeepFloatMinHeightRef,
-                    GalleryUiDesignTokens.StripKeepFloatMaxHeightRef);
+                FloatGeometrySlot slot = VPBConfig.Instance.CreatorStripPanelGeometry.Current;
+                slot.StorePos(center);
+                slot.StoreSize(new Vector2(
+                    Mathf.Clamp(
+                        _stripKeepPanelRT.sizeDelta.x / s,
+                        GalleryUiDesignTokens.StripKeepFloatMinWidthRef,
+                        GalleryUiDesignTokens.StripKeepFloatMaxWidthRef),
+                    Mathf.Clamp(
+                        _stripKeepPanelRT.sizeDelta.y / s,
+                        GalleryUiDesignTokens.StripKeepFloatMinHeightRef,
+                        GalleryUiDesignTokens.StripKeepFloatMaxHeightRef)));
             }
             catch { return; }
             StripKeepSchedulePanelSave();
@@ -197,7 +178,6 @@ namespace VPB
         private void StripKeepOnPanelResized()
         {
             StripKeepPersistPanelGeometry();
-            // Reflow preset chips to new width — wrap is not sticky at open-time width.
             ScheduleStripKeepPresetChipFlow();
         }
 
@@ -219,10 +199,6 @@ namespace VPB
                 GalleryUiDesignTokens.StripKeepFloatMaxHeightRef * s);
         }
 
-        /// <summary>
-        /// Horizontal chip strip that scrolls instead of overflowing panel width.
-        /// Returns content transform for chip children; hostGo is the scroll strip root.
-        /// </summary>
         private static Transform StripKeepCreateHScrollChipStrip(
             Transform parent, string name, float height, float s,
             out ScrollRect scroll, out GameObject hostGo)
@@ -270,9 +246,6 @@ namespace VPB
             return content.transform;
         }
 
-        /// <summary>
-        /// Wrap-flow chip host (FilterChips pattern). One row until full, then more rows.
-        /// </summary>
         private static Transform StripKeepCreateWrapChipHost(
             Transform parent, string name, float rowH, float s,
             out GameObject hostGo, out LayoutElement hostLe, out RectTransform contentRt)
@@ -296,10 +269,6 @@ namespace VPB
             return content.transform;
         }
 
-        /// <summary>
-        /// Manual wrap: place chip children left→right, new row when width exceeded.
-        /// Returns row count (≥1). Updates host LE height + content insets (Settings tabs pattern).
-        /// </summary>
         private static int StripKeepFlowWrapChips(
             RectTransform contentRt, LayoutElement hostLe, float rowH, float s, float availW)
         {

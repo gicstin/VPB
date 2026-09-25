@@ -16,17 +16,10 @@ namespace VPB
                 FloatGeometrySlot slot = cfg.GalleryLayoutPresetsFloatGeometry.Current;
                 if (slot == null) return;
 
-                if (slot.PosSaved)
-                    _layoutFloatSavedPosCenter = new Vector2(slot.PosX, slot.PosY);
-
-                if (slot.SizeSaved
-                    && slot.WidthRef >= LayoutFloatMinWidthRef
-                    && slot.HeightRef >= LayoutFloatMinHeightRef)
-                {
-                    _layoutFloatSavedSizeRef = new Vector2(
-                        Mathf.Clamp(slot.WidthRef, LayoutFloatMinWidthRef, LayoutFloatMaxWidthRef),
-                        Mathf.Clamp(slot.HeightRef, LayoutFloatMinHeightRef, LayoutFloatMaxHeightRef));
-                }
+                _layoutFloatSavedPosCenter = slot.SavedPos;
+                _layoutFloatSavedSizeRef = slot.SavedSize(
+                    new Vector2(LayoutFloatMinWidthRef, LayoutFloatMinHeightRef),
+                    new Vector2(LayoutFloatMaxWidthRef, LayoutFloatMaxHeightRef));
             }
             catch { }
         }
@@ -54,18 +47,8 @@ namespace VPB
                 FloatGeometrySlot slot = cfg.GalleryLayoutPresetsFloatGeometry.Current;
                 if (slot == null) return;
 
-                if (_layoutFloatSavedPosCenter.HasValue)
-                {
-                    slot.PosSaved = true;
-                    slot.PosX = _layoutFloatSavedPosCenter.Value.x;
-                    slot.PosY = _layoutFloatSavedPosCenter.Value.y;
-                }
-                if (_layoutFloatSavedSizeRef.HasValue)
-                {
-                    slot.SizeSaved = true;
-                    slot.WidthRef = _layoutFloatSavedSizeRef.Value.x;
-                    slot.HeightRef = _layoutFloatSavedSizeRef.Value.y;
-                }
+                slot.StorePos(_layoutFloatSavedPosCenter);
+                slot.StoreSize(_layoutFloatSavedSizeRef);
             }
             catch { return; }
             try { ScheduleQuickFiltersConfigSave(); } catch { }

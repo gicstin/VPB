@@ -4,13 +4,8 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>Last player-UI root we parented to (detect HUD rebuild / null).</summary>
         private Transform _worldSpaceUiParent;
 
-        /// <summary>
-        /// WorldSpace gallery: parent under same unscaled HUD space as assignable buttons / native mainHUD
-        /// so VaM worldScale does not change pane size.
-        /// </summary>
         private void ApplyWorldSpaceCanvasScale()
         {
             if (canvas == null || isFixedLocally) return;
@@ -28,10 +23,6 @@ namespace VPB
             _worldSpaceUiParent = canvas.transform.parent;
         }
 
-        /// <summary>
-        /// Re-attach if HUD root appeared late, or localScale was overwritten.
-        /// Cheap: parent/scale compares only.
-        /// </summary>
         private void SyncWorldSpaceCanvasScaleIfWorldScaleChanged()
         {
             if (canvas == null || isFixedLocally) return;
@@ -55,9 +46,6 @@ namespace VPB
             _worldSpaceUiParent = null;
         }
 
-        /// <summary>
-        /// Desktop HostScale tracks VaM monitorUIScale. Cheap compare; ApplyInnerPaneScale only on change.
-        /// </summary>
         private void SyncHostUiScaleIfChanged()
         {
             try
@@ -74,7 +62,6 @@ namespace VPB
             try { ApplyInnerPaneScale(); } catch { }
         }
 
-        /// <summary>Fixed overlay: leave HUD attach so ScreenSpaceOverlay is not under WorldSpace parent.</summary>
         private void DetachWorldSpaceCanvasFromPlayerUi()
         {
             if (canvas == null) return;

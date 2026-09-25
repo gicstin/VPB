@@ -16,7 +16,7 @@ namespace VPB
     {
         public RectTransform target;
         public UnityAction OnReorder;
-        public int minIndex = 0; // Minimum sibling index this item can move to
+        public int minIndex = 0;
         
         private Transform parent;
         private int startIndex;
@@ -66,7 +66,6 @@ namespace VPB
                 walk = walk.parent;
             }
             
-            // Disable button during drag to prevent accidental click on release
             if (btn != null)
             {
                 wasBtnEnabled = btn.enabled;
@@ -78,12 +77,10 @@ namespace VPB
         {
             if (parent == null || dragCam == null || target == null) return;
 
-            // Find which index we should be at based on vertical position
             int currentIndex = target.GetSiblingIndex();
             Vector2 localMouse;
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parent as RectTransform, eventData.position, dragCam, out localMouse))
             {
-                // Iterate through siblings to see if we should swap
                 for (int i = minIndex; i < parent.childCount; i++)
                 {
                     if (i == currentIndex) continue;
@@ -92,11 +89,10 @@ namespace VPB
                     RectTransform childRT = child as RectTransform;
                     if (childRT == null) continue;
 
-                    // Use midpoint + buffer to prevent flickering
                     float childMidY = childRT.anchoredPosition.y - (childRT.rect.height * 0.5f);
                     float buffer = 5f;
 
-                    if (currentIndex < i) // Dragging down
+                    if (currentIndex < i)
                     {
                         if (localMouse.y < childMidY - buffer)
                         {
@@ -104,7 +100,7 @@ namespace VPB
                             break;
                         }
                     }
-                    else // Dragging up
+                    else
                     {
                         if (localMouse.y > childMidY + buffer)
                         {
@@ -124,7 +120,6 @@ namespace VPB
                 _pausedScroll = null;
             }
 
-            // Restore button state
             if (btn != null) btn.enabled = wasBtnEnabled;
 
             if (target != null && target.GetSiblingIndex() != startIndex)
@@ -167,13 +162,11 @@ namespace VPB
             Ray ray = dragCam.ScreenPointToRay(eventData.position);
             target.position = ray.GetPoint(planeDistance) + offset;
             
-            // Face camera
             Vector3 lookDir = target.position - dragCam.transform.position;
             if (lookDir != Vector3.zero)
             {
                 if (lookDir.sqrMagnitude > 0.001f)
                 {
-                    // Face camera, but no roll
                     target.rotation = Quaternion.LookRotation(lookDir, Vector3.up);
                 }
             }
@@ -199,7 +192,6 @@ namespace VPB
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;
 
-            // Consume the drag start event so it doesn't bubble up to parent UIDraggable
             dragCam = eventData.pressEventCamera;
             if (dragCam == null) dragCam = Camera.main;
             
@@ -219,7 +211,6 @@ namespace VPB
             RectTransform parentRect = target.parent as RectTransform;
             if (parentRect == null) return;
 
-            // 3. Get Mouse Position in Parent Local Space
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, dragCam, out Vector2 localMouse))
             {
                 Vector2 pos = target.anchoredPosition;
@@ -229,7 +220,6 @@ namespace VPB
 
                 if (anchor == AnchorPresets.bottomRight) 
                 {
-                    // Stationary: Top-Left
                     float stationaryX = pos.x - size.x * 0.5f;
                     float stationaryY = pos.y + size.y * 0.5f;
                     
@@ -244,7 +234,6 @@ namespace VPB
                 }
                 else if (anchor == AnchorPresets.topLeft) 
                 {
-                    // Stationary: Bottom-Right
                     float stationaryX = pos.x + size.x * 0.5f;
                     float stationaryY = pos.y - size.y * 0.5f;
 
@@ -259,7 +248,6 @@ namespace VPB
                 }
                 else if (anchor == AnchorPresets.topRight) 
                 {
-                    // Stationary: Bottom-Left
                     float stationaryX = pos.x - size.x * 0.5f;
                     float stationaryY = pos.y - size.y * 0.5f;
 
@@ -274,7 +262,6 @@ namespace VPB
                 }
                 else if (anchor == AnchorPresets.bottomLeft) 
                 {
-                    // Stationary: Top-Right
                     float stationaryX = pos.x + size.x * 0.5f;
                     float stationaryY = pos.y + size.y * 0.5f;
 
@@ -313,9 +300,7 @@ namespace VPB
         public bool deferred = false;
         public bool resizeX = false;
         public bool resizeY = true;
-        /// <summary>When true with <see cref="resizeX"/>, writes X to <see cref="RectTransform.anchorMax"/> instead of anchorMin.</summary>
         public bool resizeAnchorMaxX = false;
-        /// <summary>When true with <see cref="resizeY"/>, writes Y to <see cref="RectTransform.anchorMax"/> instead of anchorMin.</summary>
         public bool resizeAnchorMaxY = false;
         public float minAnchorX = 0.05f;
         public float maxAnchorX = 0.95f;
@@ -472,30 +457,23 @@ namespace VPB
         public static System.Collections.Generic.List<UIHoverBorder> Live { get { return s_Live; } }
 
         public Graphic targetGraphic;
-        public Color hoverColor = GalleryUiColorTokens.HoverRimDefault; // Bright yellow visible highlight
-        /// <summary>Armed/selected rim when not hovering. Alpha 0 = fall back to <see cref="hoverColor"/> (grid/side-rail).</summary>
+        public Color hoverColor = GalleryUiColorTokens.HoverRimDefault;
         public Color selectedRimColor;
-        /// <summary>Idle control edge when <see cref="showIdleRim"/>. Muted fill still reads as a button (Norman).</summary>
         public Color idleRimColor = GalleryUiColorTokens.RimIdle;
         public float borderSize = GalleryUiDesignTokens.ControlRimThicknessRef;
         /// <summary>When true, border effect is rendered inward (negative outline offset).</summary>
         public bool inward = false;
         public bool isSelected = false;
-        /// <summary>Keep a faint rim while idle so muted chrome stays discernible. Off for grid thumbs.</summary>
         public bool showIdleRim = false;
         int _rimSettingsSig;
         bool _rimSettingsApplied;
-        /// <summary>List layout: hover uses <see cref="hoverBorderGO"/> only; selection is a separate Graphic.
-        /// Exit always hides hover GO (pool reuse never gets PointerExit). Grid inward border keeps GO when selected.</summary>
+        /// <summary>List layout: hover uses hoverBorderGO only; selection is a separate Graphic.</summary>
         public bool hoverIndicatorUsesSeparateSelectionVisual = false;
-        // When set, show/hide this GO on hover instead of using the rim / Outline.
-        // Used in list mode to avoid the Outline filling the entire semi-transparent row.
         public GameObject hoverBorderGO;
 
         private GameObject rimRoot;
         private RoundedRectOutline rimBorder;
 
-        /// <summary>True while pointer hovers so we combine with <see cref="isSelected"/> for rim visibility.</summary>
         private bool hovering;
 
         public void ApplyBorderSettings()
@@ -613,10 +591,7 @@ namespace VPB
             ApplyRimTint();
         }
 
-        /// <summary>
-        /// Draw hover/selection chrome above opaque grid labels (sibling order).
-        /// Label band sits under thumb; without this, caption covers bottom rim.
-        /// </summary>
+        /// <summary>Draw hover/selection chrome above opaque grid labels (sibling order).</summary>
         public void BringIndicatorToFront()
         {
             if (hoverBorderGO != null)
@@ -711,9 +686,6 @@ namespace VPB
 
             rimRoot = UI.CreateChildRT(gameObject, "HoverRim", AnchorPresets.stretchAll);
 
-            // Parent may have HorizontalLayoutGroup/VerticalLayoutGroup with childControlWidth/Height
-            // that would squash the rim to ~0px (e.g. CategoryQuickSwitchChrome). Rim must always
-            // fill parent via its stretched anchors, so opt out of any layout group sizing.
             var rimLe = rimRoot.AddComponent<LayoutElement>();
             rimLe.ignoreLayout = true;
 
@@ -729,11 +701,6 @@ namespace VPB
             float t = borderSize;
             if (t < 1f) t = 1f;
 
-            // RoundedRectOutline draws thickness along the INNER edge of rimRoot.
-            // Outward: expand rim by t so the band sits outside the control (gutter / spacing).
-            // Inward: keep rim flush — band insets into the control. Do NOT also shrink rimRoot
-            // by t (that double-offset pushed the rim inward and left a 1px seam into neighbors
-            // when flush grid cells used the rim path).
             var prt = rimRoot.GetComponent<RectTransform>();
             if (prt != null)
             {
@@ -775,10 +742,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> when marked dirty (UI rebuild),
-    /// rate-limited. Idle frames pay zero GetComponentsInChildren cost.
-    /// </summary>
     public sealed class GalleryPaneChromeEnforcer : MonoBehaviour
     {
         private const float MinIntervalSeconds = 0.5f;
@@ -862,10 +825,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Grid cell pointer enter/exit: claim footer hover path + grid hover badges.
-    /// Name Card overlay removed — captions live on always-on GridLabel + info-bar path.
-    /// </summary>
     public class UIHoverReveal : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public GalleryPanel panel;
@@ -934,7 +893,6 @@ namespace VPB
             // Recycle / deactivate must clear hover rating so pooled grid cells stay clean.
             if (panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 panel.HideGridHoverBadges(gameObject, force: true);
-            // Drop path claim if this cell owned it (pool recycle / deactivate mid-hover).
             if (panel != null) panel.ReleaseHoverPath(this);
         }
 
@@ -970,10 +928,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Hovering the thumbnail shows an anchored larger preview (bottom-left above the tbox).
-    /// Bound per-row because list/grid rows are recycled.
-    /// </summary>
     public class UIHoverPreviewTrigger : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public GalleryPanel panel;
@@ -983,7 +937,6 @@ namespace VPB
 
         public bool IsHovering => hovering;
 
-        /// <summary>Panel hid preview without a matching Exit — reset so next Enter can fire.</summary>
         internal void SyncHoverFlagAfterPanelHide()
         {
             hovering = false;
@@ -1048,10 +1001,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Forces a layout element to have a height based on its current width (or vice versa).
-    /// Used for 1:1 aspect ratio thumbnails in VerticalLayoutGroups.
-    /// </summary>
     public class AspectRatioLayoutElement : MonoBehaviour, ILayoutElement
     {
         public float aspectRatio = 1f;
@@ -1131,14 +1080,7 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Run after <see cref="ScrollbarSync.LateUpdate"/> (default order). Uses
-    /// <see cref="ScrollRect.verticalNormalizedPosition"/> for row window (same mapping as
-    /// <see cref="ScrollToCenterItem"/>). Do not call <see cref="Canvas.ForceUpdateCanvases"/> on scroll —
-    /// it re-enters layout and breaks ScrollRect + decoupled scrollbar after first drag.
-    /// One <see cref="Canvas.willRenderCanvases"/> flush per burst re-binds after layout. Cache busted on every
-    /// <see cref="ScrollRect.onValueChanged"/> so LateUpdate never skips a pass on stale (start,end).
-    /// </summary>
+    /// <summary>Runs after ScrollbarSync; rebinds rows once per burst via willRenderCanvases. Never ForceUpdateCanvases on scroll.</summary>
     [DefaultExecutionOrder(50)]
     public class RecyclingGridView : MonoBehaviour
     {
@@ -1170,10 +1112,6 @@ namespace VPB
         public Func<GameObject> onCreateItem;
         public Action<GameObject> onRecycleItem;
 
-        /// <summary>
-        /// The item index whose row was closest to viewport center during the last UpdateVisibleItems call.
-        /// Cached so callers (e.g. thumbnail priority computation) don't recompute it per-item.
-        /// </summary>
         public int CachedCenterItemIndex { get; private set; }
 
         public int VisibleStartIndex { get { return _lastVisibleStartIndex; } }
@@ -1192,7 +1130,6 @@ namespace VPB
         private HashSet<int> _activeIndexSet = new HashSet<int>();
         private Stack<RectTransform> pool = new Stack<RectTransform>();
         
-        // Grid State
         private float itemWidth = 100f;
         private float itemHeight = 100f;
         public float CellWidth => itemWidth;
@@ -1202,22 +1139,11 @@ namespace VPB
         private int colCount = 1;
         private int rowCount = 0;
 
-        // Adaptive Config
         public bool isAdaptive = false;
         public float minCellSize = 200f;
-        /// <summary>
-        /// Hard floor for grid cells when fixed column count is set. Below this, effective
-        /// columns drop (then cell size clamps) so a tiny pane cannot spawn 1px thumbs.
-        /// Softer than <see cref="minCellSize"/> so preferred columns stay until pane is truly narrow.
-        /// </summary>
         private const float AbsoluteMinCellSize = 80f;
         public int fixedColumns = 0;
         public float targetAspectRatio = 1.0f;
-        /// <summary>
-        /// Extra cell height in pixels under a square thumb (grid captions).
-        /// Independent of column width — strip hugs text metrics (Johnson density; Galitz chrome).
-        /// List/fixed-height mode ignores this.
-        /// </summary>
         public float fixedBottomChromePx = 0f;
         public bool useFixedHeight = false;
         private float lastRectWidth = -1f;
@@ -1227,7 +1153,7 @@ namespace VPB
         public int preserveCenterItemIndex = -1;
 
         private bool _needsVisibleUpdate = false;
-        private bool _needsLayoutUpdate = true; // Start with true to ensure initial layout
+        private bool _needsLayoutUpdate = true;
 
         /// <summary>Last committed visible index range (for diagnostics only).</summary>
         private int _lastVisibleStartIndex = -1;
@@ -1241,7 +1167,6 @@ namespace VPB
             _lastVisibleEndIndex = -1;
         }
 
-        /// <summary>Top of visible band in content space — derived from norm (authoritative when <see cref="ScrollbarSync"/> drives ScrollRect).</summary>
         private float GetContentScrollTopYForVisibility()
         {
             if (viewport == null || content == null) return 0f;
@@ -1278,12 +1203,13 @@ namespace VPB
             _needsLayoutUpdate = true;
         }
 
+        private RectTransform _selfRectTransform;
+
         private void Update()
         {
-            // Adaptive relayout must not run on tiny viewport width noise: RecalculateLayout() ends in
-            // Refresh() -> RecycleAll(), which drops the visible-range cache and re-binds every cell
-            // — main cause of grid scroll jitter when rect.width fluctuates 1–2px per frame.
-            RectTransform rt = GetComponent<RectTransform>();
+            // Adaptive relayout must not run on tiny viewport width noise.
+            if (_selfRectTransform == null) _selfRectTransform = transform as RectTransform;
+            RectTransform rt = _selfRectTransform;
             float usableWidth = viewport != null ? viewport.rect.width : (rt != null ? rt.rect.width : 0);
 
             if (isAdaptive)
@@ -1294,7 +1220,6 @@ namespace VPB
                 else if (fixedColumns > 0)
                 {
                     int cols = ResolveColumnCount(usableWidth);
-                    // Match PositionItem: left pad + (cols-1) gaps + right pad = (cols+1)*spacingX
                     float inner = usableWidth - (cols + 1) * spacingX;
                     if (inner > 0.01f)
                     {
@@ -1322,9 +1247,6 @@ namespace VPB
                 RecalculateLayout();
             }
 
-            // Visibility refresh is deferred to LateUpdate: ScrollRect + manual ScrollbarSync apply
-            // content.anchoredPosition after our Update runs; scrollbar jumps could leave stale scroll offset
-            // here so start/end indices match old viewport → no recycle/bind → thumbnails never enqueue.
         }
 
         private void LateUpdate()
@@ -1351,16 +1273,11 @@ namespace VPB
             if (isAdaptive) _needsLayoutUpdate = true;
         }
 
-        /// <summary>
-        /// Effective column count for current viewport. Honors fixedColumns when set; in grid
-        /// mode drops columns so cells stay &gt;= <see cref="AbsoluteMinCellSize"/>.
-        /// </summary>
         private int ResolveColumnCount(float usableWidth)
         {
             int cols = fixedColumns;
             if (cols <= 0)
             {
-                // Side pads = spacingX (same as PositionItem / vertical totalHeight).
                 cols = Mathf.FloorToInt((usableWidth - spacingX) / (minCellSize + spacingX));
                 if (cols < 1) cols = 1;
                 return cols;
@@ -1388,7 +1305,6 @@ namespace VPB
             RectTransform rt = GetComponent<RectTransform>();
             if (rt == null) return;
             
-            // Priority: Viewport width (actual visible area)
             float usableWidth = viewport != null ? viewport.rect.width : rt.rect.width;
             
             // If we don't have a width yet, try to force it or use a sensible default
@@ -1404,7 +1320,7 @@ namespace VPB
                 wasZero = true;
             }
 
-            lastRectWidth = wasZero ? 0f : usableWidth; // Store 0 if we defaulted, to allow next change to trigger
+            lastRectWidth = wasZero ? 0f : usableWidth;
             lastFixedColumns = fixedColumns;
             
             int cols = ResolveColumnCount(usableWidth);
@@ -1413,7 +1329,6 @@ namespace VPB
             float cellWidth = (usableWidth - (cols + 1) * spacingX) / cols;
             if (!useFixedHeight)
             {
-                // Floor even when cols==1 and viewport still narrower — prevents 1px thumbs / huge visible set.
                 if (cellWidth < AbsoluteMinCellSize) cellWidth = AbsoluteMinCellSize;
             }
             else if (cellWidth < 10f)
@@ -1437,7 +1352,6 @@ namespace VPB
                 cellHeight = cellWidth / targetAspectRatio;
             }
 
-            // Internal update of config members
             itemWidth = cellWidth;
             itemHeight = cellHeight;
             colCount = Mathf.Max(1, cols);
@@ -1462,7 +1376,6 @@ namespace VPB
             fixedColumns = fixedCols;
             useFixedHeight = fixedHeight;
             
-            // Force immediate recalculation
             lastRectWidth = -1f; 
             RecalculateLayout(deferFinalRefresh: deferRefresh);
         }
@@ -1476,10 +1389,10 @@ namespace VPB
 
             spacingX = spaceX;
             spacingY = spaceY;
-            fixedColumns = columns; // Set this as the fixed target
+            fixedColumns = columns;
             colCount = Mathf.Max(1, columns);
             
-            lastRectWidth = -1f; // Force recalculation to sync width
+            lastRectWidth = -1f;
             if (itemsCount > 0) UpdateContentHeight();
             if (!deferRefresh) Refresh();
         }
@@ -1491,11 +1404,7 @@ namespace VPB
             if (!deferRefresh) Refresh();
         }
 
-        /// <summary>
-        /// Sets item count and immediately positions the scroll to <paramref name="normalizedPos"/>
-        /// before the first UpdateVisibleItems runs, so the initial item bind happens at the
-        /// correct scroll position instead of always starting from the top.
-        /// </summary>
+        /// <summary>Sets item count and immediately positions the scroll to normalizedPos before the first UpdateVisibleItems runs.</summary>
         public void SetItemCountAtScroll(int count, float normalizedPos)
         {
             itemsCount = count;
@@ -1504,16 +1413,12 @@ namespace VPB
             Refresh();
         }
 
-        /// <summary>
-        /// Sets item count and immediately centers the viewport on <paramref name="centerItemIndex"/>
-        /// before the first UpdateVisibleItems runs.
-        /// </summary>
+        /// <summary>Sets item count and immediately centers the viewport on centerItemIndex before the first UpdateVisibleItems runs.</summary>
         public void SetItemCountAtItem(int count, int centerItemIndex)
         {
             itemsCount = count;
             UpdateContentHeight();
             ScrollToCenterItem(centerItemIndex);
-            // ScrollToCenterItem calls UpdateVisibleItems internally, so skip the Refresh() here.
         }
 
         private void UpdateContentHeight()
@@ -1537,7 +1442,6 @@ namespace VPB
             UpdateVisibleItems('R');
         }
 
-        /// <summary>Returns the index of the item whose row is closest to the viewport center.</summary>
         public int GetCenterItemIndex()
         {
             if (content == null || viewport == null || itemsCount == 0) return 0;
@@ -1580,7 +1484,6 @@ namespace VPB
             if (effectiveItemHeight <= 0.1f) return;
 
             int row = index / Mathf.Max(1, colCount);
-            // Match PositionItem: top = row*(h+s)+s, bottom = top+h (pivot top-left).
             float rowTopY = row * effectiveItemHeight + spacingY;
             float rowBottomY = rowTopY + itemHeight;
 
@@ -1591,7 +1494,6 @@ namespace VPB
             if (maxScrollY <= 0.01f) return;
 
             float scrollTopY = GetContentScrollTopYForVisibility();
-            // Small pad so two-line caption under square thumb is not flush-clipped.
             float edgePad = Mathf.Max(2f, spacingY * 0.5f);
             float targetScrollY = scrollTopY;
             if (rowTopY - edgePad < scrollTopY)
@@ -1607,14 +1509,12 @@ namespace VPB
             UpdateVisibleItems('V');
         }
 
-        /// <summary>Jump scroll to the first row (Unity: vertical normalized 1 = top).</summary>
         public void ScrollToTopImmediate()
         {
             if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = 1f;
             UpdateVisibleItems('T');
         }
 
-        /// <summary>Jump scroll to the last row (Unity: vertical normalized 0 = bottom).</summary>
         public void ScrollToBottomImmediate()
         {
             if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = 0f;
@@ -1667,13 +1567,10 @@ namespace VPB
             int startIndex = startRow * colCount;
             int endIndex = Mathf.Min(itemsCount - 1, (endRow * colCount) + colCount - 1);
 
-            // Cache center index once for the entire bind pass so onBindItem callbacks
-            // don't recompute it (and access viewport.rect) for every single item.
             CachedCenterItemIndex = GetCenterItemIndex();
             _lastVisibleStartIndex = startIndex;
             _lastVisibleEndIndex = endIndex;
 
-            // Recycle items out of range, updating the index set in sync.
             for (int i = activeItems.Count - 1; i >= 0; i--)
             {
                 RecyclingGridItem item = activeItems[i];
@@ -1689,7 +1586,6 @@ namespace VPB
                 }
             }
 
-            // Create missing items — O(1) lookup via HashSet instead of O(N) inner scan.
             for (int i = startIndex; i <= endIndex; i++)
             {
                 if (_activeIndexSet.Contains(i)) continue;
@@ -1909,25 +1805,21 @@ namespace VPB
                 LastScrollbarDragValue = scrollbar != null ? scrollbar.value : -1f;
             }
             catch { }
-
         }
 
         public void OnPointerUp(PointerEventData eventData)
         {
             _isPointerDown = false;
-            // Final sync on release to ensure alignment
             if (scrollRect != null && scrollbar != null)
             {
                 SyncToScrollRect(scrollbar.value);
             }
-
         }
 
         private void Update()
         {
             if (scrollbar == null) return;
 
-            // Force interactable to prevent other scripts from disabling it
             if (!scrollbar.interactable) scrollbar.interactable = true;
             // Scrollbar size + collider sync run in LateUpdate only — avoids duplicate rect reads every frame.
         }
@@ -1942,7 +1834,6 @@ namespace VPB
 
             UpdateScrollbarSize();
 
-            // Fallback sync to ensure consistency if onValueChanged didn't catch a programmatic change
             if (!_isPointerDown && !_isSyncing)
             {
                 float targetVal = scrollRect.verticalNormalizedPosition;
@@ -2013,7 +1904,6 @@ namespace VPB
             {
                 float size = viewportHeight / contentHeight;
                 
-                // Use actual RT height for track height
                 float trackHeight = _scrollbarRT != null ? _scrollbarRT.rect.height : ((RectTransform)scrollbar.transform).rect.height;
                 if (trackHeight <= 1f) trackHeight = viewportHeight;
                 
@@ -2038,7 +1928,6 @@ namespace VPB
             if (_scrollbarRT == null) return;
 
             Vector3 targetSize = new Vector3(_scrollbarRT.rect.width, _scrollbarRT.rect.height, 1f);
-            // Ensure some depth for easier interaction
             targetSize.z = 20f; 
 
             if (Vector3.SqrMagnitude(_collider.size - targetSize) > 0.001f)
@@ -2056,7 +1945,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Grid hover: open Hub detail for item (download missing deps there). Ctrl+click copies missing dep names.</summary>
     public class GalleryDepsDownloadHoverButton : MonoBehaviour
     {
         public GalleryPanel panel;
@@ -2092,9 +1980,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Clamps Scrollbar handle fraction so long lists keep a grab-able handle (Unity shrinks to ~1px).
-    /// </summary>
     public class ScrollbarMinHandleHeight : MonoBehaviour
     {
         public float minHandlePixels = 28f;
@@ -2122,13 +2007,11 @@ namespace VPB
         }
     }
 
-    /// <summary>Holds per-row rating picker GO when parented under float panel (not under recycled row).</summary>
     public class PluginsFloatRowSelectorRef : MonoBehaviour
     {
         public GameObject selector;
     }
 
-    /// <summary>Row background tint on pointer hover (Plugins float virt rows).</summary>
     public class PluginsFloatRowHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public Image target;

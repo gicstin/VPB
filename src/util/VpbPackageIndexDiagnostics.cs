@@ -5,10 +5,7 @@ using System.Text;
 
 namespace VPB
 {
-    /// <summary>
-    /// Optional tracing for VAR packages that fail to appear in the gallery index.
-    /// Enable via BepInEx config <c>Logging.IndexDiagUidSubstring</c> (e.g. <c>RunRudolf.AlternativeFuta</c>).
-    /// </summary>
+    /// <summary>Optional tracing for VAR packages that fail to appear in the gallery index.</summary>
     internal static class VpbPackageIndexDiagnostics
     {
         const string LogTag = "[VPB.IndexDiag]";
@@ -147,7 +144,6 @@ namespace VPB
                     }
                 }
 
-                // Registry entries matching needle but missing on expected disk paths
                 try
                 {
                     lock (FileManager.packagesLock)

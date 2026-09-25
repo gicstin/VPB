@@ -4,10 +4,6 @@ using System.Text;
 using UnityEngine;
 namespace VPB
 {
-    /// <summary>
-    /// Custom var package ID scanner
-    /// Compared to regular expressions, this provides performance improvements by dozens of times
-    /// </summary>
     class VarNameParser
     {
         public static HashSet<string> Parse(string text)
@@ -22,13 +18,10 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(text) || text.IndexOf(':') < 0) return;
             
-            // Use local StringBuilder instead of static s_TempBuilder
             StringBuilder builder = new StringBuilder();
 
-            //(creater).(varname).(version):
             for (int i = 0; i < text.Length - 5;)
             {
-                // Clear
                 builder.Length = 0;
                 int createrLen = ReadString(builder, text, ref i, 5);
                 if (createrLen > 0)
@@ -40,13 +33,12 @@ namespace VPB
                         {
                             if (ReadDot(builder, text, ref i))
                             {
-                                // versionId or latest
                                 int versionLen = ReadVersion(builder, text, ref i, 1);
                                 if (versionLen > 0)
                                 {
                                     if (ReadColon(text, ref i))
                                     {
-                                        string uid = builder.ToString();// string.Format("{0}.{1}.{2}", creater, varName, version);
+                                        string uid = builder.ToString();
                                         results.Add(uid);
                                     }
                                 }
@@ -107,7 +99,7 @@ namespace VPB
         }
         static int ReadVersion(StringBuilder builder, string text, ref int idx, int leastLeftCntToRead)
         {
-            if (idx + 6 + leastLeftCntToRead < text.Length)// Reserve space to read "latest"
+            if (idx + 6 + leastLeftCntToRead < text.Length)
             {
                 if (text[idx] == 'l'
                     && text[idx + 1] == 'a'
@@ -129,7 +121,6 @@ namespace VPB
             if (idx >= text.Length) return 0;
             int cnt = 0;
             char peek = text[idx];
-            // Version numbers cannot start with 0
             if (peek == '0')
             {
                 idx++;

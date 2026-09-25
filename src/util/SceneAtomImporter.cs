@@ -7,10 +7,6 @@ using VPB;
 
 namespace VPB.src.util
 {
-    /// <summary>
-    /// Enumerates and spawns non-Person atoms from a saved scene JSON. CUAs delegate to
-    /// <see cref="CUAAtomImporter"/> so person-linked placement stays correct.
-    /// </summary>
     public static class SceneAtomImporter
     {
         public struct SceneAtomEntry
@@ -19,37 +15,19 @@ namespace VPB.src.util
             public string Type;
             public bool LinksToPerson;
             public bool UidCollision;
-            /// <summary>
-            /// Picker ids contained by this SubScene (uid prefix <c>id/</c> and/or parentAtom chain).
-            /// Null when not a SubScene or when it has no importable children.
-            /// </summary>
             public string[] SubSceneDescendantIds;
         }
 
-        /// <summary>
-        /// External atom UID referenced by selected import payload that is not itself being imported.
-        /// Shown for missing live UIDs, person-like retarget (Person→Player), and plugin-receiver remap.
-        /// </summary>
         public struct BrokenUidRef
         {
             public string OriginalUid;
             public string SourceType;
             public string SuggestedLiveUid;
-            /// <summary>Donor scene still has this atom — Remap modal can co-import it as Create new.</summary>
             public bool CanCreateFromSource;
-            /// <summary>
-            /// Distinct <c>plugin#N_ClassName</c> values from trigger <c>receiver</c> fields targeting
-            /// <see cref="OriginalUid"/> inside the selected import JSON. Empty/null when none.
-            /// </summary>
             public List<string> SourcePluginReceivers;
-            /// <summary>
-            /// Parallel to <see cref="SourcePluginReceivers"/>: PluginManager URL for that slot on the
-            /// source-scene atom (may be empty). Used for URL-based live suggest.
-            /// </summary>
             public List<string> SourcePluginReceiverUrls;
         }
 
-        /// <summary>Live plugin slot on an atom (PluginManager key + param storable id + script URL).</summary>
         public struct LivePluginSlot
         {
             public string SlotKey;
@@ -58,10 +36,6 @@ namespace VPB.src.util
             public string Url;
         }
 
-        /// <summary>
-        /// Remap-choice sentinel: co-import the donor atom under its original UID (refs stay intact).
-        /// Not a legal VaM atom id.
-        /// </summary>
         public const string CreateNewUidSentinel = "__vpb_create_new__";
 
         private static bool s_importRunning;
@@ -134,7 +108,6 @@ namespace VPB.src.util
             if (atoms == null) return result;
 
             Dictionary<string, bool> cuaLinks = null;
-            // parentAtom map includes Person atoms — walk can pass through them.
             Dictionary<string, string> parentById = new Dictionary<string, string>(atoms.Count, StringComparer.Ordinal);
 
             for (int i = 0; i < atoms.Count; i++)
@@ -191,10 +164,6 @@ namespace VPB.src.util
             return v;
         }
 
-        /// <summary>
-        /// Fill <see cref="SceneAtomEntry.SubSceneDescendantIds"/> for each SubScene picker row.
-        /// Membership = uid prefix <c>subSceneId/</c> (VaM containingSubScene) or parentAtom chain to that SubScene.
-        /// </summary>
         private static void AttachSubSceneDescendants(List<SceneAtomEntry> picker, Dictionary<string, string> parentById)
         {
             if (picker == null || picker.Count == 0) return;
@@ -242,9 +211,7 @@ namespace VPB.src.util
             return false;
         }
 
-        /// <summary>
-        /// True when the live scene already has an atom with this source uid, or a prior import variant (uid#2, …).
-        /// </summary>
+        /// <summary>True when the live scene already has an atom with this source uid, or a prior import variant (uid#2, …).</summary>
         public static bool AtomAlreadyInScene(string sourceAtomId)
         {
             if (string.IsNullOrEmpty(sourceAtomId)) return false;
@@ -289,10 +256,6 @@ namespace VPB.src.util
                 selectedIds, relativeToTargetPerson, skipExistingInScene, uidRemap, null);
         }
 
-        /// <param name="receiverRemapByUid">
-        /// Optional: original atom uid → (source <c>plugin#N_Class</c> → live dest store id).
-        /// Applied to trigger <c>receiver</c> fields before atom UID remap.
-        /// </param>
         public static IEnumerator ImportSelectedAtoms(
             JSONClass sourceScene,
             string sourcePersonAtomId,
@@ -343,9 +306,6 @@ namespace VPB.src.util
             }
         }
 
-        /// <summary>
-        /// True when live scene has an atom with this exact uid (not <c>uid#N</c> variants).
-        /// </summary>
         public static bool ExactAtomInScene(string atomUid)
         {
             if (string.IsNullOrEmpty(atomUid)) return false;
@@ -355,14 +315,6 @@ namespace VPB.src.util
             catch { return false; }
         }
 
-        /// <summary>
-        /// Finds external atom UIDs referenced by <paramref name="selectedIds"/> that need a Remap Atom UIDs
-        /// row: missing in live scene, person-like retarget (e.g. donor <c>Person</c> → live <c>Player</c>),
-        /// or trigger plugin receivers that may need slot remap. Cold path — scene import only.
-        /// </summary>
-        /// <param name="preferredPersonUid">
-        /// Import-sidebar target person uid — preferred suggest for person-like refs when present live.
-        /// </param>
         public static List<BrokenUidRef> CollectBrokenExternalUidRefs(
             JSONClass sourceScene, HashSet<string> selectedIds)
         {
@@ -399,7 +351,6 @@ namespace VPB.src.util
                 CollectTriggerPluginReceivers(node, pluginReceiversByUid);
             }
 
-            // Live uid → type for same-type suggestions.
             var liveByType = new Dictionary<string, List<string>>(StringComparer.Ordinal);
             SuperController sc = SuperController.singleton;
             if (sc != null)
@@ -443,15 +394,12 @@ namespace VPB.src.util
                 bool missingLive = !ExactAtomInScene(refUid);
                 bool personLike = SceneUtils.IsPersonLikeAtomType(srcType);
                 bool hasPluginRecv = srcReceivers != null && srcReceivers.Count > 0;
-                // Always offer person-like retarget (Person→Player) and plugin-receiver rows even when
-                // the donor uid still exists live — prior skip hid Embody retarget entirely.
                 if (!missingLive && !personLike && !hasPluginRecv)
                     continue;
 
                 string suggested = SuggestLiveUidForExternalRef(
                     refUid, srcType, preferredPersonUid, liveByType);
 
-                // Non-person identity row with plugins that already match live → noise, skip.
                 if (!missingLive && !personLike && hasPluginRecv)
                 {
                     string dest = !string.IsNullOrEmpty(suggested) ? suggested : refUid;
@@ -480,29 +428,17 @@ namespace VPB.src.util
             return result;
         }
 
-        /// <summary>
-        /// True when this ref cannot land on its own and a human must choose. Auto-resolvable means the
-        /// donor uid exists live under the same name, nothing wants to point it somewhere else, and every
-        /// plugin receiver it triggers has a unique live match.
-        /// </summary>
+        /// <summary>True when this ref cannot land on its own and a human must choose.</summary>
         public static bool UidRefNeedsAttention(BrokenUidRef row)
         {
             if (string.IsNullOrEmpty(row.OriginalUid)) return false;
-            // Donor uid missing from the live scene — the whole point of the remap prompt.
             if (!ExactAtomInScene(row.OriginalUid)) return true;
-            // Exists live, but the suggest wants a different atom (e.g. person-like ref vs the sidebar
-            // target person). Ambiguous → ask rather than silently pick one.
             if (!string.IsNullOrEmpty(row.SuggestedLiveUid)
                 && !string.Equals(row.SuggestedLiveUid, row.OriginalUid, StringComparison.Ordinal))
                 return true;
-            // Same atom, but a trigger targets a plugin slot we cannot match on it.
             return CountUnresolvedPluginReceivers(row, row.OriginalUid, null) > 0;
         }
 
-        /// <summary>
-        /// Subset of <paramref name="rows"/> that <see cref="UidRefNeedsAttention"/> flags. Empty result =
-        /// the import can proceed without showing the Remap Atom UIDs prompt.
-        /// </summary>
         public static List<BrokenUidRef> FilterUidRefsNeedingAttention(List<BrokenUidRef> rows)
         {
             var result = new List<BrokenUidRef>();
@@ -515,11 +451,6 @@ namespace VPB.src.util
             return result;
         }
 
-        /// <summary>
-        /// Receiver remaps for the silent path: every row keeps its own uid as the destination, so this
-        /// only yields the <c>plugin#N_Class</c> slot moves that auto-matched. Skipping this would make
-        /// "it just works" quietly drop a trigger whose plugin sits at a different slot live.
-        /// </summary>
         public static Dictionary<string, Dictionary<string, string>> BuildAutoReceiverRemapByUid(
             List<BrokenUidRef> rows)
         {
@@ -535,9 +466,6 @@ namespace VPB.src.util
             return BuildReceiverRemapByUid(rows, identity, null);
         }
 
-        /// <summary>
-        /// Suggest live destination for an external ref: preferred person → exact uid → unique same-type.
-        /// </summary>
         private static string SuggestLiveUidForExternalRef(
             string refUid,
             string srcType,
@@ -546,7 +474,6 @@ namespace VPB.src.util
         {
             bool personLike = SceneUtils.IsPersonLikeAtomType(srcType);
 
-            // Person-like: prefer import-sidebar target (Player) over donor uid when names diverged.
             if (personLike
                 && !string.IsNullOrEmpty(preferredPersonUid)
                 && ExactAtomInScene(preferredPersonUid))
@@ -576,10 +503,6 @@ namespace VPB.src.util
             return null;
         }
 
-        /// <summary>
-        /// Walk trigger-action objects (<c>receiverAtom</c> + <c>receiver</c>) and collect distinct
-        /// <c>plugin#N_ClassName</c> receivers keyed by the target atom uid.
-        /// </summary>
         private static void CollectTriggerPluginReceivers(
             JSONNode node, Dictionary<string, HashSet<string>> sink)
         {
@@ -633,7 +556,6 @@ namespace VPB.src.util
             return storeId.IndexOf('_') > "plugin#".Length;
         }
 
-        /// <summary>Strip subscene <c>external_ref:</c> prefix from a receiverAtom value.</summary>
         public static string StripExternalRefPrefix(string receiverAtom)
         {
             if (string.IsNullOrEmpty(receiverAtom)) return receiverAtom;
@@ -663,7 +585,6 @@ namespace VPB.src.util
             }
         }
 
-        /// <summary>Class / type suffix of <c>plugin#N_ClassName</c>, or null.</summary>
         public static string PluginStoreClassName(string storeId)
         {
             if (!IsPluginStoreId(storeId)) return null;
@@ -672,10 +593,6 @@ namespace VPB.src.util
             return storeId.Substring(us + 1);
         }
 
-        /// <summary>
-        /// Soft ClassName equality: exact ignore-case, or dotted suffix
-        /// (<c>VamTimeline.AtomPlugin</c> ↔ <c>AtomPlugin</c>).
-        /// </summary>
         public static bool PluginClassNamesMatch(string a, string b)
         {
             if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
@@ -685,7 +602,6 @@ namespace VPB.src.util
             return false;
         }
 
-        /// <summary>Slot key <c>plugin#N</c> from a store id or bare slot key.</summary>
         public static string PluginStoreSlotKey(string storeIdOrSlot)
         {
             if (string.IsNullOrEmpty(storeIdOrSlot)) return null;
@@ -695,10 +611,6 @@ namespace VPB.src.util
             return storeIdOrSlot.Substring(0, us);
         }
 
-        /// <summary>
-        /// Live plugin slots on an atom (cold path). Prefer PluginManager URLs; also surfaces
-        /// <c>plugin#N_Class</c> store ids from <see cref="Atom.GetStorableIDs"/>.
-        /// </summary>
         public static List<LivePluginSlot> ListLivePluginSlots(Atom atom)
         {
             var result = new List<LivePluginSlot>(8);
@@ -782,10 +694,6 @@ namespace VPB.src.util
             return ListLivePluginSlots(atom);
         }
 
-        /// <summary>
-        /// Suggest a live store id for <paramref name="sourceReceiver"/> on <paramref name="destAtomUid"/>.
-        /// Exact store id → unique ClassName → unique URL (when provided).
-        /// </summary>
         public static string SuggestLiveReceiverStoreId(string destAtomUid, string sourceReceiver)
         {
             return SuggestLiveReceiverStoreId(destAtomUid, sourceReceiver, null);
@@ -799,7 +707,6 @@ namespace VPB.src.util
             List<LivePluginSlot> slots = ListLivePluginSlotsByUid(destAtomUid);
             if (slots == null || slots.Count == 0) return null;
 
-            // Exact store id already on dest — no slot remap needed.
             for (int i = 0; i < slots.Count; i++)
             {
                 if (string.Equals(slots[i].StoreId, sourceReceiver, StringComparison.Ordinal))
@@ -844,10 +751,6 @@ namespace VPB.src.util
             return null;
         }
 
-        /// <summary>
-        /// True when every source plugin receiver for this row either matches a live store id
-        /// exactly, has an auto/explicit remap, or dest is Create new / empty (not applicable).
-        /// </summary>
         public static int CountUnresolvedPluginReceivers(
             BrokenUidRef row,
             string destUid,
@@ -895,10 +798,6 @@ namespace VPB.src.util
             return false;
         }
 
-        /// <summary>
-        /// Build per-original-uid receiver remaps: unique ClassName/URL auto-map plus explicit
-        /// <paramref name="explicitChoices"/> (originalUid → chosen live store id for the primary/first source receiver).
-        /// </summary>
         public static Dictionary<string, Dictionary<string, string>> BuildReceiverRemapByUid(
             List<BrokenUidRef> rows,
             Dictionary<string, string> uidChoices,
@@ -966,7 +865,6 @@ namespace VPB.src.util
             int slash = path.LastIndexOf('/');
             if (slash >= 0 && slash + 1 < path.Length)
                 path = path.Substring(slash + 1);
-            // Embody.cslist / Embody.cs → Embody
             int dot = path.LastIndexOf('.');
             if (dot > 0) path = path.Substring(0, dot);
             return string.IsNullOrEmpty(path) ? null : path;
@@ -1019,7 +917,6 @@ namespace VPB.src.util
             val = StripExternalRefPrefix(val);
             if (string.IsNullOrEmpty(val)) return;
 
-            // Compound atom:storable — always consider the atom prefix.
             int colon = val.IndexOf(':');
             if (colon > 0)
             {
@@ -1028,7 +925,6 @@ namespace VPB.src.util
                     sink.Add(prefix);
             }
 
-            // Bare atom equals — skip type/id/url keys so "type":"Person" is not a Person ref.
             if (JSONExtensions.JsonKeyIsNonAtomUidRef(key)) return;
             if (sourceIdToType.ContainsKey(val))
                 sink.Add(val);
@@ -1037,7 +933,6 @@ namespace VPB.src.util
         private static void ApplyUidRemapToNode(JSONClass node, Dictionary<string, string> uidRemap)
         {
             if (node == null || uidRemap == null || uidRemap.Count == 0) return;
-            // Two-phase via temps so A→B + B→C cannot collide mid-walk.
             List<string> fromList = new List<string>(uidRemap.Count);
             List<string> toList = new List<string>(uidRemap.Count);
             foreach (KeyValuePair<string, string> kv in uidRemap)
@@ -1059,10 +954,6 @@ namespace VPB.src.util
             }
         }
 
-        /// <summary>
-        /// Apply trigger receiver remaps while <c>receiverAtom</c> still names the original UID.
-        /// Must run before <see cref="ApplyUidRemapToNode"/>.
-        /// </summary>
         private static void ApplyReceiverRemapToNode(
             JSONClass node, Dictionary<string, Dictionary<string, string>> receiverRemapByUid)
         {

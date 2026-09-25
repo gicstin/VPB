@@ -209,7 +209,6 @@ namespace VPB
             tagLineJSON = new JSONStorableString("tagLine", startingValue2);
             versionNumberJSON = new JSONStorableString("versionNumber", startingValue3);
             
-            // Calculate total size and append dependency info to version string
             long totalSize = 0;
             if (varFilesJSONArray != null)
             {
@@ -318,8 +317,6 @@ namespace VPB
             else
             {
                 LogUtil.LogWarning("[VPB] HubImageLoaderThreaded.singleton is null during SyncCreatorIconUrl for " + url);
-                // The URL is already stored in creatorIconUrlJSON, so it might be retried later if needed, 
-                // but let's try a small delay or just rely on Show() calling it again.
             }
         }
 
@@ -479,8 +476,7 @@ namespace VPB
                     }
                 }
 
-                // Some Hub browse payloads only include dependency_count (and maybe total size),
-                // but omit the dependency file list + URLs. In that case, force the detail fetch.
+                // Some Hub browse payloads only include dependency_count (and maybe total size), but omit the dependency file list + URLs.
                 if (!needsDetailFetchForDeps && depBuilt == 0)
                 {
                     needsDetailFetchForDeps = true;
@@ -679,7 +675,7 @@ namespace VPB
             labelRect.offsetMax = new Vector2(-3f, -1f);
 
             Text label = labelObject.GetComponent<Text>();
-            label.text = "Direct Download All";
+            label.text = VPBTranslation.T("hub.direct_download_all", "Direct Download All");
             label.alignment = TextAnchor.MiddleCenter;
             label.color = new Color32(163, 111, 214, 255);
             label.fontStyle = FontStyle.Normal;
@@ -749,7 +745,6 @@ namespace VPB
             }
 
             // "Direct Update" label is a landing-list CTA only (like "Direct Download All").
-            // Detail pages should not show this label.
             if (registeredUI is HubResourceItemDetailUI)
             {
                 if (registeredUI.updateMsgText != null)
@@ -765,7 +760,7 @@ namespace VPB
                 registeredUI.updateMsgText.gameObject.SetActive(updateAvailableJSON.val);
                 if (queueActive && updateAvailableJSON.val)
                 {
-                    registeredUI.updateMsgText.text = "Updating";
+                    registeredUI.updateMsgText.text = VPBTranslation.T("hub.updating", "Updating");
                 }
                 else if (updateAvailableJSON.val)
                 {
@@ -873,7 +868,7 @@ namespace VPB
             }
             else
             {
-                label.text = "Direct Download All";
+                label.text = VPBTranslation.T("hub.direct_download_all", "Direct Download All");
                 label.color = new Color32(255, 255, 255, 255);
                 background.color = new Color32(163, 111, 214, 255);
             }
@@ -976,7 +971,6 @@ namespace VPB
                 titleJSON.text = ui.titleText;
                 tagLineJSON.text = ui.tagLineText;
                 versionNumberJSON.text = ui.versionText;
-                // Format as "PayType: Category"
                 if (ui.payTypeText != null)
                 {
                     string payType = payTypeJSON.val;
@@ -985,7 +979,6 @@ namespace VPB
                     // Avoid duplication if category is already in payType (e.g. "Free Looks" and "Looks")
                     if (!string.IsNullOrEmpty(category) && payType.EndsWith(category, StringComparison.OrdinalIgnoreCase))
                     {
-                        // Strip the duplicate part from payType
                         payType = payType.Substring(0, payType.Length - category.Length).Trim();
                     }
 
@@ -997,24 +990,19 @@ namespace VPB
                     ui.payTypeText.text = formattedText;
                 }
                 
-                // Style the main pay type badge if it's not empty
                 if (ui.payTypeText != null && !string.IsNullOrEmpty(payTypeJSON.val))
                 {
                     var payRT = ui.payTypeText.GetComponent<RectTransform>();
                     
-                    // Check if we need to add a background image if it doesn't have one
                     Image payImg = ui.payTypeText.GetComponent<Image>();
                     if (payImg == null && payRT.parent != null)
                     {
-                        // Check parent for background (standard VaM badge pattern)
                         payImg = payRT.parent.GetComponent<Image>();
                     }
                     
-                    // If no background, add one to make it look like a badge
                     if (payImg == null)
                     {
                         payImg = ui.payTypeText.gameObject.AddComponent<Image>();
-                        // Give it some padding
                         payRT.sizeDelta = new Vector2(payRT.sizeDelta.x + 20, payRT.sizeDelta.y + 10);
                     }
 
@@ -1022,9 +1010,9 @@ namespace VPB
                     {
                         payImg.enabled = true;
                         if (payTypeJSON.val.ToLower().Contains("free"))
-                            payImg.color = new Color(0.2f, 0.6f, 0.2f, 1f); // Darker green for free
+                            payImg.color = new Color(0.2f, 0.6f, 0.2f, 1f);
                         else
-                            payImg.color = new Color(0.5f, 0f, 0.5f, 1f); // Dark magenta/purple for paid
+                            payImg.color = new Color(0.5f, 0f, 0.5f, 1f);
                     }
                     
                     ui.payTypeText.alignment = TextAnchor.MiddleCenter;
@@ -1085,5 +1073,4 @@ namespace VPB
             }
         }
     }
-
 }

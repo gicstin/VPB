@@ -63,11 +63,7 @@ namespace VPB
             return n == CreatorSideRailBtnNameLeft || n == CreatorSideRailBtnNameRight;
         }
 
-        /// <summary>
-        /// Cold/warm presence sync only (settings toggle / Init). Not called from layout refresh.
-        /// Hide on → chips absent. Hide off → chips exist and stay activeSelf like Category;
-        /// rail container SetActive owns show/hide (collapse / fixed dock / ShowSideButtons).
-        /// </summary>
+        /// <summary>Cold/warm presence sync only (settings toggle / Init).</summary>
         private void SyncCreatorSideRailPresence()
         {
             if (HideCreatorSideRailButtonsRequested())
@@ -84,14 +80,12 @@ namespace VPB
             }
 
             EnsureCreatorSideRailButtonsExist();
-            // Match Category: leave activeSelf true; parent container gates visibility.
             if (leftCreatorSideBtnGO != null && !leftCreatorSideBtnGO.activeSelf)
                 leftCreatorSideBtnGO.SetActive(true);
             if (rightCreatorSideBtnGO != null && !rightCreatorSideBtnGO.activeSelf)
                 rightCreatorSideBtnGO.SetActive(true);
         }
 
-        /// <summary>Settings / config: sync creator chip presence once, then relayout.</summary>
         private void EnforceCreatorSideRailButtonVisibilityFromConfig()
         {
             SyncCreatorSideRailPresence();
@@ -126,7 +120,6 @@ namespace VPB
 
         private void DestroyOneCreatorSideRailButton(ref GameObject go, List<RectTransform> list, bool isLeft)
         {
-            // Unity fake-null: destroyed GO still referenced until cleared.
             if (go == null)
             {
                 go = null;
@@ -387,10 +380,6 @@ namespace VPB
             del.OnRightClick = action;
         }
 
-        /// <summary>
-        /// Single place for gallery panel <see cref="VPBConfig.ConfigChanged"/> wiring.
-        /// REGRESSION GUARD: never subscribe <see cref="UpdateTabs"/> here — it repopulates O(n) side-tab buttons and freezes the UI on every Save/TriggerChange.
-        /// </summary>
         private void SubscribeGalleryPanelToVpBConfigChanged()
         {
             if (VPBConfig.Instance == null) return;
@@ -477,7 +466,6 @@ namespace VPB
             try { TeardownLayoutPresetsFloat(); } catch { }
             try { TboxDestroyRandomPreview(); } catch { }
 
-            // Re-enable saving on teardown so the cache isn't left permanently paused.
             if (GalleryThumbnailCache.Instance != null)
                 GalleryThumbnailCache.Instance.SavingPaused = false;
 
@@ -495,14 +483,10 @@ namespace VPB
                 }
                 Destroy(canvas.gameObject);
             }
-            // Remove from manager if needed
             if (Gallery.singleton != null)
             {
                 Gallery.singleton.RemovePanel(this);
             }
-
         }
-
     }
-
 }

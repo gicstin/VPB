@@ -15,17 +15,13 @@ namespace VPB
         [ThreadStatic]
         private static string _lastReadImagePath;
 
-        // Transit map: byte[] -> source path, populated on File.ReadAllBytes and consumed
-        // when the bytes are passed to Texture2D.LoadImage / LoadRawTextureData. Consumers
-        // MUST call Remove after their TryGetValue so the buffer is not retained beyond decode.
-        // MaxCapacity is a safety backstop for byte[]s that are read but never decoded; in
-        // steady state the map should hold only in-flight entries (single digits).
+        // Transit map byte[] to source path; consumers must Remove after TryGetValue.
         private class BufferPathMap
         {
             private readonly Dictionary<byte[], string> _map = new Dictionary<byte[], string>();
             private readonly List<byte[]> _keys = new List<byte[]>();
             private const int MaxEntries = 100;
-            private const long MaxBytes = 64L * 1024L * 1024L; // 64MB safety cap
+            private const long MaxBytes = 64L * 1024L * 1024L;
             private long _totalBytes;
 
             public void Add(byte[] data, string path)
@@ -39,8 +35,6 @@ namespace VPB
                     _keys.Add(data);
                     _totalBytes += data.Length;
 
-                    // Evict oldest until both caps satisfied. Decode path may skip Remove (exceptions,
-                    // unmatched LoadImage), so unbounded growth would otherwise pin large image buffers.
                     while ((_keys.Count > MaxEntries || _totalBytes > MaxBytes) && _keys.Count > 0)
                     {
                         var oldest = _keys[0];
@@ -87,7 +81,6 @@ namespace VPB
         {
             try
             {
-                // Patch File.ReadAllBytes to capture context
                 var mReadAllBytes = AccessTools.Method(typeof(System.IO.File), "ReadAllBytes", new Type[] { typeof(string) });
                 if (mReadAllBytes != null)
                 {
@@ -96,7 +89,6 @@ namespace VPB
                         LogUtil.Log("Patched File.ReadAllBytes");
                 }
 
-                // Patch Texture2D.LoadImage (2 args)
                 var mLoadImage = typeof(Texture2D).GetMethod("LoadImage", new Type[] { typeof(byte[]), typeof(bool) });
                 if (mLoadImage != null)
                 {
@@ -107,7 +99,6 @@ namespace VPB
                         LogUtil.Log("Patched Texture2D.LoadImage(byte[], bool)");
                 }
 
-                // Patch Texture2D.LoadImage (1 arg)
                 var mLoadImageSimple = typeof(Texture2D).GetMethod("LoadImage", new Type[] { typeof(byte[]) });
                 if (mLoadImageSimple != null)
                 {
@@ -118,7 +109,6 @@ namespace VPB
                         LogUtil.Log("Patched Texture2D.LoadImage(byte[])");
                 }
 
-                // Patch ImageConversion.LoadImage (Unity 2017+)
                 var imgConvType = AccessTools.TypeByName("UnityEngine.ImageConversion");
                 if (imgConvType != null)
                 {
@@ -133,14 +123,12 @@ namespace VPB
                     }
                 }
                 
-                // Patch Resources.Load
                 var mResourcesLoad = AccessTools.Method(typeof(Resources), "Load", new Type[] { typeof(string) });
                 if (mResourcesLoad != null)
                 {
                     harmony.Patch(mResourcesLoad, prefix: new HarmonyMethod(typeof(GenericTextureHook), nameof(Resources_Load_Prefix)));
                 }
 
-                // Patch WWW constructor and texture property
                 try 
                 {
                     var wwwType = typeof(WWW);
@@ -164,13 +152,11 @@ namespace VPB
                     LogUtil.LogError("Failed to patch WWW: " + ex);
                 }
 
-                // Patch UnityWebRequest (if available)
                 try
                 {
                     var uwrType = AccessTools.TypeByName("UnityEngine.Networking.UnityWebRequest");
                     if (uwrType != null)
                     {
-                         // Patch UnityWebRequest.Get(string)
                          var mGet = uwrType.GetMethod("Get", new Type[] { typeof(string) });
                          if (mGet != null)
                          {
@@ -183,7 +169,6 @@ namespace VPB
                     var dhtType = AccessTools.TypeByName("UnityEngine.Networking.DownloadHandlerTexture");
                     if (dhtType != null)
                     {
-                        // Patch DownloadHandlerTexture.texture property
                         var mTex = AccessTools.Property(dhtType, "texture").GetGetMethod();
                         if (mTex != null)
                         {
@@ -198,7 +183,6 @@ namespace VPB
                     LogUtil.LogError("Failed to patch UnityWebRequest: " + ex);
                 }
 
-                // Patch FileManager.ReadAllBytes
                 try
                 {
                     var fmType = typeof(MVR.FileManagement.FileManager);
@@ -222,21 +206,18 @@ namespace VPB
                 }
                 catch { }
 
-                // Patch Texture2D.Apply
                 var mApply = typeof(Texture2D).GetMethod("Apply", new Type[] { typeof(bool), typeof(bool) });
                 if (mApply != null)
                 {
                     harmony.Patch(mApply, prefix: new HarmonyMethod(typeof(GenericTextureHook), nameof(Texture2D_Apply_Prefix)));
                 }
 
-                // Patch Texture2D.Compress
                 var mCompress = typeof(Texture2D).GetMethod("Compress", new Type[] { typeof(bool) });
                 if (mCompress != null)
                 {
                     harmony.Patch(mCompress, prefix: new HarmonyMethod(typeof(GenericTextureHook), nameof(Texture2D_Compress_Prefix)));
                 }
 
-                // Patch Texture2D.LoadRawTextureData
                 var mLoadRaw = typeof(Texture2D).GetMethod("LoadRawTextureData", new Type[] { typeof(byte[]) });
                 if (mLoadRaw != null)
                 {
@@ -299,7 +280,7 @@ namespace VPB
                 int currentLevel = Settings.Instance.TextureLogLevel.Value;
                 if (currentLevel < 2) return false;
 
-                bool isThumb = ImageLoadingMgr.currentProcessingIsThumbnail || (texName != null && texName.StartsWith("THUMB:"));
+                bool isThumb = ImageLoadingMgr.currentProcessingIsThumbnail || (texName != null && texName.StartsWith("THUMB:", StringComparison.Ordinal));
                 if (isThumb && currentLevel < 3) return false;
             }
             catch { return false; }
@@ -316,7 +297,7 @@ namespace VPB
             if (data != null)
             {
                 _dataToPath.TryGetValue(data, out path);
-                _dataToPath.Remove(data); // bytes about to be decoded; drop the transit entry
+                _dataToPath.Remove(data);
             }
 
             if (string.IsNullOrEmpty(path))
@@ -337,8 +318,6 @@ namespace VPB
                     path = n;
                 }
             }
-
-
 
             if (!hasMgr) return;
 
@@ -394,7 +373,6 @@ namespace VPB
             
             if (string.IsNullOrEmpty(url)) return;
             
-            // Clean up file:// prefix if present
             string path = url;
             if (path.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
             {
@@ -479,13 +457,12 @@ namespace VPB
 
         public static void Resources_Load_Prefix(string path)
         {
-             // Placeholder for monitoring
         }
 
         public static bool Texture2D_LoadImage_Prefix(Texture2D __instance, byte[] data, bool markNonReadable, ref bool __result, out string __state)
         {
             string path = _lastReadImagePath;
-            _lastReadImagePath = null; // Consume context
+            _lastReadImagePath = null;
 
             if (string.IsNullOrEmpty(path))
             {
@@ -499,12 +476,11 @@ namespace VPB
 
             if (data != null)
             {
-                _dataToPath.Remove(data); // bytes about to be decoded; drop the transit entry
+                _dataToPath.Remove(data);
             }
 
             if (string.IsNullOrEmpty(path) && !string.IsNullOrEmpty(__instance.name))
             {
-                // VaM often sets texture name to path
                 if (__instance.name.Contains("/") || __instance.name.Contains("\\") || __instance.name.Contains(":"))
                 {
                     path = __instance.name;
@@ -533,7 +509,7 @@ namespace VPB
                 {
                     __result = true;
                     __state = null; // Don't re-cache
-                    return false; // Skip original
+                    return false;
                 }
             }
             return true;
@@ -541,10 +517,7 @@ namespace VPB
 
         public static void Texture2D_LoadImage_Postfix(Texture2D __instance, string __state)
         {
-            // Unity 2018 LoadImage can return void in some versions/overloads, or bool. 
-            // Harmony handles void by not providing __result, or we check if it succeeded.
-            // But if the signature returns bool, we should respect it.
-            // However, most importantly, if the texture is loaded, we want to capture it.
+            // Unity 2018 LoadImage can return void in some versions/overloads, or bool.
             
             if (string.IsNullOrEmpty(__state)) return;
             
@@ -555,7 +528,6 @@ namespace VPB
                 qi.tex = __instance;
                 qi.compress = true;
                 
-                // Directly tracking it as a new candidate if it wasn't one already
                  if (ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi))
                  {
                  }
@@ -564,7 +536,6 @@ namespace VPB
 
         public static bool Texture2D_LoadImage_Prefix_Simple(Texture2D __instance, byte[] data, out string __state)
         {
-            // In simple version (no bool return ref), we just pass dummy ref
             bool dummy = false;
             return Texture2D_LoadImage_Prefix(__instance, data, false, ref dummy, out __state);
         }
@@ -617,7 +588,6 @@ namespace VPB
             }
             return false;
         }
-
 
         public static void UnityWebRequest_Get_Postfix(object __result, string uri)
         {

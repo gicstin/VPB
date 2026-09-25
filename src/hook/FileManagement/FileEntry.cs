@@ -2,7 +2,6 @@ using System;
 using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
 
 namespace VPB
 {
@@ -21,7 +20,6 @@ namespace VPB
 				}
 				return m_UidLowerInvariant;
 			}
-			//protected set;
 		}
 		public virtual string Path { get; protected set; }
 		public virtual string Name { get; protected set; }
@@ -39,9 +37,9 @@ namespace VPB
 			{
 				throw new Exception("Null path in FileEntry constructor");
 			}
-			Path = path.Replace('\\', '/'); //path.Replace('/', '\\');
+			Path = path.Replace('\\', '/');
 			Uid = Path;
-			Name = Regex.Replace(Path, ".*/", string.Empty);
+			Name = VamPathFastPaths.StripThroughLastSlash(Path);
 		}
 
 		public override string ToString()
@@ -114,7 +112,6 @@ namespace VPB
 
 		public void SetAutoInstallInternal(string key,bool b)
 		{
-			//string key = this.Package.Uid;
 			if (b)
 			{
 				AutoInstallLookup.Add(key);
@@ -142,5 +139,4 @@ namespace VPB
 			m_UidLowerInvariant = null;
 		}
 	}
-
 }

@@ -9,10 +9,7 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Shift+Right-click on a gallery row dumps a forensic snapshot of the row's thumbnail
-        // pipeline to Cache/VPB/_thumbdebug/<timestamp>_<row>/. Used to localize sporadic
-        // artifacts (rectangular bands of pixel noise) to one of: disk cache bytes,
-        // TurboJPEG scaled decode, Unity LoadImage decode, or display-side stride.
+        // Shift+Right-click dumps row thumbnail pipeline snapshot to Cache/VPB/_thumbdebug.
         internal void DebugDumpThumbnailForRow(FileEntry file, GameObject rowRoot)
         {
             LogUtil.Log("[VPB ThumbDbg] DebugDumpThumbnailForRow entry: file=" + (file != null ? file.Name : "<null>") + " rowRoot=" + (rowRoot != null ? rowRoot.name : "<null>") + " isActive=" + (isActiveAndEnabled));
@@ -204,7 +201,6 @@ namespace VPB
 
             yield return null;
 
-            // Unity decode (full resolution)
             try
             {
                 Texture2D u = new Texture2D(2, 2);
@@ -224,7 +220,6 @@ namespace VPB
 
             yield return null;
 
-            // TurboJPEG at the denom the grid would have used, plus full-res for comparison.
             DumpTurboDecode(src, gridDenom, outDir, meta, "source_decode_turbo_grid.png");
             if (gridDenom != 1)
                 DumpTurboDecode(src, 1, outDir, meta, "source_decode_turbo_full.png");
@@ -298,7 +293,6 @@ namespace VPB
             return dst;
         }
 
-        // Works for both readable and non-readable textures (Blit through ARGB32 RT, ReadPixels into a fresh Texture2D).
         private static byte[] CaptureTextureToPng(Texture src, int w, int h)
         {
             if (src == null || w <= 0 || h <= 0) return new byte[0];

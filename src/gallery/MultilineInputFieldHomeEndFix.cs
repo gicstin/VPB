@@ -3,10 +3,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Unity multiline <see cref="InputField"/> treats Home/End as whole buffer. Caveman want current line only (Notepad / VSCode style).
-    /// Runs LateUpdate after default InputField so caveman fix caret when Home/End pressed this frame.
-    /// </summary>
     [RequireComponent(typeof(InputField))]
     internal sealed class MultilineInputFieldHomeEndFix : MonoBehaviour
     {

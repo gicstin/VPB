@@ -256,7 +256,6 @@ namespace VPB
             if (Messager.singleton == null || !Messager.singleton.gameObject.activeInHierarchy) return;
             while (s_Active.Count < MaxConcurrent && s_Pending.Count > 0)
             {
-                // A synchronous completion callback can replace the loader while this pump is running.
                 if (loader == null || !ReferenceEquals(Singleton(), loader)) return;
                 string next = null;
                 int nextIndex = -1;
@@ -315,7 +314,6 @@ namespace VPB
             {
                 MVR.FileManagement.FileEntry entry = MVR.FileManagement.FileManager.GetFileEntry(path);
                 long bytes = entry != null ? entry.Size : 0;
-                // Allow source plus native load copy headroom; final asset memory is not bounded here.
                 if (bytes > 0) return bytes <= long.MaxValue / 2 ? bytes * 2 : long.MaxValue;
             }
             catch (Exception ex) { LogUtil.LogWarning("[VPB.Perf] bundle size unavailable for " + path + ": " + ex.Message); }
@@ -692,7 +690,6 @@ namespace VPB
             if (w == null || w.Disowned) return;
 
             w.Disowned = true;
-            // Abandon callbacks, not the read/native operation or its admission reservation.
             Recovered++;
             Failures++;
             LogUtil.LogWarning("[VPB.Perf] bundle worker abandoned for " + w.Path + " (" + reason + ")");

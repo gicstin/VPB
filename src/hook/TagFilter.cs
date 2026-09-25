@@ -21,10 +21,8 @@ namespace VPB
         public static List<string> HairOtherTags = new List<string>()
         {
             "no tag",
-            // Some custom tags
 
-
-            "unknown",// Remaining tags
+            "unknown",
         };
 
         public static List<string> ClothingRegionTags = new List<string>()
@@ -41,12 +39,9 @@ namespace VPB
         {
             "back","costume","fantasy","heels","jeans","lingerie","sneakers","swimwear",
 
-            // Some custom tags
-
-            "no tag",// Special
-            "unknown",// Remaining tags
+            "no tag",
+            "unknown",
         };
-
 
         public static HashSet<string> AllClothingTags = new HashSet<string>()
         {

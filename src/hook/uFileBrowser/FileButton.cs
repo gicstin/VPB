@@ -1,7 +1,6 @@
 using VPB.src.util;
 using Prime31.MessageKit;
 using System.Runtime.InteropServices;
-//using MVR.FileManagement;
 using System;
 using System.IO;
 using UnityEngine;
@@ -45,22 +44,16 @@ namespace VPB
         public Text fullPathLabel;
         public RectTransform rectTransform;
 
-        //[HideInInspector]
         public string text;
 
-        //[HideInInspector]
         public string textLowerInvariant;
 
-        //[HideInInspector]
         public string fullPath;
 
-        //[HideInInspector]
         public string removedPrefix;
 
-        //[HideInInspector]
         public bool isDir;
 
-        //[HideInInspector]
         public string imgPath;
 
         private FileBrowser browser;
@@ -107,7 +100,7 @@ namespace VPB
                     try
                     {
                         // Some var packages have incomplete dependencies, so we need to ensure installation.
-                        if (fullPath.EndsWith(".json"))
+                        if (fullPath.EndsWith(".json", StringComparison.Ordinal))
                         {
                             using (FileEntryStream fileEntryStream = FileManager.OpenStream(fullPath))
                             {
@@ -156,7 +149,7 @@ namespace VPB
                 {
                     try
                     {
-                        if (fullPath.EndsWith(".json"))
+                        if (fullPath.EndsWith(".json", StringComparison.Ordinal))
                         {
                             using (FileEntryStream fileEntryStream = FileManager.OpenStream(fullPath))
                             {
@@ -178,7 +171,6 @@ namespace VPB
                         LogUtil.Log(e.ToString());
                     }
                     
-
                     OnInstalled(true);
                     browser.OnFileClick(this);
                 }
@@ -318,11 +310,10 @@ namespace VPB
         {
             bool flag = false;
             var movedUids = new List<string>(2);
-            FileEntry fileEntry = FileManager.GetFileEntry(fullPath, true);// Without the AllPackages prefix
+            FileEntry fileEntry = FileManager.GetFileEntry(fullPath, true);
             if (fileEntry != null && (fileEntry is VarFileEntry))
             {
                 var entry = fileEntry as VarFileEntry;
-                // Uninstall
                 if (!b)
                 {
                     bool dirty=entry.Package.UninstallSelf();
@@ -383,7 +374,6 @@ namespace VPB
             }
         }
 
-
         void OnEnable()
         {
             MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
@@ -403,7 +393,7 @@ namespace VPB
             browser = b;
             text = txt;
             textLowerInvariant = txt.ToLowerInvariant();
-            fullPath = path;// This path is in the format uid:subPath
+            fullPath = path;
             isDir = dir;
             label.text = text;
 
@@ -437,20 +427,17 @@ namespace VPB
                     hiddenToggle.interactable = false;
                 }
             }
-            //deleteButton.transform.Find("Text").GetComponent<Text>().text = "Install In Background";
-            renameButton.transform.Find("Text").GetComponent<Text>().text = "Install In Background";
+            renameButton.transform.Find("Text").GetComponent<Text>().text = VPBTranslation.T("filebrowser.install_background", "Install In Background");
             var rt = renameButton.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(250,40);
             rt.anchoredPosition = new Vector2(-130, 130);
 
-            useFileAsTemplateToggle.transform.Find("Label").GetComponent<Text>().text = "Auto Install";
+            useFileAsTemplateToggle.transform.Find("Label").GetComponent<Text>().text = VPBTranslation.T("filebrowser.auto_install", "Auto Install");
 
             this.buttonImage.color = Color.white;
             if (browser.inGame)
             {
                 deleteButton.gameObject.SetActive(false);
-                //deleteButton.onClick.RemoveAllListeners();
-                //deleteButton.onClick.AddListener(EnsureInstalled);
 
                 renameButton.gameObject.SetActive(true);
                 renameButton.onClick.RemoveAllListeners();
@@ -463,22 +450,18 @@ namespace VPB
             else
             {
                 deleteButton.gameObject.SetActive(false);//ensureInstallButton
-                //deleteButton.onClick.RemoveAllListeners();
-                //deleteButton.onClick.AddListener(EnsureInstalled);
 
                 renameButton.gameObject.SetActive(true);
                 renameButton.onClick.RemoveAllListeners();
                 renameButton.onClick.AddListener(InstallInBackground);
 
                 hiddenToggle.gameObject.SetActive(false);
-                // Install
                 useFileAsTemplateToggle.gameObject.SetActive(true);
                 useFileAsTemplateToggle.onValueChanged.RemoveAllListeners();
                 useFileAsTemplateToggle.isOn = isAutoInstall;
                 useFileAsTemplateToggle.onValueChanged.AddListener(OnSetAutoInstall);
 
                 RefreshInstallStatus();
-
             }
         }
         public void RefreshInstallStatus()
@@ -500,11 +483,11 @@ namespace VPB
             else
             {
                 // After plugin installation, the path changes
-                if (fullPath.StartsWith("AllPackages"))
+                if (fullPath.StartsWith("AllPackages", StringComparison.Ordinal))
                 {
                     fullPath = "AddonPackages" + fullPath.Substring("AllPackages".Length);
                 }
-                else if (fullPath.StartsWith("AddonPackages"))
+                else if (fullPath.StartsWith("AddonPackages", StringComparison.Ordinal))
                 {
                     fullPath = "AllPackages" + fullPath.Substring("AddonPackages".Length);
                 }

@@ -35,6 +35,5 @@ namespace VPB
                 target.SendMessage(splits[0], p);
             }
         }
-
     }
 }

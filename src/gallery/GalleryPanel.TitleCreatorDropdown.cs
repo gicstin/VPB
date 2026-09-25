@@ -12,7 +12,6 @@ namespace VPB
         {
             if (titleBarGO == null || backgroundBoxGO == null) return;
 
-            // Button (between filter presets and title search)
             titleCreatorBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, " ", 16, 0, 0, AnchorPresets.middleCenter, null);
             titleCreatorBtnBackdrop = titleCreatorBtn != null ? titleCreatorBtn.GetComponent<Image>() : null;
             titleCreatorBtnText = titleCreatorBtn != null ? titleCreatorBtn.GetComponentInChildren<Text>(true) : null;
@@ -20,7 +19,6 @@ namespace VPB
             if (titleCreatorBtnText != null) { titleCreatorBtnText.text = " "; titleCreatorBtnText.gameObject.SetActive(false); }
             try
             {
-                // galleryCreatorSprite loaded later in Init; load directly so title bar button always has icon.
                 Sprite s = galleryCreatorSprite;
                 if (s == null) s = UI.LoadIconSprite("user", UI.BarIconGlyphTint);
                 if (s != null)
@@ -39,8 +37,6 @@ namespace VPB
                 btnRT.anchorMin = new Vector2(0.5f, 0.5f);
                 btnRT.anchorMax = new Vector2(0.5f, 0.5f);
                 btnRT.pivot = new Vector2(0.5f, 0.5f);
-                // Search is centered at x=-40, width=240 => left edge ~ -160. Put button left with small gap.
-                // Between P (-228) and search left edge (-160): center -184.
                 btnRT.anchoredPosition = new Vector2(-184, 0);
             }
 
@@ -81,8 +77,6 @@ namespace VPB
             }
             titleCreatorDropdownBlocker.SetActive(false);
 
-            // Dropdown root (hidden by default)
-            // Below title bar (70px height) so it overlays grid items.
             titleCreatorDropdown = UI.CreateChildRT(backgroundBoxGO, "TitleCreatorDropdown", AnchorPresets.topMiddle, new Vector2(330, 500), new Vector2(-184, -70));
             titleCreatorDropdown.transform.SetAsLastSibling();
 
@@ -119,7 +113,6 @@ namespace VPB
                 }
             }
 
-            // Search input (top of dropdown)
             {
                 var searchGO = CreateSearchInput(titleCreatorDropdown, 270f, (val) =>
                 {
@@ -158,7 +151,6 @@ namespace VPB
                 }
             }
 
-            // Scroll view area
             {
                 float scrollBarWidth = 18f;
                 GameObject scrollGO = UI.CreateChildRT(titleCreatorDropdown, "Scroll", AnchorPresets.stretchAll);
@@ -190,7 +182,6 @@ namespace VPB
                     try { UpdateTitleCreatorVirtualVisible(); } catch { }
                 });
 
-                // Scrollbar (use same sync behaviour as main lists)
                 try
                 {
                     GameObject sbGO = UI.CreateScrollBar(scrollGO, scrollBarWidth, 0, Scrollbar.Direction.BottomToTop);
@@ -377,7 +368,6 @@ namespace VPB
                     CreatorRatingRowHandler.CloseAnyOpen();
                     ToggleCreatorFilter(cName);
                     OnCreatorFilterChanged(refreshFilesAndTabs: true);
-                    // Keep dropdown open for multi-select.
                     RebuildTitleCreatorVirtView(force: false);
                     UpdateTitleCreatorVirtualVisible();
                 });
@@ -507,4 +497,3 @@ namespace VPB
         }
     }
 }
-

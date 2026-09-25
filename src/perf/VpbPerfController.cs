@@ -6,7 +6,6 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>Discrete hair density/multiplier + mirror texture steps; last step ≈ VaM defaults.</summary>
     public static class VpbPerfController
     {
         struct PerfStep
@@ -36,7 +35,6 @@ namespace VPB
             public UserPreferences.GlowEffectsLevel GlowEffects;
         }
 
-        // Step 0 = low, 5 = mid, 9 = high (VaM UltraLow … Max).
         static readonly string[] s_VaMQualityPresetByStep =
         {
             "UltraLow", "UltraLow", "Low", "Low", "Low", "Mid", "Mid", "High", "Ultra", "Max",
@@ -49,7 +47,6 @@ namespace VPB
         static readonly VaMQualityStep s_QualityUltra = new VaMQualityStep { RenderScale = 1.5f, MsaaLevel = 2, PixelLightCount = 3, ShaderLod = UserPreferences.ShaderLOD.High, SmoothPasses = 3, MirrorReflections = true, RealtimeReflectionProbes = true, SoftPhysics = true, GlowEffects = UserPreferences.GlowEffectsLevel.High };
         static readonly VaMQualityStep s_QualityMax = new VaMQualityStep { RenderScale = 2f, MsaaLevel = 2, PixelLightCount = 4, ShaderLod = UserPreferences.ShaderLOD.High, SmoothPasses = 4, MirrorReflections = true, RealtimeReflectionProbes = true, SoftPhysics = true, GlowEffects = UserPreferences.GlowEffectsLevel.High };
 
-        // Steps 0–9: 0 lowest hair/mirror (GiveMeFPS “all FPS”), 5 mid, 9 highest.
         static readonly PerfStep[] s_Steps =
         {
             new PerfStep { CurveDensity = 10f, HairMultiplier = 2f, MirrorTexSize = "512" },
@@ -83,7 +80,6 @@ namespace VPB
         static bool s_BaselineCaptured;
         static Coroutine s_ApplyCo;
 
-        /// <summary>True while perf step is actively applied (false during scene native load).</summary>
         public static bool IsAutoEnablePending { get { return s_AutoEnableAfterSceneLoad; } }
 
         /// <summary>User wants perf on (saved cfg), including after restart before apply.</summary>
@@ -169,7 +165,6 @@ namespace VPB
             s_ApplyCo = null;
         }
 
-        /// <summary>Cancel post-load auto-enable (footer Off while pending). Keeps scene at native values.</summary>
         public static void CancelAutoEnableAfterSceneLoad(bool persist, bool showStatus)
         {
             if (!s_AutoEnableAfterSceneLoad) return;
@@ -322,7 +317,6 @@ namespace VPB
                 StepIndexMax());
         }
 
-        /// <summary>Settings toggles changed — re-apply if perf On.</summary>
         public static void OnApplyTargetsChanged()
         {
             if (!Enabled) return;
@@ -330,7 +324,6 @@ namespace VPB
             ScheduleApply(false);
         }
 
-        /// <summary>Full scene load started — keep perf off until <see cref="OnSceneLoadComplete"/>.</summary>
         public static void OnSceneLoadStarting(string saveName, bool loadMerge)
         {
             if (loadMerge) return;
@@ -354,7 +347,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>VPB SCENE_LOAD_TOTAL finished — hair/atoms settled; safe to capture native baseline.</summary>
         public static void OnSceneLoadComplete()
         {
             try

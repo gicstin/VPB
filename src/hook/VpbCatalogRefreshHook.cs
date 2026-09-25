@@ -3,10 +3,7 @@ using HarmonyLib;
 
 namespace VPB
 {
-    /// <summary>
-    /// Skip DAZ package-morph re-ingest during clothing/hair-only FileManager.Refresh.
-    /// Measured: Refresh package morphs ~18–20s per person when TittyMagic/Naturalis banks reload.
-    /// </summary>
+    /// <summary>Skip DAZ package-morph re-ingest during clothing/hair-only FileManager.Refresh.</summary>
     internal static class VpbCatalogRefreshHook
     {
         public static void PatchAll(Harmony harmony)
@@ -40,7 +37,6 @@ namespace VPB
             }
         }
 
-        // Both RefreshPackageMorphs overloads return bool (changed).
         static bool PreRefreshPackageMorphsBool(ref bool __result)
         {
             if (!VpbCatalogRefreshGuard.SkipPackageMorphRefresh)

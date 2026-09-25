@@ -6,10 +6,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Filter-presets list: dropdown under title chip, or detachable floating window
-    /// (drag / resize / collapse / close-hides; Dock reattaches). Pos+size+detached flag live in <see cref="VPBConfig"/>.
-    /// </summary>
     public partial class QuickFiltersUI
     {
         private const float PanelMaxHeightRef = 500f;
@@ -19,11 +15,9 @@ namespace VPB
         private const float SplitterHeightRef = GalleryUiDesignTokens.BandPadRef;
         private const float HeaderPadRef = GalleryUiDesignTokens.FloatSearchRowPadRef;
         private const float HeaderSortGapRef = GalleryUiDesignTokens.ControlGapRef;
-        /// <summary>Icon pad on ButtonSizeRef squares — matches side-rail / sort chips (glyph fills hit).</summary>
         private const float RowActionIconPadRef = GalleryUiDesignTokens.TightGapRef;
         private const float SoftDeleteUndoSeconds = 5f;
 
-        // Match Settings float chrome (neutral greys).
         private static readonly Color FloatTitleBarBg = GalleryUiColorTokens.SurfaceDark;
         private static readonly Color FloatFooterBarBg = GalleryUiColorTokens.SurfaceDarker;
         private static readonly Color FloatPanelBg = GalleryUiColorTokens.SurfaceDeep;
@@ -56,7 +50,6 @@ namespace VPB
         private InputField searchInput;
         private GameObject sortBtnGO;
         private Image sortBtnIcon;
-        /// <summary>Docked header Float chip (import-sidebar pattern). Hidden while detached.</summary>
         private GameObject headerFloatBtnGO;
         private Text headerFloatBtnText;
         private GameObject collapseBtnGO;
@@ -74,16 +67,11 @@ namespace VPB
         private List<GameObject> activeButtons = new List<GameObject>();
         private Dictionary<GameObject, QuickFilterEntry> buttonToEntry = new Dictionary<GameObject, QuickFilterEntry>();
         private QuickFilterEntry renamingEntry;
-        /// <summary>Skip InputField onEndEdit when Cancel / Confirm already handled rename.</summary>
         private bool ignoreRenameEndEdit;
         private bool mergeMode;
-        /// <summary>Armed delete on this row — inline Confirm/Cancel (browse or edit; no external dialog).</summary>
         private QuickFilterEntry pendingDeleteEntry;
-        /// <summary>Row with inline More actions expanded (pin / rename / delete).</summary>
         private QuickFilterEntry expandedMoreEntry;
-        /// <summary>Just-saved row — paint once with highlight (change blindness cue).</summary>
         private QuickFilterEntry flashEntry;
-        /// <summary>Keyboard highlight in display list (recognition; arrows/Enter/D).</summary>
         private QuickFilterEntry keyboardFocusEntry;
         private QuickFilterEntry softDeleteEntry;
         private int softDeleteIndex = -1;
@@ -100,7 +88,6 @@ namespace VPB
         private float? expandHeightRef;
         private Vector2? savedFloatPosCenter;
         private Vector2? savedFloatSizeRef;
-        /// <summary>Top-left anchored pos while collapsed — keeps title edge fixed (pivot top-left).</summary>
         private Vector2? collapsedTopLeftPos;
 
         public QuickFiltersUI(GalleryPanel panel, GameObject parent)
@@ -254,7 +241,6 @@ namespace VPB
                 else panel.SetStatus(null);
             };
 
-            // Collapsed mini palette host (pinned Dice) — filled when collapsed.
             collapsePaletteGO = UI.CreateChildRT(titleBarGO, "CollapsePalette", AnchorPresets.middleCenter,
                 new Vector2(0f, chromeSz), Vector2.zero);
             UI.AddHLG(
@@ -264,7 +250,6 @@ namespace VPB
                 childForceExpandWidth: false, childForceExpandHeight: false);
             UI.AddLE(collapsePaletteGO, flexibleWidth: 0f, minWidth: 0f);
             collapsePaletteGO.SetActive(false);
-            // Sit between title and collapse/close chrome.
             if (collapseBtnGO != null)
                 collapsePaletteGO.transform.SetSiblingIndex(collapseBtnGO.transform.GetSiblingIndex());
 
@@ -272,7 +257,6 @@ namespace VPB
             headerDrag.Target = containerRT;
             headerDrag.OnMoved = OnFloatMoved;
 
-            // Fixed header: search · Float (docked) · sort — match import sidebar chrome (Jakob).
             headerGO = UI.CreateChildRT(containerGO, "Header", AnchorPresets.hStretchTop,
                 new Vector2(0f, GalleryUiDesignTokens.FloatSearchRowHeightRef),
                 new Vector2(0f, 0f));
@@ -292,7 +276,6 @@ namespace VPB
             float searchH = GalleryUiDesignTokens.SearchFieldHeightRef;
             int searchFont = GalleryUiDesignTokens.PopupMenuRowFontRef;
 
-            // Settings-master filter: chrome input + search glyph.
             searchInput = UI.CreateChromeLayoutInputField(
                 headerGO.transform,
                 searchFont,
@@ -454,7 +437,6 @@ namespace VPB
                 };
             }
 
-            // Scroll host sits between header/footer — viewport + scrollbar stay inside this rect.
             scrollHostGO = UI.CreateChildRT(containerGO, "ScrollHost", AnchorPresets.stretchAll);
             UI.AddImage(scrollHostGO, GalleryUiColorTokens.ModalSurface);
             if (scrollHostGO.GetComponent<RectMask2D>() == null)
@@ -506,8 +488,6 @@ namespace VPB
             ContentSizeFitter csf = scrollContentGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // Float footer: Dock · Undo/Redo/Remove · soft-delete Undo as square icons + resize.
-            // Icons keep chrome under QuickFiltersFloatMinWidthRef (text labels overflowed → squeeze/drift).
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef;
             footerGO = UI.CreateChildRT(containerGO, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
@@ -524,9 +504,7 @@ namespace VPB
                 childAlignment: TextAnchor.MiddleLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: false, childForceExpandHeight: false);
-            // No footer RectMask2D — clips bottom-right resize grip / hover rim (DetailStrip same).
 
-            // Full-footer drag hit (behind Dock/Undo/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(footerGO);
             if (footerDragArea != null)
             {
@@ -628,7 +606,6 @@ namespace VPB
             };
             floatPresetUndoBtnGO.SetActive(false);
 
-            // Flexible spacer so resize sits visually on the right.
             GameObject footerSpacer = new GameObject("Spacer");
             footerSpacer.transform.SetParent(footerGO.transform, false);
             footerSpacer.AddComponent<RectTransform>();
@@ -837,7 +814,6 @@ namespace VPB
 
             if (searchInput != null)
             {
-                // Keep search always visible — recognition over hide-when-few (Norman/Jakob).
                 if (!searchInput.gameObject.activeSelf)
                     searchInput.gameObject.SetActive(true);
                 float searchFieldH = GalleryUiDesignTokens.SearchFieldHeightRef * s;
@@ -982,10 +958,8 @@ namespace VPB
                     if (t != null)
                         GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
 
-                    // Right-edge stack.
                     if (mergeMode)
                     {
-                        // Selection mode — no row action chips.
                     }
                     else if (ch.Find("ConfirmRenameBtn") != null)
                     {
@@ -999,7 +973,6 @@ namespace VPB
                     }
                     else if (ch.Find("MoreCloseBtn") != null)
                     {
-                        // Expanded more: close · delete · rename · pin (no color).
                         PlaceRowAction(ch, "MoreCloseBtn", iconSq, iconPadR, iconGap, 0);
                         PlaceRowAction(ch, "DeleteBtn", iconSq, iconPadR, iconGap, 1);
                         PlaceRowAction(ch, "RenameBtn", iconSq, iconPadR, iconGap, 2);
@@ -1141,9 +1114,6 @@ namespace VPB
             {
                 if (detached)
                 {
-                    // Pivot top-left: keep title corner fixed on UI scale / resize.
-                    // Re-applying saved center→topLeft drifts the window when size changes.
-                    // Size already applied above from savedFloatSizeRef — do not touch anchors from docked parent.
                     containerRT.anchorMin = new Vector2(0.5f, 0.5f);
                     containerRT.anchorMax = new Vector2(0.5f, 0.5f);
                     containerRT.pivot = new Vector2(0f, 1f);
@@ -1152,8 +1122,6 @@ namespace VPB
                     else
                     {
                         // Keep top-left after sizeDelta write (pivot top-left); sync memory only.
-                        // Memory + Instance fields only — no ScheduleSave (ApplyLayout is hot on rebuild).
-                        // UI-scale hotkey deferred Save flushes disk.
                         CaptureFloatGeometryToMemory();
                         try { PersistGeometryFieldsOnly(); } catch { }
                     }
@@ -1177,11 +1145,6 @@ namespace VPB
                 -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
         }
 
-        /// <summary>
-        /// Apply float anchors + saved size + center→topLeft together.
-        /// Must set size before position — docked sizeDelta with saved center places wrong
-        /// top-left; ApplyLayout then grows size and Capture corrupts saved center (Import pattern).
-        /// </summary>
         private void ApplyFloatAnchorsAndPos(float s)
         {
             if (containerRT == null) return;
@@ -1198,7 +1161,7 @@ namespace VPB
             containerRT.sizeDelta = size;
 
             Vector2 center = ResolveFloatCenterPos();
-            containerRT.anchoredPosition = CenterToTopLeft(center, size);
+            containerRT.anchoredPosition = FloatPanelCoords.CenterToTopLeft(center, size);
         }
 
         private float ResolvePanelWidthRef()
@@ -1232,16 +1195,6 @@ namespace VPB
             return Vector2.zero;
         }
 
-        private static Vector2 CenterToTopLeft(Vector2 center, Vector2 size)
-        {
-            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
-        }
-
-        private static Vector2 TopLeftToCenter(Vector2 topLeft, Vector2 size)
-        {
-            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
-        }
-
         private static void PlaceRowAction(Transform row, string name, float sq, float padR, float gap, int fromRight)
         {
             Transform t = row.Find(name);
@@ -1268,8 +1221,6 @@ namespace VPB
 
         public void Refresh()
         {
-            // renamingEntry / pendingDeleteEntry / expandedMoreEntry kept — row rebuilds into that chrome.
-            // flashEntry kept for this rebuild only — cleared at end.
             foreach (var btn in activeButtons) GameObject.Destroy(btn);
             activeButtons.Clear();
             buttonToEntry.Clear();
@@ -1391,13 +1342,12 @@ namespace VPB
                 if (filter)
                 {
                     string name = e.Name ?? "";
-                    if (name.ToLowerInvariant().IndexOf(qLower) < 0)
+                    if (name.ToLowerInvariant().IndexOf(qLower, StringComparison.Ordinal) < 0)
                         continue;
                 }
                 list.Add(e);
             }
 
-            // Always pin-group at top (chunking) — sort applies inside each group.
             var pinned = new List<QuickFilterEntry>();
             var unpinned = new List<QuickFilterEntry>();
             for (int i = 0; i < list.Count; i++)
@@ -1448,7 +1398,6 @@ namespace VPB
             txtRT.offsetMax = new Vector2(-right, 0f);
         }
 
-        /// <summary>Leading non-filter rows in scroll content (ActionsRow, Splitter).</summary>
         private int ListChromeChildCount => 2;
 
         private void CreateActionsRow()
@@ -1665,8 +1614,6 @@ namespace VPB
                 0, 0,
                 AnchorPresets.middleCenter,
                 null);
-            // Disable row Button — nested chips bubble OnPointerClick to it and steal ⋮ / dice.
-            // Apply uses UILeftClickDelegate that ignores hits under action child names.
             var rowBtn = btn != null ? btn.GetComponent<Button>() : null;
             if (rowBtn != null)
             {
@@ -1801,7 +1748,6 @@ namespace VPB
                 }
             }
 
-            // Browse: dice+more. Expanded: 5 chips. Rename/delete: confirm pair.
             float iconReserve;
             if (mergeMode) iconReserve = 8f;
             else if (pendingDelete || renaming) iconReserve = 80f;
@@ -2047,7 +1993,6 @@ namespace VPB
             }
             else if (moreExpanded)
             {
-                // Inline overflow: default · pin · rename · delete · close (no color/star).
                 bool isDefault = GalleryPanel.IsDefaultQuickFilter(entry);
                 GameObject defaultBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 if (defaultBtn != null) defaultBtn.name = "DefaultBtn";
@@ -2070,7 +2015,6 @@ namespace VPB
                 setupSquare(closeBtn, sprCancel, Color.white, -padR, closeBackdrop);
                 setupSquare(deleteBtn, sprDelete, Color.white, -(padR + sq + gap), deleteBackdrop);
                 setupSquare(renameBtn, sprRename, Color.white, -(padR + 2f * (sq + gap)), renameBackdrop);
-                // Affordance: show action you can take — pinned → unpin (pin_off); unpinned → pin (pin_on).
                 setupSquare(pinBtn, entry.Pinned ? sprPinOff : sprPinOn, Color.white, -(padR + 3f * (sq + gap)), pinBackdrop);
                 Color defaultBackdrop = isDefault
                     ? GalleryUiColorTokens.ActiveOn
@@ -2124,7 +2068,6 @@ namespace VPB
             }
             else
             {
-                // Browse: dice + more (edit — solid hit target like dice).
                 GameObject randomBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 GameObject moreBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 if (randomBtn != null) randomBtn.name = "RandomBtn";
@@ -2178,7 +2121,7 @@ namespace VPB
                     };
                 }
             }
-            } // !mergeMode
+            }
 
             if (!mergeMode && !pendingDelete && !renaming)
             {
@@ -2263,7 +2206,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Esc cancel for rename, armed delete, or expanded row actions.</summary>
         public bool TryCancelPendingDelete()
         {
             bool any = false;
@@ -2340,7 +2282,6 @@ namespace VPB
             Refresh();
         }
 
-        /// <summary>Match side-rail Remove Item Mode selected rim + glyph tint.</summary>
         public void SyncRemoveModeButton(bool active)
         {
             Color c = active ? RemoveModeOutlineActive : RemoveModeOutlineIdle;
@@ -2362,7 +2303,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Scale collapsed title Dice chips to match collapse/close chrome.</summary>
         private void ScaleCollapsePaletteChrome(float sortSq, float s)
         {
             if (collapsePaletteGO == null) return;
@@ -2386,7 +2326,6 @@ namespace VPB
             }
         }
 
-        /// <summary>X / Esc hide: keep detach + geometry.</summary>
         private void HideFloatKeepDetach()
         {
             if (mergeMode) ExitMergeMode();
@@ -2404,7 +2343,6 @@ namespace VPB
             if (panel != null) panel.SyncQuickFilterToggleState();
         }
 
-        /// <summary>ALT+F path: ensure floating chrome + visible (keep detach on close).</summary>
         public void EnsureDetachedAndVisible()
         {
             if (!detached)
@@ -2515,7 +2453,6 @@ namespace VPB
             else
             {
                 int max = GalleryUiDesignTokens.QuickFiltersMergeMaxMembers;
-                // Count leaf capacity if selecting a merged preset.
                 int addLeaves = 1;
                 if (entry.IsMerged && entry.MergeMembers != null)
                     addLeaves = entry.MergeMembers.Count;
@@ -2577,7 +2514,6 @@ namespace VPB
                 return;
             }
 
-            // Name = selected preset names joined with + — no external name dialog (power path).
             string name = BuildMergeNameFromSelection(mergeSelection);
             FinishCreateMergedPreset(name, leaves);
         }
@@ -2603,10 +2539,8 @@ namespace VPB
             var entry = new QuickFilterEntry();
             entry.Name = string.IsNullOrEmpty(name) ? "Merged" : name;
             entry.MergeMembers = leaves;
-            // Visual: blend toward teal so merged rows scan differently (von Restorff).
             entry.ButtonColor = new Color(0.14f, 0.28f, 0.30f, 1f);
             entry.TextColor = Color.white;
-            // Seed browse fields from first leaf; ApplyQuickFilterState OR-combines all leaves.
             QuickFilterEntry first = leaves[0];
             if (first != null)
             {
@@ -2634,9 +2568,6 @@ namespace VPB
             CaptureCurrentFilter(useListSearchAsName: false);
         }
 
-        /// <param name="useListSearchAsName">
-        /// True only for Ctrl+S expert path. Button Save always suggests + inline rename (intentional naming).
-        /// </param>
         private void CaptureCurrentFilter(bool useListSearchAsName)
         {
             if (panel == null) return;
@@ -2674,7 +2605,6 @@ namespace VPB
                     entry.Name ?? ""),
                 2.5f);
 
-            // Typed name already applied — skip rename. Else open rename for intentional naming.
             if (typedName.Length == 0)
                 StartInlineRename(entry);
         }
@@ -2719,24 +2649,11 @@ namespace VPB
             {
                 if (VPBConfig.Instance == null) return;
                 detached = VPBConfig.Instance.GalleryQuickFiltersDetached;
-                if (VPBConfig.Instance.GalleryQuickFiltersPosSaved)
-                {
-                    savedFloatPosCenter = new Vector2(
-                        VPBConfig.Instance.GalleryQuickFiltersPosX,
-                        VPBConfig.Instance.GalleryQuickFiltersPosY);
-                }
-                if (VPBConfig.Instance.GalleryQuickFiltersSizeSaved)
-                {
-                    float w = VPBConfig.Instance.GalleryQuickFiltersWidthRef;
-                    float h = VPBConfig.Instance.GalleryQuickFiltersHeightRef;
-                    if (w >= GalleryUiDesignTokens.QuickFiltersFloatMinWidthRef
-                        && h >= GalleryUiDesignTokens.QuickFiltersFloatMinHeightRef)
-                    {
-                        savedFloatSizeRef = new Vector2(
-                            Mathf.Clamp(w, GalleryUiDesignTokens.QuickFiltersFloatMinWidthRef, GalleryUiDesignTokens.QuickFiltersFloatMaxWidthRef),
-                            Mathf.Clamp(h, GalleryUiDesignTokens.QuickFiltersFloatMinHeightRef, GalleryUiDesignTokens.QuickFiltersFloatMaxHeightRef));
-                    }
-                }
+                FloatGeometrySlot slot = VPBConfig.Instance.GalleryQuickFiltersGeometry.Current;
+                savedFloatPosCenter = slot.SavedPos;
+                savedFloatSizeRef = slot.SavedSize(
+                    new Vector2(GalleryUiDesignTokens.QuickFiltersFloatMinWidthRef, GalleryUiDesignTokens.QuickFiltersFloatMinHeightRef),
+                    new Vector2(GalleryUiDesignTokens.QuickFiltersFloatMaxWidthRef, GalleryUiDesignTokens.QuickFiltersFloatMaxHeightRef));
             }
             catch { }
         }
@@ -2746,7 +2663,6 @@ namespace VPB
             if (detached) return;
             floatCollapsed = false;
             expandHeightRef = null;
-            // Seed size from current dropdown height so first float isn't tiny.
             if (!savedFloatSizeRef.HasValue && containerRT != null)
             {
                 float s = panel != null && panel.ChromeScale > 0f ? panel.ChromeScale : 1f;
@@ -2763,7 +2679,6 @@ namespace VPB
             if (panel != null) panel.SyncQuickFilterToggleState();
         }
 
-        /// <summary>Close float: reattach under title chip (X = dock + hide).</summary>
         private void CloseAndDock()
         {
             if (mergeMode) ExitMergeMode();
@@ -2876,7 +2791,6 @@ namespace VPB
                     }
                     else if (hadWorld && floatHost != null)
                     {
-                        // Seed float size first, then keep title corner in world space (recognition > jump).
                         float ss = panel != null && panel.ChromeScale > 0f ? panel.ChromeScale : 1f;
                         float wRef = ResolvePanelWidthRef();
                         float hRef = floatCollapsed
@@ -2884,7 +2798,7 @@ namespace VPB
                             : ResolvePanelHeightRef();
                         containerRT.sizeDelta = new Vector2(wRef * ss, hRef * ss);
                         containerRT.position = keepWorld;
-                        savedFloatPosCenter = TopLeftToCenter(containerRT.anchoredPosition, containerRT.sizeDelta);
+                        savedFloatPosCenter = FloatPanelCoords.TopLeftToCenter(containerRT.anchoredPosition, containerRT.sizeDelta);
                     }
                     else
                     {
@@ -2932,11 +2846,10 @@ namespace VPB
             if (floatCollapsed && containerRT != null)
             {
                 collapsedTopLeftPos = containerRT.anchoredPosition;
-                // Center as if expanded height so expand keeps same top edge.
                 float s = panel != null && panel.ChromeScale > 0f ? panel.ChromeScale : 1f;
                 float w = ResolvePanelWidthRef() * s;
                 float h = ResolvePanelHeightRef() * s;
-                savedFloatPosCenter = TopLeftToCenter(collapsedTopLeftPos.Value, new Vector2(w, h));
+                savedFloatPosCenter = FloatPanelCoords.TopLeftToCenter(collapsedTopLeftPos.Value, new Vector2(w, h));
                 PersistGeometry();
                 return;
             }
@@ -2946,9 +2859,7 @@ namespace VPB
 
         private void OnFloatResizing()
         {
-            // Capture live size only — full ApplyLayout rewrites sizeDelta via ref÷scale×scale
-            // every tick (drift) and rebuilds chrome (jitter / grip clip). End-drag applies layout.
-            // Same contract as ImportSidebar OnImportSidebarFloatResizing.
+            // Capture live size only during drag; end-drag applies layout.
             CaptureFloatGeometryToMemory();
             try { SyncFloatScrollHostInsetsDuringResize(); } catch { }
         }
@@ -2960,7 +2871,6 @@ namespace VPB
             try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
         }
 
-        /// <summary>Live resize: keep scroll band under title/header and above footer without full ApplyLayout.</summary>
         private void SyncFloatScrollHostInsetsDuringResize()
         {
             if (!detached || floatCollapsed || scrollHostGO == null) return;
@@ -2978,7 +2888,7 @@ namespace VPB
         {
             if (containerRT == null || floatCollapsed) return;
             float s = panel != null && panel.ChromeScale > 0f ? panel.ChromeScale : 1f;
-            savedFloatPosCenter = TopLeftToCenter(containerRT.anchoredPosition, containerRT.sizeDelta);
+            savedFloatPosCenter = FloatPanelCoords.TopLeftToCenter(containerRT.anchoredPosition, containerRT.sizeDelta);
             savedFloatSizeRef = new Vector2(
                 Mathf.Clamp(containerRT.sizeDelta.x / s, GalleryUiDesignTokens.QuickFiltersFloatMinWidthRef, GalleryUiDesignTokens.QuickFiltersFloatMaxWidthRef),
                 Mathf.Clamp(containerRT.sizeDelta.y / s, GalleryUiDesignTokens.QuickFiltersFloatMinHeightRef, GalleryUiDesignTokens.QuickFiltersFloatMaxHeightRef));
@@ -3011,18 +2921,9 @@ namespace VPB
         private void PersistGeometryFieldsOnly()
         {
             if (VPBConfig.Instance == null) return;
-            if (savedFloatPosCenter.HasValue)
-            {
-                VPBConfig.Instance.GalleryQuickFiltersPosSaved = true;
-                VPBConfig.Instance.GalleryQuickFiltersPosX = savedFloatPosCenter.Value.x;
-                VPBConfig.Instance.GalleryQuickFiltersPosY = savedFloatPosCenter.Value.y;
-            }
-            if (savedFloatSizeRef.HasValue)
-            {
-                VPBConfig.Instance.GalleryQuickFiltersSizeSaved = true;
-                VPBConfig.Instance.GalleryQuickFiltersWidthRef = savedFloatSizeRef.Value.x;
-                VPBConfig.Instance.GalleryQuickFiltersHeightRef = savedFloatSizeRef.Value.y;
-            }
+            FloatGeometrySlot slot = VPBConfig.Instance.GalleryQuickFiltersGeometry.Current;
+            slot.StorePos(savedFloatPosCenter);
+            slot.StoreSize(savedFloatSizeRef);
         }
 
         private Vector2 GetFloatMinSizeScaled()

@@ -4,10 +4,7 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>
-    /// Owns the named layout presets: lazy load, CRUD, ordering, recents and the active-preset marker.
-    /// Writes are coalesced by <see cref="GalleryPanel"/> so a reorder drag never hits SQLite per tick.
-    /// </summary>
+    /// <summary>Owns the named layout presets: lazy load, CRUD, ordering, recents and the active-preset marker.</summary>
     internal static class GalleryLayoutPresetStore
     {
         private static readonly List<GalleryLayoutPreset> s_presets = new List<GalleryLayoutPreset>();
@@ -35,17 +32,12 @@ namespace VPB
             get { EnsureLoaded(); return s_presets; }
         }
 
-        /// <summary>
-        /// Loads with payloads: the manager draws every listed row's arrangement, so a lazy list
-        /// would just turn into one SQLite round trip per visible row on first open.
-        /// </summary>
         internal static void EnsureLoaded()
         {
             if (s_loaded) return;
             s_loaded = true;
             try { s_sqlAvailable = VpbLocalDatabase.TryLoadLayoutPresets(s_presets, true); }
             catch { s_sqlAvailable = false; }
-            // Appended last so a user's own presets always sort above the shipped baselines.
             try { GalleryLayoutPresetDefaults.Append(s_presets); }
             catch { }
         }
@@ -70,7 +62,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Name / category / dock-shape match. Empty query matches everything.</summary>
         internal static bool MatchesSearch(GalleryLayoutPreset e, string query)
         {
             if (e == null) return false;
@@ -109,7 +100,6 @@ namespace VPB
             return null;
         }
 
-        /// <summary>Returns the preset with its payload guaranteed present, pulling it from SQLite on demand.</summary>
         internal static GalleryLayoutPreset ResolvePayload(GalleryLayoutPreset e)
         {
             if (e == null) return null;
@@ -222,14 +212,11 @@ namespace VPB
             s_activeDockShapeOnly = false;
         }
 
-        /// <summary>True when the live arrangement has drifted from the preset that was last applied.</summary>
         internal static bool IsActiveDirty(GalleryLayoutPreset liveSnapshot)
         {
             if (s_activeId == 0 || string.IsNullOrEmpty(s_activeSignature)) return false;
             if (liveSnapshot == null) return false;
 
-            // Compare on the same terms the active preset restores on, or a dock-shape preset would
-            // read as drifted the instant any unrelated setting moved.
             bool restore = liveSnapshot.DockShapeOnly;
             liveSnapshot.DockShapeOnly = s_activeDockShapeOnly;
             string live;
@@ -247,7 +234,6 @@ namespace VPB
             while (s_recentIds.Count > RecentMax) s_recentIds.RemoveAt(s_recentIds.Count - 1);
         }
 
-        /// <summary>Most recently applied presets for the given mode, newest first.</summary>
         internal static void CollectRecent(int mode, List<GalleryLayoutPreset> into)
         {
             if (into == null) return;
@@ -260,7 +246,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Statics survive scene loads; clear on plugin teardown so nothing dangles.</summary>
         internal static void ResetForTeardown()
         {
             s_presets.Clear();

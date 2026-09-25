@@ -4,19 +4,13 @@ using System.Text;
 
 namespace VPB
 {
-    /// <summary>Title-bar search SQL fragments (broad OR + explicit tag:/time/creator:).</summary>
     internal static partial class VpbLocalDatabase
     {
-        /// <summary>Row key for in-memory tag joins: pkg_uid + NUL + internal_path (ordinal).</summary>
         internal static string MakeGalleryRowKey(string pkgUid, string internalPath)
         {
             return (pkgUid ?? "") + "\0" + (internalPath ?? "");
         }
 
-        /// <summary>
-        /// Collects <c>pkg_uid\0internal_path</c> keys whose user-tag name matches any substring in
-        /// <paramref name="tagSubstrings"/> (OR across substrings). Category-scoped like grid filters.
-        /// </summary>
         internal static bool TryCollectRowKeysWithUserTagSubstrings(
             string categoryTitle,
             IList<string> tagSubstrings,
@@ -37,10 +31,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// One SQLite connection: for each substring, fill <paramref name="keysByTermOut"/>[term] with matching row keys.
-        /// Skips terms shorter than 2 chars (leading-wildcard LIKE on 1 char is too expensive for keystroke search).
-        /// </summary>
         internal static bool TryCollectRowKeysWithUserTagSubstringsPerTerm(
             string categoryTitle,
             IList<string> tagSubstrings,
@@ -70,7 +60,6 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    // Vocab is small — filter tag ids first, then expand rows via idx_giut_tag.
                     const string sql =
                         "SELECT gut.pkg_uid, gut.internal_path FROM gallery_item_user_tag gut " +
                         "WHERE gut.tag_id IN (SELECT tag_id FROM gallery_user_tag WHERE lower(name) LIKE ? ESCAPE '\\')";
@@ -106,11 +95,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Append EXISTS user-tag name LIKE for cat_mem alias <paramref name="mAlias"/>.</summary>
-        /// <remarks>
-        /// Tag-id subquery first (small vocab / <c>idx</c>), then match row — avoids JOIN+LIKE
-        /// per outer <c>cat_mem</c> row (was making category loads with search very slow).
-        /// </remarks>
         private static void AppendSqlUserTagNameLikeExists(
             StringBuilder sb,
             List<string> bindOut,
@@ -125,7 +109,7 @@ namespace VPB
             bool allVar = IsGalleryAllVarPseudoCategory(categoryTitle);
             string catExpr;
             if (allVar || everythingView)
-                catExpr = null; // match any category row for that pkg/path
+                catExpr = null;
             else
                 catExpr = mAlias + ".category";
 
@@ -140,10 +124,6 @@ namespace VPB
             bindOut.Add("%" + EscapeLike(termLower) + "%");
         }
 
-        /// <summary>
-        /// Builds broad-term / tag: / creator: / status fragments into <paramref name="ctx"/>.
-        /// OR-branches become <c>AND ( (branch1) OR (branch2) … )</c>.
-        /// </summary>
         private static void AppendGallerySearchQueryToWhere(
             GalleryCategoryWhereContext ctx,
             GallerySearchQuery query,
@@ -216,9 +196,7 @@ namespace VPB
         {
             if (sb == null || binds == null || br == null) return;
 
-            // Broad include/exclude: match GalleryPanel.FileEntryMatchesBroadTerm PathAndName surface
-            // (path + creator + uid + user-tag substring). NameOnly / NameStartsWith are omitted from SQL
-            // by the panel and applied in PassesFilters.
+            // Broad include/exclude matches PathAndName surface; NameOnly modes applied in PassesFilters.
             if (br.BroadTerms != null)
             {
                 for (int i = 0; i < br.BroadTerms.Count; i++)
@@ -304,10 +282,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// OR-group body for one broad search term (no leading AND/NOT).
-        /// Surfaces: list_path, internal_path, creator, uid, user-tag name LIKE.
-        /// </summary>
         static void AppendDataPackTerms(
             StringBuilder sb,
             List<string> binds,
@@ -420,7 +394,6 @@ namespace VPB
             }
             else
             {
-                // lap: stays substring even when quoted — any-field expert search.
                 string likePat = "%" + EscapeLike(body) + "%";
                 sb.Append("(EXISTS (SELECT 1 FROM datapack_entry de WHERE de.pack_id=dl.pack_id");
                 sb.Append(" AND de.entry_id=dl.entry_id AND (");
@@ -529,7 +502,6 @@ namespace VPB
             binds.Add(esc);
             binds.Add(esc);
 
-            // User-tag substring (same as in-memory broad OR). Skip 1-char — too expensive / noisy.
             if (termLower.Length < 2) return;
 
             bool allVar = IsGalleryAllVarPseudoCategory(categoryTitle);
@@ -543,7 +515,6 @@ namespace VPB
             sb.Append(')');
             binds.Add(esc);
 
-            // Look-A-Pedia subject ("this looks like") — same OR as in-memory FileEntryMatchesBroadTerm.
             if (DataPackSubjectSearchEnabled()
                 && !TryAppendDataPackSubjectUidSet(sb, "m.pkg_uid", termLower, false, false, " OR ", true))
             {
@@ -557,7 +528,6 @@ namespace VPB
             }
         }
 
-        /// <summary>History browse: append search AST predicates (paths + creator + uid + user tags + status).</summary>
         private static void AppendGalleryHistorySearchSql(
             StringBuilder sb,
             List<string> textBinds,

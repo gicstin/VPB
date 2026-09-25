@@ -4,10 +4,7 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Facet rail: exclusive browse chips only (Tags / Category / Creator / Looks like / Path / History / Import).
-    /// Window chrome and tools live on title, footer, toolbox.
-    /// </summary>
+    /// <summary>Facet rail: exclusive browse chips only (Tags / Category / Creator / Looks like / Path / History / Import).</summary>
     public partial class GalleryPanel
     {
         private void UpdateSideButtonsVisibility()
@@ -77,7 +74,6 @@ namespace VPB
                 return;
             }
 
-            // Auto: one rail on the free inner edge (dock) or last floating edge.
             if (fixedMode && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
             {
                 wantRight = true;

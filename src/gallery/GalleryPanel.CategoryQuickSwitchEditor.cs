@@ -28,7 +28,6 @@ namespace VPB
 
         private static void ParseNameTokens(string spec, List<string> dest)
         {
-            // Reuse exact parsing rules from quick-switch runtime.
             ParseQuickSwitchNameTokens(spec, dest);
         }
 
@@ -44,7 +43,6 @@ namespace VPB
                     result.Add(n);
                 }
             }
-            // De-dupe, stable.
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int w = 0;
             for (int i = 0; i < result.Count; i++)
@@ -64,7 +62,6 @@ namespace VPB
 
             var allNames = BuildAllCategoryNames();
 
-            // Hidden list.
             {
                 var tokens = new List<string>(32);
                 ParseNameTokens(VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "", tokens);
@@ -76,7 +73,6 @@ namespace VPB
                 }
             }
 
-            // Visible ordered list.
             {
                 var tokens = new List<string>(32);
                 string orderSpec = (VPBConfig.Instance.GalleryCategoryQuickOrder ?? "").Trim();
@@ -108,7 +104,6 @@ namespace VPB
             }
 
             // If config hid unknown token, keep it, but do not render unless it matches real category name.
-            // (Hidden spec is case-insensitive, but we only show categories that exist in VaM list.)
         }
 
         private void SaveCategoryQuickEditorDraftToConfig()
@@ -118,7 +113,6 @@ namespace VPB
             // Order spec: only explicit visible list. Quick-switch runtime appends unspecified categories.
             string orderSpec = string.Join("\n", _catQuickVisibleDraft.ToArray());
 
-            // Hidden spec: alphabetical for stable diffs / readability.
             var hidden = new List<string>(_catQuickHiddenDraft);
             hidden.Sort(StringComparer.OrdinalIgnoreCase);
             string hiddenSpec = string.Join("\n", hidden.ToArray());
@@ -138,7 +132,6 @@ namespace VPB
             var allNames = BuildAllCategoryNames();
             var nameSet = new HashSet<string>(allNames, StringComparer.OrdinalIgnoreCase);
 
-            // Visible ordered rows.
             for (int i = 0; i < _catQuickVisibleDraft.Count; i++)
             {
                 string name = _catQuickVisibleDraft[i];
@@ -228,7 +221,6 @@ namespace VPB
                 AddTooltipPlain(dn, VPBTranslation.T("settings.category_quick.editor.move_down_tip", "Move down"));
             }
 
-            // Toggle hidden/show uses text button (icon set not guaranteed).
             GameObject tog = new GameObject("ToggleHidden");
             tog.transform.SetParent(row.transform, false);
             Image bg = AddCategoryQuickRoundedBg(tog, new Color(0.44f, 0.36f, 0.20f, 1f));
@@ -271,7 +263,6 @@ namespace VPB
 
             UI.AddVLG(panel, UI.GapGroup(s), UI.PadDialog(s));
 
-            // Header row.
             GameObject header = UI.CreateChildRT(panel, "HeaderRow");
             UI.AddHLG(header, UI.GapControl(s), childForceExpandWidth: false);
             LayoutElement hle = UI.AddLE(header, minHeight: 54f * s, preferredHeight: 54f * s);
@@ -301,7 +292,6 @@ namespace VPB
                 HideCategoryQuickEditor();
             });
 
-            // Body: two sections inside scroll.
             GameObject scrollGO = UI.CreateVScrollableContent(panel, new Color(0, 0, 0, 0), AnchorPresets.stretchAll, 0f, 300f * s, Vector2.zero, 10f * s, 3f * s, false);
             LayoutElement scLe = UI.AddLE(scrollGO, minHeight: 420f * s, flexibleHeight: 1f);
             Transform vp = scrollGO.transform.Find("Viewport");
@@ -330,4 +320,3 @@ namespace VPB
         }
     }
 }
-

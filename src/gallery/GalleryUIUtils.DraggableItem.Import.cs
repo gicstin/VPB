@@ -6,10 +6,6 @@ namespace VPB
 {
     public partial class UIDraggableItem : MonoBehaviour, UnityEngine.EventSystems.IBeginDragHandler, UnityEngine.EventSystems.IDragHandler, UnityEngine.EventSystems.IEndDragHandler
     {
-        /// <summary>
-        /// Route scene→person import through the Scene Import sidebar (single power surface).
-        /// Retires the old Clothing/Appearance-only floating drill-down.
-        /// </summary>
         private void OpenSceneImportSidebar(FileEntry entry, Atom targetAtom)
         {
             OpenSceneImportSidebar(entry, targetAtom, false, VpbResourceType.Appearance);

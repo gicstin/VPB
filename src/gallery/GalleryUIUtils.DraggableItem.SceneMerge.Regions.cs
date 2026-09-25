@@ -24,7 +24,6 @@ namespace VPB
 
             HashSet<string> regions = new HashSet<string>();
 
-            // 1. Try VarFileEntry pre-parsed tags
             if (entry is VarFileEntry vfe)
             {
                 List<string> varTags = getVarTags(vfe);
@@ -38,7 +37,6 @@ namespace VPB
                 }
             }
 
-            // 2. Try reading file content (for loose files or missing cache)
             if (regions.Count == 0)
             {
                 string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
@@ -67,7 +65,6 @@ namespace VPB
                 }
             }
 
-            // 3. Filename heuristics
             if (regions.Count == 0)
                 regions = heuristicFn(Path.GetFileNameWithoutExtension(entry.Path));
 
@@ -117,7 +114,7 @@ namespace VPB
              name = name.ToLowerInvariant();
              
              if (name.Contains("top") || name.Contains("shirt") || name.Contains("bra") || name.Contains("jacket") || name.Contains("sweater")) regions.Add("torso");
-             if (name.Contains("bottom") || name.Contains("pant") || name.Contains("skirt") || name.Contains("short") || name.Contains("underwear") || name.Contains("thong")) regions.Add("hip"); // usually Hip/Pelvis
+             if (name.Contains("bottom") || name.Contains("pant") || name.Contains("skirt") || name.Contains("short") || name.Contains("underwear") || name.Contains("thong")) regions.Add("hip");
              
              if (name.Contains("dress") || name.Contains("bodysuit") || name.Contains("suit")) 
              {
@@ -139,8 +136,6 @@ namespace VPB
              
              return regions;
         }
-
-
 
         private void ApplyDualPose(Atom targetAtom, JSONNode dualPoseNode)
         {
@@ -292,7 +287,6 @@ namespace VPB
              return false;
         }
 
-        // VPB-refactor: native atom restore, deferred from import-unification
         private void ApplyPoseToAtom(Atom atom, JSONClass data)
         {
              bool suppressRoot = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
@@ -352,7 +346,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Alt/Ctrl on drop: replay sticky last action without opening menu.</summary>
         private bool TrySkipContextMenu(Atom atom, FileEntry entry, Vector3 position)
         {
             if (!ContextMenuPanel.IsSkipModifierHeld()) return false;
@@ -488,7 +481,6 @@ namespace VPB
                 return ContextMenuPanel.OptionKind.Primary;
             if (actionId == ContextMenuPanel.SceneActionId.Load)
             {
-                // Soft friction: Load is Destructive when not the sticky primary.
                 if (string.IsNullOrEmpty(last) || last == ContextMenuPanel.SceneActionId.Load)
                     return ContextMenuPanel.OptionKind.Primary;
                 return ContextMenuPanel.OptionKind.Destructive;
@@ -516,7 +508,6 @@ namespace VPB
                 string last = ContextMenuPanel.GetLastSceneAction();
                 Atom importTarget = ResolveImportTargetAtom(atom);
 
-                // Sticky buried action → Repeat row at top (Tesler: absorb recall).
                 if (IsBuriedSceneAction(last))
                 {
                     string buried = last;
@@ -531,7 +522,6 @@ namespace VPB
                         ContextMenuPanel.OptionKind.Primary));
                 }
 
-                // Load Scene — one click (subtitle warns). No confirm page.
                 options.Add(new ContextMenuPanel.Option(
                     VPBTranslation.T("ctx.scene.load", "Load Scene"),
                     VPBTranslation.T("ctx.scene.load_sub", "Replaces the current scene"),
@@ -602,7 +592,6 @@ namespace VPB
                 string last = ContextMenuPanel.GetLastAppearanceAction();
                 Atom selected = ResolveImportTargetAtom(atom);
 
-                // Near-miss: drop missed person but selection is person-like.
                 if (SceneUtils.IsPersonLikeAtom(selected)
                     && (atom == null || !SceneUtils.IsPersonLikeAtom(atom)))
                 {
@@ -976,8 +965,5 @@ namespace VPB
             VpbImport.LoadPreset(entry, target, VpbResourceType.Pose, ClothingApplyMode.Replace,
                                  presetJC: null, suppressRoot: suppressRoot);
         }
-
-
     }
-
 }

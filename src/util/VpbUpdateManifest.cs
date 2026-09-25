@@ -146,7 +146,7 @@ namespace VPB.Shared
             result.Version = ExtractStringValue(json, "version");
             result.Branch = ExtractStringValue(json, "branch");
 
-            int filesStart = json.IndexOf("\"files\"");
+            int filesStart = json.IndexOf("\"files\"", StringComparison.Ordinal);
             if (filesStart < 0) return result;
 
             int arrayStart = json.IndexOf('[', filesStart);
@@ -414,7 +414,7 @@ namespace VPB.Shared
         private static bool ExtractBoolValue(string json, string key)
         {
             string search = "\"" + key + "\"";
-            int keyIdx = json.IndexOf(search);
+            int keyIdx = json.IndexOf(search, StringComparison.Ordinal);
             if (keyIdx < 0) return false;
 
             int colonIdx = json.IndexOf(':', keyIdx + search.Length);
@@ -429,7 +429,7 @@ namespace VPB.Shared
         private static string ExtractStringValue(string json, string key)
         {
             string search = "\"" + key + "\"";
-            int keyIdx = json.IndexOf(search);
+            int keyIdx = json.IndexOf(search, StringComparison.Ordinal);
             if (keyIdx < 0) return null;
 
             int colonIdx = json.IndexOf(':', keyIdx + search.Length);

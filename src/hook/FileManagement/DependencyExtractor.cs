@@ -8,25 +8,14 @@ using System.Text.RegularExpressions;
 
 namespace VPB
 {
-	/// <summary>
-	/// Utility class for extracting dependencies from JSON metadata.
-	/// Used by both VAR packages and scene JSON files.
-	/// </summary>
 	public static class DependencyExtractor
 	{
-		// Regex pattern for matching dependency references: Author.Name.version
-		// Use word boundary before and negative lookahead after to avoid matching file extensions (.dll, .cs, etc)
-		// Note: real-world UIDs can start with digits and may contain '-' in the name.
 		private static readonly Regex DepPattern = new Regex(@"\b([A-Za-z0-9_][A-Za-z0-9_-]*)\.([A-Za-z0-9_][A-Za-z0-9_-]*)\.(latest|min\d+|\d+)(?![A-Za-z0-9_-])", RegexOptions.Compiled);
 
-		/// <summary>
-		/// Recursively walks every string value in a JSONNode and extracts dependency references.
-		/// </summary>
 		public static void ScanAllStringsForDependencies(JSONNode node, HashSet<string> dependencies)
 		{
 			if (node == null) return;
 
-			// Try to interpret as object
 			var obj = node.AsObject;
 			if (obj != null)
 			{
@@ -37,7 +26,6 @@ namespace VPB
 				return;
 			}
 
-			// Try to interpret as array
 			var arr = node.AsArray;
 			if (arr != null)
 			{
@@ -54,10 +42,6 @@ namespace VPB
 				ExtractDependenciesWithRegex(value, dependencies);
 		}
 
-		/// <summary>
-		/// Applies the dep regex to a string and adds all valid matches to the set.
-		/// Matches pattern: Author.Name.version (e.g., "MacGruber.Life.latest" or "vs1.vs1_H102.1")
-		/// </summary>
 		public static void ExtractDependenciesWithRegex(string value, HashSet<string> dependencies)
 		{
 			if (string.IsNullOrEmpty(value))
@@ -78,10 +62,7 @@ namespace VPB
 			catch { }
 		}
 
-		/// <summary>
-		/// Validates a regex match: both author and name must contain at least one letter.
-		/// Version must be "latest", "minN", or start with a digit.
-		/// </summary>
+		/// <summary>Validates a regex match: both author and name must contain at least one letter.</summary>
 		public static bool IsValidDepMatch(string author, string name, string version)
 		{
 			// Version must be "latest", "minN", or start with a digit
@@ -95,7 +76,6 @@ namespace VPB
 			if (!author.Any(char.IsLetter) || !name.Any(char.IsLetter))
 				return false;
 
-			// Reject if author or name is a known file extension
 			var ext = new[] { "dll", "cs", "exe", "jpg", "png", "json", "var", "bat", "cmd", "sh", "ps1" };
 			if (ext.Contains(author, StringComparer.OrdinalIgnoreCase) ||
 				ext.Contains(name, StringComparer.OrdinalIgnoreCase))
@@ -104,11 +84,7 @@ namespace VPB
 			return true;
 		}
 
-		/// <summary>
-		/// Fast extraction of dependency patterns from raw text using regex only.
-		/// Skips JSON parsing for performance on large scene files.
-		/// Uses a timeout to prevent regex backtracking on pathological inputs.
-		/// </summary>
+		/// <summary>Fast extraction of dependency patterns from raw text using regex only.</summary>
 		public static HashSet<string> ExtractDependenciesFromRawText(string content)
 		{
 			HashSet<string> dependencies = new HashSet<string>();
@@ -121,7 +97,6 @@ namespace VPB
 
 				foreach (Match m in DepPattern.Matches(content))
 				{
-					// Safety timeout: if regex is taking too long, stop
 					if (sw.ElapsedMilliseconds > 500)
 						break;
 
@@ -145,11 +120,6 @@ namespace VPB
 			return dependencies;
 		}
 
-		/// <summary>
-		/// Extract dependencies from a text file without loading it all into memory.
-		/// Reads incrementally and feeds the regex scanner with a small overlap window
-		/// to avoid missing matches that cross buffer boundaries.
-		/// </summary>
 		public static HashSet<string> ExtractDependenciesFromFile(string filePath, int maxDependencies = 150, int maxMilliseconds = 1500)
 		{
 			HashSet<string> dependencies = new HashSet<string>();
@@ -161,7 +131,7 @@ namespace VPB
 
 				// Keep some overlap between chunks to avoid losing matches at boundaries.
 				const int overlapChars = 512;
-				const int bufferChars = 64 * 1024; // 64Ki chars (~128KB)
+				const int bufferChars = 64 * 1024;
 				char[] buffer = new char[bufferChars];
 				string tail = "";
 
@@ -193,11 +163,6 @@ namespace VPB
 			return dependencies;
 		}
 
-		/// <summary>
-		/// Extracts all dependencies from a JSON string.
-		/// Fast mode: only checks explicit "dependencies" key (for performance).
-		/// Slow mode: recursively scans all strings for embedded dependency patterns.
-		/// </summary>
 		public static HashSet<string> ExtractDependenciesFromJson(string jsonContent, bool fastModeOnly = true)
 		{
 			HashSet<string> dependencies = new HashSet<string>();
@@ -207,7 +172,6 @@ namespace VPB
 				JSONNode root = JSON.Parse(jsonContent);
 				if (root != null)
 				{
-					// First try explicit "dependencies" key (fast)
 					JSONClass depObj = root["dependencies"].AsObject;
 					if (depObj != null)
 					{
@@ -220,7 +184,6 @@ namespace VPB
 						}
 					}
 
-					// Recursively scan all strings for embedded dependency patterns
 					if (!fastModeOnly)
 					{
 						ScanAllStringsForDependencies(root, dependencies);
@@ -235,9 +198,6 @@ namespace VPB
 			return dependencies;
 		}
 
-		/// <summary>
-		/// Recursively extracts dependencies from nested dependencies objects.
-		/// </summary>
 		private static void ExtractDependenciesFromDependenciesObject(JSONClass jc, HashSet<string> depends)
 		{
 			foreach (string key in jc.Keys)

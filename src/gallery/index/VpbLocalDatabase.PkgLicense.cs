@@ -4,15 +4,11 @@ using System.Text;
 
 namespace VPB
 {
-    /// <summary>
-    /// Persist <c>meta.json</c> licenseType on <c>pkg.license</c> for gallery SQL filters.
-    /// Avoids main-thread ZIP hydrate when browsing by license.
-    /// </summary>
+    /// <summary>Persist meta.json licenseType on pkg.license for gallery SQL filters.</summary>
     internal static partial class VpbLocalDatabase
     {
         const string PkgLicenseBackfillMetaKey = "pkg_license_backfill_v1";
 
-        /// <summary>Trim; drop empty / literal "null".</summary>
         internal static string NormalizePkgLicense(string license)
         {
             if (string.IsNullOrEmpty(license)) return "";
@@ -22,7 +18,6 @@ namespace VPB
             return t;
         }
 
-        /// <summary>Appends AND equality (COLLATE NOCASE); one bind placeholder when filter non-empty.</summary>
         internal static void AppendPkgLicenseFilterSql(StringBuilder sb, string pkgAlias, string licenseFilter)
         {
             if (sb == null) return;
@@ -47,7 +42,6 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN license TEXT;");
             try
             {
-                // NOCASE index matches filter COLLATE so equality can seek.
                 conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_pkg_license ON pkg(license COLLATE NOCASE);");
             }
             catch { }
@@ -62,12 +56,59 @@ namespace VPB
             }
         }
 
+        internal struct PkgLicenseCarryOver
+        {
+            internal string License;
+            internal long WriteTime;
+            internal long Size;
+        }
+
+        static Dictionary<string, PkgLicenseCarryOver> ReadLicenseCarryOverForRebuild(VpbSqlite3.Connection conn)
+        {
+            var result = new Dictionary<string, PkgLicenseCarryOver>(StringComparer.OrdinalIgnoreCase);
+            if (conn == null || !PkgHasLicenseColumn(conn)) return result;
+            using (var sel = conn.Prepare("SELECT uid, license, wtime, psize FROM pkg WHERE license IS NOT NULL"))
+            {
+                while (sel.Step() == VpbSqlite3.SqliteRow)
+                {
+                    string uid = sel.ColumnText(0);
+                    if (string.IsNullOrEmpty(uid)) continue;
+                    result[uid] = new PkgLicenseCarryOver
+                    {
+                        License = sel.ColumnText(1) ?? "",
+                        WriteTime = sel.ColumnInt64(2),
+                        Size = sel.ColumnInt64(3)
+                    };
+                }
+            }
+            return result;
+        }
+
+        internal static bool TryCarryOverLicense(
+            IDictionary<string, PkgLicenseCarryOver> carryOver, string uid, long writeTime, long size, out string license)
+        {
+            license = "";
+            PkgLicenseCarryOver carry;
+            if (carryOver == null || string.IsNullOrEmpty(uid) || !carryOver.TryGetValue(uid, out carry)) return false;
+            if (carry.WriteTime != writeTime || carry.Size != size) return false;
+            license = NormalizePkgLicense(carry.License);
+            return true;
+        }
+
         static string ResolveLicenseForInsert(VarPackage pkg)
+        {
+            return ResolveLicenseForInsert(pkg, null, 0L, 0L);
+        }
+
+        static string ResolveLicenseForInsert(
+            VarPackage pkg, IDictionary<string, PkgLicenseCarryOver> carryOver, long writeTime, long size)
         {
             if (pkg == null) return "";
             string lic = "";
             try { lic = NormalizePkgLicense(pkg.LicenseType); } catch { lic = ""; }
             if (lic.Length > 0) return lic;
+            string carried;
+            if (TryCarryOverLicense(carryOver, pkg.Uid, writeTime, size, out carried)) return carried;
             try
             {
                 pkg.TryEnsureMetaJsonLiteFields();
@@ -77,10 +118,7 @@ namespace VPB
             return lic ?? "";
         }
 
-        /// <summary>
-        /// One-shot: fill empty <c>pkg.license</c> from live <see cref="VarPackage"/> (may open ZIP).
-        /// Call from ThreadPool / index rebuild — never main-thread VR frame.
-        /// </summary>
+        /// <summary>One-shot: fill empty pkg.license from live VarPackage (may open ZIP).</summary>
         internal static bool TryBackfillPkgLicensesFromLivePackagesIfNeeded()
         {
             if (!VpbSqlite3.IsAvailable) return false;
@@ -115,7 +153,6 @@ namespace VPB
             try { byUid = FileManager.PackagesByUid; } catch { byUid = null; }
             if (byUid == null || byUid.Count == 0)
             {
-                // No packages yet — leave sentinel unset so a later inventory can fill.
                 return false;
             }
 

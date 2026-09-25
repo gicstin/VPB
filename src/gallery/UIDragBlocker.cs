@@ -11,11 +11,6 @@ namespace VPB
         public void OnEndDrag(PointerEventData eventData) { }
     }
 
-    /// <summary>
-    /// Chip X dismiss that survives parent chip-drag / ScrollRect steal.
-    /// Owns IBeginDrag so EventSystem does not walk up to <see cref="TitleSearchChipDragSource"/>;
-    /// fires on pointer-up when movement stays small (Button.onClick dies once dragging=true).
-    /// </summary>
     public sealed class UIChipDismissClick : MonoBehaviour,
         IPointerDownHandler, IPointerUpHandler,
         IBeginDragHandler, IDragHandler, IEndDragHandler

@@ -65,10 +65,6 @@ namespace VPB
             return go != null && _footerOverflowCollapsed != null && _footerOverflowCollapsed.Contains(go);
         }
 
-        /// <summary>
-        /// Fixed vs floating footer chrome. Must run after overflow restore so mode-hidden
-        /// chips (follow in fixed, dock/height/autohide in floating) stay hidden.
-        /// </summary>
         private void ApplyFooterModeButtonVisibility()
         {
             bool fixedMode = isFixedLocally;
@@ -140,7 +136,6 @@ namespace VPB
             return sig;
         }
 
-        /// <summary>Force next <see cref="ApplyFooterOverflowLayout"/> to remeasure (mode/dock chrome change).</summary>
         private void InvalidateFooterOverflowLayout()
         {
             _footerOverflowLayoutSig = int.MinValue;
@@ -171,7 +166,6 @@ namespace VPB
         private float EstimateFooterCenterMinWidth(float chip, float gap, float s)
         {
             float w = EstimateFooterCenterChromeWidthWithoutSideButtons(chip, gap, s);
-            // Top dock: side strip + quality share CenterSection — reserve both (not Max).
             if (IsFixedTopDockMode() && !isCollapsed && _footerSideButtonsGroupRT != null && _footerSideButtonsGroupGO != null
                 && _footerSideButtonsGroupGO.activeSelf)
             {
@@ -195,7 +189,6 @@ namespace VPB
             {
                 RectTransform ch = sectionRT.GetChild(i) as RectTransform;
                 if (ch == null || !ch.gameObject.activeSelf) continue;
-                // Nested perf group: measure its children pack.
                 if (ch.name == "FooterPerfGroup")
                 {
                     float nested = MeasureFooterSectionPreferredWidth(ch, s);
@@ -205,7 +198,6 @@ namespace VPB
                     n++;
                     continue;
                 }
-                // Top-dock side strip: counted via EstimateFooterCenterMinWidth — skip if under CenterSection.
                 if (ch.name == "SideButtonsGroup")
                     continue;
                 float cw = ch.sizeDelta.x;
@@ -495,7 +487,6 @@ namespace VPB
             float s = ChromeScale <= 0f ? 1f : ChromeScale;
             float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
 
-            // X from … button; Y clears tooltip/info bar (hoverPath) so status text stays readable.
             Vector3 worldX = _footerOverflowBtnRT.TransformPoint(_footerOverflowBtnRT.rect.center);
             float localX = overlayRT.InverseTransformPoint(worldX).x;
             float localY;
@@ -549,8 +540,6 @@ namespace VPB
             if (footerW < 8f) return;
 
             int sig = ComputeFooterOverflowLayoutSig(footerW, s);
-            // Hard early-out: width/scale/visibility unchanged — skip Collect + Collapse every visible frame.
-            // Note: undo/redo label text does not change chip size (fixed ButtonSizeRef), so omit from sig.
             if (sig == _footerOverflowLayoutSig)
                 return;
 

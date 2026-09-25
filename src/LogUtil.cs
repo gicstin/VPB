@@ -238,8 +238,6 @@ namespace VPB
             sincePluginAwake.Start();
         }
 
-        /// <see cref="VPBLogSource.LogInfo(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string log)
         {
@@ -256,67 +254,48 @@ namespace VPB
             logSource.LogInfo(log);
         }
 
-        /// <see cref="VPBLogSource.LogInfo(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, string p2)
         {
             logSource.LogInfo($"{p1} {p2}");
         }
 
-        /// <see cref="VPBLogSource.LogInfo(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, string p2, string p3)
         {
-
             logSource.LogInfo($"{p1} {p2} {p3}");
         }
 
-        /// <see cref="VPBLogSource.LogInfo(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, int p2)
         {
-
             logSource.LogInfo($"{p1} {p2}");
         }
 
-        /// <see cref="VPBLogSource.LogInfo(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, float p2)
         {
             logSource.LogInfo($"{p1} {p2}");
         }
 
-        /// <see cref="VPBLogSource.LogError(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogError")]
         public static void LogError(string log)
         {
             logSource.LogError(log);
         }
 
-        /// <see cref="VPBLogSource.LogError(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogError")]
         public static void LogError(string p1, string p2)
         {
             logSource.LogError($"{p1} {p2}");
         }
 
-        /// <see cref="VPBLogSource.LogWarning(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogWarning")]
         public static void LogWarning(string log)
         {
             logSource.LogWarning(log);
         }
 
-
-        /// <see cref="VPBLogSource.LogWarning(object)"/>
-        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
         [Obsolete("Prefer VPBLogSource.LogWarning")]
         public static void LogWarning(string p1, string p2)
         {
@@ -336,7 +315,6 @@ namespace VPB
 
             return 1;
         }
-
 
         static bool ShouldLogKey(string key, float intervalSeconds)
         {
@@ -478,7 +456,6 @@ namespace VPB
                 return;
             }
 
-            // If we saw image work, wait until image loading is idle for a quiet window.
             if (sceneClickSawImageWork)
             {
                 if (IsImageLoadingBusy())
@@ -497,7 +474,6 @@ namespace VPB
             }
             else
             {
-                // No image work observed; fall back to SuperController not-loading.
                 bool? loading = TryGetSuperControllerLoading();
                 if (loading.HasValue && loading.Value)
                 {
@@ -534,7 +510,6 @@ namespace VPB
             if (!startupReadyLogged && !isFileManagerInited) return;
 
             // Conservative timeout to avoid false positives on very slow machines.
-            // If UI init never completes (exceptions, missing dependencies, etc), freeze timer anyway.
             float elapsed = Time.realtimeSinceStartup - pluginSessionEngineStartSeconds;
             if (elapsed < 180f) return;
 
@@ -550,7 +525,6 @@ namespace VPB
             if (readyLoggedRealtime <= 0f) return;
 
             float now = Time.realtimeSinceStartup;
-            // Give post-READY bootstrap a chance to schedule follow-up work.
             if ((now - readyLoggedRealtime) < StartupSettleInitialDelaySeconds) return;
 
             bool hasPendingWork = false;
@@ -678,8 +652,6 @@ namespace VPB
             }
 
             // Issue #80: clear per-session clothing texture bookkeeping before anything loads.
-            // Must be at load START — clearing at load END would discard expectations for the
-            // custom texture loads still in flight when the scene finishes.
             try { DAZClothingHook.ResetTransientState(); } catch { }
         }
 
@@ -805,8 +777,6 @@ namespace VPB
             bool? loading = TryGetSuperControllerLoading();
             if (!loading.HasValue)
             {
-                // If we can't read loading state, fall back to ending when the scene has been "stable" long enough.
-                // We keep this conservative to avoid cutting off long async loads.
                 if (!sceneLoadAutoEndFailedLogged)
                 {
                     sceneLoadAutoEndFailedLogged = true;
@@ -840,7 +810,6 @@ namespace VPB
             sceneLoadNotLoadingStableFrames++;
             sceneLoadTailUpdateCount++;
 
-
             bool busy = IsImageLoadingBusy();
             if (sceneLoadPrevBusyKnown && !sceneLoadPrevBusyValue && busy && sceneLoadFirstNotBusyRealtime >= 0f)
             {
@@ -863,7 +832,6 @@ namespace VPB
             }
 
             // Require a quiet window after the last image activity.
-            // Scene loads can trigger image bursts after the main load is complete.
             float idleSecondsRequired = 0.5f;
             if ((Time.realtimeSinceStartup - imageLastActivityRealtime) < idleSecondsRequired)
             {
@@ -947,7 +915,6 @@ namespace VPB
                 if (sceneSettlePersonsMin < 0 || personCount < sceneSettlePersonsMin) sceneSettlePersonsMin = personCount;
                 if (sceneSettlePersonsMax < 0 || personCount > sceneSettlePersonsMax) sceneSettlePersonsMax = personCount;
 
-                // "Soft-ready": settle window shows stable atom/person counts and no active image busy for >=1s.
                 bool stableCounts = sceneSettlePrevAtoms == atomCount && sceneSettlePrevPersons == personCount;
                 sceneSettlePrevAtoms = atomCount;
                 sceneSettlePrevPersons = personCount;
@@ -1041,7 +1008,6 @@ namespace VPB
                 }
 
                 // Vanilla loader (ImageLoaderThreaded) can still be active even when VPB's custom pipeline is not.
-                // If any images are queued, treat this as busy for scene-load timing.
                 try
                 {
                     if (ImageLoaderThreaded.singleton != null)
@@ -1080,7 +1046,6 @@ namespace VPB
 
                 var tr = Traverse.Create(CustomImageLoaderThreaded.singleton);
 
-                // Primary signal used by the loader itself.
                 try
                 {
                     var n = tr.Field("numRealQueuedImages").GetValue();
@@ -1088,7 +1053,6 @@ namespace VPB
                 }
                 catch { }
 
-                // Fallback: check the internal linked list queue length.
                 try
                 {
                     var q = tr.Field("queuedImages").GetValue();
@@ -1139,12 +1103,10 @@ namespace VPB
             {
                 sceneClickSawImageWork = true;
                 sceneClickLastActivityRealtime = Time.realtimeSinceStartup;
-                // If a late burst happens, cancel any pending end.
                 sceneClickEndArmed = false;
             }
 
             // If any image activity happens during a scene load, we must wait for image-idle before ending.
-            // Cancel any pending end if a new image burst starts.
             sceneLoadEndArmed = false;
             sceneLoadNotBusyStableFrames = 0;
         }
@@ -1168,7 +1130,6 @@ namespace VPB
 
                 var tr = Traverse.Create(SuperController.singleton);
 
-                // Try common field/property names.
                 foreach (var name in new[] { "isLoading", "loading", "_isLoading", "_loading", "loadingUIActive", "isLoadingScene" })
                 {
                     try
@@ -1271,7 +1232,6 @@ namespace VPB
                 VPBConfig.Instance.EndSceneLoad();
             }
 
-            // Scene content (including Person atoms in GetAtoms()) is reliably settled once total load completes.
             try { GalleryPanel.NotifyAllPanelsSceneTargetsChanged(); } catch { }
 
             VpbVrUiDiagnostics.CaptureSceneComplete(context);
@@ -1285,7 +1245,6 @@ namespace VPB
 
             CacheCleanupManager.FlushHitsBatch();
 
-            // Loose rewrite/filter temps: wake coordinator once load total ends (stable delete).
             try { SceneLoadingUtils.NotifySceneLoadTotalEndedForTempScenes(); } catch { }
         }
 

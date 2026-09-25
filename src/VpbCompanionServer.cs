@@ -7,10 +7,6 @@ using System.Threading;
 
 namespace VPB
 {
-    /// <summary>
-    /// Local named-pipe server so VPM can ask a running VaM to reload scan_whitelist.json
-    /// or load a scene. Not VpbNet multiplayer.
-    /// </summary>
     internal static class VpbCompanionServer
     {
         public const string PipeName = "VPB-companion";
@@ -38,17 +34,13 @@ namespace VPB
             s_stop = false;
             try { VpbShutdown.Register("companion-pipe", Stop); } catch { }
             // Dedicated background thread — never park ThreadPool on WaitForConnection.
-            // Occupied pool thread + native pipe wait keeps Unity from exiting (same class as #91).
             s_thread = new Thread(AcceptLoop);
             s_thread.IsBackground = true;
             s_thread.Name = "VPB_Companion";
             s_thread.Start();
         }
 
-        /// <summary>
-        /// Unblock WaitForConnection / ReadLine so VaM can exit. Flag alone is not enough —
-        /// ConnectNamedPipe is a native wait; Unity shutdown stalls until it returns.
-        /// </summary>
+        /// <summary>Unblock WaitForConnection / ReadLine so VaM can exit.</summary>
         public static void Stop()
         {
             s_stop = true;

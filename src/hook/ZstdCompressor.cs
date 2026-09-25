@@ -38,14 +38,12 @@ namespace VPB
                 // 1. Standard installation: BepInEx/plugins/VPB/native/
                 searchDirs.Add(VpbPaths.Native);
 
-                // 2. Same directory as VPB.dll (Handles scripts folder or custom location)
                 if (!string.IsNullOrEmpty(assemblyDir))
                 {
                     searchDirs.Add(assemblyDir);
                     searchDirs.Add(Path.Combine(assemblyDir, "zstd"));
                 }
 
-                // 2. BepInEx scripts directory specific
                 if (!string.IsNullOrEmpty(scriptDir))
                 {
                     searchDirs.Add(scriptDir);
@@ -53,7 +51,6 @@ namespace VPB
                     searchDirs.Add(Path.Combine(scriptDir, "VPB\\zstd"));
                 }
 
-                // 3. BepInEx plugins root (preferred location for shared zstd)
                 if (!string.IsNullOrEmpty(pluginDir))
                 {
                     searchDirs.Add(pluginDir);
@@ -70,12 +67,10 @@ namespace VPB
                 }
             }
             catch { }
-            // Final fallback: try PATH
             _cachedZstdPath = "zstd.exe";
             return _cachedZstdPath;
         }
 
-        /// <summary>Kill any in-flight external zstd.exe children (quit / cancel path).</summary>
         public static void KillActiveProcesses()
         {
             Process[] snapshot;
@@ -161,13 +156,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Compresses the given data using Zstd compression.
-        /// </summary>
-        /// <param name="data">The raw data to compress.</param>
-        /// <param name="level">The compression level (typically 1-22).</param>
-        /// <param name="length">Optional length of data to compress (for pooled buffers).</param>
-        /// <returns>The compressed byte array.</returns>
         public static byte[] Compress(byte[] data, int level, int length = -1)
         {
             if (data == null || data.Length == 0)
@@ -201,9 +189,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Compresses the given data using an external Zstd process to save memory in the main process.
-        /// </summary>
         public static byte[] CompressExternal(byte[] data, int level, int length = -1)
         {
             if (data == null || data.Length == 0)
@@ -230,7 +215,6 @@ namespace VPB
                     }
                 }
 
-                // Fallback to internal
                 return CompressInternal(data, level, length);
             }
             catch (Exception ex)
@@ -245,11 +229,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Decompresses the given Zstd-compressed data.
-        /// </summary>
-        /// <param name="compressed">The compressed data.</param>
-        /// <returns>The original uncompressed byte array.</returns>
         public static byte[] Decompress(byte[] compressed)
         {
             return Decompress(compressed, MaxDecompressedBytes);
@@ -270,13 +249,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Compresses the provided data (e.g., DXT texture data) and saves it to the specified file path.
-        /// </summary>
-        /// <param name="path">The full path where the cache file will be saved.</param>
-        /// <param name="data">The raw data to compress and save.</param>
-        /// <param name="level">The compression level to use.</param>
-        /// <param name="length">Optional length of data to compress (for pooled buffers).</param>
         public static void SaveCache(string path, byte[] data, int level, int length = -1)
         {
             if (data == null)
@@ -305,7 +277,6 @@ namespace VPB
                     return;
                 }
 
-                // Fallback to internal
                 byte[] compressed = CompressInternal(data, level, length);
                 File.WriteAllBytes(path, compressed);
             }
@@ -321,17 +292,12 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Compresses an existing file on disk and saves it to the specified path.
-        /// This is more memory-efficient than reading the file into a byte array first.
-        /// </summary>
         public static void SaveCacheFromFile(string outputPath, string inputPath, int level)
         {
             if (!File.Exists(inputPath)) return;
 
             try
             {
-                // If input and output are same, we need a temp file for output
                 bool samePath = string.Equals(Path.GetFullPath(inputPath), Path.GetFullPath(outputPath), StringComparison.OrdinalIgnoreCase);
                 string actualOut = samePath ? outputPath + ".tmp_zstd" : outputPath;
 
@@ -345,8 +311,7 @@ namespace VPB
                     return;
                 }
 
-                // Fallback: if external fails, we have to do it internally (memory intensive)
-                // We use CompressInternal directly here to avoid another RunZstd attempt inside SaveCache
+                // Fallback: compress internally when external zstd fails.
                 byte[] data = File.ReadAllBytes(inputPath);
                 byte[] compressed = CompressInternal(data, level);
                 File.WriteAllBytes(outputPath, compressed);
@@ -357,11 +322,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Reads a compressed cache file from disk and decompresses it back to raw data (e.g., DXT texture).
-        /// </summary>
-        /// <param name="path">The full path to the cache file.</param>
-        /// <returns>The decompressed data, or null if the file does not exist.</returns>
         public static byte[] LoadCache(string path)
         {
             if (!File.Exists(path))
@@ -369,20 +329,13 @@ namespace VPB
                 return null;
             }
 
-            // Read compressed bytes
             byte[] compressed = File.ReadAllBytes(path);
 
-            // Decompress
             return Decompress(compressed);
         }
 
-        /// <summary>
-        /// Helper to ensure the compressor is initialized. With ZstdNet, this is handled by the library,
-        /// but keeping the method signature for compatibility if needed by other callers (though existing callers seem to access static methods directly).
-        /// </summary>
         private static void EnsureInitialized()
         {
-            // No-op for ZstdNet implementation as it initializes on demand/static ctor.
         }
     }
 }

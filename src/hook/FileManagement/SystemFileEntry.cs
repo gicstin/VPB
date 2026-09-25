@@ -15,10 +15,6 @@ namespace VPB
 		private bool? _hiddenCached;
 		private static string s_cachedGameRootFull;
 
-		/// <summary>
-		/// Fast-path constructor when caller already knows file stat. Avoids per-entry FileInfo calls
-		/// (used by SQLite-cached loose-file listings).
-		/// </summary>
 		public SystemFileEntry(string path, DateTime lastWriteTime, long size, bool exists)
 			: base(path)
 		{
@@ -53,14 +49,12 @@ namespace VPB
 				}
 			}
 
-			// Do not use GetPackage(uid) default (ensureInstalled: true): that runs InstallRecursive()
-			// as a side effect of merely representing an on-disk .var (e.g. gallery Autoinstall path).
+			// Do not use GetPackage(uid) default (ensureInstalled: true).
 			package = FileManager.GetPackage(System.IO.Path.GetFileNameWithoutExtension(Path), false);
             if (package != null)
             {
 				isVar = true;
             }
-			
         }
 
 		public override FileEntryStream OpenStream()
@@ -76,12 +70,12 @@ namespace VPB
         {
             if (isVar)
             {
-                if (Path.StartsWith("AllPackages"))
+                if (Path.StartsWith("AllPackages", StringComparison.Ordinal))
                 {
 					string path="AddonPackages" + Path.Substring("AllPackages".Length);
 					return File.Exists(path);
 				}
-				else if (Path.StartsWith("AddonPackages"))
+				else if (Path.StartsWith("AddonPackages", StringComparison.Ordinal))
                 {
 					return File.Exists(Path);
                 }
@@ -123,7 +117,6 @@ namespace VPB
 			bool hidden = false;
 			try
 			{
-				// VaM "system file" hide marker: adjacent "<file>.hide"
 				string full = FileManager.GetFullPath(Path);
 				string root = s_cachedGameRootFull;
 				if (string.IsNullOrEmpty(root))
@@ -188,17 +181,16 @@ namespace VPB
             {
 				string installPath = null;
 				string repoPath = null;
-				if (Path.StartsWith("AddonPackages/"))
+				if (Path.StartsWith("AddonPackages/", StringComparison.Ordinal))
 				{
 					installPath = Path;
 					repoPath = "AllPackages" + Path.Substring("AddonPackages".Length);
 				}
-				else if (Path.StartsWith("AllPackages/"))
+				else if (Path.StartsWith("AllPackages/", StringComparison.Ordinal))
 				{
 					installPath = "AddonPackages" + Path.Substring("AllPackages".Length);
 					repoPath = Path;
 				}
-				// Uninstall
 				if (File.Exists(repoPath))
 				{
 					if (!File.Exists(installPath))
@@ -218,7 +210,6 @@ namespace VPB
 			}
             else
             {
-				// This is a var package
             }
 			return false;
         }
@@ -228,18 +219,17 @@ namespace VPB
 			{
 				string installPath = null;
 				string repoPath = null;
-                if (Path.StartsWith("AddonPackages/"))
+                if (Path.StartsWith("AddonPackages/", StringComparison.Ordinal))
                 {
 					installPath = Path;
 					repoPath = "AllPackages" + Path.Substring("AddonPackages".Length);
 				}
-                else if(Path.StartsWith("AllPackages/"))
+                else if(Path.StartsWith("AllPackages/", StringComparison.Ordinal))
                 {
 					installPath = "AddonPackages" + Path.Substring("AllPackages".Length);
 					repoPath = Path;
 				}
 
-                // Uninstall
                 if (File.Exists(installPath))
                 {
                     if (!File.Exists(repoPath))
@@ -260,11 +250,6 @@ namespace VPB
 				return false;
 		}
 
-		/// <summary>
-		/// Re-read the on-disk last-write time and size for this loose file. Used after an
-		/// overwrite-save so Date Updated/modified sorts reflect the new timestamp without a
-		/// full gallery rescan (issue #45).
-		/// </summary>
 		public void RefreshLastWriteTimeFromDisk()
 		{
 			try
@@ -301,5 +286,4 @@ namespace VPB
 			InvalidateUidLowerInvariantCache();
 		}
 	}
-
 }

@@ -10,9 +10,6 @@ namespace VPB
         private float SideTabBottomMargin => SideTabScrollBottomInsetY();
         private float SideTabDefaultBottomOffset => SideTabScrollBottomInsetY();
 
-        // Top inset for side tab scroll: clears sort + search row. Must read the same anchor the
-        // filter row is placed from (SidePanelFilterRowTopRef).
-        // Filter chip bar lives in the main grid column only — do not add ActiveFilterChromeTopInsetPx here.
         private float TabScrollTopOffset()
         {
             return Mathf.Min(TabScrollTopOffsetForSide(true), TabScrollTopOffsetForSide(false));
@@ -85,32 +82,18 @@ namespace VPB
             MarkGalleryPaneChromeDirty();
         }
 
-        /// <summary>
-        /// Rebuilds every side-tab button list (categories / creators / tags / hub). Can take seconds with large libraries.
-        /// </summary>
-        /// <remarks>
-        /// INVARIANT: Do not subscribe this method to <see cref="VPBConfig.ConfigChanged"/>. Use
-        /// <see cref="RefreshSideTabAreasForConfigChange"/> for that channel. A runtime guard downgrades mistaken calls during dispatch.
-        /// </remarks>
         internal void UpdateTabs()
         {
             UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true);
         }
 
-        /// <summary>
-        /// <see cref="VPBConfig.ConfigChanged"/> handler: title/footer/side chrome, sort labels, and tab scroll rect layout
-        /// without destroying and recreating hundreds of side-tab buttons (avoids multi-second stalls on resize/scale).
-        /// </summary>
         private void RefreshSideTabAreasForConfigChange()
         {
             UpdateTabsImpl(rebuildSideTabLists: false, rebuildSubPaneSideTabLists: true);
         }
 
-        /// <param name="rebuildSubPaneSideTabLists">When false, skips tag/hub-sub/scene-source side lists (split bottom). Main category/creator strips still rebuild when <paramref name="rebuildSideTabLists"/> is true.</param>
         private void UpdateTabsImpl(bool rebuildSideTabLists, bool rebuildSubPaneSideTabLists = true)
         {
-            // UserTags split uses sticky viewports; lightweight path skips ApplyUserTagsStickyScrollChrome at the end
-            // of this method — layout rebuilds would leave toolbars hidden until a full UpdateLayout.
             bool userTagsSideOpen = leftActiveContent == ContentType.UserTags
                 || rightActiveContent == ContentType.UserTags;
             if ((leftTabContainerGO != null || rightTabContainerGO != null)
@@ -129,8 +112,6 @@ namespace VPB
 
             if (titleText != null)
             {
-                // When filtering by deps/dependents, the active category title is not meaningful.
-                // Hide it to reduce visual noise; the footer shows the filter mode instead.
                 bool showTitle = !IsFilterActive;
                 if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
 
@@ -164,7 +145,6 @@ namespace VPB
                 if (splitView && leftActiveContent == ContentType.CleanupCategories
                     && leftSubTabScrollGO != null)
                 {
-                    // Split Layout
                     leftSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
@@ -208,13 +188,11 @@ namespace VPB
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
-                    // Populate Top (Category / Hub Category / Status)
                     if (rebuildSideTabLists)
                     {
                         RebuildMainPaneSideTabList(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                     }
 
-                    // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     if (rebuildSideTabLists && !rebuildSubPaneSideTabLists)
                     {
                         foreach (var b in leftSubActiveTabButtons) ReturnTabButton(b);
@@ -225,7 +203,6 @@ namespace VPB
                 }
                 else
                 {
-                    // Full Layout
                     if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
                     leftSubSceneSortBarActive = false;
                     if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
@@ -274,7 +251,6 @@ namespace VPB
                 if (splitView && rightActiveContent == ContentType.CleanupCategories
                     && rightSubTabScrollGO != null)
                 {
-                    // Split Layout
                     rightSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
@@ -318,13 +294,11 @@ namespace VPB
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
-                    // Populate Top (Category / Hub Category / Status)
                     if (rebuildSideTabLists)
                     {
                         RebuildMainPaneSideTabList(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                     }
 
-                    // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     if (rebuildSideTabLists && !rebuildSubPaneSideTabLists)
                     {
                         foreach (var b in rightSubActiveTabButtons) ReturnTabButton(b);
@@ -335,7 +309,6 @@ namespace VPB
                 }
                 else
                 {
-                    // Full Layout
                     if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
                     rightSubSceneSortBarActive = false;
                     if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
@@ -346,7 +319,7 @@ namespace VPB
                     RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
                     rightRT.anchorMin = new Vector2(1, 0);
                     rightRT.anchorMax = new Vector2(1, 1);
-                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabDefaultBottomOffset); // Restore default
+                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabDefaultBottomOffset);
                     rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffsetForSide(false));
 
                     if (rebuildSideTabLists)
@@ -377,8 +350,7 @@ namespace VPB
             float paneScale = ChromeScale;
             try { SyncSidePanelHeaderChrome(paneScale); } catch { }
 
-            // UpdateLayout runs before UpdateTabs in ToggleLeft/Right; UpdateTabsImpl mutates tab ScrollRect geometry
-            // after that — viewport stretch resets unless sticky chrome is reapplied here.
+            // UpdateLayout runs before UpdateTabs in ToggleLeft/Right.
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             MarkGalleryPaneChromeDirty();
         }
@@ -448,7 +420,5 @@ namespace VPB
 
             return true;
         }
-
     }
 }
-

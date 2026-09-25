@@ -6,11 +6,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Floating Save popup. The green side-rail Save button opens this instead of a side
-        // tab, mirroring the Save popup used by the quick-menu assignable grid button so the
-        // save experience is unified (see issue #62). Reuses BuildSaveMenuOptions() so the
-        // option order matches the old side panel.
-
         private GameObject _saveMenuPopupGO;
         private bool _saveMenuPopupOpen;
         private bool _saveMenuPopupOpenedLeft;
@@ -82,7 +77,6 @@ namespace VPB
             EnsureSaveMenuPopupChrome();
             if (_saveMenuPopupGO == null) return;
 
-            // Toggle off if the same side is reopened while showing.
             if (_saveMenuPopupOpen && _saveMenuPopupOpenedLeft == useLeftSide)
             {
                 CloseSaveMenuPopup();

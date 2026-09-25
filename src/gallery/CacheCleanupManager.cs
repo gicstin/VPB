@@ -38,7 +38,6 @@ namespace VPB
             string prefix = p.Substring(0, idx);
             if (string.IsNullOrEmpty(prefix)) return false;
 
-            // Case 1: var/zip path: AddonPackages/Foo.Bar.1.var:/...
             if (prefix.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || prefix.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -54,7 +53,6 @@ namespace VPB
                 return false;
             }
 
-            // Case 2: uid-style: Foo.Bar.1:/...
             if (prefix.IndexOf('/') < 0)
             {
                 uid = prefix;
@@ -72,8 +70,6 @@ namespace VPB
                 s_HitBuffer.Add(path);
                 if (!string.IsNullOrEmpty(imgPathOrUidPath))
                 {
-                    // Store a single best-effort package uid for exemption decisions.
-                    // Mapping is append-only in DB (cache_path,pkg_uid), so losing some here is OK.
                     if (!s_HitPkgUidByPath.ContainsKey(path) && TryExtractPackageUidFromImagePath(imgPathOrUidPath, out string uid))
                     {
                         if (!string.IsNullOrEmpty(uid)) s_HitPkgUidByPath[path] = uid;
@@ -181,7 +177,6 @@ namespace VPB
                     var results = new List<VpbLocalDatabase.CacheUsageRow>();
                     VpbLocalDatabase.TryGetStaleCacheItems(olderThanBinary, maxHits, results);
 
-                    // Verify files still exist on disk
                     var verified = new List<VpbLocalDatabase.CacheUsageRow>();
                     foreach (var item in results)
                     {
@@ -191,7 +186,6 @@ namespace VPB
                         }
                         else
                         {
-                            // Clean up DB if file is already gone
                             VpbLocalDatabase.TryDeleteCacheUsage(item.CachePath);
                         }
                     }
@@ -234,7 +228,6 @@ namespace VPB
                         if (File.Exists(path))
                         {
                             File.Delete(path);
-                            // Also delete meta file
                             string meta = path + "meta";
                             if (File.Exists(meta)) File.Delete(meta);
                             
@@ -251,7 +244,6 @@ namespace VPB
                 if (deleted > 0)
                 {
                     LogUtil.Log("[VPB] Smart Cleanup: Deleted " + deleted + " stale cache items.");
-                    // Refresh results
                     lock (s_Lock)
                     {
                         s_StaleItems.RemoveAll(item => paths.Contains(item.CachePath));

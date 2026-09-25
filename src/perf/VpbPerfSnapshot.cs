@@ -12,9 +12,7 @@ namespace VPB
 
     internal sealed class VpbHairPerfSnapshot
     {
-        /// <summary>DAZHairGroup.uid — stable across load.</summary>
         public string HairItemUid;
-        /// <summary>Legacy fallback when HairItemUid empty.</summary>
         public string ControlUid;
         public float CurveDensity;
         public float HairMultiplier;

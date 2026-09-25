@@ -7,7 +7,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Scene Utils toolbox Compress Cache button (hover count tooltip).
         private int _footerCompressCacheCount = -1;
         private bool _footerCompressCacheHovering;
         private bool _footerCompressCacheCounting;

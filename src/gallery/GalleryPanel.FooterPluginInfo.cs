@@ -4,18 +4,13 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Rich hover tooltip for the title-bar Settings gear — diagnostics that help triage a user's
-        // screenshot: plugin version, baked build date + age, VR/Desktop mode, loaded var-package count,
-        // updater status, and the on-disk path of the loaded DLL. Build date + path expose a stale/duplicate
-        // VPB.dll; VR/Desktop and package count narrow down environment-specific reports.
         private string BuildPluginInfoTooltip()
         {
             var sb = new StringBuilder(220);
             sb.Append("VPB ");
             sb.Append(PluginVersionInfo.Version);
 
-            // Baked build date (UTC, date only): confirms the loaded build is actually recent without
-            // leaking a precise timestamp/timezone. Shows age in days so a stale DLL is obvious.
+            // Baked build date (UTC, date only): confirms the loaded build is actually recent without leaking a precise timestamp/timezone.
             try
             {
                 sb.Append(" | ");

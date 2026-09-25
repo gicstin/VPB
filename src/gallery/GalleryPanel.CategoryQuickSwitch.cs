@@ -28,7 +28,6 @@ namespace VPB
             rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
         }
 
-        /// <summary>Menu top Y on <c>backgroundBoxGO</c> (anchor top-left): flush under category chrome.</summary>
         private static float CategoryQuickMenuTopOffsetY(float paneScale)
         {
             float s = paneScale <= 0f ? 1f : paneScale;
@@ -56,10 +55,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Narrow title bar: hide category label, show icon-only chip (gallery_category).
-        /// Wide: chevron + label. Never leave truncated label — always sync icon + visibility.
-        /// </summary>
+        /// <summary>Narrow title bar: hide category label, show icon-only chip (gallery_category).</summary>
         private void SetCategoryQuickCompactMode(bool compact, float paneScale)
         {
             if (paneScale <= 0f) paneScale = 1f;
@@ -108,7 +104,6 @@ namespace VPB
                 }
             }
 
-            // Always sync sprite — compact can flip without dirty-gate if layout early-outs elsewhere.
             if (_categoryQuickArrowImage != null)
             {
                 try
@@ -129,7 +124,6 @@ namespace VPB
                 _categoryQuickLayoutLastScale = float.NaN;
         }
 
-        /// <summary>Keep category label stretched + middle-aligned inside title clip (survives scale/layout passes).</summary>
         private void SyncCategoryQuickTitleLabelRect()
         {
             if (titleText == null) return;
@@ -161,7 +155,6 @@ namespace VPB
 
             var hitImg = AddCategoryQuickRoundedBg(cqRoot, new Color(0f, 0f, 0f, 0.5f));
 
-            // Regular label-button: click label toggles list underneath.
             var headerBtn = cqRoot.AddComponent<Button>();
             headerBtn.transition = Selectable.Transition.None;
             headerBtn.targetGraphic = hitImg;
@@ -214,7 +207,6 @@ namespace VPB
             if (titleLe != null) titleLe.ignoreLayout = true;
             SyncCategoryQuickTitleLabelRect();
 
-            // Ensure title text reads like label (no arrow dependency).
             try
             {
                 var t = titleGO.GetComponent<Text>();
@@ -250,7 +242,6 @@ namespace VPB
             blkBtn.onClick.AddListener(() => SetCategoryQuickMenuVisible(false));
             _categoryQuickBlockerGO.SetActive(false);
 
-            // Keep menu out of titlebar masks/clips. Width matches QuickFilters popup (not title-bar chrome clamp).
             _categoryQuickMenuOuterGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickMenu", AnchorPresets.topLeft, new Vector2(GalleryUiDesignTokens.PopupMenuPanelWidthRef, 340f), new Vector2(60, CategoryQuickMenuTopOffsetY(1f)));
             var outerRT = _categoryQuickMenuOuterGO.GetComponent<RectTransform>();
 
@@ -258,11 +249,6 @@ namespace VPB
             // Flat panel (match CreatePopupMenuPanel). Rounding belongs on chrome chip + row buttons only.
             UI.AddImage(_categoryQuickMenuOuterGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
-            // No child Canvas / overrideSorting / SuperController.AddCanvas. Earlier attempts at all three
-            // either left the popup behind gallery rows in VR (overrideSorting unreliable for nested WorldSpace
-            // canvases) or broke raycast (z-position offset). Matching TitleCreatorDropdown's pattern: stay in
-            // the parent gallery canvas, rely on hierarchy sibling order (SetAsLastSibling on show) to render
-            // above rows. Within a single canvas, sibling order is the render order.
             try
             {
                 var cg = _categoryQuickMenuOuterGO.AddComponent<CanvasGroup>();
@@ -310,7 +296,6 @@ namespace VPB
             innerPaneScaleActions.Add(s => ApplyCategoryQuickChromeLayout(s));
         }
 
-        /// <summary>VR: gallery chrome docked to VaM menu strip (flush left when menu visible).</summary>
         private bool CategoryQuickSwitchUsesAnchoredTitleLayout()
         {
             bool vr = XrUtils.IsVrActive();
@@ -320,7 +305,6 @@ namespace VPB
             return IsVamMenuVisible();
         }
 
-        /// <summary>True: align category chrome with left window edge. False (floating desktop / floating VR): inset so resize handle stays usable.</summary>
         private bool CategoryQuickSwitchFlushLeftEdge()
         {
             if (CategoryQuickSwitchUsesAnchoredTitleLayout()) return true;
@@ -351,10 +335,7 @@ namespace VPB
             float leftInset = flushLeft
                 ? GalleryUiDesignTokens.BandPadRef * paneScale
                 : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * paneScale;
-            // Same height as Source/settings chips so label cannot peek above neighbours.
             float catH = GalleryUiDesignTokens.TitleBarChipRef * paneScale;
-            // Prefer labeled width (same as title-bar responsive), not ClampMax — Max made VR
-            // dropdown span resize→filter under smaller panes.
             float catLabeledW = Mathf.Clamp(TitleBarCategoryPreferredRef * paneScale,
                 TitleBarCategoryClampMinRef * paneScale, TitleBarCategoryClampMaxRef * paneScale);
             float catW = _categoryQuickCompact
@@ -380,7 +361,6 @@ namespace VPB
             ApplyCategoryQuickMenuRowsLayout(paneScale);
         }
 
-        /// <summary>Scale category quick-switch dropdown row fonts/heights without full rebuild.</summary>
         private void ApplyCategoryQuickMenuRowsLayout(float s)
         {
             if (_categoryQuickMenuContentGO == null) return;
@@ -396,9 +376,6 @@ namespace VPB
             int padH = Mathf.RoundToInt(10f * s);
             int padV = Mathf.RoundToInt(6f * s);
             int gap = Mathf.RoundToInt(10f * s);
-            // FontMin floor keeps fontSize high while rowH tracks raw scale — at low UI scale
-            // Wrap+Truncate then drops the only line (empty rows, visible chrome). Match header
-            // Overflow fix + keep row tall enough for floored font.
             int fontPt = GalleryUiMetrics.ScaledFontSize(
                 GalleryUiDesignTokens.PopupMenuRowFontLargeRef, s, GalleryUiDesignTokens.FontMinRef);
             float rowH = Mathf.Max(
@@ -468,8 +445,6 @@ namespace VPB
         private void SyncCategoryQuickSwitchChrome()
         {
             if (_categoryQuickChromeRootGO == null) return;
-            // Keep header category chip while Import sidebar is open: Import replaces the side
-            // Category column, so this dropdown is the remaining primary category nav (and exit path).
             bool show = !IsFilterActive;
             if (_categoryQuickChromeRootGO.activeSelf != show)
                 _categoryQuickChromeRootGO.SetActive(show);
@@ -498,8 +473,6 @@ namespace VPB
             {
                 if (eventData != null && TryPickCategoryQuickSwitchFromRaycast(eventData, out Gallery.Category cat))
                     QueueDeferredCategoryQuickPick(cat);
-                // Released on empty space during hold-browse: leave the menu open so the user can
-                // make a deliberate tap selection rather than forcing a full reopen cycle.
                 return;
             }
             if (!openedByHoldGesture && durationSeconds < CategoryQuickHoldOpenSeconds)
@@ -811,7 +784,6 @@ namespace VPB
             var cap = cat;
             btn.onClick.AddListener(() => ApplyCategoryQuickPick(cap));
 
-            // Match side tabs / tag-category modal rows (CreateUIButton path not used here).
             try
             {
                 var hb = row.AddComponent<UIHoverBorder>();
@@ -822,8 +794,6 @@ namespace VPB
 
             string numPrefix = keyboardDigitLabel >= 0 ? (keyboardDigitLabel == 0 ? "0." : keyboardDigitLabel + ".") : rowLabelNumber + ".";
 
-            // Overflow: Wrap+Truncate blanks when UI-scale pass leaves row shorter than one line
-            // (same class of bug as CategoryQuickTitleClip header label).
             var numT = UI.CreateLabel(row, numPrefix, GalleryUiDesignTokens.FontBodyRef, UI.PopupMutedText, TextAnchor.MiddleLeft,
                 HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, name: "Idx");
             var numLe = UI.AddLE(numT.gameObject, minWidth: 34, preferredWidth: 34);
@@ -914,7 +884,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Raycast target for hold\u2192release category selection on row.</summary>
     internal class CategoryQuickSwitchRowMarker : MonoBehaviour
     {
         public string CategoryName;

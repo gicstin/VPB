@@ -51,7 +51,6 @@ namespace VPB
                 MethodInfo disabling = AccessTools.Method(typeof(PostMagicUiCameraFix), nameof(CameraHookDisabling));
                 bool enablePatched = HasPatch(enable, enabled, false);
                 bool disablePatched = HasPatch(disable, disabling, true);
-                // Inspect Harmony ownership instead of retaining dynamic Types across VPB unpatch/reinitialization.
                 if (!enablePatched) harmony.Patch(enable, postfix: new HarmonyMethod(enabled));
                 if (!disablePatched) harmony.Patch(disable, prefix: new HarmonyMethod(disabling));
                 if (!enablePatched || !disablePatched)
@@ -82,7 +81,6 @@ namespace VPB
             {
                 int sharedBaseline;
                 if (!TryGetOtherOwner(__instance, ___mainCamera, ___uiCamera, out sharedBaseline)) return;
-                // Later hooks captured an already-separated UI mask; retain the first owner's original UI bits.
                 ___mainCullingMask = (___mainCullingMask & ~___uiMask) | (sharedBaseline & ___uiMask);
             }
             catch (Exception ex) { LogUtil.LogWarning("[VPB][VRUI] PostMagic UI baseline capture failed: " + ex.Message); }

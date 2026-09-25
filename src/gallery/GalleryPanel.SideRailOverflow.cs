@@ -9,8 +9,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Side-rail height fit: close zone/group gaps first, then collapse chips into “…”.
-
         private GameObject _leftSideRailOverflowBtnGO;
         private RectTransform _leftSideRailOverflowBtnRT;
         private GameObject _rightSideRailOverflowBtnGO;
@@ -75,17 +73,8 @@ namespace VPB
                 Vector2.zero);
         }
 
-        /// <summary>
-        /// Edge pad beyond title / footer bar for side-rail button centers.
-        /// Rails sit on pane edges — do NOT reserve InfoBar/toolbox height (that emptied
-        /// floating/VR rails into "…" while vertical space sat unused beside the strip).
-        /// </summary>
         private const float SideRailChromeEdgePadRef = GalleryUiDesignTokens.BandPadHRef;
 
-        /// <summary>
-        /// Free Y band for side-rail button centers (bg-local), and first↔last center span.
-        /// Top = title bar bottom; bottom = footer bar top. Ignores live detail-strip height.
-        /// </summary>
         private bool TryGetSideRailFreeBand(float scale, out float yMax, out float yMin, out float centerSpan)
         {
             yMax = 0f;
@@ -102,7 +91,6 @@ namespace VPB
             float btnHalf = GalleryUiDesignTokens.SideButtonSquareRef * scale * 0.5f;
             float pad = SideRailChromeEdgePadRef * scale;
 
-            // Fallback from design tokens when live chrome rects missing.
             float topEdge = half - GalleryUiDesignTokens.TitleBarHeightRef * scale - pad;
             float botEdge = -half + GalleryUiDesignTokens.FooterBarHeightRef * scale + pad;
 
@@ -141,7 +129,6 @@ namespace VPB
                 float mid = 0.5f * (yMax + yMin);
                 yMax = yMin = mid;
             }
-            // Room for first↔last center span (total stack extent is span + btnH).
             float btnH = GalleryUiDesignTokens.SideButtonSquareRef * scale;
             centerSpan = Mathf.Max(btnH, yMax - yMin);
             return true;
@@ -154,7 +141,6 @@ namespace VPB
             return 400f;
         }
 
-        /// <summary>Y of first (top) button center so stack sits in free band, not pane center.</summary>
         private float GetSideRailStackTopY(float stackHeight, float scale)
         {
             if (TryGetSideRailFreeBand(scale, out float yMax, out float yMin, out _))
@@ -253,7 +239,6 @@ namespace VPB
                 if (g2 != null) g2.alpha = a2;
                 if (g3 != null) g3.alpha = a3;
                 if (footerCg != null) footerCg.alpha = footerA;
-                // Re-assert intended side alpha (fade timer / transparency).
                 try
                 {
                     for (int i = 0; i < n; i++)
@@ -360,10 +345,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Fit side-rail stack to pane height: group gaps → flush spacing → overflow.
-        /// Writes spacing/groupGap used by UpdateListPositions.
-        /// </summary>
         private void ApplySideRailHeightFit(float scale, out float spacing, out float groupGap)
         {
             EnsureSideRailOverflowChrome();
@@ -739,7 +720,6 @@ namespace VPB
             }
             UI.ClampPopupMenuPanelX(panelRT, overlayRT, pad);
 
-            // Keep menu above tooltip/info bar (same clearance as footer overflow).
             float? bottomFloor = null;
             if (hoverPathRT != null && hoverPathRT.gameObject.activeInHierarchy)
             {
@@ -773,7 +753,6 @@ namespace VPB
                 PositionSideRailOverflowMenuPanel(panel as RectTransform);
         }
 
-        /// <summary>Top-dock horizontal side-button strip: squeeze gap then collapse into ….</summary>
         private void ApplyTopDockSideButtonsOverflowFit(float s, List<RectTransform> buttonList, SideButtonLayoutEntry[] layout, float availW, float btnSz, ref float gap)
         {
             if (buttonList == null || layout == null) return;
@@ -830,7 +809,7 @@ namespace VPB
                 if (rt == null || !rt.gameObject.activeSelf) continue;
                 n++;
             }
-            if (_sideRailOverflowCollapsedIdx.Count > 0) n++; // …
+            if (_sideRailOverflowCollapsedIdx.Count > 0) n++;
             if (n <= 0) return 0f;
             return n * btnSz + (n - 1) * g;
         }

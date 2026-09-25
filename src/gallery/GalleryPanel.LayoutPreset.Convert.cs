@@ -7,11 +7,7 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>
-        /// Produces a NEW preset in the other mode; the source is never touched. The translation is
-        /// lossy by nature — a screen-anchor ratio and a metre pose describe different things — so it
-        /// is explicit and named rather than something apply does silently.
-        /// </summary>
+        /// <summary>Produces a NEW preset in the other mode; the source is never touched.</summary>
         internal GalleryLayoutPreset ConvertLayoutPresetToOtherMode(GalleryLayoutPreset source)
         {
             if (source == null) return null;
@@ -50,7 +46,6 @@ namespace VPB
             return copy;
         }
 
-        /// <summary>VR has no docks: every pane floats, fanned out from the default viewing pose.</summary>
         private static void ConvertPanesToVr(GalleryLayoutPreset preset)
         {
             if (preset.Panes == null) return;
@@ -66,7 +61,6 @@ namespace VPB
                 p.DockSlot = (int)GalleryDockSide.None;
                 p.Collapsed = false;
 
-                // Fan alternately right/left of centre so pane 0 stays straight ahead.
                 int rank = (i + 1) / 2;
                 float sign = (i % 2 == 0) ? 1f : -1f;
                 float yawDeg = rank * stepDeg * sign;
@@ -148,7 +142,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Writes one preset as shareable JSON next to VPB.cfg.</summary>
         internal bool ExportLayoutPreset(GalleryLayoutPreset preset)
         {
             if (preset == null) return false;
@@ -177,7 +170,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Imports every *.vpblayout.json found in the export folder. Names are de-duplicated.</summary>
         internal int ImportLayoutPresets()
         {
             int added = 0;

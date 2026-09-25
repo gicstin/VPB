@@ -4,10 +4,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Sticky tool exclusivity + ambient mode chrome.
-    /// One sticky tool at a time; apply/hold always visible when active; Esc names next exit.
-    /// </summary>
     public partial class GalleryPanel
     {
         private enum StickyToolMode
@@ -40,20 +36,16 @@ namespace VPB
         private string _modeSemanticsBannerCacheKey;
         private static readonly Color ModeBannerToolBg = GalleryUiColorTokens.ModeToolBanner;
 
-        /// <summary>Sticky mode line under drag/temp status. Null when idle.</summary>
         private string ModeAmbientMsg { get { return _modeAmbientMsg; } }
 
         private bool IsImportStickyToolActive()
         {
-            // Docked side-column Import rewrites click/chrome (sticky).
-            // Floating Import is modeless — gallery browse stays fully live.
             return ImportSidebarOccupiesSideColumn;
         }
 
         private StickyToolMode GetActiveStickyToolMode()
         {
             // Esc ladder order for sticky tools (nested dialogs handled earlier).
-            // SubScene pick is nested under Scene Tools — owns sticky chrome as Creator.
             if (_stripKeepSubScenePickActive) return StickyToolMode.Creator;
             if (creatorModeActive) return StickyToolMode.Creator;
             if (_removeModeActive) return StickyToolMode.Remove;
@@ -97,11 +89,6 @@ namespace VPB
             return null;
         }
 
-        /// <summary>
-        /// Exit every sticky tool except <paramref name="keep"/>.
-        /// Call at the start of each sticky-tool enter path (after Try-On gate).
-        /// Try-On force-revert remains fallback; normal sticky switch uses Keep/Revert dialog.
-        /// </summary>
         private void ExitOtherStickyToolModes(StickyToolMode keep)
         {
             if (keep != StickyToolMode.Creator && (creatorModeActive || creatorModeStripBusy))
@@ -137,7 +124,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Force Hold/1-Click off (no idle check). Warm path.</summary>
         private void ForceClearArmedApplySemantics(bool toast)
         {
             bool clearedHold = false;
@@ -204,23 +190,17 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>True when Esc exits the active sticky tool (not 1-Click/Hold alone).</summary>
         private bool ModeAmbientEscExitsAny()
         {
             return GetActiveStickyToolMode() != StickyToolMode.None;
         }
 
-        /// <summary>True when Esc clears Hold / 1-Click apply semantics.</summary>
         private bool ApplySemanticsEscExitsAny()
         {
             if (holdToLaunchEnabled) return true;
             return ItemApplyMode == ApplyMode.SingleClick;
         }
 
-        /// <summary>
-        /// Esc: clear Hold-launch and/or 1-Click back to safe 2-Click default.
-        /// Only when no sticky tool owns Esc (sticky handlers run first).
-        /// </summary>
         private bool TryHandleApplySemanticsEsc()
         {
             if (!Input.GetKeyDown(KeyCode.Escape)) return false;
@@ -276,7 +256,6 @@ namespace VPB
             if (_modeAmbientCacheKey == keyStr)
             {
                 SyncModeSemanticsBanner(tool, applyLabel);
-                // Banner text stable — still refresh task chrome (selection/rail peers).
                 try { RefreshTaskChrome(force: false); } catch { }
                 return;
             }
@@ -321,16 +300,10 @@ namespace VPB
             _modeAmbientMsg = _modeAmbientSb.ToString();
             SyncModeSemanticsBanner(tool, applyLabel);
             try { InvalidateTaskChrome(); RefreshTaskChrome(force: true); } catch { }
-            // Sticky/armed change → rebuild tbox peers (cache key includes TaskChrome bits).
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
-        /// <summary>
-        /// Build status line: drag &gt; mode sticky (never blanked by toast) + optional toast.
-        /// Warm path — cached concat when mode+toast both set.
-        /// When mode banner visible, banner owns mode copy — status shows toast/drag only
-        /// (von Restorff: one primary mode surface).
-        /// </summary>
+        /// <summary>Build status line: drag &gt; mode sticky (never blanked by toast) + optional toast.</summary>
         private string ResolveStatusBarText(string drag, string toast, string mode)
         {
             if (drag != null) return drag;
@@ -374,8 +347,6 @@ namespace VPB
             _statusBarLastColor = want;
             statusBarText.color = want;
         }
-
-        // ── Near-grid mode banner (apply/hold + sticky tool) ───────────────
 
         private void CreateModeSemanticsBanner(GameObject parentGO)
         {
@@ -421,8 +392,6 @@ namespace VPB
 
         private void SyncModeSemanticsBanner(StickyToolMode tool, string applyLabel)
         {
-            // Dedicated action bars own Try-On copy — no duplicate top banner.
-            // Hold / 1-Click stay on status line only (no permanent band).
             bool dedicatedBar = tool == StickyToolMode.TryOn;
             bool show = tool != StickyToolMode.None && !dedicatedBar;
             string toolName = StickyToolDisplayName(tool);
@@ -564,7 +533,6 @@ namespace VPB
             try { _modeSemanticsBannerGO.transform.SetAsLastSibling(); } catch { }
         }
 
-        /// <summary>Esc ladder: exit Scene Eraser when gallery owns focus.</summary>
         private bool TryHandleRemoveModeEsc()
         {
             if (!_removeModeActive) return false;
@@ -573,7 +541,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Esc: revert + end Try-On session (safe exit, no commit).</summary>
         private bool TryHandleTryOnEsc()
         {
             if (!_tryOnActive) return false;
@@ -589,7 +556,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Esc: leave Cleanup list view.</summary>
         private bool TryHandleCleanupModeEsc()
         {
             if (!cleanupModeActive) return false;
@@ -606,7 +572,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Esc: close docked Import sidebar (float path handled separately).</summary>
         private bool TryHandleImportSidebarDockedEsc()
         {
             if (!importSidebarActive) return false;
@@ -616,7 +581,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Esc: clear grid selection when nothing else claimed Esc.</summary>
         private bool TryHandleClearSelectionEsc()
         {
             if (!Input.GetKeyDown(KeyCode.Escape)) return false;

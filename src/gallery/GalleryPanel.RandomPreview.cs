@@ -8,21 +8,13 @@ using MVR.FileManagement;
 
 namespace VPB
 {
-    /// <summary>
-    /// Panel side of random hover preview: sample from the same pool a random button would draw from,
-    /// hand out the preview thumbnail, then launch the exact entry the user saw. Sampling is by
-    /// rejection so no pool copy happens on the hover path. Also owns the toolbox overlay (dim +
-    /// centered card on the file grid).
-    /// </summary>
     public partial class GalleryPanel
     {
-        /// <summary>True when this panel is already listing <paramref name="categoryName"/> (null/empty = current view).</summary>
         internal bool QuickMenu_IsShowingRandomCategory(string categoryName)
         {
             if (string.IsNullOrEmpty(categoryName)) return true;
             string cur = currentCategoryTitle ?? "";
             if (string.Equals(cur, categoryName, StringComparison.OrdinalIgnoreCase)) return true;
-            // Same alias the launch path uses: quick-menu "Skin" is category "Person Skin" in some builds.
             if (string.Equals(categoryName, "Skin", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(cur, "Person Skin", StringComparison.OrdinalIgnoreCase))
                 return true;
@@ -57,13 +49,11 @@ namespace VPB
 
         private string _copiedRandomPoolFilterCaption;
 
-        /// <summary>Caption from the last <see cref="QuickMenu_CopyRandomPoolFromCurrentView"/> (watch reel). Null if unfiltered.</summary>
         internal string QuickMenu_CopiedRandomPoolFilterCaption
         {
             get { return _copiedRandomPoolFilterCaption; }
         }
 
-        /// <summary>Live caption for the view now showing. Null when random uses the unfiltered category set.</summary>
         internal string QuickMenu_FormatRandomPoolFilterCaption()
         {
             List<FileEntry> pool = GetRandomCandidatePool();
@@ -92,14 +82,14 @@ namespace VPB
                 if (total <= poolCount)
                 {
                     if (cat.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
-                        && clothingSubfilterCountAll > total)
-                        total = clothingSubfilterCountAll;
+                        && tagFacets.ClothingSubfilterCountAll > total)
+                        total = tagFacets.ClothingSubfilterCountAll;
                     else if (cat.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
-                        && hairSubfilterCountAll > total)
-                        total = hairSubfilterCountAll;
+                        && tagFacets.HairSubfilterCountAll > total)
+                        total = tagFacets.HairSubfilterCountAll;
                     else if (cat.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
-                        && appearanceSubfilterCountAll > total)
-                        total = appearanceSubfilterCountAll;
+                        && tagFacets.AppearanceSubfilterCountAll > total)
+                        total = tagFacets.AppearanceSubfilterCountAll;
                 }
             }
             catch { }
@@ -285,11 +275,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Bind a preview thumbnail to an arbitrary RawImage. Same tier as hover preview / detail strip:
-        /// denom 1 + Unity decode. Grid-column denom would hand back the tile-sized decode, so a small
-        /// pane made the preview card blurry even though the card itself never shrinks.
-        /// </summary>
         internal void QuickMenu_LoadPreviewThumbnail(FileEntry file, RawImage target)
         {
             if (target == null) return;
@@ -315,7 +300,6 @@ namespace VPB
             ClearThumbnailTarget(target);
         }
 
-        /// <summary>Short display name for the preview caption (file name, no extension, no package prefix).</summary>
         internal static string QuickMenu_GetPreviewLabel(FileEntry file)
         {
             if (file == null) return "";
@@ -335,11 +319,6 @@ namespace VPB
             return s;
         }
 
-        /// <summary>
-        /// Two-band preview caption in the grid's own shape: <paramref name="primary"/> is the leaf (or
-        /// sole package) name, <paramref name="secondary"/> the muted creator plus package line.
-        /// Warm path — runs once per hover draw, not per frame.
-        /// </summary>
         internal void QuickMenu_GetPreviewLabelLines(FileEntry file, out string primary, out string secondary)
         {
             primary = "";
@@ -370,7 +349,6 @@ namespace VPB
                 secondary = pkg ?? "";
         }
 
-        /// <summary>Launch one preselected entry from <paramref name="categoryName"/> (hover preview click).</summary>
         internal void QuickMenu_LoadPickedFromCategory(string categoryName, FileEntry file, bool preserveUi, bool preserveTarget)
         {
             try
@@ -390,19 +368,15 @@ namespace VPB
             catch { }
         }
 
-        // ---------------------------------------------------------------- toolbox overlay
-
         private const float TboxRandPreviewThumb = 380f;
         private const float TboxRandPreviewPad = 14f;
         private const float TboxRandPreviewLabelH = 26f;
         private const float TboxRandPreviewSubH = 20f;
         private const float TboxRandPreviewFilterH = 36f;
         private const int TboxRandPreviewFilterFont = 22;
-        /// <summary>Card is clipped by the grid viewport, so shrink to fit rather than overflow a small pane.</summary>
         private const float TboxRandPreviewHostMargin = 16f;
         private const float TboxRandPreviewMinThumb = 140f;
         private const float TboxRandPreviewDimAlpha = 0.55f;
-        // Absolute px at ChromeScale 1. Button fraction (0.22) of this card is a lozenge.
         private const float TboxRandPreviewCornerPx = 6f;
         private static readonly Color TboxRandPreviewThumbPlaceholder = new Color(0.25f, 0.25f, 0.25f, 0.55f);
 
@@ -624,7 +598,6 @@ namespace VPB
             TboxLayoutRandomPreviewCard();
         }
 
-        /// <summary>Live ChromeScale + corner sync. Hide immediately when the settings toggle is off.</summary>
         internal void TboxSyncRandomPreviewLiveScale()
         {
             if (!TboxRandomPreviewEnabled())
@@ -657,7 +630,6 @@ namespace VPB
                 && _tboxRandPreviewFilterStripRt.gameObject.activeSelf;
             float filterH = headerOn ? TboxRandPreviewFilterH * s : 0f;
 
-            // Root stretches the grid viewport, which masks: a card wider than the pane loses its edges.
             RectTransform hostRt = _tboxRandPreviewRootRt;
             // Rect is 0 until the first layout pass — clamping then would lock the card to the floor.
             if (hostRt != null && hostRt.rect.width > 1f && hostRt.rect.height > 1f)

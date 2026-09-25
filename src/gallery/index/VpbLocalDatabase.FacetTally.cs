@@ -20,7 +20,6 @@ namespace VPB
         {
             repacked = 0;
             unresolved = 0;
-            // Two-pass: collect while SELECT is open, then UPDATE; nested Prepare/Step on this connection wrapper is not safe.
             var categories = new List<string>();
             var pkgUids = new List<string>();
             var internalPaths = new List<string>();
@@ -78,7 +77,6 @@ namespace VPB
             return baseAttr | (isCustom ? ClothingAttrIsCustomFlag : 0);
         }
 
-        // Not lowercased: caller's dict is OrdinalIgnoreCase, matching the grid's family dict.
         private static void ParseUidFamilyVersion(string uid, out string family, out int version)
         {
             family = uid ?? "";
@@ -96,7 +94,6 @@ namespace VPB
 
         private static readonly string[,] s_LooseRoots =
         {
-            // root                        category    exts (split on |)
             { "Custom/Clothing",           "Clothing", "vam|vap" },
             { "Custom/Atom/Person/Clothing","Clothing", "vap"     },
             { "Saves/Person/Clothing",     "Clothing", "vam|vap" },
@@ -157,7 +154,6 @@ namespace VPB
                                 if (raw.Length == 0) continue;
                                 string norm = raw.Replace('\\', '/');
 
-                                // Category-by-root: use the pass category, not the classifier's kind.
                                 ClothingLoadingUtils.ResourceKind ck;
                                 ClothingLoadingUtils.ResourceGender cg;
                                 ClothingLoadingUtils.ClassifyClothingHairPath(norm, out ck, out cg);
@@ -206,7 +202,7 @@ namespace VPB
 
         internal struct ClothingChipCounts
         {
-            public int Default;    // f==0 (no chip active)
+            public int Default;
             public int Real;
             public int Presets;
             public int Custom;
@@ -218,7 +214,6 @@ namespace VPB
         }
 
         // sourceMode: 0=All, 1=Local-only, 2=VAR-only; loose rows are never version-filtered.
-        // pkgVersionFilter: PkgVersionFilterOff / NewestOnly / OldOnly (library-global pkg.is_newest).
         internal static bool TryQueryClothingChipCounts(
             string creatorFilter,
             int loadedState,
@@ -333,8 +328,7 @@ namespace VPB
 
                     int[] varCounts = new int[chips.Length];
 
-                    // cloth_attr unindexed (~11 values): C# classify per chip; list_path unique so COUNT(*) == COUNT(DISTINCT list_path).
-                    if (sourceMode != 1) // skip VAR when source=Local
+                    if (sourceMode != 1)
                     {
                         var rows = new List<ClothCountGroupRow>();
 
@@ -377,16 +371,14 @@ namespace VPB
                         {
                             var chip = chips[ci];
                             // Male/Female allows Unknown gender; VAR rows are never Custom/CustomPreset.
-                            // Version filter already applied in SQL via pkg.is_newest — tally all matching rows.
                             for (int i = 0; i < rows.Count; i++)
                                 if (ClothingPackedAttrMatchesSubfilter(rows[i].Attr, chip))
                                     varCounts[ci] += rows[i].Cnt;
                         }
                     }
 
-                    // Gate per chip via PassesClothingGalleryFiltersForPath to match what the grid shows for loose entries.
                     int[] looseCounts = new int[chips.Length];
-                    if (sourceMode != 2) // skip loose when source=VAR
+                    if (sourceMode != 2)
                     {
                         using (var st = conn.Prepare(
                             "SELECT internal_path FROM loose_cat_mem WHERE category='Clothing'"))

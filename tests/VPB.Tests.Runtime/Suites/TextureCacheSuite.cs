@@ -53,6 +53,44 @@ namespace VPB.Tests.Runtime
         }
 
         [VpbRuntimeTest]
+        public static void ABaseOnlyPayloadYieldsItsGeneratedMipChainForTheCacheUpgrade()
+        {
+            byte[] baseLevel = Rgba32Payload(Width, Height, 11);
+            Texture2D tex = TextureUtil.CreateTextureFromCachedRaw(
+                baseLevel, Width, Height, TextureFormat.RGBA32,
+                createMipMaps: true, linear: false, markNonReadable: false, forceReadable: false);
+            try
+            {
+                RuntimeAssert.True(tex != null, "CreateTextureFromCachedRaw returned null for a base-only RGBA32 payload.");
+                RuntimeAssert.True(TextureUtil.ShouldGenerateMipsOnApply(true, baseLevel.Length, Width, Height, TextureFormat.RGBA32),
+                    "A base-only RGBA32 payload no longer generates mips on Apply, so the mip chain upgrade never triggers.");
+
+                byte[] chain = tex.GetRawTextureData();
+                RuntimeAssert.Equal(TextureUtil.GetExpectedFullMipChainSize(Width, Height, TextureFormat.RGBA32), chain.Length,
+                    "The readable texture did not expose Unity's generated mip chain, so the cache upgrade would store a " +
+                    "payload that fails validation and every later load keeps regenerating mips on the main thread.");
+
+                tex.Apply(false, true);
+                bool stillReadable;
+                try
+                {
+                    tex.GetPixel(0, 0);
+                    stillReadable = true;
+                }
+                catch
+                {
+                    stillReadable = false;
+                }
+                RuntimeAssert.False(stillReadable,
+                    "The texture kept its CPU copy after the upgrade capture, doubling its memory for the session.");
+            }
+            finally
+            {
+                if (tex != null) UnityEngine.Object.DestroyImmediate(tex);
+            }
+        }
+
+        [VpbRuntimeTest]
         public static void AShortPayloadIsRefusedRatherThanPartiallyApplied()
         {
             Texture2D tex = NewTexture(Width, Height, false);

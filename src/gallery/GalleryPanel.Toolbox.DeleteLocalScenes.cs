@@ -25,7 +25,6 @@ namespace VPB
             return directoryFullPathTrimmed + Path.DirectorySeparatorChar;
         }
 
-        /// <summary>Whether <paramref name="pathFull"/> is inside or equal to <paramref name="ancestorFull"/> (directory tree). Safe for drive root and symlink-resolved paths.</summary>
         private static bool IsPathInsideOrEqualDirectory(string pathFull, string ancestorFull)
         {
             if (string.IsNullOrEmpty(pathFull) || string.IsNullOrEmpty(ancestorFull)) return false;
@@ -199,7 +198,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Moves scene JSON plus same-base .jpg/.png and optional .json.fav / .json.hide into <paramref name="deletedDir"/>.</summary>
         private void PerformLocalScenesDeleteMove(List<LocalSceneDeleteItem> items, string deletedDir, out int moved, out int failed, List<FileMoveUndoPair> undoOut = null)
         {
             moved = 0;

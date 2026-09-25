@@ -3,10 +3,6 @@ using MVR.FileManagement;
 
 namespace VPB
 {
-    /// <summary>
-    /// History / <c>item_usage</c> helpers for VaM-native load paths (file browser, Scene Loader triggers)
-    /// in addition to explicit gallery UI records.
-    /// </summary>
     internal static partial class VpbLocalDatabase
     {
         private const float HistoryRecordDedupeSeconds = 2.5f;
@@ -14,7 +10,6 @@ namespace VPB
         private static string _lastHistoryRecordKind = "";
         private static DateTime _lastHistoryRecordUtc = DateTime.MinValue;
 
-        /// <summary>Normalize a VaM load path / UID into an <c>item_usage.item_key</c>.</summary>
         internal static string BuildUsageKeyFromPath(string path)
         {
             if (string.IsNullOrEmpty(path)) return "";
@@ -36,10 +31,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Skip ephemeral / auto loads that must not appear in History
-        /// (temp merge scenes, default scene, empty browser callbacks).
-        /// </summary>
+        /// <summary>Skip ephemeral / auto loads that must not appear in History (temp merge scenes, default scene, empty browser callbacks).</summary>
         internal static bool ShouldSkipHistoryPath(string path)
         {
             if (string.IsNullOrEmpty(path)) return true;
@@ -58,7 +50,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Map VaM preset storable id → History kind (matches gallery UI kinds).</summary>
         internal static string KindFromPresetStorableId(string storableId)
         {
             if (string.IsNullOrEmpty(storableId)) return "item";
@@ -74,11 +65,6 @@ namespace VPB
             return "item";
         }
 
-        /// <summary>
-        /// Record History for a VaM load path. No-ops for skip paths and near-duplicate
-        /// (same key+kind within <see cref="HistoryRecordDedupeSeconds"/>) so gallery UI + hooks
-        /// do not double-count one user action.
-        /// </summary>
         internal static void TryRecordItemUseFromPath(string path, string kind)
         {
             if (ShouldSkipHistoryPath(path)) return;
@@ -87,7 +73,6 @@ namespace VPB
             TryRecordItemUse(key, kind ?? "");
         }
 
-        /// <summary>Returns true when this key+kind was recorded very recently (caller should skip).</summary>
         private static bool IsRecentHistoryDuplicate(string itemKey, string kind)
         {
             if (string.IsNullOrEmpty(itemKey)) return true;

@@ -497,5 +497,192 @@ namespace VPB.Tests
                 Assert.Equal(before, FileManager.GetPackageCount());
             }
         }
+
+        private static void PinForceLatest(bool forceAll, string excluded = "", bool forceExact = false)
+        {
+            HeadlessVam.OverrideSetting("ForceLatestAllDependencies", forceAll);
+            HeadlessVam.OverrideSetting("ForceLatestDependencies", false);
+            HeadlessVam.OverrideSetting("ForceLatestDependencyPackageGroups", "");
+            HeadlessVam.OverrideSetting("ForceLatestDependencyIgnorePackageGroups", excluded ?? "");
+            HeadlessVam.OverrideSetting("ForceExactPackageVersions", forceExact);
+            PackageReferenceVersionResolver.ClearActiveLoadReferrer();
+        }
+
+        [Fact]
+        public void AlwaysNewestLoadsTheNewestInstalledVersionInsteadOfAnInstalledOldPin()
+        {
+            using (var install = new TempInstall("fm_force_all"))
+            using (var library = new VamLibrary(install))
+            {
+                VarPackage one = library.AddScene("Creator", "Pack", 1);
+                VarPackage five = library.AddScene("Creator", "Pack", 5);
+                try
+                {
+                    PinForceLatest(false);
+                    Assert.Same(one, FileManager.GetPackageForDependency("Creator.Pack.1", false));
+
+                    PinForceLatest(true);
+                    Assert.Same(five, FileManager.GetPackageForDependency("Creator.Pack.1", false));
+                    Assert.Same(five, FileManager.ResolveDependency("Creator.Pack.1"));
+                    Assert.Same(five, FileManager.GetPackageForDependency("Creator.Pack.min1", false));
+                    Assert.True(FileManager.IsDependencySatisfiedByInstalled("Creator.Pack.1"));
+                }
+                finally
+                {
+                    PinForceLatest(false);
+                }
+            }
+        }
+
+        [Fact]
+        public void AlwaysNewestNeverSubstitutesAnOlderVersionForANewerMissingOne()
+        {
+            using (var install = new TempInstall("fm_force_no_downgrade"))
+            using (var library = new VamLibrary(install))
+            {
+                library.AddScene("Creator", "Pack", 2);
+                try
+                {
+                    PinForceLatest(true);
+                    Assert.Null(FileManager.ResolveDependency("Creator.Pack.9"));
+                    Assert.False(FileManager.IsDependencySatisfiedByInstalled("Creator.Pack.9"),
+                        "A scene needing Creator.Pack.9 must stay reported missing so the Hub fetch downloads it; "
+                        + "counting the installed .2 as satisfying it would load an outdated package silently.");
+                }
+                finally
+                {
+                    PinForceLatest(false);
+                }
+            }
+        }
+
+        [Fact]
+        public void ExcludedPackagesKeepTheirPinnedVersion()
+        {
+            using (var install = new TempInstall("fm_force_excluded"))
+            using (var library = new VamLibrary(install))
+            {
+                VarPackage one = library.AddScene("Creator", "Pack", 1);
+                library.AddScene("Creator", "Pack", 5);
+                VarPackage otherOne = library.AddScene("Other", "Pack", 1);
+                VarPackage otherThree = library.AddScene("Other", "Pack", 3);
+                try
+                {
+                    PinForceLatest(true, "creator.pack");
+                    Assert.Same(one, FileManager.GetPackageForDependency("Creator.Pack.1", false));
+                    Assert.Same(otherThree, FileManager.GetPackageForDependency("Other.Pack.1", false));
+
+                    PinForceLatest(true, "", forceExact: true);
+                    Assert.Same(otherOne, FileManager.GetPackageForDependency("Other.Pack.1", false));
+                }
+                finally
+                {
+                    PinForceLatest(false);
+                }
+            }
+        }
+
+        [Fact]
+        public void AlwaysNewestLeavesReferencesFromTheSamePackageGroupPinned()
+        {
+            using (var install = new TempInstall("fm_force_self"))
+            using (var library = new VamLibrary(install))
+            {
+                VarPackage one = library.AddScene("Creator", "Pack", 1);
+                library.AddScene("Creator", "Pack", 5);
+                try
+                {
+                    PinForceLatest(true);
+                    PackageReferenceVersionResolver.BeginReferrerContext("Creator.Pack.1");
+                    try
+                    {
+                        Assert.Same(one, FileManager.GetPackageForDependency("Creator.Pack.1", false));
+                    }
+                    finally
+                    {
+                        PackageReferenceVersionResolver.EndReferrerContext();
+                    }
+                }
+                finally
+                {
+                    PinForceLatest(false);
+                }
+            }
+        }
+
+        [Fact]
+        public void PackageIdentityLookupsIgnoreAlwaysNewest()
+        {
+            using (var install = new TempInstall("fm_force_identity"))
+            using (var library = new VamLibrary(install))
+            {
+                VarPackage one = library.AddScene("Creator", "Pack", 1);
+                library.AddScene("Creator", "Pack", 5);
+                try
+                {
+                    PinForceLatest(true);
+                    Assert.True(ReferenceEquals(one, FileManager.GetInstalledPackageOrDependency("Creator.Pack.1")),
+                        "Delete Packages and cleanup resolve the file to act on through this lookup; with Always newest on, "
+                        + "deleting Creator.Pack.1 would delete Creator.Pack.5 instead.");
+                }
+                finally
+                {
+                    PinForceLatest(false);
+                }
+            }
+        }
+
+        [Fact]
+        public void AlwaysNewestSkipsVersionsDisabledInVam()
+        {
+            using (var install = new TempInstall("fm_force_disabled"))
+            using (var library = new VamLibrary(install))
+            {
+                library.AddScene("Creator", "Pack", 1);
+                VarPackage three = library.AddScene("Creator", "Pack", 3);
+                VarPackage five = library.AddScene("Creator", "Pack", 5);
+                File.WriteAllText(five.Path + ".disabled", "");
+                try
+                {
+                    PinForceLatest(true);
+                    FileManager.ClearForcedEntryPresenceCache();
+                    Assert.True(ReferenceEquals(three, FileManager.GetPackageForDependency("Creator.Pack.1", false)),
+                        "VaM refuses to load a package disabled in its package manager; redirecting to it breaks the scene.");
+                }
+                finally
+                {
+                    PinForceLatest(false);
+                    FileManager.ClearForcedEntryPresenceCache();
+                }
+            }
+        }
+
+        [Fact]
+        public void AForcedUpgradeIsRefusedWhenTheNewestVersionLacksTheFile()
+        {
+            using (var install = new TempInstall("fm_force_entry"))
+            using (var library = new VamLibrary(install))
+            {
+                library.AddScene("Creator", "Pack", 1);
+                library.AddScene("Creator", "Pack", 5);
+                try
+                {
+                    PinForceLatest(true);
+                    FileManager.ClearForcedEntryPresenceCache();
+                    Assert.True(FileManager.ForcedTargetHasEntry("Creator.Pack.1", "Creator.Pack.5", ":/Saves/scene/Pack.json"));
+                    Assert.True(FileManager.ForcedTargetHasEntry("Creator.Pack.1", "Creator.Pack.5", ":/saves/SCENE/Pack.json"),
+                        "Zip entry lookups in VaM ignore case; a case difference must not block the upgrade.");
+                    Assert.False(FileManager.ForcedTargetHasEntry("Creator.Pack.1", "Creator.Pack.5", ":/Custom/Clothing/Female/Gone/Gone.vam"),
+                        "A file the newest version dropped would fail to load instead of loading from the installed pinned version.");
+                    Assert.True(FileManager.ForcedTargetHasEntry("Creator.Pack.9", "Creator.Pack.5", ":/Custom/Clothing/Female/Gone/Gone.vam"),
+                        "When the pinned version is not installed there is nothing better to keep.");
+                }
+                finally
+                {
+                    PinForceLatest(false);
+                    FileManager.ClearForcedEntryPresenceCache();
+                }
+            }
+        }
     }
 }

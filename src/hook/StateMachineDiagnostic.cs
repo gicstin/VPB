@@ -6,15 +6,7 @@ using SimpleJSON;
 
 namespace VPB
 {
-    // Diagnostic-only patches for issue #52: MacGruber StateMachine state list empty under VPB.
-    // Discriminates between three hypotheses on the same atom:
-    //   1. Atom.lastRestoredData gets overwritten between plugin#0 and plugin#1 CreateScriptController
-    //   2. JSONStorable.insideRestore is false when plugin#0 CreateScriptController runs (RestoreFromLast skipped)
-    //   3. JSONStorable.RestoreFromJSON receives a thinned JSON node for plugin#0
-    //
-    // Gated by Settings.Instance.LogStateMachineApply; harmless overhead when disabled (early-return).
-    // Filter is narrow: only logs for atoms whose uid contains "_logic" and storables whose id contains
-    // "MacGruber.StateMachine". Reduces volume to a handful of lines per scene load.
+    // Issue #52 diagnostics for MacGruber StateMachine restore; gated by LogStateMachineApply, filtered to _logic atoms.
     public static class StateMachineDiagnostic
     {
         const string AtomFilterFragment = "_logic";
@@ -87,9 +79,6 @@ namespace VPB
                         postfix: new HarmonyMethod(typeof(StateMachineDiagnostic), nameof(PostJsRestoreFromJSON)));
                 }
 
-                // LateRestoreFromJSON is the call that populates MacGruber's myStates list. The base
-                // method gets called from inside MacGruber's override; patching the base IL fires our
-                // postfix on every base call including via overrides. Empty jc here means states clear.
                 var mJsLateRestore = AccessTools.Method(
                     typeof(JSONStorable),
                     "LateRestoreFromJSON",
@@ -101,9 +90,7 @@ namespace VPB
                         postfix: new HarmonyMethod(typeof(StateMachineDiagnostic), nameof(PostJsLateRestoreFromJSON)));
                 }
 
-                // Atom.LateRestore drives the second-pass storable cleanup that calls
-                // LateRestoreFromJSON(new JSONClass()) on any storable not found in the jc.
-                // Logging entry lets us correlate which atom.LateRestore call wiped plugin#0.
+                // Logs Atom.LateRestore entry to correlate which call wiped plugin#0.
                 var mAtomLateRestore = AccessTools.Method(
                     typeof(Atom),
                     "LateRestore",
@@ -286,8 +273,6 @@ namespace VPB
             int jcKeys = 0;
             try { jcKeys = jc.Count; } catch { }
 
-            // Bracket with caller frame to identify which Atom.LateRestore branch invoked us
-            // (the "missing storable cleanup" branch passes new JSONClass() so jcKeys=0).
             string stackHint = "";
             try
             {

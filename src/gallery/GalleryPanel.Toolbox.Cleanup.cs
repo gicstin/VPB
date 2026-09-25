@@ -99,7 +99,7 @@ namespace VPB
 
         private bool cleanupModeActive;
         private int cleanupFilterMode;
-        private int cleanupStaleBucketMode; // 0=All, 1=1w, 2=2w, 3=1m, 4=2m, 5=6m
+        private int cleanupStaleBucketMode;
         private bool cleanupScanInProgress;
         private bool cleanupSideHostIsLeft;
         private ContentType? cleanupPrevHostContent;
@@ -116,8 +116,7 @@ namespace VPB
         private readonly Dictionary<string, CleanupHashCacheEntry> cleanupHashCacheByPath =
             new Dictionary<string, CleanupHashCacheEntry>(StringComparer.OrdinalIgnoreCase);
 
-        // Splits the previously-aggregated "var=" scan timer into stale-cache vs var vs hash so one run
-        // pinpoints the bottleneck. Stopwatch ticks accumulated here, converted to ms at report time.
+        // Splits the previously-aggregated "var=" scan timer into stale-cache vs var vs hash so one run pinpoints the bottleneck.
         private long _clDiagStaleQueryTicks;
         private int _clDiagStaleRows;
         private long _clDiagStaleFileExistsTicks;
@@ -181,7 +180,6 @@ namespace VPB
 
         private void RecordCleanupHashSample(string path, long bytes, double ms)
         {
-            // Keep the most expensive hashed files so the report names exactly which large VARs cost.
             const int Cap = 15;
             try
             {
@@ -298,7 +296,6 @@ namespace VPB
             version = -1;
             if (string.IsNullOrEmpty(fileStem)) return false;
 
-            // MyScene_v12 / MyScene-12 / MyScene.12
             Match m = Regex.Match(fileStem, @"^(.*?)(?:[_\.\-]v?([0-9]+))$", RegexOptions.IgnoreCase);
             if (!m.Success) return false;
 
@@ -324,8 +321,6 @@ namespace VPB
         private static bool IsLocalMarkerFile(string normalizedPath)
         {
             if (string.IsNullOrEmpty(normalizedPath)) return false;
-            // Keep favorites/hide sidecar markers out of cleanup detection:
-            // they are metadata files managed by existing systems and can be zero-byte by design.
             return normalizedPath.EndsWith(".fav", StringComparison.OrdinalIgnoreCase)
                 || normalizedPath.EndsWith(".hide", StringComparison.OrdinalIgnoreCase)
                 || normalizedPath.EndsWith(".json.fav", StringComparison.OrdinalIgnoreCase)
@@ -342,7 +337,6 @@ namespace VPB
         private static int GetDuplicateKeepRank(string normalizedPath)
         {
             if (string.IsNullOrEmpty(normalizedPath)) return int.MaxValue;
-            // Keep AddonPackages when present; prefer deleting outside AddonPackages (e.g. AllPackages).
             if (normalizedPath.IndexOf("/AddonPackages/", StringComparison.OrdinalIgnoreCase) >= 0) return 0;
             if (normalizedPath.IndexOf("/AllPackages/", StringComparison.OrdinalIgnoreCase) >= 0) return 2;
             return 1;
@@ -427,8 +421,7 @@ namespace VPB
             var result = new Dictionary<string, List<CleanupCandidate>>(StringComparer.OrdinalIgnoreCase);
             if (candidates == null || candidates.Count <= 1) return result;
 
-            // Bucket by on-disk length (a stat, no read); only same-size files can be byte-identical, so
-            // unique-size files never get hashed in the second pass.
+            // Bucket by on-disk length (a stat, no read); only same-size files can be byte-identical.
             var bySize = new Dictionary<long, List<CleanupCandidate>>();
             for (int i = 0; i < candidates.Count; i++)
             {
@@ -532,7 +525,7 @@ namespace VPB
 
         private bool TryLoadCleanupCandidatesFromCache(bool testMode)
         {
-            if (testMode) return false; // Shift+Cleanup should always force a fresh scan.
+            if (testMode) return false;
             if (cleanupCandidatesCachedSnapshot == null || cleanupCandidatesCachedSnapshot.Count == 0) return false;
             long nowClock = TryGetCleanupScanClockBinary();
             if (nowClock == long.MinValue || cleanupCandidatesCachedScanClockBinary == long.MinValue) return false;
@@ -629,8 +622,6 @@ namespace VPB
         {
             try
             {
-                // Logic: older than 1 week (unless testMode). Hit count is tracked but not used for staleness.
-                // UI can further bucket-filter (1w/2w/1m/2m/6m) without rescanning.
                 int days = testMode ? 0 : 7;
 
                 long olderThanBinary = DateTime.UtcNow.AddDays(-days).ToBinary();
@@ -671,7 +662,6 @@ namespace VPB
                                     break;
                                 }
 
-                                // Exempt if package has star rating > 3
                                 int r = 0;
                                 long rtT0 = Stopwatch.GetTimestamp();
                                 try { r = RatingsManager.Instance != null ? RatingsManager.Instance.GetRating(uid) : 0; } catch { r = 0; }
@@ -940,7 +930,6 @@ namespace VPB
                     {
                         long len = 0;
                         try { len = new FileInfo(norm).Length; } catch { len = 0; }
-                        // Guard large files to keep global cleanup responsive.
                         if (len > 0 && len <= 4L * 1024L * 1024L)
                         {
                             string json = File.ReadAllText(norm);
@@ -966,7 +955,6 @@ namespace VPB
                         c.Reasons.Add("Scene JSON parse failed");
                     }
                 }
-
             }
 
             foreach (var kvp in byFileName)
@@ -1271,7 +1259,6 @@ namespace VPB
                 SaveCleanupCandidatesToCache();
             }
 
-            // Exclude status may change independently of package refresh.
             RefreshCleanupExcludedKeyCache();
             for (int i = 0; i < cleanupCandidatesAll.Count; i++)
             {
@@ -1340,8 +1327,6 @@ namespace VPB
                 total, dup, old, dmg, stale);
         }
 
-        // Cleanup view is a temporary task-oriented list. Keep the user's original layout
-        // and restore it once cleanup mode exits.
         private bool cleanupTemporaryLayoutSessionActive;
         private GalleryLayoutMode cleanupTemporaryPrevLayoutMode;
 
@@ -1593,7 +1578,7 @@ namespace VPB
                     else
                     {
                         cacheUsage.TryDelete(c.SourcePath);
-                        moved = true; // Already gone
+                        moved = true;
                         return true;
                     }
                 }
@@ -1640,7 +1625,6 @@ namespace VPB
             moved = true;
             dstPath = dst;
 
-            // Local scene sidecars are moved together when possible.
             if (c.SourceKind == CleanupCandidateSourceKind.LocalScene)
             {
                 try

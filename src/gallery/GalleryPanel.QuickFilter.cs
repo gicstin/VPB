@@ -25,10 +25,6 @@ namespace VPB
             return CaptureQuickFilterState(null);
         }
 
-        /// <param name="preferredName">
-        /// Optional display name (e.g. text typed in presets list search — Postel: honor mistaken name intent).
-        /// Empty → suggest from live filter tokens.
-        /// </param>
         public QuickFilterEntry CaptureQuickFilterState(string preferredName)
         {
             var entry = new QuickFilterEntry();
@@ -64,10 +60,6 @@ namespace VPB
             return entry;
         }
 
-        /// <summary>
-        /// Cold-path name for new presets: search / creator / tags / category.
-        /// Uniquify with " 2", " 3"…; empty filters fall back to Preset#N.
-        /// </summary>
         private static string BuildSuggestedQuickFilterName(QuickFilterEntry entry, HashSet<string> existingNames)
         {
             if (existingNames == null)
@@ -96,7 +88,6 @@ namespace VPB
             if (string.IsNullOrEmpty(raw)) return;
             string t = raw.Trim();
             if (t.Length == 0) return;
-            // Collapse internal whitespace (cold path — rare).
             if (t.IndexOf('\n') >= 0 || t.IndexOf('\t') >= 0)
                 t = t.Replace('\n', ' ').Replace('\t', ' ');
             while (t.IndexOf("  ", StringComparison.Ordinal) >= 0)
@@ -183,21 +174,14 @@ namespace VPB
             ApplyQuickFilterState(entry, announce, quietUi: false);
         }
 
-        /// <param name="quietUi">
-        /// Background randomize: mutate category + filter fields and refresh lists without
-        /// title/side-tab/layout thrash. Caller must bookend with quiet gallery refresh.
-        /// </param>
         public void ApplyQuickFilterState(QuickFilterEntry entry, bool announce, bool quietUi)
         {
             if (entry == null) return;
 
-            // Drop pending keystroke search refresh — otherwise debounce can fire mid-apply
-            // and briefly widen the list (search restored then wiped by stale empty apply).
             try { CancelTitleSearchSqlDebounce(); } catch { }
             try { CancelTitleSearchInMemoryDebounce(); } catch { }
 
             // Merged: OR-combine all leaf filters for browse (not first-only).
-            // Dice still expands leaves in FilterRandomizer — does not pass IsMerged here.
             if (entry.IsMerged && entry.MergeMembers != null && entry.MergeMembers.Count > 0)
             {
                 var leaves = new List<QuickFilterEntry>(entry.MergeMembers.Count);
@@ -235,7 +219,6 @@ namespace VPB
                 return;
             }
 
-            // 1. Restore Category
             if (!string.IsNullOrEmpty(entry.CategoryPath))
             {
                 Gallery.Category? cat = null;
@@ -272,7 +255,6 @@ namespace VPB
 
             // 2. Restore full filter state (scene/appearance local-only, untagged, subfilters, etc.)
             ApplyCategoryFilterState(CategoryFilterStateFromQuickFilterEntry(entry), restoreUserTagFilter: true, quietUi: quietUi);
-            // Preset Source All/Local/.var always applies (Independent: this category; Synced: shared live value).
             ApplyQuickFilterGlobalSourceFilter(entry, quietUi);
             try { ReconcileAutoGenderForCurrentTarget(); } catch { }
 
@@ -332,16 +314,10 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// After merged browse apply: union folder prefixes from every leaf category into
-        /// <see cref="currentPaths"/> so multi-category merges show all members' items.
-        /// Returns true when paths changed (caller should refresh).
-        /// </summary>
         private bool ExpandCurrentPathsFromMergeLeaves(IList<QuickFilterEntry> leaves)
         {
             if (leaves == null || leaves.Count < 2 || categories == null) return false;
 
-            // Defensive copy — category.paths may be shared with live currentPaths.
             var merged = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (currentPaths != null)
@@ -571,10 +547,6 @@ namespace VPB
             return state;
         }
 
-        /// <summary>
-        /// Warm path: set title-bar Source from preset without RefreshFilesAndTabs
-        /// (caller already refreshes). Clears Local linger when preset is All.
-        /// </summary>
         private void ApplyQuickFilterGlobalSourceFilter(QuickFilterEntry entry, bool quietUi)
         {
             VPBConfig.GlobalSourceFilterValue desired = VPBConfig.GlobalSourceFilterValue.All;
@@ -591,7 +563,6 @@ namespace VPB
                 }
             }
 
-            // Mirror ApplyGlobalSourceFilterValue: Local and creator filters are mutually exclusive.
             if (desired == VPBConfig.GlobalSourceFilterValue.Local && HasCreatorFilter())
             {
                 ClearCreatorFilters();
@@ -622,7 +593,6 @@ namespace VPB
             SyncQuickFilterToggleState();
         }
 
-        /// <summary>ALT+F — open/close floating filter-presets window (detach if needed; hide keeps float).</summary>
         public void ToggleFloatingQuickFilters()
         {
             if (quickFiltersUI == null) return;

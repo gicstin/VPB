@@ -7,12 +7,6 @@ using System.Text;
 
 namespace VPB
 {
-    /// <summary>
-    /// Loads the official SQLite native DLL (<c>sqlite3.dll</c>) with <see cref="LoadLibrary"/>, then binds entry points via <see cref="GetProcAddress"/>.
-    /// Mono does not resolve <c>DllImport("sqlite3")</c> to a module loaded only by <c>LoadLibrary</c> (DllNotFoundException), so we never P/Invoke the short name.
-    /// Do not place <c>sqlite3.dll</c> under <c>BepInEx\scripts</c> — VaM's Script Engine loads every .dll there as managed IL and will throw BadImageFormatException.
-    /// Default deploy: <c>BepInEx\plugins\VPB\sqlite3.dll</c> under the VaM install folder (see PostBuild in csproj).
-    /// </summary>
     internal static class VpbSqlite3
     {
         internal const int SqliteRow = 100;
@@ -29,7 +23,6 @@ namespace VPB
         /// <summary>Absolute <c>Cache\VPB</c> (rebuildable cache + legacy sqlite3.dll / DB migrate source); set on main thread for workers. Durable gallery DB lives under <c>Saves\PluginData\VPB</c>.</summary>
         private static string s_CacheVpbDirectory;
         private static bool s_LoggedSqliteLoadDetail;
-        /// <summary>Module handle from <see cref="LoadLibrary"/>; kept for process lifetime once bound.</summary>
         private static IntPtr s_sqliteModule;
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -279,11 +272,7 @@ namespace VPB
             try { if (s_interrupt != null) s_interrupt(h); } catch { }
         }
 
-        /// <summary>
-        /// Abort every in-flight statement so no thread stays parked inside native sqlite3_step at quit.
-        /// Mono cannot preempt a thread inside a P/Invoke, so a blocked writer would otherwise hold the
-        /// process open past teardown. Interrupted writes roll back; the index rebuilds next launch.
-        /// </summary>
+        /// <summary>Abort every in-flight statement so no thread stays parked inside native sqlite3_step at quit.</summary>
         internal static void InterruptAllForShutdown()
         {
             s_ShutdownInterrupt = true;

@@ -50,7 +50,6 @@ namespace VPB
             return GalleryConsolidateCreatorNamesEnabled ? "|consolidate" : "";
         }
 
-        /// <summary>Creator filter for SQLite / scans (case folding handled in SQL when consolidation is on).</summary>
         private string GetCreatorFilterForQueries()
         {
             return currentCreator ?? "";

@@ -248,9 +248,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Removes entries excluded by the package-hide filter from the visible list and grid without rescanning.
-        /// </summary>
         private void RemoveCurrentGalleryEntriesMatchingHideFilter()
         {
             if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
@@ -560,8 +557,6 @@ namespace VPB
                 ShowTemporaryStatus("Clear autoinstall failed. See log.", 2f);
             }
         }
-
-        // ─── Scan Whitelist toolbox actions ───────────────────────────────────────
 
         private void TboxScanWhitelistTemporaryForSelection()
         {

@@ -7,16 +7,7 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// Filter-preset randomizer: apply saved filter set, wait for refresh, LoadRandom, optionally restore UI.
-    /// Warm path — not per-frame. Reuses <see cref="ApplyQuickFilterState"/> + <see cref="LoadRandom"/>.
-    /// With preserveUi, runs as quiet background refresh (frozen grid, no overlay / layout thrash).
-    /// Merged presets run each leaf member in order (e.g. clothing then pose).
-    /// Multi-member Replace: full family wipe once (ClothingItem is region-only otherwise), then Add
-    /// subsequent members so the rolled set stacks on a clean wardrobe.
-    /// Single clothing/hair dice: region replace only — keep other-category garments.
-    /// Rapid re-dice / merge: drain deferred clothing applies before wipe and between wear steps.
-    /// </summary>
+    /// <summary>Filter-preset randomizer: apply filter set, refresh, LoadRandom, optionally restore UI; merged presets run members in order.</summary>
     public partial class GalleryPanel
     {
         private Coroutine _filterRandomizeCo;
@@ -25,10 +16,6 @@ namespace VPB
         // Cached yields — warm path; avoid per-wait alloc (Unity scripting strategies).
         private static readonly WaitForEndOfFrame s_FilterRandWaitEof = new WaitForEndOfFrame();
 
-        /// <summary>
-        /// Random load from a saved filter preset. Default restores previous gallery view after load
-        /// so browsing context stays put (background randomize).
-        /// </summary>
         public void RandomizeFromFilterPreset(QuickFilterEntry entry, bool preserveUi = true)
         {
             if (entry == null) return;
@@ -44,7 +31,6 @@ namespace VPB
                 {
                     try { EndQuietGalleryRefresh(); } catch { _quietGalleryRefresh = false; _quietDisplayFiles.Clear(); }
                 }
-                // Force-clear sticky override + abort deferred clothing/hair from superseded LoadRandom.
                 try { ClearDragDropReplaceOverride(); } catch { }
                 try { InvalidateClothingApplySerial(); } catch { }
                 _filterRandomizeGen++;
@@ -99,8 +85,6 @@ namespace VPB
             _quietGalleryRefresh = false;
             _quietDisplayFiles.Clear();
 
-            // Restore normal bind. Do not Refresh/SetItemCount — frozen cells already match
-            // pre-randomize view; a rebind here can flash if hide-follow-up was skipped.
             if (recyclingGrid != null && currentFilteredFiles != null)
             {
                 recyclingGrid.onBindItem = (go, index) =>
@@ -136,10 +120,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Drain deferred clothing/hair applies (serial-invalidated or just finished).
-        /// Lets superseded toggles hit serial checks and End before wipe/load of next dice.
-        /// </summary>
         private IEnumerator WaitForClothingApplySettle(int gen)
         {
             // One frame so StartCoroutine work can BeginClothingApplyWork before we poll.
@@ -162,14 +142,10 @@ namespace VPB
             yield return null;
         }
 
-        /// <summary>
-        /// Clothing / hair category for merged-random replace-once semantics.
-        /// </summary>
         private static int ClassifyFilterWearFamily(QuickFilterEntry step, string categoryTitle, string categoryPath)
         {
             if (step != null)
             {
-                // Subfilter bits survive even when title/path strings are empty on leaf snapshots.
                 if (step.HairSubfilter != 0) return 2;
                 if (step.ClothingSubfilter != 0) return 1;
             }
@@ -185,17 +161,13 @@ namespace VPB
 
             if (t.IndexOf("hair", StringComparison.Ordinal) >= 0
                 || p.IndexOf("/hair", StringComparison.Ordinal) >= 0)
-                return 2; // hair
+                return 2;
             if (t.IndexOf("clothing", StringComparison.Ordinal) >= 0
                 || p.IndexOf("/clothing", StringComparison.Ordinal) >= 0)
-                return 1; // clothing
+                return 1;
             return 0;
         }
 
-        /// <summary>
-        /// When Replace ON for a merged set: first clothing/hair member → replace, later same family → add.
-        /// Non-wear members leave null (honor config). Never force-add over Replace for unclassified steps.
-        /// </summary>
         private static bool? ResolveMultiReplaceOverride(
             bool wantReplace,
             int family,
@@ -224,11 +196,7 @@ namespace VPB
             return null;
         }
 
-        /// <summary>
-        /// Full family wipe before first merged clothing/hair member with Replace ON.
-        /// ClothingItem path is region-only — without this, later Add members stack on old wardrobe.
-        /// Single-preset dice must NOT call this (keep other-category garments).
-        /// </summary>
+        /// <summary>Full family wipe before first merged clothing/hair member with Replace ON.</summary>
         private void WipeWearFamilyForFilterRandom(int family)
         {
             Atom target = null;
@@ -288,7 +256,6 @@ namespace VPB
                 BeginQuietGalleryRefresh();
             }
 
-            // Snapshot persisted replace flag (getter may later return override).
             bool wantReplace = VPBConfig.Instance != null && VPBConfig.Instance.DragDropReplaceMode;
             bool clothingReplaceUsed = false;
             bool hairReplaceUsed = false;
@@ -326,8 +293,6 @@ namespace VPB
                         continue;
                     }
 
-                    // Merged + Replace: first wear member wipe+replace, later same family force Add.
-                    // Single preset: null override → region replace from config (keep other categories).
                     bool? replaceOverride = null;
                     int family = ClassifyFilterWearFamily(step, currentCategoryTitle, currentPath);
                     bool wipeFamily = false;
@@ -386,8 +351,6 @@ namespace VPB
                     if (!string.IsNullOrEmpty(loadedName))
                         loadedNames.Add(loadedName);
 
-                    // Wear loads often defer (preset wait / catalog retry). Drain before next leaf
-                    // or before UI restore so rapid re-dice and merge Add see stable geometry.
                     if (family == 1 || family == 2)
                     {
                         yield return WaitForClothingApplySettle(gen);
@@ -430,7 +393,6 @@ namespace VPB
             }
             finally
             {
-                // Token-scoped — superseded run cannot wipe a newer override owner.
                 try { EndDragDropReplaceOverride(gen); } catch { }
                 if (preserveUi)
                 {

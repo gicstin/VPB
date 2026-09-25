@@ -67,19 +67,12 @@ namespace VPB
 			return string.IsNullOrEmpty(file) ? null : file;
 		}
 
-		private static string ResolveVarRelPathForUid(string uid)
+		internal static string ResolveVarRelPathForUid(string uid)
 		{
 			if (string.IsNullOrEmpty(uid)) return null;
 			try
 			{
 				VarPackage pkg = FileManager.GetPackage(uid, false);
-				if (pkg != null && !string.IsNullOrEmpty(pkg.Path))
-					return pkg.Path.Replace('\\', '/');
-			}
-			catch { }
-			try
-			{
-				VarPackage pkg = FileManager.GetPackageForDependency(uid, false);
 				if (pkg != null && !string.IsNullOrEmpty(pkg.Path))
 					return pkg.Path.Replace('\\', '/');
 			}

@@ -22,7 +22,6 @@ namespace VPB
 			protected set { _packageStore = value; }
 		}
 
-		/// <summary>When set, <see cref="Package"/> is resolved on first use via <see cref="FileManager.TryResolveVarPackageForIndexedGalleryRow"/>.</summary>
 		private string _deferredPackageUid;
 		private string _deferredVarPathHint;
 
@@ -32,10 +31,8 @@ namespace VPB
 		/// <summary>Per-uid <c>pkg.first_scanned</c> from SQLite; avoids resolving <see cref="Package"/> for DateAdded/DateUpdated sort.</summary>
 		private long _galleryIndexedFirstScannedTicks = long.MinValue;
 
-		/// <summary>NTFS creation time from SQLite <c>pkg.pctime</c>; bounds package New/Updated dates.</summary>
 		private long _galleryIndexedFileCreationTicks = long.MinValue;
 
-		/// <summary>When set (History grid), exact <c>item_usage.item_key</c> for deletes (matches usage tracking keys).</summary>
 		private string _galleryItemUsageKey;
 
 		public string GalleryItemUsageKey => _galleryItemUsageKey;
@@ -75,9 +72,6 @@ namespace VPB
 		{
 		}
 
-		/// <summary>
-		/// Gallery fast path: listing fields come from SQLite; <see cref="Package"/> is resolved lazily when the file is opened or other package state is needed.
-		/// </summary>
 		public VarFileEntry(string packageUid, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, string indexedVarPathHint)
 			: this(packageUid, entryName, lastWriteTime, size, indexedGalleryPath, indexedVarPathHint, long.MinValue)
 		{
@@ -102,7 +96,6 @@ namespace VPB
 			base.Size = size;
 		}
 
-		/// <summary>Gallery fast path with first_scanned for DateAdded/DateUpdated sort. Delegates to the standard ctor then sets the scan timestamp.</summary>
 		public VarFileEntry(string packageUid, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, string indexedVarPathHint, long packageCreationTicksOrMin, long firstScannedTicksOrMin, string galleryItemUsageKey = null)
 			: this(packageUid, entryName, lastWriteTime, size, indexedGalleryPath, indexedVarPathHint, packageCreationTicksOrMin, galleryItemUsageKey)
 		{
@@ -115,7 +108,6 @@ namespace VPB
 			_galleryIndexedFileCreationTicks = packageFileCreationTicksOrMin;
 		}
 
-		/// <summary>Package UID for this row (deferred or resolved), for matching scoped path refresh.</summary>
 		internal string GetRowPackageUid()
 		{
 			if (_deferredPackageUid != null) return _deferredPackageUid;
@@ -222,8 +214,8 @@ namespace VPB
 			return new VarFileEntryStream(this);
 		}
 
-		public List<string> ClothingTags;// = new List<string>();
-		public List<string> HairTags;// = new List<string>();
+		public List<string> ClothingTags;
+		public List<string> HairTags;
 
 		public override FileEntryStreamReader OpenStreamReader()
 		{
@@ -291,16 +283,15 @@ namespace VPB
 			return !string.IsNullOrEmpty(InternalPath);
 		}
 
-
 		public override bool IsInstalled()
 		{
 			EnsurePackageResolved();
 			if (_packageStore == null) return false;
-			if(_packageStore.Path.StartsWith("AddonPackages/"))
+			if(_packageStore.Path.StartsWith("AddonPackages/", StringComparison.Ordinal))
             {
 				return File.Exists(_packageStore.Path);
             }
-			else if (_packageStore.Path.StartsWith("AllPackages/"))
+			else if (_packageStore.Path.StartsWith("AllPackages/", StringComparison.Ordinal))
             {
 				return File.Exists("AddonPackages" + _packageStore.Path.Substring("AllPackages".Length));
             }
@@ -324,8 +315,7 @@ namespace VPB
 			string key = _packageStore.Uid;
 			SetAutoInstallInternal(key, b);
 
-			// Do not call InstallSelf() here: moving AllPackages → AddonPackages is deferred to
-			// VamHookPlugin.TryAutoInstall() on the next process launch (faster UI; one batch I/O).
+			// No InstallSelf here; the move is deferred to TryAutoInstall on next launch.
 			return false;
 		}
 
@@ -343,10 +333,7 @@ namespace VPB
 			InvalidateUidLowerInvariantCache();
 		}
 
-		/// <summary>
-		/// Sync <see cref="FileEntry.Path"/> from <see cref="FileManager"/> after a path-only move (AllPackages ↔ AddonPackages).
-		/// Resolves deferred SQLite-backed rows when possible so <see cref="RefreshDisplayPathsFromPackage"/> can run.
-		/// </summary>
+		/// <summary>Sync Path from FileManager after a path-only move (AllPackages ↔ AddonPackages).</summary>
 		public bool TryRefreshPathsFromLivePackage()
 		{
 			if (_packageStore != null)
@@ -367,7 +354,5 @@ namespace VPB
 			Exists = true;
 			return true;
 		}
-
 	}
-
 }

@@ -3,9 +3,6 @@ using UnityEngine;
 
 namespace VPB
 {
-    // Toggle: Settings.LogPerfDiagnostics (BepInEx config "Logging.LogPerfDiagnostics").
-    // Counter sites check the cached bool, so when off the cost is one branch per site.
-    // Cache is refreshed once per VamHookPlugin.Update tick.
     static class VpbPerfDiag
     {
         public static bool CachedEnabled;
@@ -23,8 +20,6 @@ namespace VPB
         public static long UserTagPinnedRebuild;
         public static long TooltipAttach;
         // File-hook activity, for attributing a stalled frame to the on-demand path vs VaM itself.
-        // fxHook/getVar = FileExists/GetVarFileEntry postfix calls, fxHeavy/getVarHeavy = those that ran
-        // the on-demand resolve, scriptCtrl = plugin creates.
         public static long FileExistsHook;
         public static long FileExistsHookHeavy;
         public static long GetVarEntryHook;
@@ -70,7 +65,6 @@ namespace VPB
             {
                 if (!CachedEnabled)
                 {
-                    // Keep baseline current while disabled so the first enabled tick doesn't dump a giant catch-up delta.
                     _lastQmRefresh = QmRefresh;
                     _lastQmIconCreate = QmIconCreate;
                     _lastQmIconSwap = QmIconSwap;
@@ -142,9 +136,6 @@ namespace VPB
                 _lastGetVarEntryHookHeavy = GetVarEntryHookHeavy;
                 _lastScriptCtrlCreate = ScriptCtrlCreate;
 
-                // Snapshot panel state. `gallSubtreeActive` counts panels whose UI subtree is currently
-                // active (Phase 3); the diff vs gallVis surfaces transition windows where canvas just
-                // toggled but the SetActive call hasn't propagated yet.
                 int panels = 0, vis = 0, hid = 0, subtree = 0;
                 try
                 {

@@ -2,19 +2,10 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>
-    /// WorldSpace UI that must ignore <see cref="SuperController.worldScale"/> — same space as native mainHUD
-    /// and VPB assignable quick-menu buttons (<c>mainHUD</c> / attach point, outside <c>worldScaleTransform</c>).
-    /// </summary>
     internal static class VpbWorldSpaceUiScale
     {
-        /// <summary>World meters per UI pixel at design scale (VaM WorldSpace canvas convention).</summary>
         public const float MetersPerUiPixel = 0.001f;
 
-        /// <summary>
-        /// Unscaled HUD space (outside <c>worldScaleTransform</c>), same chain as assignable buttons on mainHUD.
-        /// Prefer attach point so gallery is not SetActive-tied to mainHUD visibility.
-        /// </summary>
         public static Transform GetPlayerUiRoot()
         {
             SuperController sc = SuperController.singleton;
@@ -23,7 +14,6 @@ namespace VPB
             if (sc.mainHUDAttachPoint != null)
                 return sc.mainHUDAttachPoint;
 
-            // Same parent as mainHUD if attach missing — still outside world scale.
             if (sc.mainHUD != null && sc.mainHUD.parent != null)
                 return sc.mainHUD.parent;
 
@@ -33,10 +23,7 @@ namespace VPB
             return null;
         }
 
-        /// <summary>
-        /// Parent into player UI space and lock localScale to <see cref="MetersPerUiPixel"/>.
-        /// Preserves world pose. No-op when already parented with correct scale.
-        /// </summary>
+        /// <summary>Parent into player UI space and lock localScale to MetersPerUiPixel.</summary>
         public static void AttachToPlayerUiSpace(Transform tf)
         {
             if (tf == null) return;
@@ -53,9 +40,7 @@ namespace VPB
             {
                 Vector3 pos = tf.position;
                 Quaternion rot = tf.rotation;
-                // worldPositionStays: keep pose while leaving worldScaleTransform (if any).
                 tf.SetParent(root, true);
-                // Parent lossy is ~1 in HUD space; force design meters-per-pixel (may correct baked scale).
                 ApplyMetersPerPixelLocalScale(tf);
                 tf.position = pos;
                 tf.rotation = rot;
@@ -65,7 +50,6 @@ namespace VPB
                 ApplyMetersPerPixelLocalScale(tf);
             }
 
-            // Match native / assignable-button UI layer when possible.
             try
             {
                 SuperController sc = SuperController.singleton;
@@ -75,7 +59,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Leave player UI space (e.g. switch to ScreenSpaceOverlay fixed dock).</summary>
         public static void DetachToSceneRoot(Transform tf)
         {
             if (tf == null) return;
@@ -98,10 +81,6 @@ namespace VPB
             tf.localScale = new Vector3(s, s, s);
         }
 
-        /// <summary>
-        /// Attach + meters-per-pixel scale. Pass the transform that owns world pose
-        /// (gallery canvas, or context-menu root — never a child while parent is rotated).
-        /// </summary>
         public static void ApplyConstantWorldScale(Transform tf)
         {
             AttachToPlayerUiSpace(tf);

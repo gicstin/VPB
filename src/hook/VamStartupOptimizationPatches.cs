@@ -3,7 +3,6 @@ using HarmonyLib;
 
 namespace VPB
 {
-    /// <summary>VaM cold-start Harmony hooks (SyncVamX skips live in <see cref="VamStartupProfilerPatches"/>).</summary>
     internal static class VamStartupOptimizationPatches
     {
         public static void Apply(Harmony harmony)
@@ -18,6 +17,8 @@ namespace VPB
                 try { LogUtil.LogWarning(VamStartupOptimizations.LogTag + " optimization PatchAll partial: " + ex.Message); }
                 catch { }
             }
+            VamNativePackageListing.Apply(harmony);
+            VamPathFastPaths.Apply(harmony);
         }
     }
 }

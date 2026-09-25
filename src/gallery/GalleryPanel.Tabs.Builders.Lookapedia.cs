@@ -85,7 +85,6 @@ namespace VPB
             RetireLookFacetSideRail(remapOpenPane: true);
         }
 
-        /// <summary>Pack facets moved into Tags. Hide leftover rail chips; remap an open Lookapedia pane to Tags.</summary>
         private void RetireLookFacetSideRail(bool remapOpenPane)
         {
             if (leftLookFacetSideBtnGO != null && leftLookFacetSideBtnGO.activeSelf)
@@ -106,7 +105,6 @@ namespace VPB
             try { UpdateSideButtonPositions(); } catch { }
         }
 
-        /// <summary>Command palette / expert path: open Tags and expand the relevant pack bucket.</summary>
         private void OpenUserTagsForPackFacet()
         {
             if (LookFacetSubjectModeAvailable())

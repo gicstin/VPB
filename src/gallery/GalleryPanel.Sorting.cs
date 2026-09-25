@@ -60,7 +60,6 @@ namespace VPB
             return r;
         }
 
-        /// <summary>Star-count tab filter (Filter menu). Empty filter = pass.</summary>
         private bool PassesStarCountFilter(int rating)
         {
             if (string.IsNullOrEmpty(currentRatingFilter)) return true;
@@ -74,10 +73,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Title-bar ★ presence + star-count tab (single GetRating). Used by <see cref="PassesFilters"/>
-        /// including History so ★ chrome matches visible rows.
-        /// </summary>
         private bool PassesLiveStarFilters(FileEntry entry)
         {
             if (_ratingPresenceFilterMode == RatingPresenceFilterMode.Off
@@ -93,12 +88,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// After item ratings mutate: prune rows that fail rating filters (Not rated / Rated only / star tab / search),
-        /// else rebind badge visuals. Skips full <see cref="RefreshFiles"/> (same pattern as user-tag prune).
-        /// Selection moves to a surviving neighbor before prune so detail strip stays populated.
-        /// Prefer overloads that pass mutated rows — avoids O(n) PassesFilters over whole grid.
-        /// </summary>
+        /// <summary>After item ratings mutate: prune rows that fail rating filters (Not rated / Rated only / star tab / search).</summary>
         internal void AfterItemRatingsMutated()
         {
             AfterItemRatingsMutatedEntries(null);
@@ -176,11 +166,6 @@ namespace VPB
             try { NotifyPluginsFloatRatingChanged(); } catch { }
         }
 
-        /// <summary>
-        /// Drop visible rows that no longer pass rating presence / star / search-status filters.
-        /// Only evaluates mutated hints (or selection fallback) — not the full grid.
-        /// Keeps filter/search base snapshots intact so clearing ★ can restore rows without RefreshFiles.
-        /// </summary>
         private bool TryPruneVisibleGridAfterRatingChange(IList<FileEntry> mutatedHint)
         {
             if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return false;
@@ -206,7 +191,6 @@ namespace VPB
                 FileEntry hint = hints[h];
                 if (hint == null) continue;
 
-                // Resolve to the list instance (hint may be a different FileEntry with same identity).
                 string hintKey = GetSelectionIdentityKey(hint, historyBrowse);
                 FileEntry visible = null;
                 if (!string.IsNullOrEmpty(hintKey))
@@ -216,7 +200,6 @@ namespace VPB
                 }
                 if (visible == null)
                 {
-                    // Same-ref fast path when identity key empty / not found.
                     for (int i = 0; i < currentFilteredFiles.Count; i++)
                     {
                         if (ReferenceEquals(currentFilteredFiles[i], hint))
@@ -242,8 +225,7 @@ namespace VPB
 
             try { ReselectBeforeRatingPrune(removeRefs, removeKeys, historyBrowse); } catch { }
 
-            // Visible + selection only. Do not hollow topSearchBaseFiles / filterSearchBaseFiles —
-            // clearing ★ / presence rebuilds the view from those bases.
+            // Visible + selection only.
             RemoveFileEntriesFromLists(currentFilteredFiles, removeRefs);
             RemoveFileEntriesFromLists(lastFilteredFiles, removeRefs);
             try { InvalidateGalleryPreHideFileListSnapshot(); } catch { }
@@ -265,10 +247,7 @@ namespace VPB
             return !string.IsNullOrEmpty(k) && removeKeys.Contains(k);
         }
 
-        /// <summary>
-        /// Before prune: keep surviving multi-select, or move single/empty selection to nearest survivor
-        /// (prefer next, else previous). Last surviving item → clear selection.
-        /// </summary>
+        /// <summary>Before prune: keep surviving multi-select, or move single/empty selection to nearest survivor (prefer next, else previous).</summary>
         private void ReselectBeforeRatingPrune(
             HashSet<FileEntry> removeRefs,
             HashSet<string> removeKeys,
@@ -346,11 +325,9 @@ namespace VPB
                 return;
             }
 
-            // All selected rows leave the filter — pick nearest survivor.
             int pivot = anchorRemovedIdx >= 0 ? anchorRemovedIdx : firstRemovedSelIdx;
             if (pivot < 0)
             {
-                // Rated an unselected? Should not reach here (anySelectedRemoved). Fallback: first remove.
                 for (int i = 0; i < currentFilteredFiles.Count; i++)
                 {
                     if (IsFileRemovedForRatingPrune(currentFilteredFiles[i], removeRefs, removeKeys, historyBrowse))
@@ -413,7 +390,6 @@ namespace VPB
             if (selectedFilePaths == null || selectedFilePaths.Count == 0) return;
             if (removeKeys == null || removeKeys.Count == 0) return;
 
-            // selectedFilePaths may use Path while removeKeys use identity — rebuild from selectedFiles.
             selectedFilePaths.Clear();
             if (selectedFiles == null) return;
             bool historyBrowse = activeContentType == ContentType.History;
@@ -463,10 +439,7 @@ namespace VPB
                 "Cycle: Rated only → Not rated → Off. Right-click clears.");
         }
 
-        /// <summary>
-        /// Primary click cycles Off → RatedOnly → UnratedOnly → Off.
-        /// VR laser only fires left-click — full cycle must live on primary.
-        /// </summary>
+        /// <summary>Primary click cycles Off → RatedOnly → UnratedOnly → Off.</summary>
         private void ToggleRatingSort()
         {
             RatingPresenceFilterMode next;
@@ -481,7 +454,6 @@ namespace VPB
             ApplyRatingSortFilterChange(showStatus: true);
         }
 
-        /// <summary>Right-click on ★ while armed: clear without advancing cycle.</summary>
         private void DisableRatingSortFilterIfEnabled()
         {
             if (_ratingPresenceFilterMode == RatingPresenceFilterMode.Off) return;
@@ -615,7 +587,6 @@ namespace VPB
             return state;
         }
 
-        // Overload: Old method for backward compatibility
         private void CycleSort(string context, Text buttonText)
         {
             CycleSort(context, buttonText, null);
@@ -636,7 +607,6 @@ namespace VPB
             CommitSortTypeChange(context, nextType, typeText, dirText);
         }
 
-        /// <summary>Applies a new sort type with the same default directions and refresh behavior as <see cref="CycleSort"/>.</summary>
         private void CommitSortTypeChange(string context, SortType newType, Text typeText, Text dirText)
         {
             if (!IsSortTypeValid(context, newType)) return;
@@ -689,8 +659,7 @@ namespace VPB
                     bool prevExclusive = false;
                     bool nextExclusive = false;
 
-                    // Exclusive "only" modes prune the list in-place. Switching to/from them must rebuild the base list,
-                    // otherwise the user can't "clear" the mode without changing categories.
+                    // Exclusive "only" modes prune the list in-place.
                     if (prevExclusive || nextExclusive)
                     {
                         RefreshFiles(keepScroll: false);
@@ -705,10 +674,6 @@ namespace VPB
             else UpdateTabs();
         }
 
-        /// <summary>
-        /// Re-sorts the loaded file list and refreshes the recycling grid without re-running
-        /// <see cref="GalleryPanel.RefreshFiles"/> (package scan / coroutine), then resets to top.
-        /// </summary>
         private bool TryReapplyFilesSortWithoutFullRefresh()
         {
             if (!hasLoadedContent || currentFilteredFiles == null || recyclingGrid == null) return false;
@@ -828,7 +793,6 @@ namespace VPB
             if (sidePaneSortMenuRoot != null || backgroundBoxGO == null) return;
 
             sidePaneSortMenuRoot = UI.CreatePopupMenuRoot(backgroundBoxGO, "SidePaneSortMenu", CloseSidePaneSortMenu);
-            // Anchors / position are set at open-time based on which button was clicked.
             sidePaneSortMenuPanelGO = UI.CreatePopupMenuPanel(
                 sidePaneSortMenuRoot, "SidePaneSortMenuPanel",
                 AnchorPresets.topLeft, new Vector2(240f, 50f), new Vector2(10f, -95f));
@@ -951,7 +915,6 @@ namespace VPB
             sidePaneSortMenuContext = context ?? "";
             RebuildSidePaneSortMenuOptions(sidePaneSortMenuContext);
 
-            // Position directly under the clicked sort button.
             bool isRight = false;
             try { isRight = anchorButtonRT != null && anchorButtonRT.anchorMin.x > 0.5f; } catch { isRight = false; }
             float sc = ChromeScale;
@@ -1092,14 +1055,12 @@ namespace VPB
         {
             if (context == "Files")
             {
-                // Hidden / Always loaded / Loaded / Unloaded live on Filter button.
                 return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated
                     || type == SortType.DateAdded || type == SortType.DateUpdated
                     || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.UsageCount
                     || type == SortType.Random
                     || (IsHubSortType(type) && VpbLocalDatabase.DataPackPacksConfigured())
-                    // Prefer-sort still used by Always-loaded / Unused Filter cycles (not shown in sort menu).
                     || type == SortType.AutoInstall;
             }
             else if (context == "Creator")
@@ -1118,7 +1079,6 @@ namespace VPB
             return context == "Category" || context == "Creator" || context == "Lookapedia" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags";
         }
 
-        /// <summary>Upper side pane: name A→Z, name Z→A, count low→high, count high→low (same icons as scene file sort).</summary>
         private static void SidePaneFourModeToState(int mode, out SortType type, out SortDirection dir)
         {
             switch (mode)
@@ -1158,7 +1118,6 @@ namespace VPB
             ApplySidePaneFourModeSort(ctx, ty, d);
         }
 
-        /// <summary>Lower split row (tags / hub tags): same 4-mode cycle as upper pane, persisted as <c>Tags</c>.</summary>
         private void CycleSidePaneSubTagSort()
         {
             const string ctx = "Tags";
@@ -1179,7 +1138,6 @@ namespace VPB
             UpdateTabs();
         }
 
-        /// <summary>Upper side sort + tag sub-row: one place for vpb_icons vs legacy text.</summary>
         private void SyncSidePaneTopSortButtonVisuals()
         {
             if (leftSortBtn != null && leftActiveContent.HasValue && !ContentTypeSuppressesSideSort(leftActiveContent.Value))
@@ -1248,7 +1206,6 @@ namespace VPB
             }
         }
 
-        // Overload: Old method for combined button
         private void UpdateSortButtonText(Text t, SortState state)
         {
             if (t == null) return;
@@ -1285,7 +1242,6 @@ namespace VPB
             t.text = symbol + arrow;
         }
 
-        // New method: Update separate type and direction buttons
         private void UpdateSortButtonText(Text typeText, Text dirText, SortState state)
         {
             if (typeText != null)
@@ -1327,7 +1283,6 @@ namespace VPB
                 dirText.text = arrow;
             }
 
-            // Swap sort-direction icon sprite
             if (fileSortDirIconImage != null)
             {
                 Sprite target = state.Direction == SortDirection.Ascending ? fileSortDirAscSprite : fileSortDirDescSprite;

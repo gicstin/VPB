@@ -13,6 +13,5 @@ namespace VPB
         {
             // VPB.HubResourcePackage.DownloadComplete registers the package; avoid duplicate refresh here.
         }
-
     }
 }

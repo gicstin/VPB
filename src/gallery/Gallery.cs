@@ -19,7 +19,6 @@ namespace VPB
         private DateTime lastObservedPackageRefreshTime = DateTime.MinValue;
         private bool _hasHadInitialRefresh = false;
         
-        // Suppress auto-refresh when gallery is loading content (to preserve scroll position and state)
         private static bool suppressAutoRefresh = false;
         private static readonly object suppressLock = new object();
         public static void SuppressAutoRefresh(bool suppress) 
@@ -54,12 +53,9 @@ namespace VPB
             public List<string> paths;
         }
 
-        /// <summary>Gallery category that lists every indexed VAR internal path (see <c>cat_mem</c> EVERYTHING rows) plus loose-disk roots.</summary>
         public const string EverythingCategoryName = "EVERYTHING";
-        /// <summary>Non-file extension token; matches all extensions in refresh / index logic.</summary>
         public const string EverythingExtensionToken = "vpbeverything";
 
-        /// <summary>Extensions used when enumerating loose files on disk for <see cref="EverythingCategoryName"/> (VAR internals already cover package files).</summary>
         public static readonly string[] EverythingLooseDiskExtensions = new[]
         {
             "json", "vam", "vap", "var",
@@ -85,10 +81,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Non-file extension tokens used as category markers (not real internal-path suffixes).
-        /// Must not be applied as <c>LIKE %.<paramref name="extensionToken"/></c> filters.
-        /// </summary>
         public static bool IsGalleryPseudoExtensionToken(string extensionToken)
         {
             if (string.IsNullOrEmpty(extensionToken)) return false;
@@ -99,7 +91,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Preview textures inside VARs; omitted from EVERYTHING grid/index.</summary>
         public static bool IsEverythingExcludedPreviewExtension(string extensionNoDot)
         {
             if (string.IsNullOrEmpty(extensionNoDot)) return false;
@@ -108,7 +99,6 @@ namespace VPB
                 || string.Equals(extensionNoDot, "png", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>Returns <paramref name="splitExtensions"/> or, for EVERYTHING mode, <see cref="EverythingLooseDiskExtensions"/> for SafeGetFiles loops.</summary>
         public static string[] DiskScanExtensionsOrEverything(string currentExtensionPipe, string[] splitExtensions)
         {
             if (IsEverythingCategoryExtension(currentExtensionPipe) && splitExtensions != null && splitExtensions.Length == 1
@@ -117,10 +107,6 @@ namespace VPB
             return splitExtensions;
         }
 
-        /// <summary>
-        /// Resolves VaM-relative category roots (e.g. <c>Saves/scene</c>) to on-disk paths for
-        /// <see cref="FileManager.SafeGetFiles"/> / <see cref="Directory.Exists"/> (matches VaM cwd semantics).
-        /// </summary>
         public static void CollectLooseDiskSearchRoots(List<string> dest, IList<string> categoryPaths, string categoryPath)
         {
             if (dest == null) return;
@@ -163,10 +149,8 @@ namespace VPB
 
         private List<Category> categories = new List<Category>();
         
-        // Panels management
         private List<GalleryPanel> panels = new List<GalleryPanel>();
 
-        // IsVisible property checks if ANY panel is visible
         public bool IsVisible 
         {
             get 
@@ -179,14 +163,9 @@ namespace VPB
         public List<GalleryPanel> Panels => panels;
         public bool AnyPanelHasLoadedContent => panels.Any(p => p != null && p.HasLoadedContent);
 
-        /// <summary>
-        /// True after the first gallery open this VaM process.
-        /// Cold start (process launch): use <see cref="VPBConfig.InitialGalleryCategory"/> + default side rails.
-        /// In-session Close/reopen: use Last* browse memory (category, rails, scroll, filters).
-        /// </summary>
+        /// <summary>True after the first gallery open this VaM process.</summary>
         public static bool SessionInitialCategoryApplied { get; private set; }
 
-        /// <summary>Alias — in-session browse memory is active (not a fresh VaM process).</summary>
         public static bool SessionBrowseMemoryActive => SessionInitialCategoryApplied;
 
         public static void MarkSessionInitialCategoryApplied()
@@ -194,9 +173,6 @@ namespace VPB
             SessionInitialCategoryApplied = true;
         }
 
-        /// <summary>
-        /// Unhide existing panes and keep browse place. True when at least one pane had loaded content.
-        /// </summary>
         public bool TryRestoreExistingPanelsKeepingState()
         {
             if (panels == null || panels.Count == 0) return false;
@@ -241,10 +217,7 @@ namespace VPB
         {
             // Apply saved cap after SQLite path setup; waiting for a new import leaves oversized upgrades untouched.
             VpbLocalDatabase.RequestSceneAtomCacheTrim();
-            // Do not rebuild the SQLite index here: FileManager.lastPackageRefreshTime is often still
-            // DateTime.MinValue, which would publish scan stamp 0 and disable TryQueryGalleryCategoryRows until
-            // a full rebuild runs after a real package refresh. Rebuild is scheduled from
-            // OnFileManagerRefresh / SetCategories instead.
+            // Do not rebuild the SQLite index here: FileManager.lastPackageRefreshTime is often still DateTime.MinValue.
         }
 
         void Update()
@@ -273,8 +246,6 @@ namespace VPB
 
         private IEnumerator InitCharacterGenderMapEarly()
         {
-            // Start immediately so this heavy task can overlap with startup work.
-            // READY still waits on completion via StartupSettleUpdate pending checks.
             VamStartupProfiler.BeginScope("gender_map_load");
             yield return JSONExtensions.LoadCharacterGenderMap();
             VamStartupProfiler.EndScope("gender_map_load");
@@ -333,7 +304,6 @@ namespace VPB
             try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
             // Ignore broadcasts that did not advance the package scan clock (e.g. legacy global pings).
-            // Still run when a pending add/remove delta exists (hub download under manual-refresh-only).
             if (lastObservedPackageRefreshTime != DateTime.MinValue &&
                 refreshTime <= lastObservedPackageRefreshTime &&
                 !pendingPackageDelta)
@@ -354,7 +324,6 @@ namespace VPB
             else
                 GalleryFileListSnapshotCache.InvalidateAll();
 
-            // Process-lifetime static L1 caches: drop on package library change (stability / bound memory).
             try { GallerySortManager.ClearSceneDependencyCache(); } catch { }
             try { PackageHidePrefs.InvalidateSceneJsonCountCache(); } catch { }
             try
@@ -369,8 +338,6 @@ namespace VPB
             try { LooseVapGenderProbe.InvalidateMemoryCache(); } catch { }
             try { VpbLocalDatabase.ClearDeepDirMtimeCache(); } catch { }
 
-            // VAR scan rewrote per-uid cslist-referenced rows; drop the in-memory set so the
-            // next read sees the fresh SQLite state.
             try
             {
                 if (panels != null)
@@ -465,7 +432,6 @@ namespace VPB
                     DateTime refreshTime = DateTime.MinValue;
                     try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
-                    // Snapshot the delta lists so all panels see the same set of changes.
                     List<VarPackage> added = null;
                     List<VarPackage> removed = null;
                     try
@@ -579,12 +545,10 @@ namespace VPB
             }
             if (panels.Contains(p)) panels.Remove(p);
             GalleryPanel.MarkSessionArrangementDirty();
-            // All panes gone → next create is primary again (browse memory restores).
             if (panels.Count == 0)
                 _nextExtraPanelSlot = 1;
         }
 
-        /// <summary>True when a live pane still owns this stable id (dock-slot self-heal).</summary>
         internal static bool HasPanelWithId(string panelId)
         {
             if (string.IsNullOrEmpty(panelId) || singleton == null || singleton.panels == null) return false;
@@ -599,8 +563,6 @@ namespace VPB
 
         public void Init()
         {
-            // VamHookPlugin calls this on hotkey if panels are hidden or empty.
-            // We no longer automatically create a pane here to avoid ghosts.
         }
 
         public void SetCategories(List<Category> cats)
@@ -610,9 +572,6 @@ namespace VPB
             try { hydrated = VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory(); } catch { }
             if (!hydrated)
             {
-                // Cold start: package inventory is still registering when categories first bind.
-                // Forcing rebuild here bypasses sqlRestore and blocks startup for ~15s. Scan completion
-                // calls ScheduleGalleryIndexUpdateAfterScan() once registry is complete.
                 bool startupReady = false;
                 try { startupReady = LogUtil.IsStartupReadyLogged() || LogUtil.IsReadyLogged(); } catch { }
                 if (startupReady)
@@ -660,14 +619,12 @@ namespace VPB
 
         private static System.Diagnostics.Stopwatch _pendingCreatePaneStopwatch;
 
-        /// <summary>Call when the user invokes Create Gallery Pane (hotkey / UI) so timing includes category init until the new pane's grid is ready.</summary>
         public static void MarkCreateGalleryPaneRequested()
         {
             _pendingCreatePaneStopwatch = System.Diagnostics.Stopwatch.StartNew();
             _createPaneTakeMenuAnchor = true;
         }
 
-        /// <summary>Create-gallery (QM/hotkey) docks the new pane to the VaM menu. Closing a free pane does not reclaim the slot.</summary>
         private static bool _createPaneTakeMenuAnchor;
 
         internal static System.Diagnostics.Stopwatch TakePendingCreatePaneStopwatch()
@@ -677,12 +634,10 @@ namespace VPB
             return s;
         }
 
-        /// <summary>Returns the new pane so callers can keep acting on it (e.g. park it on a dock edge).</summary>
         public GalleryPanel ClonePanel(GalleryPanel original, bool toRight)
         {
             if (panels.Count >= MaxPanels)
             {
-                // Optionally warn user?
                 return null;
             }
 
@@ -693,7 +648,6 @@ namespace VPB
             p.importSidebarInitAsClone = true;
 
             p.Init();
-            // Force floating mode for clones
             p.SetFixedLocally(false);
             p.ReleaseVamMenuAnchor();
             
@@ -710,20 +664,16 @@ namespace VPB
             p.CopyImportSidebarStateFrom(original);
             p.SetFollowMode(original.GetFollowMode());
             
-            // Sync size
             RectTransform originalRT = original.GetBackgroundRT();
             RectTransform pRT = p.GetBackgroundRT();
             if (originalRT != null && pRT != null)
             {
-                // If original is fixed, it has no sizeDelta (it's stretched in ScreenSpaceOverlay).
-                // Clones are always floating, so use the default 1200x800 size for fixed-to-floating clones.
                 if (original.isFixedLocally)
                     pRT.sizeDelta = new Vector2(1200, 800);
                 else
                     pRT.sizeDelta = originalRT.sizeDelta;
             }
 
-            // Sync position and rotation
             Camera cam = Camera.main;
             Transform camTrans = cam != null ? cam.transform : null;
             if (camTrans == null && SuperController.singleton != null && SuperController.singleton.centerCameraTarget != null)
@@ -736,15 +686,12 @@ namespace VPB
                 
                 if (original.isFixedLocally)
                 {
-                    // Fixed panels are in ScreenSpaceOverlay. Place the floating clone directly 1.5m in front of the user.
-                    // We don't use the "cloning principle" (offset) here because the source is screen-pinned, not world-placed.
                     toOriginal = camTrans.forward * 1.5f;
                     p.canvas.transform.position = camPos + toOriginal;
                     p.canvas.transform.rotation = Quaternion.LookRotation(toOriginal, Vector3.up);
                 }
                 else
                 {
-                    // For floating panels, use the standard cloning principle (place it to the side)
                     toOriginal = original.canvas.transform.position - camPos;
                     float radius = toOriginal.magnitude;
                     if (radius < 0.1f) radius = 0.1f;
@@ -791,10 +738,6 @@ namespace VPB
             VpbPerfDiag.LogTransition("Gallery.Show", "title=" + title + " panels=" + panels.Count);
             if (panels.Count == 0)
             {
-                // Create the panel without its internal Show() so we can call Show() exactly
-                // once below with the caller's own title/extension/path.  This avoids the old
-                // double-Show pattern (CreatePane→p.Show + Show again) that caused two content
-                // loads, duplicate thumbnail coroutines and a scroll-position reset on startup.
                 CreatePane(showAfterCreate: false);
                 if (panels.Count > 0)
                     panels[0].Show(title, extension, path);
@@ -808,7 +751,6 @@ namespace VPB
                     p.Show(title, extension, path);
                 }
             }
-            // Any intentional Show (toggle, hotkey, CreatePane) consumes Initial for this process.
             MarkSessionInitialCategoryApplied();
         }
 
@@ -823,7 +765,7 @@ namespace VPB
 
             GameObject go = new GameObject("GalleryPanel_New");
             GalleryPanel p = go.AddComponent<GalleryPanel>();
-            p.Init(); // Undocked unless first pane, or Create Gallery claims the menu slot.
+            p.Init();
             if (_createPaneTakeMenuAnchor)
             {
                 _createPaneTakeMenuAnchor = false;
@@ -832,7 +774,6 @@ namespace VPB
             
             p.SetCategories(categories);
 
-            // Position relative to viewer
             if (SuperController.singleton != null && SuperController.singleton.centerCameraTarget != null)
             {
                 Transform cameraTransform = SuperController.singleton.centerCameraTarget.transform;
@@ -840,13 +781,11 @@ namespace VPB
                 p.canvas.transform.rotation = cameraTransform.rotation;
             }
             
-            // Show initial category
             if (categories.Count > 0)
             {
                 Gallery.Category initial = categories[0];
 
                 string categoryToOpen = forcedInitialCategory;
-                // Cold start: InitialGalleryCategory (Scenes / …). In-session recreate: leave null → Last* below.
                 if (string.IsNullOrEmpty(categoryToOpen) && VPBConfig.Instance != null && !SessionBrowseMemoryActive)
                     categoryToOpen = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
 
@@ -909,7 +848,6 @@ namespace VPB
                     if (createTiming != null)
                         p.BeginPaneLoadTiming(createTiming, "create");
                     p.Show(initial.name, initial.extension, initial.path);
-                    // Startup auto-pane / Create Pane consumed Initial for this process.
                     MarkSessionInitialCategoryApplied();
                     if (coldStart)
                     {
@@ -923,7 +861,6 @@ namespace VPB
             }
         }
 
-        /// <summary>When <see cref="VPBConfig.GalleryCollapseOnSceneLaunch"/> is on: fixed panes slide to dock edge; floating panes hide.</summary>
         public static void CollapsePanelsOnSceneLaunch()
         {
             try
@@ -1007,7 +944,6 @@ namespace VPB
                 try { p.ResetFollowOffsets(); } catch { }
             }
 
-            // Bring Context Menu to front if it is currently open
             try
             {
                 var ctxMenu = ContextMenuPanel.ExistingInstance;
@@ -1025,10 +961,7 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// After <see cref="FileManager.NotifyInstalled"/> resyncs path dictionaries, refresh cached
-        /// <see cref="FileEntry.Path"/> only for rows whose package UID is in <paramref name="packageUids"/>.
-        /// </summary>
+        /// <summary>After NotifyInstalled resyncs path dictionaries, refresh cached Path only for rows whose package UID is in packageUids.</summary>
         public static void NotifyDisplayedPathsAfterPackagePathChanges(ICollection<string> packageUids)
         {
             if (packageUids == null || packageUids.Count == 0) return;
@@ -1044,10 +977,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// After SQLite <c>pkg.var_path</c> was corrected for Explorer moves (index reuse, no rebuild).
-        /// Clears Path side-panel folder counts and refreshes displayed VAR paths for changed UIDs.
-        /// </summary>
+        /// <summary>After SQLite pkg.var_path was corrected for Explorer moves (index reuse, no rebuild).</summary>
         public static void NotifyAfterPkgVarPathsSynced(ICollection<string> packageUids)
         {
             if (singleton == null) return;
@@ -1065,10 +995,7 @@ namespace VPB
                 NotifyDisplayedPathsAfterPackagePathChanges(packageUids);
         }
 
-        /// <summary>
-        /// Refreshes row bindings for visible non-hub panels only (no full list rebuild).
-        /// Useful for badge-only state changes while auto-refresh is suppressed.
-        /// </summary>
+        /// <summary>Refreshes row bindings for visible non-hub panels only (no full list rebuild).</summary>
         public static void RefreshVisiblePanelRowVisuals()
         {
             if (singleton == null) return;
@@ -1100,7 +1027,6 @@ namespace VPB
             if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: prompt pending — will fire next time gallery panel opens");
         }
 
-        // Called from GalleryPanel.Show() when a panel becomes visible
         internal static bool TryConsumeBaMigrationPromptPending()
         {
             if (singleton == null || !singleton._baMigrationPromptPending) return false;
@@ -1130,8 +1056,7 @@ namespace VPB
                 VamStartupProfiler.Milestone("sql_rebuild_deferred_run_begin");
             }
             catch { }
-            // Do NOT forceFullRebuild — that sets worker bypass-skip and rebuilds every launch
-            // even when on-disk index is valid. NeedsFull / incremental decide.
+            // Do NOT forceFullRebuild — that sets worker bypass-skip and rebuilds every launch even when on-disk index is valid.
             try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(); } catch { }
         }
 

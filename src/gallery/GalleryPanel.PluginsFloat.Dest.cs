@@ -8,13 +8,8 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Plugins float header destinations: Session + one chip per Person.
-    /// Click → Edit mode + open VaM Plugins UI. Drop → load onto that host (session or person).
-    /// </summary>
     public partial class GalleryPanel
     {
-
         private GameObject _pluginsFloatDestHost;
         private RectTransform _pluginsFloatDestContentRT;
         private GameObject _pluginsFloatSessionDestBtn;
@@ -35,10 +30,6 @@ namespace VPB
         private void BuildPluginsFloatDestBar(GameObject titleBar, float s, int font, float chromeSz)
         {
             if (titleBar == null) return;
-            // Scrollable chip strip in title bar (between title and window controls).
-            // Height matches collapse/close (chromeSz). No host RectMask2D — that was clipping
-            // UIHoverBorder outward rim + chip fill. Viewport mask only, expanded vertically by
-            // borderSize into title-bar pad so highlight has room while horizontal scroll still clips.
             _pluginsFloatDestHost = UI.CreateChildRT(titleBar, "DestHost", AnchorPresets.middleCenter,
                 new Vector2(120f * s, chromeSz), Vector2.zero);
             UI.AddLE(_pluginsFloatDestHost, flexibleWidth: 1.4f, minWidth: 100f * s,
@@ -57,7 +48,6 @@ namespace VPB
             float rimPad = GalleryUiDesignTokens.ControlRimGutterRef * s;
             if (vpRt != null)
             {
-                // Expand mask so outward hover rim is not clipped (incl. Session chip on left).
                 vpRt.offsetMin = new Vector2(-rimPad, -rimPad);
                 vpRt.offsetMax = new Vector2(rimPad, rimPad);
             }
@@ -71,7 +61,6 @@ namespace VPB
             _pluginsFloatDestContentRT.anchorMin = new Vector2(0f, 0.5f);
             _pluginsFloatDestContentRT.anchorMax = new Vector2(0f, 0.5f);
             _pluginsFloatDestContentRT.pivot = new Vector2(0f, 0.5f);
-            // Nudge content right so first chip rim sits inside expanded viewport.
             _pluginsFloatDestContentRT.anchoredPosition = new Vector2(rimPad, 0f);
             _pluginsFloatDestContentRT.sizeDelta = new Vector2(0f, chromeSz);
             HorizontalLayoutGroup hlg = content.AddComponent<HorizontalLayoutGroup>();
@@ -108,7 +97,6 @@ namespace VPB
         {
             if (parent == null) return null;
             float minW = 64f * s;
-            // Same chrome button path as other float header controls (exact chromeSz height).
             GameObject go = UI.CreateChromeLayoutButton(
                 parent, minW, height, label, font, bgColor, onClick);
             if (go == null) return null;
@@ -130,7 +118,6 @@ namespace VPB
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
                 t.verticalOverflow = VerticalWrapMode.Truncate;
                 t.alignment = TextAnchor.MiddleCenter;
-                // Preferred width from text — expand chip for long person names (cap).
                 float prefer = Mathf.Clamp(EstimatePluginsFloatChipWidth(label, s), minW, 120f * s);
                 le.preferredWidth = prefer;
                 le.minWidth = Mathf.Min(minW, prefer);
@@ -306,10 +293,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// VaM Plugins UI / selection links need Edit mode; Play blocks the path.
-        /// Setter runs SyncGameMode (+ optional auto-freeze).
-        /// </summary>
+        /// <summary>VaM Plugins UI / selection links need Edit mode; Play blocks the path.</summary>
         private void EnsurePluginsFloatEditMode()
         {
             try
@@ -322,10 +306,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Open VaM main HUD on correct anchor: controller menu in VR, monitor when
-        /// MonitorRigActive / desktop. Never ShowMainHUDMonitor — that pins left monitor in VR.
-        /// </summary>
         private void ShowPluginsFloatVamMainHud()
         {
             SuperController sc = SuperController.singleton;
@@ -333,7 +313,6 @@ namespace VPB
             try { sc.ShowMainHUDAuto(); }
             catch
             {
-                // Fallback if Auto missing on older builds.
                 try
                 {
                     bool forceMonitor = false;
@@ -425,7 +404,6 @@ namespace VPB
         {
             personUid = null;
             personLabel = null;
-            // Header chips stay usable while collapsed (footer tree chrome hidden).
             if (!IsPluginsFloatOpen() || eventData == null)
                 return PluginsFloatDestKind.None;
 
@@ -433,7 +411,6 @@ namespace VPB
             if (cam == null) cam = eventData.enterEventCamera;
             Vector2 screen = eventData.position;
 
-            // Person chips first (more specific).
             for (int i = 0; i < _pluginsFloatPersonDestPool.Count; i++)
             {
                 GameObject go = _pluginsFloatPersonDestPool[i];
@@ -465,7 +442,6 @@ namespace VPB
             return DescribePluginsFloatSessionDrop(eventData, pluginName, out replaceUnused);
         }
 
-        /// <summary>Ghost/status while over header Session / Person chips. out = person chip.</summary>
         internal string DescribePluginsFloatSessionDrop(
             PointerEventData eventData, string pluginName, out bool isPersonChip)
         {
@@ -532,7 +508,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Header Session/Person chip drop. True = handled.</summary>
         internal bool TryConsumePluginsFloatSessionDrop(PointerEventData eventData, FileEntry entry)
         {
             if (entry == null || eventData == null) return false;
@@ -572,10 +547,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Person atoms changed (scene load, add, remove). Refresh Session/Person dest chips
-        /// while Plugins float is open — including float opened before any Person existed.
-        /// </summary>
         internal void NotifyPluginsFloatSceneTargetsChanged()
         {
             if (!IsPluginsFloatOpen()) return;

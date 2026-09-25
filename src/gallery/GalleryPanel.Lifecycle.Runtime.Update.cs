@@ -11,11 +11,6 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
-        /// <summary>
-        /// UI pointer screen position for hit tests. Prefers EventSystem laser/mouse sample
-        /// (<see cref="currentPointerData"/>). Desktop may fall back to <see cref="Input.mousePosition"/>;
-        /// VR without a sample returns false — mouse is not the laser.
-        /// </summary>
         internal bool TryGetUiPointerScreenPosition(out Vector2 screenPos)
         {
             try
@@ -61,9 +56,6 @@ namespace VPB
             catch { return false; }
             if (!inside) return false;
 
-            // Modeless floats live on canvas (siblings of backgroundBoxGO). Their panels often
-            // sit over the pane screen-rect — raw contains would pin AH/opacity forever.
-            // If the live raycast hit is outside the pane subtree, pointer is on float chrome.
             GameObject hitGo;
             if (TryGetCurrentPointerRaycastGameObject(out hitGo) && hitGo != null
                 && !IsTransformUnderGalleryPaneSubtree(hitGo.transform))
@@ -90,7 +82,6 @@ namespace VPB
             }
         }
 
-        /// <summary>True when transform is backgroundBoxGO or a descendant (not canvas-sibling floats).</summary>
         private bool IsTransformUnderGalleryPaneSubtree(Transform t)
         {
             if (t == null || backgroundBoxGO == null) return false;
@@ -184,10 +175,6 @@ namespace VPB
                 try { ApplyVamMenuGateVisibility(); } catch { }
                 try { ApplyVamMenuAnchoring(); } catch { }
 
-                // Determine whether the gallery is "active" (scrolling or thumbnails still loading).
-                // While active we pause all disk saves — background threads must not contend on
-                // the cache write-lock while the user is interacting; the cost is we defer
-                // persistence, but current-session display is unaffected (images stay in memory).
                 bool isScrollingRecently = (Time.unscaledTime - lastScrollTime) < 1.0f;
                 try { CustomImageLoaderThreaded.NotifyGalleryScrollUnscaledTime(lastScrollTime); } catch { }
                 bool isThumbnailLoading  = CustomImageLoaderThreaded.singleton != null &&
@@ -207,8 +194,6 @@ namespace VPB
 
                 if (isFixedLocally && backgroundBoxGO != null)
                 {
-                    // Self-correct the content subtree (e.g. first load completing while collapsed),
-                    // so a collapsed-and-loaded pane stops rendering/raycasting off-screen content.
                     bool wantSubtree = ShouldContentSubtreeBeActive();
                     if (backgroundBoxGO.activeSelf != wantSubtree)
                         backgroundBoxGO.SetActive(wantSubtree);
@@ -227,9 +212,6 @@ namespace VPB
 
                     if (isCollapsed)
                     {
-                        // Both AO and AH: expand on hover over trigger.
-                        // Pointer can already be inside trigger area when it becomes active (dock switch/collapse);
-                        // use manual rect hit as fallback so Top dock behaves same as Left/Right.
                         bool isHoveringTriggerManual = false;
                         GameObject activeTrigger = null;
                         if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) activeTrigger = collapseTriggerLeftGO;
@@ -252,8 +234,7 @@ namespace VPB
                     }
                     else if (autoCollapse)
                     {
-                        // AH mode: collapse after idle (no pointer engagement AND no text/chrome engagement)
-                        // Manual hover check for trigger area when it is NOT a raycast target (to avoid blocking scrollbar)
+                        // AH mode: collapse after idle; manual hover check when trigger area is not a raycast target.
                         bool isHoveringTriggerManual = false;
                         GameObject activeTrigger = null;
                         if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) activeTrigger = collapseTriggerLeftGO;
@@ -272,12 +253,10 @@ namespace VPB
                                 isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
 
-                        // Engagement = pointer on pane OR text focus / modal chrome (Ctrl+F, fields…).
-                        // Modeless floats do not pin expanded. Hover-only gate collapsed mid-typing.
                         bool isEngaged = IsGalleryInteractionEngaged() || isHoveringTrigger || isHoveringTriggerManual;
                         if (!isEngaged && !GalleryDockLayout.InExpandGrace())
                         {
-                            collapseTimer += Time.deltaTime;
+                            collapseTimer += Time.unscaledDeltaTime;
                             float delay = 1.0f;
                             try
                             {
@@ -295,7 +274,6 @@ namespace VPB
                             collapseTimer = 0f;
                         }
                     }
-                    // AO mode when expanded: stay expanded, no action needed
 
                     if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                     {
@@ -312,7 +290,6 @@ namespace VPB
                         if (_resizeHandleFixedBottomRightGO != null) _resizeHandleFixedBottomRightGO.SetActive(false);
                     }
 
-                    // Always update anchors in Fixed mode to support height toggles and screen resizing
                     RectTransform bgRT = _backgroundBoxRT;
                     if (bgRT == null)
                     {
@@ -334,15 +311,10 @@ namespace VPB
                         }
                     }
 
-                    // Show/Hide bottom resize handles based on dock mode (handles seated in footer slots).
-                    // Right dock → bottom-left grip; Left dock → bottom-right grip; Top dock → both grips (height only),
-                    // both using the straight-down chevron.
                     bool isTopDock = string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
                     bool showFixedBottomLeft = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || isTopDock);
                     bool showFixedBottomRight = isFixedLocally && (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) || isTopDock);
 
-                    // Cross-slot limits belong on the resizer, not just on the resolved rect: otherwise
-                    // the drag preview runs past a bound the layout then silently snaps back from.
                     float dragMinY = isTopDock
                         ? GalleryDockLayout.TopBottomAnchorFloor()
                         : GalleryDockLayout.MinCrossAnchor;
@@ -393,7 +365,6 @@ namespace VPB
                             try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomRightGO, isTopDock ? "chevrons-down" : "chevrons-down-right"); } catch { }
                     }
 
-                    // Floating corner handles are hidden in fixed mode.
                     if (_resizeHandleBottomLeftGO != null && _resizeHandleBottomLeftGO.activeSelf) _resizeHandleBottomLeftGO.SetActive(false);
                     if (_resizeHandleBottomRightGO != null && _resizeHandleBottomRightGO.activeSelf) _resizeHandleBottomRightGO.SetActive(false);
                     if (_resizeHandleTopLeftGO != null && _resizeHandleTopLeftGO.activeSelf) _resizeHandleTopLeftGO.SetActive(false);
@@ -410,7 +381,6 @@ namespace VPB
                         UpdateSideButtonsVisibility();
                     }
 
-                    // Ensure collapsed offset matches current dock side (dock can change without anchor changes).
                     if (isCollapsed)
                     {
                         Vector2 off;
@@ -427,7 +397,6 @@ namespace VPB
                         if (bgRT.anchoredPosition != Vector2.zero) bgRT.anchoredPosition = Vector2.zero;
                     }
 
-                    // Separate triggers handle chamfer direction; nothing to mirror here.
                 }
                 else if (backgroundBoxGO != null)
                 {
@@ -458,7 +427,6 @@ namespace VPB
                         UpdateSideButtonsVisibility();
 
                         if (dragger != null) dragger.enabled = true;
-                        // Floating mode uses the corner handles; the fixed-dock handles stay hidden.
                         if (_resizeHandleBottomLeftGO != null) _resizeHandleBottomLeftGO.SetActive(true);
                         if (_resizeHandleBottomRightGO != null) _resizeHandleBottomRightGO.SetActive(true);
                         if (_resizeHandleTopLeftGO != null) _resizeHandleTopLeftGO.SetActive(true);
@@ -471,11 +439,9 @@ namespace VPB
                 }
             }
 
-            // WorldSpace: keep pane size independent of VaM worldScale (native mainHUD behavior).
             if (!isFixedLocally)
                 SyncWorldSpaceCanvasScaleIfWorldScaleChanged();
 
-            // Desktop: re-chrome when VaM Monitor UI Scale changes (HostScale).
             SyncHostUiScaleIfChanged();
 
             // Coalesced VPB.cfg write after Ctrl+Alt+/- scale nudges (idle = one bool).
@@ -488,7 +454,6 @@ namespace VPB
             }
             catch { }
 
-            // Status Bar Logic
             if (temporaryStatusOwner != null && !temporaryStatusOwner.activeInHierarchy)
             {
                 // Hover owner went away without delivering an exit event; drop stale tooltip.
@@ -502,7 +467,6 @@ namespace VPB
             // Mode sticky: toast never blanks ambient modes (concat when both). Drag still wins.
             string finalStatus = ResolveStatusBarText(dragStatusMsg, temporaryStatusMsg, ModeAmbientMsg);
 
-            // When a status message is showing, interrupt any in-progress path fade
             if (!string.IsNullOrEmpty(finalStatus) && hoverPathCanvasGroup != null)
             {
                 if (hoverFadeCoroutine != null)
@@ -534,8 +498,6 @@ namespace VPB
                 hoverPathText.gameObject.SetActive(showPath);
             }
 
-            // Info bar (hoverPathRT) is always active — no show/hide needed
-
             // FPS readout, ~2Hz. Value comes from VpbFrameRate; the timer only throttles the text write.
             if (fpsText != null)
             {
@@ -562,7 +524,6 @@ namespace VPB
                     float now = Time.unscaledTime;
                     bool fixedMode = isFixedLocally;
 
-                    // Position and Rotation following throttled for VR comfort (discrete updates)
                     if (!fixedMode && (lastFollowUpdateTime <= 0f || now - lastFollowUpdateTime >= FollowUpdateInterval))
                     {
                         lastFollowUpdateTime = now;
@@ -581,12 +542,10 @@ namespace VPB
                                 offsetsInitialized = true;
                             }
                             
-                            // Handle Position Following
                             Vector3 camPos = _cachedCamera.transform.position;
                             Vector3 currentPos = canvas.transform.position;
                             Vector3 targetPos = currentPos;
 
-                            // Capture manual movement as new reference if not following OR if being dragged
                             if (!VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowEyeHeight) || (dragger != null && dragger.isDragging))
                             {
                                 followYOffset = currentPos.y - camPos.y;
@@ -599,7 +558,6 @@ namespace VPB
                                 followDistanceReference = horizontalDiff.magnitude;
                             }
 
-                            // Horizontal Following (Strictly respect followDistanceReference)
                             if (VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowDistance))
                             {
                                 Vector3 hOffset = new Vector3(followXZOffset.x, 0, followXZOffset.y);
@@ -609,14 +567,12 @@ namespace VPB
                                 targetPos.z = hTarget.z;
                             }
 
-                            // Vertical Following (Eye Height)
                             if (VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowEyeHeight))
                             {
                                 targetPos.y = camPos.y + followYOffset;
                             }
                             else
                             {
-                                // Stay at current Y
                                 targetPos.y = currentPos.y;
                             }
 
@@ -629,7 +585,6 @@ namespace VPB
                                 canvas.transform.position = targetPos;
                             }
 
-                            // Handle Rotation Following (Respect FollowAngle setting)
                             if (VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowAngle))
                             {
                                 Vector3 lookDir = canvas.transform.position - _cachedCamera.transform.position;
@@ -639,7 +594,7 @@ namespace VPB
                                     
                                     if (bypassThreshold)
                                     {
-                                        canvas.transform.rotation = targetFollowRotation; // Immediate during load
+                                        canvas.transform.rotation = targetFollowRotation;
                                     }
                                     else
                                     {
@@ -647,7 +602,6 @@ namespace VPB
                                         if (!isReorienting && angleDiff > VPBConfig.Instance.ReorientStartAngle) isReorienting = true;
                                         if (isReorienting)
                                         {
-                                            // No transition: snap rotation immediately.
                                             canvas.transform.rotation = targetFollowRotation;
                                             if (Quaternion.Angle(canvas.transform.rotation, targetFollowRotation) < ReorientStopAngle) isReorienting = false;
                                         }
@@ -655,7 +609,6 @@ namespace VPB
                                 }
                             }
                         }
-
                     }
                 }
             }
@@ -700,14 +653,10 @@ namespace VPB
                 Transform cam = Camera.main.transform;
                 canvas.transform.position = cam.position + cam.forward * 1.5f;
                 canvas.transform.rotation = Quaternion.LookRotation(canvas.transform.position - cam.position, Vector3.up);
-                offsetsInitialized = false; // Reset follow offsets
+                offsetsInitialized = false;
             }
         }
 
-        /// <summary>
-        /// Ctrl+Alt+= / Ctrl+Alt+KeypadPlus → scale up; Ctrl+Alt+- / Ctrl+Alt+KeypadMinus → scale down.
-        /// Avoids Ctrl+/- / Ctrl+scroll (grid column / list thumb zoom). Step 0.1; persists desktop/VR value.
-        /// </summary>
         private bool TryHandleGalleryUiScaleHotkey()
         {
             int dir = 0;
@@ -735,14 +684,12 @@ namespace VPB
             if (IsPluginHotkeyCaptureActive())
                 return;
 
-            // Focus title search (expanded Settings float → settings filter). Works with another InputField selected.
             if (VpbShortcutMap.Down(VpbShortcut.FocusSearch))
             {
                 try { FocusTitleSearchFromHotkey(); } catch { }
                 return;
             }
 
-            // Command palette (works even with search focused).
             if (VpbShortcutMap.Down(VpbShortcut.CommandPalette))
             {
                 try { ToggleCommandPalette(); } catch { }
@@ -754,13 +701,11 @@ namespace VPB
                 try { ToggleFloatingQuickFilters(); } catch { }
                 return;
             }
-            // Floating Scene Import (detach if needed; hide keeps float).
             if (VpbShortcutMap.Down(VpbShortcut.ImportSidebar))
             {
                 try { ToggleFloatingImportSidebar(); } catch { }
                 return;
             }
-            // Layout presets manager.
             if (VpbShortcutMap.Down(VpbShortcut.LayoutPresets))
             {
                 try { ToggleLayoutPresetsFloat(); } catch { }
@@ -768,7 +713,6 @@ namespace VPB
             }
             if (VpbShortcutMap.Down(VpbShortcut.Undo))
             {
-                // Search clear lives on main Undo stack — allow Undo while title-search field focused.
                 try
                 {
                     if (IsSearchClearUndoTop())
@@ -833,7 +777,6 @@ namespace VPB
             }
             if (IsStripKeepSelectorOpen() && StripKeepHandleKeyboard())
                 return;
-            // Dismiss strip float + Scene Tools (Cancel/X same). Soft-confirm/overlays handled above.
             if (Input.GetKeyDown(KeyCode.Escape) && IsStripKeepSelectorOpen())
             {
                 ExitCreatorMode();
@@ -859,7 +802,6 @@ namespace VPB
             // Plugins float: apply orphan .cs after async cslist-ref warm (never block open).
             try { TickPluginsFloatRefsRefresh(); } catch { }
 
-            // Plugins float: Esc clear filter → close.
             if (TryHandlePluginsFloatEsc())
                 return;
 
@@ -873,7 +815,6 @@ namespace VPB
             if (TryHandleLayoutPresetsFloatKeyboard())
                 return;
 
-            // Scene Import float: Esc expand / hide-keep-detach.
             if (TryHandleImportSidebarFloatEsc())
                 return;
 
@@ -882,7 +823,6 @@ namespace VPB
                 return;
 
             // Sticky tools + apply/hold Esc BEFORE InputField gate.
-            // Banner advertises Esc → mode; search focus must not trap exit (Norman false signifier).
             if (Input.GetKeyDown(KeyCode.Escape)
                 && (ModeAmbientEscExitsAny() || ApplySemanticsEscExitsAny()))
             {
@@ -909,7 +849,6 @@ namespace VPB
             if (TryHandleCleanupModeEsc())
                 return;
 
-            // Docked Import Esc (float handled earlier via TryHandleImportSidebarFloatEsc).
             if (TryHandleImportSidebarDockedEsc())
                 return;
 
@@ -950,19 +889,16 @@ namespace VPB
                 && _detailStripTagMenuRoot != null
                 && _detailStripTagMenuRoot.activeSelf)
             {
-                // Nested modal → clear filter → close (same ladder as search Esc).
                 DetailStripTagMenuOnSearchEscape();
                 return;
             }
 
-            // Bare Esc — clear selection when no menu/mode claimed it.
             if (TryHandleClearSelectionEsc())
                 return;
 
             if (IsVisible && VPBConfig.Instance.CategoryNumberKeysEnabled && TryConsumeCategoryQuickNumberKey())
                 return;
 
-            // UI chrome scale (not Ctrl+scroll grid zoom).
             if (TryHandleGalleryUiScaleHotkey())
                 return;
 
@@ -995,14 +931,12 @@ namespace VPB
                 return;
             }
 
-            // Toggle Scene Tools (side-rail parity).
             if (VpbShortcutMap.Down(VpbShortcut.SceneTools))
             {
                 try { ToggleCreatorMode(); } catch { }
                 return;
             }
 
-            // Toggle Scene Eraser.
             if (VpbShortcutMap.Down(VpbShortcut.SceneEraser))
             {
                 try { ToggleRemoveMode(false, false); } catch { }
@@ -1032,7 +966,6 @@ namespace VPB
                 return;
             }
 
-            // Direct open/close Strip Scene window.
             if (VpbShortcutMap.Down(VpbShortcut.StripScene))
             {
                 try { HotkeyOpenStripSceneDirect(); } catch { }
@@ -1113,10 +1046,8 @@ namespace VPB
             // Click/keyboard selection may resize detail strip again after thumb-scrub lock.
             try { DetailStripUnlockAfterExternalSelectionChange(); } catch { }
 
-            // Find current index in currentFilteredFiles (visible page)
             int currentIndex = -1;
             
-            // Prefer anchor path if available for navigation continuity
             bool historyBrowseForNav = activeContentType == ContentType.History;
             string navPath = GetCurrentSelectionAnchorIdentityKey(historyBrowseForNav);
             
@@ -1130,7 +1061,6 @@ namespace VPB
                 currentIndex = 0;
             }
 
-            // Up from first item → title search (keyboard loop; skip when range/add modifiers).
             if (TryKeyboardUpToTitleSearch(currentIndex, move, moveH, shift, ctrl))
                 return;
 
@@ -1139,18 +1069,16 @@ namespace VPB
             if (layoutMode == GalleryLayoutMode.List)
             {
                 newIndex += move; 
-                // Ignore horizontal in list mode for now
             }
-            else // Grid
+            else
             {
                  int cols = GridColumnCount;
-                 if (cols < 1) cols = 4; // Fallback
+                 if (cols < 1) cols = 4;
 
                  if (move != 0) newIndex += move * cols;
                  if (moveH != 0) newIndex += moveH;
             }
 
-            // Clamp
             if (newIndex < 0) newIndex = 0;
             if (newIndex >= currentFilteredFiles.Count) newIndex = currentFilteredFiles.Count - 1;
 
@@ -1161,7 +1089,6 @@ namespace VPB
                 if (shift)
                 {
                     bool historyBrowse = activeContentType == ContentType.History;
-                    // Range Select
                     string anchor = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
                     int anchorIndex = -1;
                     if (!string.IsNullOrEmpty(anchor)) anchorIndex = FindIndexBySelectionIdentity(currentFilteredFiles, anchor, historyBrowse);
@@ -1194,7 +1121,6 @@ namespace VPB
                 }
                 else
                 {
-                    // Single Select (or Toggle with Ctrl)
                     bool historyBrowse = activeContentType == ContentType.History;
                     if (!ctrl)
                     {
@@ -1203,7 +1129,7 @@ namespace VPB
                     }
                     
                     AddFileToSelection(newFile, historyBrowse);
-                    SetSelectionAnchor(newFile, historyBrowse); // Move anchor
+                    SetSelectionAnchor(newFile, historyBrowse);
                 }
 
                 selectedPath = historyBrowseForNav ? GetSelectionIdentityKey(newFile, true) : newFile.Path;
@@ -1221,10 +1147,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Keyboard/selection scroll after chrome layout. Must run after detail strip/tbox
-        /// change bottom inset — otherwise caption under square thumb stays clipped.
-        /// </summary>
+        /// <summary>Keyboard/selection scroll after chrome layout.</summary>
         private void EnsureGridSelectionFullyVisible(int index)
         {
             if (index < 0) return;
@@ -1246,5 +1169,4 @@ namespace VPB
             SyncGalleryMainAreaBottomEdge(leftOffset, rightOffset, topOffset, tabTop);
         }
     }
-
 }

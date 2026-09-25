@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace VPB
 {
-    /// <summary>Holds all side-tab / tag facet counters produced by <c>CacheTagCounts</c> / <c>CoCacheTagCountsInternal</c>.</summary>
-    internal sealed class TagCountSnapshot
+    internal class TagFacetCounts
     {
-        public Dictionary<string, int> TagCounts;
-
         public int AppearanceSourceCountAll;
         public int AppearanceSourceCountPresets;
         public int AppearanceSourceCountCustom;
@@ -66,12 +64,22 @@ namespace VPB
         public int AppearanceSubfilterCurrentCountFemale;
         public int AppearanceSubfilterCurrentCountFuta;
         public int AppearanceSubfilterCurrentCountUnknown;
+
+        private static readonly FieldInfo[] s_Fields = typeof(TagFacetCounts).GetFields(BindingFlags.Public | BindingFlags.Instance);
+
+        public void CopyFrom(TagFacetCounts other)
+        {
+            if (other == null) return;
+            foreach (FieldInfo f in s_Fields)
+                f.SetValue(this, f.GetValue(other));
+        }
     }
 
-    /// <summary>
-    /// Reuses tag/facet counts for a gallery category view when path/extension/creator/subfilters and package scan match,
-    /// avoiding a second full VAR scan after the file grid refresh (often several seconds).
-    /// </summary>
+    internal sealed class TagCountSnapshot : TagFacetCounts
+    {
+        public Dictionary<string, int> TagCounts;
+    }
+
     internal static class GalleryTagCountSnapshotCache
     {
         private static readonly object s_Lock = new object();
@@ -97,7 +105,6 @@ namespace VPB
             }
         }
 
-        /// <summary>True if <see cref="TryGet"/> would succeed, without cloning the snapshot (cheaper than <see cref="TryGet"/> for probing).</summary>
         public static bool HasSnapshot(string key)
         {
             if (string.IsNullOrEmpty(key)) return false;
@@ -127,61 +134,9 @@ namespace VPB
                 foreach (var kv in s.TagCounts)
                     d[kv.Key] = kv.Value;
             }
-            return new TagCountSnapshot
-            {
-                TagCounts = d,
-                AppearanceSourceCountAll = s.AppearanceSourceCountAll,
-                AppearanceSourceCountPresets = s.AppearanceSourceCountPresets,
-                AppearanceSourceCountCustom = s.AppearanceSourceCountCustom,
-                ClothingSubfilterCountAll = s.ClothingSubfilterCountAll,
-                ClothingSubfilterCountReal = s.ClothingSubfilterCountReal,
-                ClothingSubfilterCountPresets = s.ClothingSubfilterCountPresets,
-                ClothingSubfilterCountCustom = s.ClothingSubfilterCountCustom,
-                ClothingSubfilterCountCustomPreset = s.ClothingSubfilterCountCustomPreset,
-                ClothingSubfilterCountItems = s.ClothingSubfilterCountItems,
-                ClothingSubfilterCountMale = s.ClothingSubfilterCountMale,
-                ClothingSubfilterCountFemale = s.ClothingSubfilterCountFemale,
-                ClothingSubfilterCountDecals = s.ClothingSubfilterCountDecals,
-                HairSubfilterCountAll = s.HairSubfilterCountAll,
-                HairSubfilterCountPresets = s.HairSubfilterCountPresets,
-                HairSubfilterCountCustom = s.HairSubfilterCountCustom,
-                HairSubfilterCountCustomPreset = s.HairSubfilterCountCustomPreset,
-                HairSubfilterCountItems = s.HairSubfilterCountItems,
-                HairSubfilterCountMale = s.HairSubfilterCountMale,
-                HairSubfilterCountFemale = s.HairSubfilterCountFemale,
-                AppearanceSubfilterCountAll = s.AppearanceSubfilterCountAll,
-                AppearanceSubfilterCountPresets = s.AppearanceSubfilterCountPresets,
-                AppearanceSubfilterCountCustom = s.AppearanceSubfilterCountCustom,
-                AppearanceSubfilterCountMale = s.AppearanceSubfilterCountMale,
-                AppearanceSubfilterCountFemale = s.AppearanceSubfilterCountFemale,
-                AppearanceSubfilterCountFuta = s.AppearanceSubfilterCountFuta,
-                AppearanceSubfilterCountUnknown = s.AppearanceSubfilterCountUnknown,
-                ClothingSubfilterFacetCountReal = s.ClothingSubfilterFacetCountReal,
-                ClothingSubfilterFacetCountPresets = s.ClothingSubfilterFacetCountPresets,
-                ClothingSubfilterFacetCountCustom = s.ClothingSubfilterFacetCountCustom,
-                ClothingSubfilterFacetCountCustomPreset = s.ClothingSubfilterFacetCountCustomPreset,
-                ClothingSubfilterFacetCountItems = s.ClothingSubfilterFacetCountItems,
-                ClothingSubfilterFacetCountMale = s.ClothingSubfilterFacetCountMale,
-                ClothingSubfilterFacetCountFemale = s.ClothingSubfilterFacetCountFemale,
-                ClothingSubfilterFacetCountDecals = s.ClothingSubfilterFacetCountDecals,
-                HairSubfilterFacetCountPresets = s.HairSubfilterFacetCountPresets,
-                HairSubfilterFacetCountCustom = s.HairSubfilterFacetCountCustom,
-                HairSubfilterFacetCountCustomPreset = s.HairSubfilterFacetCountCustomPreset,
-                HairSubfilterFacetCountItems = s.HairSubfilterFacetCountItems,
-                HairSubfilterFacetCountMale = s.HairSubfilterFacetCountMale,
-                HairSubfilterFacetCountFemale = s.HairSubfilterFacetCountFemale,
-                AppearanceSubfilterFacetCountPresets = s.AppearanceSubfilterFacetCountPresets,
-                AppearanceSubfilterFacetCountCustom = s.AppearanceSubfilterFacetCountCustom,
-                AppearanceSubfilterFacetCountMale = s.AppearanceSubfilterFacetCountMale,
-                AppearanceSubfilterFacetCountFemale = s.AppearanceSubfilterFacetCountFemale,
-                AppearanceSubfilterFacetCountFuta = s.AppearanceSubfilterFacetCountFuta,
-                AppearanceSubfilterFacetCountUnknown = s.AppearanceSubfilterFacetCountUnknown,
-                AppearanceSubfilterCurrentCountAll = s.AppearanceSubfilterCurrentCountAll,
-                AppearanceSubfilterCurrentCountMale = s.AppearanceSubfilterCurrentCountMale,
-                AppearanceSubfilterCurrentCountFemale = s.AppearanceSubfilterCurrentCountFemale,
-                AppearanceSubfilterCurrentCountFuta = s.AppearanceSubfilterCurrentCountFuta,
-                AppearanceSubfilterCurrentCountUnknown = s.AppearanceSubfilterCurrentCountUnknown,
-            };
+            var clone = new TagCountSnapshot { TagCounts = d };
+            clone.CopyFrom(s);
+            return clone;
         }
     }
 }

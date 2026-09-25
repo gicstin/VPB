@@ -48,7 +48,6 @@ namespace VPB
             _layoutPresetSaveCo = null;
         }
 
-        /// <summary>Captures the live arrangement as a new named preset for the running mode.</summary>
         internal GalleryLayoutPreset SaveCurrentLayoutAsPreset(string preferredName)
         {
             GalleryLayoutPreset preset;
@@ -84,8 +83,6 @@ namespace VPB
             return preset;
         }
 
-        /// <summary>Re-captures the live arrangement into an existing preset, keeping its identity.</summary>
-        /// <summary>Shipped baselines are read-only; the manager offers Duplicate instead.</summary>
         private bool RejectBuiltInLayoutEdit(GalleryLayoutPreset preset)
         {
             if (preset == null || !preset.IsBuiltIn) return false;
@@ -231,7 +228,6 @@ namespace VPB
             return preset.Pinned;
         }
 
-        /// <summary>True when the live arrangement drifted from the preset that was last applied.</summary>
         internal bool IsActiveLayoutPresetDirty()
         {
             if (GalleryLayoutPresetStore.ActiveId == 0) return false;
@@ -239,7 +235,6 @@ namespace VPB
             catch { return false; }
         }
 
-        /// <summary>Applies the Nth preset of the running mode (hotkey slots).</summary>
         internal bool ApplyLayoutPresetBySlot(int slotIndex)
         {
             if (slotIndex < 0) return false;

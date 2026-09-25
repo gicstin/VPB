@@ -5,10 +5,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Resolves a UI <see cref="Font"/> suitable for the current locale (CJK vs Latin).
-    /// Prefers vpb_fonts/NotoSansSC-Regular.ttf next to the DLL when present.
-    /// </summary>
     public static class VPBUiFont
     {
         /// <summary>Checked in order under vpb_fonts/ next to VPB.dll (Google Fonts often ships *-VariableFont_wght.ttf).</summary>
@@ -74,17 +70,11 @@ namespace VPB
                 || l.StartsWith("ko_", StringComparison.Ordinal);
         }
 
-        /// <summary>Font for Unity UI Text: OS CJK font for CJK locales; else cached builtin Arial.</summary>
         public static Font GetUiFont()
         {
             VPBTranslation.EnsureInitialized();
             Font latin = EnsureLatinFont();
             string locale = VPBTranslation.CurrentLocale;
-
-            // new Font(filePath) does NOT load a TTF from disk in Unity — it looks up an OS font by name.
-            // Passing a file path creates a broken Font object with no glyphs (invisible text).
-            // Bundled font file loading via new Font() is therefore skipped entirely.
-            // For CJK locales, fall back to OS system fonts instead.
 
             if (LocaleNeedsCjkFallback(locale))
             {
@@ -136,7 +126,6 @@ namespace VPB
                 Font f = GetUiFont();
                 if (f == null) return;
 
-                // CreateDynamicFontFromOSFont can mutate size/style on assign. Snapshot, restore, rebuild.
                 int fontSize = text.fontSize;
                 FontStyle fontStyle = text.fontStyle;
                 bool bestFit = text.resizeTextForBestFit;

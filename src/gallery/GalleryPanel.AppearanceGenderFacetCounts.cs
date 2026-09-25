@@ -23,10 +23,8 @@ namespace VPB
             return IsGlobalSourceFilterLocal();
         }
 
-        /// <summary>Fast gender badges + skip heavy parallel tag scan when Source: Local is active.</summary>
         private bool IsAppearanceLooseScopedBrowsing() => IsAppearanceLocalOnlyActive();
 
-        /// <summary>Appearance facet counts come from one SQL pass; skip the VAR package walk (~3374 rows).</summary>
         private bool ShouldSkipHeavyAppearanceTagParallelScan()
         {
             if (!IsAppearanceCategoryTitle()) return false;
@@ -43,30 +41,30 @@ namespace VPB
 
         private void ResetAppearanceGenderFacetCounts()
         {
-            appearanceSubfilterCountAll = 0;
-            appearanceSubfilterCountPresets = 0;
-            appearanceSubfilterCountCustom = 0;
-            appearanceSubfilterCountMale = 0;
-            appearanceSubfilterCountFemale = 0;
-            appearanceSubfilterCountFuta = 0;
-            appearanceSubfilterCountUnknown = 0;
+            tagFacets.AppearanceSubfilterCountAll = 0;
+            tagFacets.AppearanceSubfilterCountPresets = 0;
+            tagFacets.AppearanceSubfilterCountCustom = 0;
+            tagFacets.AppearanceSubfilterCountMale = 0;
+            tagFacets.AppearanceSubfilterCountFemale = 0;
+            tagFacets.AppearanceSubfilterCountFuta = 0;
+            tagFacets.AppearanceSubfilterCountUnknown = 0;
 
-            appearanceSubfilterFacetCountPresets = 0;
-            appearanceSubfilterFacetCountCustom = 0;
-            appearanceSubfilterFacetCountMale = 0;
-            appearanceSubfilterFacetCountFemale = 0;
-            appearanceSubfilterFacetCountFuta = 0;
-            appearanceSubfilterFacetCountUnknown = 0;
+            tagFacets.AppearanceSubfilterFacetCountPresets = 0;
+            tagFacets.AppearanceSubfilterFacetCountCustom = 0;
+            tagFacets.AppearanceSubfilterFacetCountMale = 0;
+            tagFacets.AppearanceSubfilterFacetCountFemale = 0;
+            tagFacets.AppearanceSubfilterFacetCountFuta = 0;
+            tagFacets.AppearanceSubfilterFacetCountUnknown = 0;
 
-            appearanceSubfilterCurrentCountAll = 0;
-            appearanceSubfilterCurrentCountMale = 0;
-            appearanceSubfilterCurrentCountFemale = 0;
-            appearanceSubfilterCurrentCountFuta = 0;
-            appearanceSubfilterCurrentCountUnknown = 0;
+            tagFacets.AppearanceSubfilterCurrentCountAll = 0;
+            tagFacets.AppearanceSubfilterCurrentCountMale = 0;
+            tagFacets.AppearanceSubfilterCurrentCountFemale = 0;
+            tagFacets.AppearanceSubfilterCurrentCountFuta = 0;
+            tagFacets.AppearanceSubfilterCurrentCountUnknown = 0;
 
-            appearanceSourceCountAll = 0;
-            appearanceSourceCountPresets = 0;
-            appearanceSourceCountCustom = 0;
+            tagFacets.AppearanceSourceCountAll = 0;
+            tagFacets.AppearanceSourceCountPresets = 0;
+            tagFacets.AppearanceSourceCountCustom = 0;
         }
 
         private void CollectAppearanceSearchPaths(List<string> pathsToSearch)
@@ -76,11 +74,6 @@ namespace VPB
             else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
         }
 
-        /// <summary>
-        /// Loose .vap facet counts (uses system_files cache + loose_vap_gender probe cache).
-        /// Prefer <see cref="CoMergeLooseVapAppearanceGenderFacetCounts"/> (sliced) from UI paths —
-        /// this sync path remains for tiny libraries / tests only.
-        /// </summary>
         private void AccumulateLooseVapAppearanceGenderCounts(bool resetCountsFirst)
         {
             if (resetCountsFirst)
@@ -166,44 +159,42 @@ namespace VPB
                     bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                     bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
 
-                    appearanceSourceCountAll++;
-                    if (isCustomLoose) appearanceSourceCountCustom++;
-                    if (isPresetLoose) appearanceSourceCountPresets++;
+                    tagFacets.AppearanceSourceCountAll++;
+                    if (isCustomLoose) tagFacets.AppearanceSourceCountCustom++;
+                    if (isPresetLoose) tagFacets.AppearanceSourceCountPresets++;
 
                     AppearanceGender lg;
                     try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey, genderBulk); }
                     catch { lg = AppearanceGender.Unknown; }
 
-                    appearanceSubfilterCountAll++;
-                    if (isPresetLoose) appearanceSubfilterCountPresets++;
-                    if (isCustomLoose) appearanceSubfilterCountCustom++;
-                    if (lg == AppearanceGender.Male) appearanceSubfilterCountMale++;
-                    if (lg == AppearanceGender.Female) appearanceSubfilterCountFemale++;
-                    if (lg == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
-                    if (lg == AppearanceGender.Unknown) appearanceSubfilterCountUnknown++;
+                    tagFacets.AppearanceSubfilterCountAll++;
+                    if (isPresetLoose) tagFacets.AppearanceSubfilterCountPresets++;
+                    if (isCustomLoose) tagFacets.AppearanceSubfilterCountCustom++;
+                    if (lg == AppearanceGender.Male) tagFacets.AppearanceSubfilterCountMale++;
+                    if (lg == AppearanceGender.Female) tagFacets.AppearanceSubfilterCountFemale++;
+                    if (lg == AppearanceGender.Futa) tagFacets.AppearanceSubfilterCountFuta++;
+                    if (lg == AppearanceGender.Unknown) tagFacets.AppearanceSubfilterCountUnknown++;
 
-                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Presets, isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountPresets++;
-                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Custom, isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountCustom++;
-                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Male), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountMale++;
-                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Female), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountFemale++;
-                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Futa), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountFuta++;
-                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Unknown), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountUnknown++;
+                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Presets, isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountPresets++;
+                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Custom, isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountCustom++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Male), isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountMale++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Female), isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountFemale++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Futa), isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountFuta++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Unknown), isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountUnknown++;
 
                     if (LoosePassesAppearanceSubfilter(aSub, isPresetLoose, isCustomLoose, lg))
                     {
-                        appearanceSubfilterCurrentCountAll++;
-                        if (lg == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
-                        if (lg == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
-                        if (lg == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
-                        if (lg == AppearanceGender.Unknown) appearanceSubfilterCurrentCountUnknown++;
+                        tagFacets.AppearanceSubfilterCurrentCountAll++;
+                        if (lg == AppearanceGender.Male) tagFacets.AppearanceSubfilterCurrentCountMale++;
+                        if (lg == AppearanceGender.Female) tagFacets.AppearanceSubfilterCurrentCountFemale++;
+                        if (lg == AppearanceGender.Futa) tagFacets.AppearanceSubfilterCurrentCountFuta++;
+                        if (lg == AppearanceGender.Unknown) tagFacets.AppearanceSubfilterCurrentCountUnknown++;
                     }
                 }
             }
             genderBulk.Flush();
         }
 
-        /// <summary>Time-sliced loose .vap merge/recount — keeps category switch responsive on huge libraries.</summary>
-        /// <param name="resetCountsFirst">True for Source:Local full recount; false to merge onto SQL/VAR totals.</param>
         private IEnumerator CoMergeLooseVapAppearanceGenderFacetCounts(int maxMsPerSlice, int deferredSessionId, bool resetCountsFirst)
         {
             if (!ShouldCountLooseAppearanceGenderFiles()) yield break;
@@ -296,36 +287,36 @@ namespace VPB
                     bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                     bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
 
-                    appearanceSourceCountAll++;
-                    if (isCustomLoose) appearanceSourceCountCustom++;
-                    if (isPresetLoose) appearanceSourceCountPresets++;
+                    tagFacets.AppearanceSourceCountAll++;
+                    if (isCustomLoose) tagFacets.AppearanceSourceCountCustom++;
+                    if (isPresetLoose) tagFacets.AppearanceSourceCountPresets++;
 
                     AppearanceGender lg;
                     try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey, genderBulk); }
                     catch { lg = AppearanceGender.Unknown; }
 
-                    appearanceSubfilterCountAll++;
-                    if (isPresetLoose) appearanceSubfilterCountPresets++;
-                    if (isCustomLoose) appearanceSubfilterCountCustom++;
-                    if (lg == AppearanceGender.Male) appearanceSubfilterCountMale++;
-                    if (lg == AppearanceGender.Female) appearanceSubfilterCountFemale++;
-                    if (lg == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
-                    if (lg == AppearanceGender.Unknown) appearanceSubfilterCountUnknown++;
+                    tagFacets.AppearanceSubfilterCountAll++;
+                    if (isPresetLoose) tagFacets.AppearanceSubfilterCountPresets++;
+                    if (isCustomLoose) tagFacets.AppearanceSubfilterCountCustom++;
+                    if (lg == AppearanceGender.Male) tagFacets.AppearanceSubfilterCountMale++;
+                    if (lg == AppearanceGender.Female) tagFacets.AppearanceSubfilterCountFemale++;
+                    if (lg == AppearanceGender.Futa) tagFacets.AppearanceSubfilterCountFuta++;
+                    if (lg == AppearanceGender.Unknown) tagFacets.AppearanceSubfilterCountUnknown++;
 
-                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Presets, isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountPresets++;
-                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Custom, isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountCustom++;
-                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Male), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountMale++;
-                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Female), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountFemale++;
-                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Futa), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountFuta++;
-                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Unknown), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountUnknown++;
+                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Presets, isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountPresets++;
+                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Custom, isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountCustom++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Male), isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountMale++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Female), isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountFemale++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Futa), isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountFuta++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Unknown), isPresetLoose, isCustomLoose, lg)) tagFacets.AppearanceSubfilterFacetCountUnknown++;
 
                     if (LoosePassesAppearanceSubfilter(aSub, isPresetLoose, isCustomLoose, lg))
                     {
-                        appearanceSubfilterCurrentCountAll++;
-                        if (lg == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
-                        if (lg == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
-                        if (lg == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
-                        if (lg == AppearanceGender.Unknown) appearanceSubfilterCurrentCountUnknown++;
+                        tagFacets.AppearanceSubfilterCurrentCountAll++;
+                        if (lg == AppearanceGender.Male) tagFacets.AppearanceSubfilterCurrentCountMale++;
+                        if (lg == AppearanceGender.Female) tagFacets.AppearanceSubfilterCurrentCountFemale++;
+                        if (lg == AppearanceGender.Futa) tagFacets.AppearanceSubfilterCurrentCountFuta++;
+                        if (lg == AppearanceGender.Unknown) tagFacets.AppearanceSubfilterCurrentCountUnknown++;
                     }
 
                     if (sliceWatch != null && fi % 64 == 63 && sliceWatch.ElapsedMilliseconds >= maxMsPerSlice)
@@ -343,7 +334,6 @@ namespace VPB
         private void ScheduleAppearanceLooseMergeRefresh()
         {
             if (!ShouldCountLooseAppearanceGenderFiles()) return;
-            // Source:Local uses ScheduleAppearanceLooseScopedSliceRecount (full reset).
             if (IsAppearanceLooseScopedBrowsing())
             {
                 ScheduleAppearanceLooseScopedSliceRecount(_deferredSubPaneSessionId);
@@ -372,9 +362,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Source:Local Appearance — sliced full loose-.vap recount (never sync Accumulate on large trees).
-        /// </summary>
+        /// <summary>Source:Local Appearance — sliced full loose-.vap recount (never sync Accumulate on large trees).</summary>
         private void ScheduleAppearanceLooseScopedSliceRecount(int deferredSessionId)
         {
             if (!ShouldCountLooseAppearanceGenderFiles()) return;
@@ -411,10 +399,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Source:Local Appearance: prefer SQL for instant chips; kick sliced loose recount.
-        /// Never runs sync <see cref="AccumulateLooseVapAppearanceGenderCounts"/> (can freeze VAM).
-        /// </summary>
         private bool TryRecomputeAppearanceGenderFacetCountsScoped()
         {
             if (!IsAppearanceLooseScopedBrowsing()) return false;

@@ -24,7 +24,7 @@ namespace VPB
     // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)
     [BepInPlugin("VPB", "VPB", PluginVersionInfo.Version)]
 
-    public partial class VamHookPlugin : BaseUnityPlugin // Inherits BaseUnityPlugin
+    public partial class VamHookPlugin : BaseUnityPlugin
     {
         private class FilteringLogHandler : ILogHandler
         {
@@ -107,11 +107,9 @@ namespace VPB
 
                 if (string.IsNullOrEmpty(msg)) return false;
 
-                // VaM/Unity spam during unload; shows up as "[Info   : Unity Log] Unload Person ..." in BepInEx output.
-                // The string passed through Unity's logger is typically just "Unload Person ...".
+                // VaM/Unity spam during unload; shows up as "[Info : Unity Log] Unload Person ..." in BepInEx output.
                 if (msg.StartsWith("Unload Person ", StringComparison.OrdinalIgnoreCase)) return true;
 
-                // Defensive: if the prefix is included in the formatted message for some reason.
                 if (msg.IndexOf("Unload Person ", StringComparison.OrdinalIgnoreCase) >= 0
                     && msg.IndexOf("Unity Log", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
@@ -120,7 +118,6 @@ namespace VPB
 
                 return false;
             }
-
         }
 
         private KeyUtil UIKey;
@@ -132,8 +129,6 @@ namespace VPB
         private KeyUtil ToggleFixedGalleryKey;
         private Vector2 UIPosition;
         private bool MiniMode;
-
-
 
         private const int STD_OUTPUT_HANDLE = -11;
 
@@ -225,7 +220,6 @@ namespace VPB
         private static bool s_UiPendingWarnLogged;
 
         public static string CurrentScenePackageUid;
-        /// <summary>Last non-merge scene load path from SuperController (VAR uid:/internal or local Saves/scene path).</summary>
         public static string CurrentSceneSaveName;
 
         private Harmony m_Harmony;
@@ -234,7 +228,6 @@ namespace VPB
 
         public static string GetCacheDir()
         {
-            // Move Zstd texture cache to a subfolder of native Textures cache
             string baseCache = MVR.FileManagement.CacheManager.GetTextureCacheDir();
             if (string.IsNullOrEmpty(baseCache))
             {
@@ -252,7 +245,6 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(abCacheDir))
             {
-                // Keep assetbundle cache in its own isolated folder
                 abCacheDir = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/VPB_cache/ab"));
                 if (!Directory.Exists(abCacheDir))
                 {
@@ -264,6 +256,7 @@ namespace VPB
         void Awake()
         {
             singleton = this;
+            useGUILayout = false;
             IsFileManagerInited = false;
 
             try { VpbShutdown.Arm(); } catch { }
@@ -282,7 +275,6 @@ namespace VPB
             {
             }
 
-            // Explicitly initialize ZstdNet native library early
             try { ExternMethods.Initialize(); } catch { }
 
             LogUtil.ResetPluginSession();
@@ -374,10 +366,10 @@ namespace VPB
             try { QuickMenuMigrateAnchorBaselineOnce(); } catch { }
             try
             {
-                // Ensure dependency whitelist (Saves/PluginData/VPB/dependency_whitelist.json) is loaded early.
                 var _ = DependencyWhitelistManager.Instance;
             }
             catch { }
+            try { FileManager.LogForceLatestPolicyStateAtStartup(); } catch { }
             try { GlobalInfo.EnsurePluginDataInitialized(); } catch { }
             try
             {
@@ -417,7 +409,6 @@ namespace VPB
                 m_Harmony.UnpatchAll("VPB_hook");
             }
             catch { }
-            // Patch VaM/Harmony hook points.
             SuperControllerHook.PatchOptional(m_Harmony);
             m_Harmony.PatchAll(typeof(AtomHook));
             m_Harmony.PatchAll(typeof(HubResourcePackageHook));
@@ -443,15 +434,10 @@ namespace VPB
             ThirdPartyFixHook.PatchAll(m_Harmony);
             StateMachineDiagnostic.PatchAll(m_Harmony);
 
-            // Zstd support is now handled by ZstdNet (auto-initialized)
-
             InitUpdater();
             try { VpbPerfController.Initialize(); } catch { }
         }
 
-        // Lazily subscribe to atom-add once SuperController exists. Awake runs at BepInEx
-        // load time (before SuperController.singleton is set), so subscribing there is a no-op.
-        // Atom removal is already handled by the SuperController.RemoveAtom Harmony postfix.
         private void EnsureAtomAddedSubscription()
         {
             if (m_AtomAddedSubscribed) return;
@@ -466,10 +452,6 @@ namespace VPB
             catch { }
         }
 
-        // Coalesce same-frame atom-add bursts (e.g. importing several atoms) into a single
-        // deferred refresh. A newly added Person atom is not reported as person-like by
-        // GetAtoms() for a few frames, so we use the multi-frame coroutine refresh rather
-        // than a single next-frame pass.
         private void OnSceneAtomAdded(Atom a)
         {
             m_PendingTargetListRefresh = true;
@@ -495,7 +477,6 @@ namespace VPB
                 return;
             }
 
-            // Preserve the expanded height so we can restore it when leaving mini mode.
             if (!MiniMode)
             {
                 m_ExpandedHeight = Mathf.Max(m_Rect.height, MiniModeHeight);
@@ -510,7 +491,6 @@ namespace VPB
             }
             else
             {
-                // Restore previous expanded height.
                 m_Rect.height = Mathf.Max(m_ExpandedHeight, MiniModeHeight);
             }
 
@@ -543,7 +523,7 @@ namespace VPB
 
             VamOnDemandLoader.SetMainThread();
             VamScanFilter.DiscoverVamInternals();
-            var _ = ScanWhitelistManager.Instance; // eager init
+            var _ = ScanWhitelistManager.Instance;
             try { VpbCompanionServer.Start(); } catch { }
 
             System.Threading.ThreadPool.QueueUserWorkItem((state) => {
@@ -573,12 +553,9 @@ namespace VPB
             }
             catch { }
 
-            // Auto-create gallery pane on startup if enabled
             TryCreateAutoFixedGalleryPane();
         }
 
-        // Start() runs once per process and does not re-run on scene reload (Hard Reset). Driven again from
-        // Update() via m_AutoFixedGalleryPanePending so the fixed gallery pane is re-created after a reload.
         void TryCreateAutoFixedGalleryPane()
         {
             if (VPBConfig.Instance == null || !VPBConfig.Instance.EnableAutoFixedGallery) return;
@@ -687,7 +664,6 @@ namespace VPB
 
             this.Config.Save();
 
-            // Cleanup QuickMenu Button
             if (SuperController.singleton.mainHUD != null)
             {
                 var existing = SuperController.singleton.mainHUD.Find("VPB_QuickMenuButton_Canvas");
@@ -711,7 +687,6 @@ namespace VPB
             try { VpbPackageInsightScanner.Shutdown(); } catch { }
             try { VpbRandomHistory.Flush(); } catch { }
         }
-        // Called on (hard) restart as well.
         IEnumerator ApplyLateStartupProfilerPatchesCo()
         {
             yield return null;
@@ -723,10 +698,6 @@ namespace VPB
         {
             try { VamStartupProfiler.Milestone("Unity.sceneLoaded name=" + (scene != null ? scene.name : "") + " mode=" + mode); } catch { }
 
-            // Additive = CustomUnityAsset payload, not a VaM scene-lifecycle event. AssetLoader
-            // .LoadSceneIntoTransformAsync loads the .assetbundle's Unity scene additively every time a CUA
-            // asset is picked, so a skybox/environment pack fires this once per selection. Only a Single load
-            // (engine scene reload / Hard Reset) means the plugin session must be re-armed.
             bool hardReset = (mode == LoadSceneMode.Single);
             if (hardReset)
                 LogUtil.Log("[VPB] Unity scene reloaded (Single): " + (scene != null ? scene.name : ""));
@@ -741,7 +712,6 @@ namespace VPB
                 m_Inited = false;
                 IsFileManagerInited = false;
                 m_UIInited = false;
-                // Scene reload (Hard Reset) destroys VaM's FileManager and skips Start()/Awake() (plugin GameObject survives), so re-arm every cold-start one-shot below to replay the plugin session: native registry, registry-ready callback, READY latches, fixed gallery pane, return-to-scene-view, on-demand cache, vamX UI.
                 s_FileManagerInitialRefreshCompleted = false;
                 s_UiPendingWarnLogged = false;
                 m_GalleryCatsInited = false;
@@ -756,10 +726,9 @@ namespace VPB
         }
         void OnEnable()
         {
-            VPBLogger.Init(); // in case the plugin is ever partially reloaded for some reason
+            VPBLogger.Init();
             MessageKit.addObserver(MessageDef.DeactivateWorldUI, OnDeactivateWorldUI);
             try { VpbProgressService.EnsureOverlay(); } catch { }
-
         }
         void OnDisable()
         {
@@ -887,7 +856,6 @@ namespace VPB
             }
             catch { }
 
-            // IMGUI TextField focus: not in all Unity reference assemblies; probe at runtime.
             try
             {
                 if (!s_EditingTextFieldResolved)
@@ -915,16 +883,9 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Normal vertical fly speed (m/s at worldScale 1) for the E/C navigation keys.</summary>
         private const float VerticalMoveSpeed = 1.0f;
-        /// <summary>Fast vertical fly speed used while Shift is held.</summary>
         private const float VerticalMoveSpeedFast = 2.0f;
 
-        /// <summary>
-        /// E = move up, C = move down. Translates the VaM navigation rig vertically so users can
-        /// gain/lose altitude with the keyboard the same way WASD moves horizontally. Universal
-        /// (desktop + VR), gated by <see cref="VPBConfig.VerticalMoveKeysEnabled"/> (ON by default).
-        /// </summary>
         private void UpdateVerticalNavigationKeys()
         {
             if (VPBConfig.Instance == null || !VPBConfig.Instance.VerticalMoveKeysEnabled) return;
@@ -972,8 +933,7 @@ namespace VPB
             VpbPerfDiag.EmitFrameSummaryIfDue();
             if (m_PendingGc)
             {
-                // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle
-                // and cause visible scene/atom pops.
+                // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle and cause visible scene/atom pops.
                 if (!LogUtil.IsSceneLoading())
                 {
                     m_PendingGc = false;
@@ -994,9 +954,7 @@ namespace VPB
             if (m_PendingTargetListRefresh)
             {
                 m_PendingTargetListRefresh = false;
-                // The coroutine waits for IsLoadingScene to clear before refreshing, so it
-                // correctly handles both manual atom adds (which briefly set the loading flag
-                // while the character loads) and full scene loads.
+                // The coroutine waits for IsLoadingScene to clear before refreshing.
                 try { SceneLoadingUtils.ScheduleGalleryTargetListRefresh(); } catch { }
             }
 
@@ -1050,7 +1008,6 @@ namespace VPB
                     var panels = Gallery.singleton.Panels;
                     if (panels != null && panels.Count > 0)
                     {
-                        // Toggle the first fixed panel found
                         foreach (var panel in panels)
                         {
                             if (panel != null && panel.isFixedLocally)
@@ -1064,7 +1021,6 @@ namespace VPB
             }
             OnDemandTextureCacheHook.Update();
             try { ImageLoadingMgr.singleton?.DrainPendingRuntimeZstdWrites(); } catch { }
-            // Hotkeys
             if (m_Inited)
             {
                 if (CreateGalleryKey.TestKeyDown() && !ShouldSuppressPluginHotkey(CreateGalleryKey, true))
@@ -1076,8 +1032,6 @@ namespace VPB
                 else if (UIKey.TestKeyDown() && !ShouldSuppressPluginHotkey(UIKey, true) && !UIKey.IsSame(GalleryKey))
                     ToggleGalleryVisibility();
 
-                // Layout presets. Pane Update skips when canvas is off, so this is the
-                // no-visible-pane path (quick menu / gallery hidden).
                 if (VpbShortcutMap.DownIgnoringPaneGate(VpbShortcut.LayoutPresets)
                     && !IsTypingInTextInput()
                     && VpbShortcutGate.GlobalHotkeyAllowed(true)
@@ -1097,8 +1051,6 @@ namespace VPB
 
             try { UpdateVerticalNavigationKeys(); } catch { }
 
-            // Ctrl+Shift+U: dump live CUA geometry (control / linked-bone / mesh bounds) for comparing a
-            // normal scene load against an import. Diagnostic only.
             try
             {
                 if (Input.GetKeyDown(KeyCode.U)
@@ -1111,8 +1063,6 @@ namespace VPB
             }
             catch { }
 
-            // Ctrl+Shift+P: dump the last imported pose (source foot/toe/hand/root control specs vs live applied
-            // controller states + toe/foot bone angles) to diagnose toes curling / hand drift. Diagnostic only.
             try
             {
                 if (Input.GetKeyDown(KeyCode.P)
@@ -1125,7 +1075,6 @@ namespace VPB
             }
             catch { }
 
-            // Ctrl+Shift+L: dump atoms listed in the gallery's selected scene/preset, not live scene state.
             try
             {
                 if (Input.GetKeyDown(KeyCode.L)
@@ -1180,8 +1129,7 @@ namespace VPB
             }
             else if ((m_CloseAllButtonGO == null || m_BringFrontButtonGO == null) && SuperController.singleton != null && SuperController.singleton.mainHUD != null)
             {
-                // Handle hot-reload updates: older sessions may have created the quick menu canvas
-                // before these buttons existed.
+                // Handle hot-reload updates: older sessions may have created the quick menu canvas before these buttons existed.
                 m_QuickMenuButtonInited = false;
                 CreateQuickMenuButton();
             }
@@ -1199,7 +1147,6 @@ namespace VPB
                     m_ShowHideButton.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide") + " (" + count + ")";
                 }
 
-                // Keep icon visuals current (Show/Hide toggles eye icon based on visibility).
                 try
                 {
                     if (m_QuickMenuGridButtons != null)
@@ -1229,7 +1176,6 @@ namespace VPB
                                 }
                             }
 
-                            // Edit/page/assignment events already refresh their slots synchronously.
                             if (i == m_QuickMenuEditSlotIdx || i == m_QuickMenuPageToggleSlotIdx) continue;
                             if (a == QuickMenuAssignableAction.FpsCounter)
                             {
@@ -1249,12 +1195,9 @@ namespace VPB
                 catch { }
             }
 
-            // VR wrist watch: separate canvas on a controller. HUD grid stays.
             try { QuickMenuUpdateVrWatch(); }
             catch (Exception ex) { QuickMenuLogWatchUpdateError(ex); }
 
-            // Live preview: reposition the quick-menu grid when the anchor setting changes.
-            // (Do this every frame; the helper is internally throttled.)
             try { QuickMenuUpdateGridLayoutLive(); } catch { }
 
             // Assignable-button tip hide grace (instant show; deferred clear only).
@@ -1265,11 +1208,8 @@ namespace VPB
             try { QuickMenuAdvanceRandomPreview(); } catch { }
         }
 
-
         bool AutoInstalled = false;
         // Once per process: install every package listed in AutoInstall.txt (AllPackages → AddonPackages).
-        // Also install dependencies for local Saves/scene JSON rows flagged with VPB_LS:… keys (scene file stays put).
-        // Toggling AutoInstall in the UI only updates that list; it does not move files until this runs.
         void TryAutoInstall()
         {
             if (AutoInstalled) return;
@@ -1430,7 +1370,6 @@ namespace VPB
             var _hubSw = System.Diagnostics.Stopwatch.StartNew();
             if (m_HubBrowse == null)
             {
-
                 var child = Tools.AddChild(this.gameObject);
                 child.name = "VarBrowser_HubBrowse";
                 child.AddComponent<VPB.HubImageLoaderThreaded>();
@@ -1511,22 +1450,17 @@ namespace VPB
                 }
             };
 
-            // Close button
-
             var close = Tools.GetChild(newgo.transform, "CloseButton");
             if (close != null)
             {
                 var closeButton = close.GetComponent<Button>();
-                //var closeButton = newgo.transform.Find("LeftBar/CloseButton").GetComponent<Button>();
                 closeButton.onClick.RemoveAllListeners();
                 closeButton.onClick.AddListener(() =>
                 {
                     m_HubBrowse.Hide();
                 });
             }
-            // Hide the built-in package manager button
             var openPackageButton = Tools.GetChild(newgo.transform, "OpenPackageManager");
-            //var openPackageButton = newgo.transform.Find("LeftBar/OpenPackageManager").GetComponent<Button>();
             if (openPackageButton != null)
                 openPackageButton.gameObject.SetActive(false);
             else
@@ -1558,7 +1492,6 @@ namespace VPB
                 var existing = SuperController.singleton.mainHUD.Find("VPB_QuickMenuButton_Canvas");
                 if (existing != null)
                 {
-                    // Destroy old version if found to ensure update
                     DestroyImmediate(existing.gameObject);
                 }
 
@@ -1607,14 +1540,12 @@ namespace VPB
                 }
                 else
                 {
-                    // Position at Left side
                     m_QuickMenuCanvas.transform.localPosition = new Vector3(0f, 0f, 0f);
                     m_QuickMenuCanvas.transform.localEulerAngles = new Vector3(0, 180, 0);
                 }
 
                 EnsureQuickMenuGridArrays();
 
-                // Load quick menu icons
                 Color tint = Color.white;
                 m_QmIconCreate   = UI.LoadIconSprite("copy-plus", tint);
                 m_QmIconEyeOn    = UI.LoadIconSprite("eye", tint);
@@ -1625,7 +1556,6 @@ namespace VPB
                 m_QmIconEditOff  = UI.LoadIconSprite("settings-off", tint);
                 m_QmIconAssignEmpty = UI.LoadIconSprite("square-plus-2", tint);
                 m_QmIconSave   = UI.LoadIconSprite("device-floppy", tint);
-                // Random icon: Tabler dice-3.
                 m_QmIconRandom = UI.LoadIconSprite("dice-3", tint);
                 m_QmIconHexAppearance = UI.LoadIconSprite("hexagon-letter-a", tint) ?? m_QmIconRandom;
                 m_QmIconHexPose = UI.LoadIconSprite("hexagon-letter-p", tint) ?? m_QmIconRandom;
@@ -1720,30 +1650,23 @@ namespace VPB
                     UI.LoadIconSprite("rosette-number-9", tint),
                 };
 
-                // Anchor center used for layout; positions are kept live in Update().
                 Vector2 createCenter = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
                 Vector2 rootTopLeft = createCenter + new Vector2(-QuickMenuAnchorOldButtonW * 0.5f, QuickMenuAnchorOldButtonH * 0.5f);
 
-                // New grid: square buttons + uniform gaps.
                 float cell = QuickMenuGridCell;
                 Vector2 popupOffset = new Vector2(260f, -20f);
 
-                // Top-left slot center (slot 0). Every other slot is offset from this.
                 Vector2 slot0Center = new Vector2(
                     rootTopLeft.x + (QuickMenuGridButtonSize * 0.5f),
                     rootTopLeft.y - (QuickMenuGridButtonSize * 0.5f)
                 );
 
-                // Load persisted page configs (or seed defaults on first run).
                 QuickMenuEnsureDefaultsAndLoadFromConfig();
                 try { QuickMenuEnsureWatchAssignments(); } catch { }
 
-                // Tooltip UI (positioned by QuickMenuApplyGridLayoutFromAnchor / live updates)
                 QuickMenuEnsureTooltipUI();
                 try { QuickMenuEnsureBrandPlate(); } catch { }
                 try { QuickMenuApplyGridLayoutFromAnchor(createCenter); } catch { }
-
-                // Core slot indices are loaded from persisted config in QuickMenuEnsureDefaultsAndLoadFromConfig().
 
                 bool initialShouldShow = Gallery.singleton != null && Gallery.singleton.PanelCount > 0;
 
@@ -1821,8 +1744,6 @@ namespace VPB
 
                         if (m_QuickMenuEditMode)
                         {
-                            // Page navigation slots stay functional in edit mode so the user
-                            // can flip pages while assigning buttons on other pages.
                             var editAct = QuickMenuGetSlotAction(idxCopy);
                             if (editAct == QuickMenuAssignableAction.PageNext)
                             {
@@ -1845,13 +1766,11 @@ namespace VPB
                         }
 
                         var act = QuickMenuGetSlotAction(idxCopy);
-                        // Save opens a submenu; remember which slot invoked it.
                         if (act == QuickMenuAssignableAction.Save) m_QuickMenuSavePopupTargetIdx = idxCopy;
                         if (act == QuickMenuAssignableAction.PersonSelect) m_QuickMenuPersonPopupTargetIdx = idxCopy;
                         QuickMenuExecuteAssignment(act);
                     });
 
-                    // Right-click on current Page button goes backwards (slot is dynamic, so check at click time).
                     var rc = go.AddComponent<QuickMenuRightClickHandler>();
                     rc.onRightClick = () =>
                     {
@@ -1875,7 +1794,6 @@ namespace VPB
                     if (requiresGallery) go.SetActive(initialShouldShow);
                 }
 
-                // Bind legacy refs to assigned slots so existing update paths continue working.
                 m_CreateGalleryButtonGO = m_QuickMenuGridButtons[0];
                 m_ShowHideButtonGO = m_QuickMenuGridButtons[1];
                 m_BringFrontButtonGO = m_QuickMenuGridButtons[2];
@@ -1896,7 +1814,6 @@ namespace VPB
 
                 try { QuickMenuEnsureDeskPreviewWidget(); } catch { }
 
-                // Initial visuals (icons / showhide state)
                 for (int i = 0; i < QuickMenuGridSlotCount; i++) QuickMenuRefreshSlotVisual(i);
 
                 m_QuickMenuButtonInited = true;
@@ -1911,7 +1828,6 @@ namespace VPB
         void ShowFileBrowser(string title, string fileFormat, string path, bool inGame = false, bool selectOnClick = true)
         {
             SuperController.singleton.ActivateWorldUI();
-            // Hide Hub Browse while the file browser is open.
             m_HubBrowse.Hide();
 
             m_FileBrowser.Hide();
@@ -2027,7 +1943,6 @@ namespace VPB
                 LogUtil.LogError("[VPB] LoadFromSceneWorldDialog failed: " + ex.Message);
             }
 
-            // Hide UI while loading a scene.
             if (m_FileBrowser != null)
             {
                 m_FileBrowser.Hide();
@@ -2042,8 +1957,6 @@ namespace VPB
         public void InitDynamicPrefab()
         {
             m_MVRPluginManager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
-            //m_MVRPluginManager.configurableFilterablePopupPrefab
-
         }
         public class ButtonHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
         {

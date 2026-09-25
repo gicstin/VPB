@@ -13,7 +13,6 @@ namespace VPB
         public string ExpectedTag;
         public Texture2D CurrentTexture;
         public Action ResumeLoad;
-        /// <summary>Decode retries for this binding (resets when ExpectedTag changes or load succeeds).</summary>
         public int ThumbRetryCount;
 
         private void OnEnable()
@@ -59,10 +58,7 @@ namespace VPB
         private const int AllVarThumbQueuePressureThreshold = 80;
         private static readonly Color ThumbnailPlaceholderBackdrop = new Color(0.25f, 0.25f, 0.25f, 0.55f);
 
-        // Cache for package list thumbnails: package UID -> internal image path (within the package).
-        // Keeps package preview lookups cheap while scrolling.
         private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        // Cache for fast ALL VAR sister JPG existence checks: package UID -> set of internal .jpg paths (normalized, no leading "/").
         private readonly Dictionary<string, HashSet<string>> _packageInternalJpgSetCache = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         // Loose-file (local scene) sister JPG: source Path -> jpg path, or "" if none. Avoids FileExists per scroll bind.
         private readonly Dictionary<string, string> _looseSisterJpgPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -76,10 +72,6 @@ namespace VPB
             return path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>
-        /// <c>pkg.var_path</c> should be the .var on disk; if wrong column / bad data yields an internal image path,
-        /// do not use it for <see cref="FileManager.GetPackage"/> or loose-file thumbnail shortcuts (ALL VAR grid).
-        /// </summary>
         private static bool IndexedVarPathHintLooksUsableForPackageResolve(string p)
         {
             if (string.IsNullOrEmpty(p)) return false;
@@ -92,9 +84,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Gallery <see cref="VarFileEntry.Path"/>: <c>pkg.var:/internal</c> or bare <c>…/pkg.var</c> (e.g. SQLite <c>meta.json</c> row uses var_path only — no <c>:/</c>).
-        /// </summary>
+        /// <summary>Gallery Path: pkg.var:/internal or bare …/pkg.var (e.g. SQLite meta.json row uses var_path only — no :/).</summary>
         private static bool TryGetVarPackageRootPathFromGalleryPath(string galleryPath, out string pkgRoot)
         {
             pkgRoot = null;
@@ -118,7 +108,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>SQLite / ALL VAR rows often use relative var paths; <see cref="FileManager.GetPackage"/> expects package UID.</summary>
         private static string CanonicalVarPackageUidFromPathOrHint(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return null;
@@ -192,9 +181,6 @@ namespace VPB
             return extWithDotLower != ".jpg" && extWithDotLower != ".jpeg" && extWithDotLower != ".png";
         }
 
-        /// <summary>
-        /// <c>Saves/scene</c> and any nested folder (e.g. <c>Saves/scene/Sharr LOOKS/*.jpg</c>). Uses <see cref="NormalizeVarInternalEntryPath"/>.
-        /// </summary>
         private static bool IsUnderSavesSceneTree(string pathNormalizedOrRaw)
         {
             if (string.IsNullOrEmpty(pathNormalizedOrRaw)) return false;
@@ -204,10 +190,7 @@ namespace VPB
                 || n.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>
-        /// VAR zip paths: parent via last <c>/</c> only (Unicode, apostrophe, leading spaces in folder names — e.g.
-        /// <c>Custom/Hair/Female/Miki/ C├┤te d'Azur Hair/file.jpg</c>). Avoids Windows <see cref="Path.GetDirectoryName"/> mangling.
-        /// </summary>
+        /// <summary>VAR zip paths: parent via last "/" only, avoiding Windows path mangling.</summary>
         private static string GetInternalPathParentDirectory(string normSlashPath)
         {
             if (string.IsNullOrEmpty(normSlashPath)) return "";
@@ -247,7 +230,6 @@ namespace VPB
             return n;
         }
 
-        /// <summary>Heuristic: UTF-8 bytes were decoded as ISO-8859-1 (common <c>Ã´</c> vs <c>ô</c> in SQLite vs zip).</summary>
         private static bool LooksLikeUtf8MisreadAsLatin1(string s)
         {
             if (string.IsNullOrEmpty(s)) return false;
@@ -282,7 +264,6 @@ namespace VPB
             return segmentNoSlashes;
         }
 
-        /// <summary>Repair each <c>/</c> segment separately so mixed UTF-8 + mojibake (e.g. <c>d'Azur</c> + <c>CÃ´te</c>) does not corrupt the path.</summary>
         private static string NormalizeVarInternalPathForThumbKeys(string path)
         {
             string n = NormalizeVarInternalEntryPath(path);
@@ -319,7 +300,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Returns zip-listed path string to pass to <c>pkg:/</c> (canonical member from set).</summary>
         private static string FindMatchingInternalJpgPathInSet(HashSet<string> set, string keyNorm)
         {
             if (set == null || string.IsNullOrEmpty(keyNorm)) return null;
@@ -338,10 +318,7 @@ namespace VPB
             public bool IsImage;
         }
 
-        /// <summary>
-        /// Package-row preview: sister pairs (<c>foo.jpg</c> + non-image <c>foo.*</c>) — first match in entry order.
-        /// EVERYTHING mode: prefer pairs under <c>Saves/scene</c>, then other pairs; orphan <c>.jpg</c> prefers <c>Saves/scene</c> path.
-        /// </summary>
+        /// <summary>Package-row preview: sister pairs (foo.jpg + non-image foo.*) — first match in entry order.</summary>
         private static string PickPackagePreviewInternalPathFromFileList(List<string> names, bool prioritizeSavesSceneForEverything)
         {
             if (names == null || names.Count == 0) return null;
@@ -563,19 +540,13 @@ namespace VPB
                     }
                     if (pendingThumbnailCacheJobs.Count == 0) break;
 
-                    // Gate 1: wait for scroll to settle (1 s idle instead of 0.25 s — gives the
-                    // image-loader background threads time to finish their own SaveThumbnail calls
-                    // and release the cache write-lock before we add more pressure from the main thread).
+                    // Gate 1: wait 1 s scroll idle so loader threads release the cache write-lock.
                     if (Time.unscaledTime - lastScrollTime <= 1.0f)
                     {
                         yield return null;
                         continue;
                     }
 
-                    // Gate 2: wait until the image loader has no thumbnails actively decoding.
-                    // While the loader is busy its background threads are calling SaveThumbnail
-                    // (holding the write-lock + doing disk flushes); adding our own saves on top
-                    // causes severe lock contention and disk saturation.
                     if (CustomImageLoaderThreaded.singleton != null &&
                         CustomImageLoaderThreaded.singleton.PendingThumbnailCount > 0)
                     {
@@ -583,9 +554,6 @@ namespace VPB
                         continue;
                     }
 
-                    // Gate 3: skip this frame if we're already running slow (< ~40 FPS).
-                    // ReadPixels + disk flush cost 10–50 ms; adding that to an already-slow
-                    // frame makes scrolling impossible.
                     if (Time.unscaledDeltaTime > 0.025f)
                     {
                         yield return null;
@@ -599,8 +567,7 @@ namespace VPB
                     yield return StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(job.Path, job.Texture, job.LastWriteTime, job.TurboJpegScaleDenom));
                     _thumbCacheSaved++;
 
-                    // Pause at least 2 frames between saves so ReadPixels/flush don't stack up
-                    // back-to-back and starve the render thread.
+                    // Pause at least 2 frames between saves so ReadPixels/flush don't stack up back-to-back and starve the render thread.
                     yield return null;
                     yield return null;
                 }
@@ -647,7 +614,6 @@ namespace VPB
             if (!string.IsNullOrEmpty(jpg))
             {
                 try { _looseThumbWriteTimeCache.Remove(jpg); } catch { }
-                // Also drop sister resolve for the JSON row this jpg belongs to.
                 string json = null;
                 try { json = Path.ChangeExtension(norm, ".json"); } catch { json = null; }
                 if (!string.IsNullOrEmpty(json))
@@ -657,10 +623,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Sister <c>.jpg</c> next to a loose gallery file (local scene JSON). Cached — scroll binds must not
-        /// re-hit <see cref="FileManager.FileExists"/> every cell.
-        /// </summary>
         private string ResolveLooseSisterJpgPathCached(string filePath)
         {
             if (string.IsNullOrEmpty(filePath)) return null;
@@ -677,7 +639,6 @@ namespace VPB
             }
             catch (ArgumentException)
             {
-                // Invalid path characters — treat as no sister.
             }
             catch { }
 
@@ -764,14 +725,13 @@ namespace VPB
             }
         }
 
-        /// <summary>Plugin script paths under Custom/Scripts.</summary>
         private static bool IsPluginScriptGalleryFile(FileEntry file)
         {
             if (file == null || string.IsNullOrEmpty(file.Path)) return false;
             string p = file.Path.Replace('\\', '/');
             if (p.IndexOf("Custom/Scripts/", StringComparison.OrdinalIgnoreCase) < 0) return false;
             string lower = p.ToLowerInvariant();
-            return lower.EndsWith(".cs") || lower.EndsWith(".cslist") || lower.EndsWith(".dll");
+            return lower.EndsWith(".cs", StringComparison.Ordinal) || lower.EndsWith(".cslist", StringComparison.Ordinal) || lower.EndsWith(".dll", StringComparison.Ordinal);
         }
 
         private void LoadThumbnailInternal(FileEntry file, RawImage target, bool gridThumbnailContext, int turboJpegThumbnailDenom, bool thumbnailUnityDecodeOnly)
@@ -793,8 +753,6 @@ namespace VPB
             }
 
             string imgPath = "";
-            // Package list rows use Path as indexed var_path hint; never treat that as a loose disk image
-            // (bad/mis-typed DB → wrong branch → FileExists miss → decode retry storm when grid relayouts).
             if (!(file is PackageListEntry) && IsImagePath(file.Path))
             {
                 imgPath = file.Path;
@@ -808,7 +766,7 @@ namespace VPB
                     try
                     {
                         if (!string.IsNullOrEmpty(cand.PackageUid))
-                            pkg = FileManager.GetPackageForDependency(cand.PackageUid, false);
+                            pkg = FileManager.GetInstalledPackageOrDependency(cand.PackageUid);
                     }
                     catch { pkg = null; }
 
@@ -821,13 +779,11 @@ namespace VPB
                 }
                 else
                 {
-                    // Local cleanup rows: sidecar .jpg next to source (.json -> .jpg).
                     imgPath = ResolveLooseSisterJpgPathCached(file.Path) ?? "";
                 }
             }
             else if (file is PackageListEntry ple)
             {
-                // Package list row: resolve VarPackage then pick internal preview (sister JPG/PNG + non-image sibling, etc.).
                 VarPackage pkg = TryResolveVarPackageForPackageListEntry(ple);
                 if (pkg != null && !string.IsNullOrEmpty(pkg.Path))
                 {
@@ -863,7 +819,6 @@ namespace VPB
                     rowPkgUid = ix > 0 ? u.Substring(0, ix) : u;
                 }
                 catch { rowPkgUid = null; }
-                // Indexed resolve (SQLite UID + var_path): matches packagesByPath / filename fallback when bare GetPackage(uid) misses (Unicode paths).
                 if (!string.IsNullOrEmpty(rowPkgUid) && !string.IsNullOrEmpty(pkgNorm))
                 {
                     try
@@ -889,7 +844,6 @@ namespace VPB
                 }
 
                 // Per-row sister: same basename, .jpg only (then package-wide preview if missing).
-                // Use encoding-repaired internal path for folder/file segments so sister path matches zip listing when SQLite has Latin1-mojibake (Ã´ vs ô).
                 string ipKey = NormalizeVarInternalPathForThumbKeys(vfe.InternalPath ?? "");
                 string leafInternal = GetZipInternalLeafFileName(ipKey);
                 string internalNoExt = string.IsNullOrEmpty(leafInternal)
@@ -901,7 +855,7 @@ namespace VPB
                     : internalDir + "/" + internalNoExt;
 
                 string internalSisterJpg = (baseInternal + ".jpg").Replace('\\', '/');
-                if (internalSisterJpg.StartsWith("/")) internalSisterJpg = internalSisterJpg.Substring(1);
+                if (internalSisterJpg.StartsWith("/", StringComparison.Ordinal)) internalSisterJpg = internalSisterJpg.Substring(1);
                 string sisterKeyNorm = NormalizeVarInternalPathForThumbKeys(internalSisterJpg);
 
                 if (vPkg != null)
@@ -941,16 +895,11 @@ namespace VPB
                 imgPath = ResolveLooseSisterJpgPathCached(file.Path) ?? "";
             }
 
-            // IMPORTANT: if we can't resolve a thumbnail path for this row, explicitly clear any
-            // previous binding/texture so recycled list rows don't show stale thumbnails.
             if (string.IsNullOrEmpty(imgPath))
             {
                 ClearThumbnailTarget(target);
                 return;
             }
-
-            // Debug Log
-            // LogUtil.Log($"[VPB] LoadThumbnail requested for {file.Name} (GroupId: {currentLoadingGroupId})");
 
             if (CustomImageLoaderThreaded.singleton == null) return;
 
@@ -962,9 +911,7 @@ namespace VPB
                 bind = target.GetComponent<ThumbnailBindingTag>();
                 if (bind == null) bind = target.gameObject.AddComponent<ThumbnailBindingTag>();
 
-                // Rebinding the same visible item after a hide/show should keep the current
-                // thumbnail in place. Otherwise the grid briefly blanks every image, then
-                // immediately restores it from cache, which looks like a full redraw.
+                // Rebinding the same visible item after a hide/show should keep the current thumbnail in place.
                 if (bind.ExpectedTag == expectedTag && bind.CurrentTexture != null && target.texture == bind.CurrentTexture)
                 {
                     target.color = Color.white;
@@ -984,8 +931,7 @@ namespace VPB
                     bind.CurrentTexture = null;
                 }
 
-                // New binding: immediately blank old texture so pooled rows never "flash" stale previews
-                // while async load resolves (notably visible in ALL VAR package list).
+                // New binding blanks old texture so pooled rows never flash stale previews.
                 try
                 {
                     target.texture = null;
@@ -998,7 +944,6 @@ namespace VPB
             // Hidden binds resume on activation; they must not pin textures in the loader.
             if (target == null || !target.gameObject.activeInHierarchy) return;
 
-            // 1. Memory Cache (tier: optional full-res for hover; else TurboJPEG scale from grid columns)
             int thumbTd = turboJpegThumbnailDenom > 0
                 ? TurboJpegNative.NormalizeScaleDenom(turboJpegThumbnailDenom)
                 : TurboJpegNative.ScaleDenomFromGridColumns(EffectiveGridColumnsForThumbDecode());
@@ -1055,8 +1000,6 @@ namespace VPB
                         try { SyncThumbPlaceholderForFile(target.transform, target, fileForCallback); } catch { }
                     }
 
-                    // Disk enqueue idle-gated in ProcessThumbnailCacheQueue.
-                    // Use sister-jpg mtime (cached) — never JSON FileEntry.LastWriteTime (cache key mismatch vs decode).
                     if (!res.loadedFromGalleryCache && capturedGroupId == currentLoadingGroupId && res.tex != null)
                     {
                         long imgTime = GetLooseThumbWriteTimeCached(imgPath);
@@ -1185,23 +1128,16 @@ namespace VPB
 
             if (arf != null)
             {
-                // List rows: cell resizes to natural image ratio via ARF.
                 target.uvRect = new Rect(0f, 0f, 1f, 1f);
                 arf.aspectRatio = ratio;
                 return;
             }
 
-            // Grid cells: always center-crop to square via uvRect — no stretching for any ratio.
             float uSize = ratio >= 1f ? 1f / ratio : 1f;
             float vSize = ratio >= 1f ? 1f : ratio;
             target.uvRect = new Rect((1f - uSize) * 0.5f, (1f - vSize) * 0.5f, uSize, vSize);
         }
 
-        /// <summary>
-        /// Downloads and applies a Hub CDN thumbnail URL to a gallery RawImage target.
-        /// Uses HubImageLoaderThreaded so it benefits from its in-memory cache and download queue.
-        /// Uses ThumbnailBindingTag to avoid applying stale textures to recycled list rows.
-        /// </summary>
         private void LoadHubThumbnailToTarget(string thumbUrl, string uid, RawImage target)
         {
             if (string.IsNullOrEmpty(thumbUrl) || target == null) return;
@@ -1213,7 +1149,6 @@ namespace VPB
             if (bind == null) bind = target.gameObject.AddComponent<ThumbnailBindingTag>();
             bind.ResumeLoad = null;
 
-            // Already showing this Hub thumbnail — keep it
             if (bind.ExpectedTag == expectedTag && target.texture != null)
             {
                 target.color = Color.white;

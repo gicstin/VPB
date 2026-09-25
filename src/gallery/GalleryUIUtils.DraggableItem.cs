@@ -32,18 +32,16 @@ namespace VPB
         
         private bool isDraggingItem = false;
         private float _pointerDownTime = -1f;
-        /// <summary>Time from <see cref="OnPointerDown"/> (unscaled); for tap vs hold heuristics on same row.</summary>
         public float LastPointerDownUnscaledTime => _pointerDownTime;
         private GameObject ghostObject;
         private Image ghostBorder;
-        private Text ghostText; // Added text component
+        private Text ghostText;
         private Renderer ghostRenderer;
-        private RawImage ghostImg; // 8b — cached reference to ghost's RawImage for late texture update
+        private RawImage ghostImg;
         private string _cuaGhostKey;
         private GameObject groundIndicator;
         private Vector3 lastGroundPoint;
         private bool hasGroundPoint;
-        // private Vector3 offset; // Unused
         private float planeDistance;
         private Camera dragCam;
 
@@ -56,11 +54,7 @@ namespace VPB
         /// <summary>True after we forwarded begin-drag to ScrollRect — item drag may still start once hold time + movement qualify.</summary>
         private bool _galleryPassthroughScrollUntilItemDrag;
 
-        /// <summary>
-        /// Screen pixels from press before a gallery row counts as intentional drag-drop (not a slow tap / micro-jitter).
-        /// Unity fires <see cref="OnBeginDrag"/> near ~5–10px; below this we keep forwarding scroll until movement grows.
-        /// VR: <see cref="PointerEventData.position"/> vs <see cref="PointerEventData.pressPosition"/> often barely changes for laser + world canvas; gate skipped when XR active.
-        /// </summary>
+        /// <summary>Screen pixels from press before a gallery row counts as intentional drag-drop (not a slow tap / micro-jitter).</summary>
         private const float GalleryMinScreenPixelsForItemDrag = 22f;
 
         private static bool IsXrPresentationActive()
@@ -95,7 +89,6 @@ namespace VPB
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
         private const int GlobalRegionCacheMaxEntries = 1024;
 
-        /// <summary>Drop clothing/hair region L1 cache (package refresh / soak-test bound).</summary>
         public static void ClearGlobalRegionCache()
         {
             _globalRegionCache.Clear();
@@ -118,7 +111,6 @@ namespace VPB
                 var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 Type t = item.GetType();
 
-                // Common patterns seen in VaM objects / mods
                 object tagsObj = null;
                 FieldInfo f = t.GetField("tags", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 if (f != null) tagsObj = f.GetValue(item);
@@ -140,7 +132,6 @@ namespace VPB
                 {
                     if (!string.IsNullOrEmpty(tagStr))
                     {
-                        // Some implementations store comma-separated tags
                         var parts = tagStr.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
                         for (int i = 0; i < parts.Length; i++)
                         {
@@ -150,7 +141,6 @@ namespace VPB
                     }
                 }
 
-                // Body-region style properties sometimes exist
                 string[] extraNames = new string[] { "bodyRegion", "region", "clothingType", "type", "category", "slot" };
                 for (int i = 0; i < extraNames.Length; i++)
                 {
@@ -194,10 +184,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Hold delay before item drag. Desktop: 0 (movement threshold alone — click-drag must not be stolen by ScrollRect).
-        /// VR: config hold (laser micro-moves otherwise start accidental item drags). 0 when DnD off.
-        /// </summary>
+        /// <summary>Hold delay before item drag.</summary>
         private static float EffectiveDragHoldSeconds()
         {
             var c = VPBConfig.Instance;
@@ -235,7 +222,6 @@ namespace VPB
                 _galleryPassthroughScrollUntilItemDrag = true;
                 return;
             }
-            // Hold time satisfied (or desktop: no hold) but movement still small — keep scroll until intentional drag distance.
             if (!PressDeltaQualifiesForGalleryItemDrag(eventData))
             {
                 ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
@@ -248,7 +234,6 @@ namespace VPB
 
         private void StartGalleryItemDragFromPointer(PointerEventData eventData)
         {
-            // If ScrollRect already owns this gesture, end it so grid does not keep scrolling under the ghost.
             if (_galleryPassthroughScrollUntilItemDrag)
                 StopGalleryScrollPassthrough(eventData);
 
@@ -273,7 +258,6 @@ namespace VPB
             _galleryPassthroughScrollUntilItemDrag = false;
         }
 
-        /// <summary>Warm path: end ScrollRect drag + kill inertia when promoting gesture to item drag.</summary>
         private void StopGalleryScrollPassthrough(PointerEventData eventData)
         {
             ScrollRect sr = ResolveGalleryScrollRectForPassthrough();
@@ -289,7 +273,6 @@ namespace VPB
             _galleryPassthroughScrollUntilItemDrag = false;
         }
 
-        // 8c — full-screen transparent overlay that absorbs pointer events to side panels during drag
         private void CreateDragOverlay()
         {
             Canvas rootCanvas = GetComponentInParent<Canvas>();
@@ -378,7 +361,6 @@ namespace VPB
 
                 ItemType itemType = GetItemType(FileEntry);
                 
-                // Handle subscenes differently - load directly without requiring atom
                 if (itemType == ItemType.SubScene && FileEntry != null)
                 {
                     string cat = Panel != null ? (Panel.CurrentCategoryTitle ?? "") : "";
@@ -397,8 +379,7 @@ namespace VPB
                     }
                     else
                     {
-                        // Do not sync-wipe SubScenes here — RemoveAtom of many SubScenes freezes the main
-                        // thread. LoadSubSceneCoroutine yields removals when replace mode needs a wipe.
+                        // Do not sync-wipe SubScenes here — RemoveAtom of many SubScenes freezes the main thread.
                         LoadSubScene(FileEntry.Uid);
                     }
                 }
@@ -408,7 +389,6 @@ namespace VPB
                     float dist;
                     Atom atom = DetectAtom(eventData, out msg, out dist);
 
-                    // Calculate Drop Position for Context Menu
                     Vector3 dropPos = transform.position;
                     Camera cam = dragCam;
                     if (cam == null) cam = Camera.main;
@@ -493,7 +473,6 @@ namespace VPB
                             HandleDropWithContext(atom, FileEntry, dropPos);
                         }
                     }
-                    // Scripts: Person → person PluginManager; UI strip / void → SessionPluginManager (not Scene).
                     else if (itemTypeForDrop == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry))
                     {
                         if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
@@ -543,8 +522,7 @@ namespace VPB
         {
             _galleryScrollRectPassthrough = null;
             _galleryPassthroughScrollUntilItemDrag = false;
-            // Only cancel if this component still owns the active item drag. Pane auto-hide
-            // used to SetActive(false) mid-drag; that path is suppressed while IsDragging.
+            // Only cancel if this component still owns the active item drag.
             if (isDraggingItem)
             {
                 DestroyGhost();
@@ -827,7 +805,6 @@ namespace VPB
                 yield return new WaitForSeconds(1.0f);
             }
 
-            // Refresh atom reference
             Atom targetAtom = SuperController.singleton.GetAtomByUid(atomUid);
             if (targetAtom == null)
             {
@@ -988,7 +965,6 @@ namespace VPB
             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "plugins"); } catch { }
             LogUtil.Log($"[VPB] LoadPlugins: Applying {FileEntry.Name} to {target.uid}");
 
-            // Session scripts (.cs/.cslist/.dll) need CreatePlugin + URL — not PluginPresets clothing path.
             if (IsPluginScriptEntry(FileEntry))
             {
                 ApplyPluginScriptToAtom(target, FileEntry);
@@ -1055,10 +1031,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Load script onto VaM SessionPluginManager (persists across scenes). Void / non-person drops.
-        /// Not ScenePluginManager — that saves with the scene only.
-        /// </summary>
         public void LoadPluginsAsSession()
         {
             if (FileEntry == null) return;
@@ -1090,8 +1062,6 @@ namespace VPB
                 return;
             }
             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "plugins"); } catch { }
-            // UIAssist/BA Start gate needs type SessionPluginManager. Older VaM keeps type CoreControl
-            // on the same host — promote before CreatePlugin so script Start() sees the modern type.
             Atom hostForGate = sessionAtom ?? sessionMgr.containingAtom;
             EnsureSessionHostTypeForPluginGate(hostForGate);
             try
@@ -1120,16 +1090,10 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Session PluginManager = Main Menu TabSessionPlugins binding, else CoreControl.PluginManager
-        /// when it is NOT the ScenePluginManager instance.
-        /// Scene plugins live on SuperController/ScenePluginManager — never use that for session loads.
-        /// </summary>
         internal static MVRPluginManager GetSessionPluginManager()
         {
             MVRPluginManager sceneMgr = GetScenePluginManagerInstance();
 
-            // 1) Manager whose UI is parented under TabSessionPlugins (authoritative).
             MVRPluginManager tabMgr = FindPluginManagerBoundToMainMenuTab("TabSessionPlugins");
             if (tabMgr != null && !RefEqPluginManager(tabMgr, sceneMgr))
             {
@@ -1211,9 +1175,6 @@ namespace VPB
             try { return object.ReferenceEquals(a, b); } catch { return false; }
         }
 
-        /// <summary>
-        /// Find MVRPluginManager whose UITransform / pluginListPanel lives under main-menu tab.
-        /// </summary>
         private static MVRPluginManager FindPluginManagerBoundToMainMenuTab(string tabName)
         {
             if (string.IsNullOrEmpty(tabName) || SuperController.singleton == null) return null;
@@ -1253,7 +1214,6 @@ namespace VPB
                     catch { }
                 }
 
-                // Fallback: manager component under the tab itself (rare).
                 try { return tabTr.GetComponentInChildren<MVRPluginManager>(true); } catch { return null; }
             }
             catch { return null; }
@@ -1271,7 +1231,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>True if atom is CoreControl by name/uid (session plugin host).</summary>
         private static bool IsCoreControlNamed(Atom a)
         {
             if (a == null) return false;
@@ -1283,10 +1242,6 @@ namespace VPB
                 || string.Equals(u, "CoreControl", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>
-        /// Session host atom: CoreControl name/uid with type SessionPluginManager (modern)
-        /// or type CoreControl (legacy — GiveMeFPS).
-        /// </summary>
         private static bool IsSessionPluginHostAtom(Atom a)
         {
             if (a == null || !IsCoreControlNamed(a)) return false;
@@ -1304,11 +1259,6 @@ namespace VPB
             return string.Equals(t, "SessionPluginManager", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>
-        /// UIAssist/BrowserAssist require type == SessionPluginManager. Older installs keep
-        /// type CoreControl on the session host — promote so plugin Start() gates pass.
-        /// Only touch the manager's containingAtom (not a random CoreControl).
-        /// </summary>
         private static void EnsureSessionHostTypeForPluginGate(Atom host)
         {
             if (host == null || !IsCoreControlNamed(host)) return;
@@ -1335,7 +1285,6 @@ namespace VPB
             {
                 if (SuperController.singleton == null) return null;
 
-                // Prefer containingAtom of TabSessionPlugins-bound manager.
                 try
                 {
                     MVRPluginManager tabMgr = FindPluginManagerBoundToMainMenuTab("TabSessionPlugins");
@@ -1345,7 +1294,6 @@ namespace VPB
                 }
                 catch { }
 
-                // Gold: uid CoreControl (modern SessionPluginManager or legacy CoreControl type).
                 Atom byUid = null;
                 try { byUid = SuperController.singleton.GetAtomByUid("CoreControl"); } catch { byUid = null; }
                 if (IsSessionPluginHostAtom(byUid))
@@ -1394,7 +1342,6 @@ namespace VPB
             return null;
         }
 
-        /// <summary>True for Custom/Scripts session plugins (.cs / .cslist / .dll), including VAR-internal paths.</summary>
         private static bool IsPluginScriptEntry(FileEntry entry)
         {
             if (entry == null || string.IsNullOrEmpty(entry.Path)) return false;
@@ -1403,7 +1350,6 @@ namespace VPB
             string internalPath = p;
             if (varSep >= 0 && varSep + 2 < p.Length)
             {
-                // Skip Windows drive "C:/..." — real VAR sep is further along.
                 if (!(varSep == 1 && char.IsLetter(p[0])))
                     internalPath = p.Substring(varSep + 2);
                 else
@@ -1417,13 +1363,10 @@ namespace VPB
                 && p.IndexOf("Custom/Scripts/", StringComparison.OrdinalIgnoreCase) < 0)
                 return false;
             string lower = internalPath.ToLowerInvariant();
-            return lower.EndsWith(".cs") || lower.EndsWith(".cslist") || lower.EndsWith(".dll");
+            return lower.EndsWith(".cs", StringComparison.Ordinal) || lower.EndsWith(".cslist", StringComparison.Ordinal) || lower.EndsWith(".dll", StringComparison.Ordinal);
         }
 
-        /// <summary>
-        /// Install / on-demand whitelist-register package, then CreatePlugin + set script URL on person's PluginManager.
-        /// Matches VaM UI "Add Plugin" after package is visible to native FileManager.
-        /// </summary>
+        /// <summary>Install / on-demand whitelist-register package, then CreatePlugin + set script URL on person's PluginManager.</summary>
         private void ApplyPluginScriptToAtom(Atom atom, FileEntry entry)
         {
             if (atom == null || entry == null) return;
@@ -1438,10 +1381,6 @@ namespace VPB
             ApplyPluginScriptToManager(mgr, entry, undoAtomUid: atom.uid);
         }
 
-        /// <summary>
-        /// Shared CreatePlugin + URL path for Person PluginManager or SessionPluginManager.
-        /// undoAtomUid null → undo removes from SessionPluginManager.
-        /// </summary>
         private void ApplyPluginScriptToManager(MVRPluginManager mgr, FileEntry entry, string undoAtomUid)
         {
             if (mgr == null || entry == null) return;
@@ -1516,7 +1455,6 @@ namespace VPB
                 return;
             }
 
-            // Person drop closure (session toast lives in LoadPluginsAsSession).
             if (Panel != null && !string.IsNullOrEmpty(undoAtomUid))
             {
                 try
@@ -1584,7 +1522,6 @@ namespace VPB
             }
             if (string.IsNullOrEmpty(url)) return null;
             url = UI.NormalizePath(url);
-            // Prefer concrete package-internal form when Path is a loose .var display path.
             if (url.IndexOf(":/", StringComparison.Ordinal) < 0
                 && entry is VarFileEntry vfe
                 && vfe.Package != null
@@ -1635,15 +1572,10 @@ namespace VPB
                 catch { }
             }
 
-            // Use LoadJSONWithFallback instead of SuperController.LoadJSON directly:
-            // some .var packages have spaces in their name (e.g. "infiniteya.Pose Pack.1")
-            // which VAM's native LoadJSON cannot resolve from a UID path, but VPB can read
-            // directly from the ZipFile stream via FileEntry.OpenStreamReader().
             JSONNode node = UI.LoadJSONWithFallback(normalizedPath, FileEntry);
             if (node == null) return;
             JSONClass presetJSON = node.AsObject;
 
-            // Duo pose: has PeopleCount >= 2 with Person1/Person2/atoms fields
             if (presetJSON["PeopleCount"] != null && presetJSON["PeopleCount"].AsInt >= 2)
             {
                 if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log($"[VPB] LoadPose: Detected duo pose (PeopleCount={presetJSON["PeopleCount"].Value}), delegating to ApplyDualPose.");
@@ -1651,7 +1583,6 @@ namespace VPB
                 return;
             }
 
-            // Detect if this is a scene file and extract the first Person atom's pose
             if (presetJSON["atoms"] != null)
             {
                 JSONClass extracted = ExtractAtomFromScene(presetJSON, "Person");
@@ -1666,9 +1597,6 @@ namespace VPB
                 }
             }
 
-            // Check whether the storables contain a PosePresets entry (standard VaM preset format)
-            // or are raw bone storables (atom-save format). Raw bone storables must be applied via
-            // atom.Restore(); passing them to PresetManager.LoadPresetFromJSON silently does nothing.
             bool hasPosePresetsStorable = false;
             JSONArray storablesArr = presetJSON["storables"] as JSONArray;
             if (storablesArr != null)
@@ -1680,10 +1608,8 @@ namespace VPB
                 }
             }
 
-
             if (!hasPosePresetsStorable && storablesArr != null)
             {
-                // VPB-refactor: native atom restore, deferred from import-unification
                 LogUtil.Log($"[VPB] LoadPose: No PosePresets storable found; using atom.Restore() for raw storables.");
                 target.PreRestore(true, false);
                 if (!suppressRoot) target.RestoreTransform(presetJSON);
@@ -1746,8 +1672,6 @@ namespace VPB
             ClothingLoadingUtils.RemoveAllClothing(target);
         }
 
-        // VaM SetActiveClothingItem / SetActiveHairItem is (id|item, bool active, bool fromRestore).
-        // Pad fromRestore=false when the resolved MethodInfo has 3+ parameters.
         private static void InvokeSetActiveItem(MethodInfo mi, object dcs, object itemOrUid, bool active)
         {
             if (mi == null || dcs == null) return;
@@ -1849,8 +1773,8 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(path)) return null;
                 string pl = path.ToLowerInvariant();
-                int idx = pl.IndexOf("/custom/clothing/");
-                if (idx < 0) idx = pl.IndexOf("/clothing/");
+                int idx = pl.IndexOf("/custom/clothing/", StringComparison.Ordinal);
+                if (idx < 0) idx = pl.IndexOf("/clothing/", StringComparison.Ordinal);
                 if (idx < 0) return null;
 
                 string sub = path.Substring(idx);
@@ -1973,7 +1897,6 @@ namespace VPB
                 {
                     if (m.Name != "SetActiveClothingItem") continue;
                     var ps = m.GetParameters();
-                    // VaM: SetActiveClothingItem(item|uid, bool active, bool fromRestore = optional)
                     if (ps.Length >= 2 && ps[1].ParameterType == typeof(bool))
                     {
                         if (ps[0].ParameterType == typeof(DAZClothingItem)) miSetActiveItem = m;
@@ -2007,15 +1930,11 @@ namespace VPB
                 return;
             }
 
-            
-
             bool geometryBoolWasTrue = false;
             bool geometryBoolFound = false;
             bool itemWasActive = false;
             try { itemWasActive = matched.active; } catch { itemWasActive = false; }
 
-            // Prefer ref-style removal: flip the geometry clothing:<uid> bool.
-            // This is the canonical wear/remove signal in VaM and triggers callbacks.
             JSONStorableBool itemJsb = null;
             try
             {
@@ -2030,11 +1949,9 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(uid)) return null;
                 string u = uid.Replace("\\", "/");
-                // Strip VAR prefix like "Author.Package.1:" if present
-                int colon = u.IndexOf(":/");
+                int colon = u.IndexOf(":/", StringComparison.Ordinal);
                 if (colon >= 0) u = u.Substring(colon + 2);
-                // Remove leading slashes
-                while (u.StartsWith("/")) u = u.Substring(1);
+                while (u.StartsWith("/", StringComparison.Ordinal)) u = u.Substring(1);
                 return u;
             }
 
@@ -2060,7 +1977,6 @@ namespace VPB
             }
             catch { }
 
-            // If the exact uid bool wasn't active, try to find the active clothing bool by normalized uid suffix.
             if (geometry != null && (!geometryBoolFound || !geometryBoolWasTrue) && !string.IsNullOrEmpty(wantedNorm))
             {
                 try
@@ -2084,13 +2000,11 @@ namespace VPB
                         string candNorm = NormalizeClothingUid(uid);
                         if (string.IsNullOrEmpty(candNorm)) continue;
 
-                        // match if exact normalized match or suffix match (handles different root prefixes)
                         if (string.Equals(candNorm, wantedNorm, StringComparison.OrdinalIgnoreCase) ||
                             candNorm.EndsWith(wantedNorm, StringComparison.OrdinalIgnoreCase) ||
                             wantedNorm.EndsWith(candNorm, StringComparison.OrdinalIgnoreCase))
                         {
                             matches++;
-                            // Prefer the longest normalized uid as the most specific
                             if (bestKey == null || candNorm.Length > NormalizeClothingUid(bestKey).Length)
                             {
                                 bestKey = uid;
@@ -2102,7 +2016,6 @@ namespace VPB
                     if (matches > 0 && bestJsb != null && bestKey != null)
                     {
                         bool before = bestJsb.val;
-                        // toggle true->false to ensure callbacks fire
                         bestJsb.val = true;
                         bestJsb.val = false;
                         geometryBoolFound = true;
@@ -2137,7 +2050,6 @@ namespace VPB
                 try { matched.active = false; } catch { }
             }
 
-            // If we couldn't target the exact jsb, try to find active clothing JSBs by filename match.
             if (geometry != null && (!geometryBoolFound || !geometryBoolWasTrue))
             {
                 try
@@ -2199,8 +2111,6 @@ namespace VPB
                 catch { }
             }
 
-            // If the item was already inactive/hidden, try a stronger approach to actually unload/remove.
-            // Some VaM versions keep inactive clothing items in the list; we attempt to force a refresh and/or invoke remove-style APIs via reflection.
             if (!itemWasActive && geometryBoolFound && !geometryBoolWasTrue)
             {
                 try
@@ -2223,7 +2133,6 @@ namespace VPB
                     LogUtil.LogWarning("[VPB] RemoveClothingItemByUid: force refresh exception: " + ex.Message);
                 }
 
-                // Try calling remove/unload methods if present.
                 try
                 {
                     bool invoked = false;
@@ -2296,9 +2205,6 @@ namespace VPB
             }
 
             // Ref implementation refreshes dynamic items after clothing/hair toggles.
-            
-
-            
         }
 
         public void RemoveAllHair(Atom target)
@@ -2545,8 +2451,5 @@ namespace VPB
                 LogUtil.LogError("[VPB] MergeSceneFile error: " + ex.Message);
             }
         }
-
-
     }
-
 }

@@ -12,10 +12,6 @@ namespace VPB
         Right = 3
     }
 
-    /// <summary>
-    /// One screen edge's docked-pane record. <see cref="WidthFree"/> keeps the legacy
-    /// <c>DesktopCustomWidth</c> meaning: the fraction of screen width left FREE, not occupied.
-    /// </summary>
     public sealed class GalleryDockSlot
     {
         public bool Occupied;
@@ -103,27 +99,16 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Sole owner of docked-pane screen partitioning. Top claims full width; Left and Right claim
-    /// the band beneath it. Cross-slot constraints engage only when more than one edge is occupied,
-    /// so a single docked pane resolves to exactly the pre-multi-dock anchors.
-    /// Panes read <see cref="Version"/> and only rewrite anchors when it changes.
-    /// </summary>
     public static class GalleryDockLayout
     {
         public const float MinCrossAnchor = 0.05f;
         public const float MaxCrossAnchor = 0.85f;
 
-        /// <summary>
-        /// Vertical band a side dock keeps when Top is also occupied. Top may grow until only this is
-        /// left — the old rule capped Top at 60% of the screen, which read as "cannot drag past the middle".
-        /// </summary>
         public const float MinSideBandHeight = 0.18f;
 
         public const float MaxSideWidthSum = 0.9f;
         public const float MinSideWidth = 0.1f;
 
-        /// <summary>Share of a dock's free band that its auto-hide reveal strip spans.</summary>
         private const float TriggerBandFill = 0.6f;
 
         /// <summary>Suppresses auto-collapse right after any dock expands, so a mouse sweep cannot cascade edges.</summary>
@@ -284,7 +269,6 @@ namespace VPB
             return bottom;
         }
 
-        /// <summary>Lowest bottom anchor the Top dock may take right now — the resize handle's own floor.</summary>
         public static float TopBottomAnchorFloor()
         {
             return AnySideOccupied() ? MinSideBandHeight : MinCrossAnchor;
@@ -299,7 +283,6 @@ namespace VPB
             return ceiling;
         }
 
-        /// <summary>Upper Y bound available to the Left and Right docks.</summary>
         public static float TopBandStart()
         {
             GalleryDockSlot top = Slot(GalleryDockSide.Top);
@@ -361,11 +344,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Horizontal span for the Top dock's hover-to-expand strip, in screen fractions. A full-width
-        /// strip would sit on top of the Left/Right panes — which reach the screen top whenever Top is
-        /// collapsed — and steal their first row of chrome, so it is confined to the free band between them.
-        /// </summary>
         public static void TopTriggerBand(out float min, out float max)
         {
             float left = 0f;
@@ -380,7 +358,6 @@ namespace VPB
             CentredBand(left, right, out min, out max);
         }
 
-        /// <summary>Vertical span for a Left/Right dock's reveal strip — the mirror case, kept clear of Top.</summary>
         public static void SideTriggerBand(out float min, out float max)
         {
             CentredBand(0f, TopBandStart(), out min, out max);
@@ -391,7 +368,6 @@ namespace VPB
             float span = hi - lo;
             if (span < MinSideWidth)
             {
-                // The other docks ate the whole axis: fall back to a centred sliver, not an inverted rect.
                 float mid = (lo + hi) * 0.5f;
                 min = mid - MinSideWidth * 0.5f;
                 max = mid + MinSideWidth * 0.5f;
@@ -493,7 +469,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Move a claim to another edge, carrying the pane's sizing so a dock-side change keeps its shape.</summary>
         public static bool TryMove(string panelId, GalleryDockSide to)
         {
             GalleryDockSlot dest = Slot(to);

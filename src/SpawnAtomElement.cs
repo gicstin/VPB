@@ -600,7 +600,6 @@ namespace VPB
             }
             finally
             {
-                // Suppression/restore is managed via SpawnSuppressionHandle.
             }
 
             Atom newPerson = FindNewAtomByType(sc, "Person", before);

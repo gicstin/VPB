@@ -7,10 +7,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        /// <summary>
-        /// Hair/Clothing/Appearance/Pose/Scene facets live under the selected category row
-        /// (one scroller). Replaces the old φ-split sub-pane for <see cref="ContentType.Category"/>.
-        /// </summary>
         private static bool CategoryHasFacetChildren(string title)
         {
             if (string.IsNullOrEmpty(title)) return false;
@@ -36,7 +32,6 @@ namespace VPB
             else _rightCategoryAccordionAnchor = null;
         }
 
-        /// <summary>Top side search: category names, and facets when selected category is expanded.</summary>
         private string GetCategorySideSearchPlaceholder()
         {
             string title = currentCategoryTitle;

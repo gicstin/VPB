@@ -121,14 +121,9 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Left-click on this graphic. Skips when the raycast hit is under a named child
-    /// (nested action chips) so parent rows do not steal chip clicks.
-    /// </summary>
     public class UILeftClickDelegate : MonoBehaviour, IPointerClickHandler
     {
         public Action OnLeftClick;
-        /// <summary>Child transform names that own the click (RandomBtn, MoreBtn, …).</summary>
         public string[] SkipWhenUnderChildNames;
 
         public void OnPointerClick(PointerEventData eventData)
@@ -169,9 +164,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Forwards non-left pointer events from child raycasts (thumbnail, list detail columns) to the row root handler.
-    /// </summary>
     internal sealed class UIFileEntryPointerForwarder : MonoBehaviour, IPointerUpHandler, IPointerClickHandler
     {
         public UIFileEntryLeftReleaseSelect Target;
@@ -197,10 +189,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Row pointer routing: left uses <see cref="IPointerUpHandler"/> + slop (ScrollRect-safe).
-    /// Right/middle use pointer-up plus click fallback; child forwarders relay hits from overlay graphics.
-    /// </summary>
     public sealed class UIFileEntryLeftReleaseSelect : MonoBehaviour, IPointerUpHandler, IPointerClickHandler
     {
         public GalleryPanel Panel;
@@ -322,34 +310,28 @@ namespace VPB
         private Image[] optionImages;
         private Text[] optionTexts;
         private GameObject[] borderGOs;
-        /// <summary>Host panel — grid picker reparents under background to escape ScrollRect mask.</summary>
         public GalleryPanel panel;
-        /// <summary>When set, picker reparents here (Plugins float panel) instead of gallery backgroundBox.</summary>
         public Transform selectorEscapeHost;
         private Transform _selectorHomeParent;
         private int _selectorHomeSibling;
 
-        /// <summary>Star Image watermark when digit is primary (toolbox / optional icon).</summary>
         private static readonly Color StarIconWatermark = new Color(1f, 1f, 1f, 0.18f);
-        /// <summary>Unrated digit on dark chrome (grid ghost α=0.2 is too faint on toolbox).</summary>
         private static readonly Color ChromeUnratedDigit = new Color(0.88f, 0.88f, 0.90f, 0.95f);
-        /// <summary>How far button fill leans toward rating hue (digit stays primary signal).</summary>
         private const float ChromeBackdropMix = 0.30f;
         /// <summary>Toolbox ★ glyph — affordance only; digit carries status color.</summary>
         private static readonly Color ChromeStarAffordance = new Color(1f, 1f, 1f, 0.92f);
 
-        /// <summary>Toolbox chrome: full-α digit + light backdrop tint. Grid badges keep ghost-0.</summary>
         private bool statusChrome;
         private Image chromeButtonImage;
 
         public static readonly Color[] RatingColors = new Color[]
         {
-            new Color(1f, 1f, 1f, 0.2f),     // 0: Ghost White (unrated)
-            new Color(1f, 0.2f, 0.2f, 1f),   // 1: Red
-            new Color(1f, 0.55f, 0f, 1f),    // 2: Orange
-            new Color(1f, 0.85f, 0f, 1f),    // 3: Gold
-            new Color(0.2f, 0.85f, 0.2f, 1f),// 4: Green
-            new Color(0f, 0.9f, 1f, 1f)      // 5: Cyan
+            new Color(1f, 1f, 1f, 0.2f),
+            new Color(1f, 0.2f, 0.2f, 1f),
+            new Color(1f, 0.55f, 0f, 1f),
+            new Color(1f, 0.85f, 0f, 1f),
+            new Color(0.2f, 0.85f, 0.2f, 1f),
+            new Color(0f, 0.9f, 1f, 1f)
         };
 
         public void Init(FileEntry e, Text s, GameObject selector)
@@ -363,8 +345,7 @@ namespace VPB
             {
                 selectorCG = selectorGO.GetComponent<CanvasGroup>();
                 if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
-                // Do not auto-close selector during refresh; refresh can rebind rows and swap FileEntry instances,
-                // which would otherwise close the popup immediately after opening (notably in Custom Scenes).
+                // Do not auto-close selector during refresh; refresh can rebind rows and swap FileEntry instances.
             }
             
             try { currentRating = RatingsManager.Instance.GetRating(e); }
@@ -408,8 +389,6 @@ namespace VPB
                 selectorGO.SetActive(true);
             if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
             if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
-            // No nested Canvas/overrideSorting — breaks WorldSpace VaM raycasts (see CategoryQuickSwitch).
-            // Escape ScrollRect RectMask2D via maskable=false + ignoreParentGroups.
             if (visible)
             {
                 StripNestedSelectorCanvas(selectorGO);
@@ -448,7 +427,6 @@ namespace VPB
             _selectorHomeParent = home;
             _selectorHomeSibling = selectorGO.transform.GetSiblingIndex();
             // Keep world pose so it stays under the star after leaving the masked scroll content.
-            // (VaM Unity has no Graphic.maskable — reparent is the mask escape.)
             selectorGO.transform.SetParent(hostTr, true);
         }
 
@@ -466,7 +444,6 @@ namespace VPB
             _selectorHomeSibling = 0;
         }
 
-        /// <summary>Remove leftover nested Canvas/GraphicRaycaster from earlier escape attempts (pooled cells).</summary>
         private static void StripNestedSelectorCanvas(GameObject selectorGO)
         {
             if (selectorGO == null) return;
@@ -528,10 +505,6 @@ namespace VPB
             UpdateDisplay();
         }
 
-        /// <summary>
-        /// Toolbox status chip: full-α digit color + light backdrop tint; ★ stays white affordance
-        /// (side-by-side layout). Grid cell badges leave this off (ghost unrated stays intentional).
-        /// </summary>
         public void SetStatusChrome(bool enabled, Image buttonImage = null)
         {
             statusChrome = enabled;
@@ -545,10 +518,7 @@ namespace VPB
             UpdateDisplay();
         }
 
-        /// <summary>
-        /// Legacy no-op — ratings always show colored 0–5 digit (never color-only ★).
-        /// Kept so call sites compile; digit mode is the only display.
-        /// </summary>
+        /// <summary>Legacy no-op — ratings always show colored 0–5 digit (never color-only ★).</summary>
         public void SetShowDigitMode(bool digit)
         {
             UpdateDisplay();
@@ -646,6 +616,11 @@ namespace VPB
             onEscape = escapeOverride;
         }
 
+        private void Awake()
+        {
+            useGUILayout = false;
+        }
+
         private void OnGUI()
         {
             if (inputField == null || !inputField.isFocused) return;
@@ -686,10 +661,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Adds standard Ctrl+Backspace (delete previous word) behavior to Unity <see cref="InputField"/>.
-    /// Unity's built-in InputField handling often lacks typical editor shortcuts.
-    /// </summary>
     public class CtrlBackspaceWordDeleteHandler : MonoBehaviour
     {
         private InputField inputField;
@@ -699,13 +670,17 @@ namespace VPB
             inputField = input;
         }
 
+        private void Awake()
+        {
+            useGUILayout = false;
+        }
+
         private void OnGUI()
         {
             if (inputField == null || !inputField.isFocused) return;
             Event e = Event.current;
             if (e == null || e.type != EventType.KeyDown) return;
 
-            // Ctrl+Backspace (Windows/Linux) / Cmd+Backspace (macOS): delete previous word
             bool accel = e.control || e.command;
             if (!accel || e.keyCode != KeyCode.Backspace) return;
 
@@ -716,7 +691,6 @@ namespace VPB
                 return;
             }
 
-            // If there's an active selection, delete it.
             int a = inputField.selectionAnchorPosition;
             int b = inputField.selectionFocusPosition;
             if (a != b)
@@ -740,9 +714,7 @@ namespace VPB
             }
 
             int i = caret;
-            // First delete any whitespace directly behind the caret (so repeated Ctrl+Backspace behaves naturally).
             while (i > 0 && char.IsWhiteSpace(text[i - 1])) i--;
-            // Then delete the previous "word" chunk.
             while (i > 0 && !char.IsWhiteSpace(text[i - 1])) i--;
 
             if (i < caret)
@@ -786,10 +758,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Top-edge drag on the selection detail strip to change height.
-    /// Forwards pointer events; panel converts screen → local and clamps min/max.
-    /// </summary>
     public sealed class DetailStripHeightDragRelay : MonoBehaviour,
         IBeginDragHandler, IDragHandler, IEndDragHandler
     {
@@ -815,11 +783,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Thumb preview: left double-click → apply/launch.
-    /// Does not implement <see cref="IScrollHandler"/> (unlike EventTrigger), so wheel reaches
-    /// <see cref="UIScrollWheelHandler"/> on the same hierarchy. Rating stays on star clicks.
-    /// </summary>
     public sealed class DetailStripThumbClickRelay : MonoBehaviour, IPointerClickHandler
     {
         public Action OnDoubleClick;
@@ -832,7 +795,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Mouse wheel on gallery footer quality toggle steps level up/down.</summary>
     public sealed class FooterPerfToggleScroll : MonoBehaviour, IScrollHandler
     {
         private float _notchAccum;

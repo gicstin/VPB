@@ -6,10 +6,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Context Bar coordination: filter chip row + +N overflow popup.
-    /// Warm/cold only — reused lists, no per-frame alloc.
-    /// </summary>
     public partial class GalleryPanel
     {
         private readonly List<ActiveFilterChipSpec> _filterChipSpecScratch = new List<ActiveFilterChipSpec>(16);
@@ -24,8 +20,6 @@ namespace VPB
         {
             _modeSemanticsBannerCacheKey = null;
         }
-
-        // ── Filter chip +N overflow popup ───────────────────────────────────
 
         private void EnsureFilterChipOverflowMenu()
         {
@@ -140,7 +134,6 @@ namespace VPB
             UI.ClampPopupMenuPanelX(panelRT, overlayRT, 8f * s);
         }
 
-        /// <summary>Approx compact chip width for one-row pack reserve (warm path).</summary>
         private static float EstimateCompactFilterChipWidth(string label, float s, int fontSize)
         {
             float pad = 20f * s;
@@ -149,7 +142,6 @@ namespace VPB
             return pad + len * charW;
         }
 
-        /// <summary>Approx standard (label + dismiss) chip width for one-row pack.</summary>
         private static float EstimateStandardFilterChipWidth(string label, float s, int fontSize, float chipH)
         {
             float padLeft = 10f * s;
@@ -167,10 +159,6 @@ namespace VPB
             return EstimateStandardFilterChipWidth(spec.Label, s, fontSize, chipH);
         }
 
-        /// <summary>
-        /// Pack chips into one Context Bar row: Back · body… · +N · Clear all.
-        /// Overflow specs kept for popup. Sets <see cref="_activeFilterChipRowCount"/> = 1.
-        /// </summary>
         private void PackActiveFilterChipsOneRow(
             List<ActiveFilterChipSpec> specs,
             float s,
@@ -259,7 +247,6 @@ namespace VPB
 
                 if (x > 0.5f && x + estW + trailing > availW + 0.5f)
                 {
-                    // This chip and the rest → overflow popup.
                     for (int oj = bi; oj < bodyCount; oj++)
                         _filterChipOverflowSpecs.Add(specs[_filterChipPackBodyIdx[oj]]);
                     break;
@@ -276,7 +263,6 @@ namespace VPB
                 float w = MeasureFilterChipPreferredWidth(chip);
                 if (w <= 1f) w = estW;
 
-                // Re-check with measured width (estimate may have been optimistic).
                 if (x > 0.5f && x + w + trailing > availW + 0.5f)
                 {
                     try { ReturnFilterChipToPool(chip); } catch { }

@@ -5,10 +5,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    // US-02: color-coded named tag categories. A tag may belong to one category; the category owns a
-    // display color used to tint the resting (inactive) state of its rows in the Tag pane, and shown as a
-    // swatch in the Tag Editor list. Category assign + manage live as nested chrome centered on the
-    // floating tag editor panel (popup tokens + hover), not a separate full-canvas modal.
     public partial class GalleryPanel
     {
         private Dictionary<string, Color> _userTagCategoryColorByTag;
@@ -48,7 +44,6 @@ namespace VPB
             _userTagCategoryColorCacheValid = true;
         }
 
-        /// <summary>Category color for a tag's resting row state / editor swatch, or null when the tag has no category.</summary>
         private Color? TryGetUserTagCategoryColor(string tagName)
         {
             if (string.IsNullOrEmpty(tagName)) return null;
@@ -76,7 +71,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Invalidate color cache and refresh every surface that shows category color.</summary>
         private void AfterTagCategoryChange()
         {
             InvalidateUserTagCategoryColorCache();
@@ -85,8 +79,6 @@ namespace VPB
             try { RefreshUserTagsAvailPaneInPlace(true); } catch { }
             try { RefreshUserTagsAvailPaneInPlace(false); } catch { }
         }
-
-        // ---- Tag Editor "Category" action ------------------------------------------------
 
         private void UserTagEditorOpenCategoryDialog()
         {
@@ -106,9 +98,6 @@ namespace VPB
             AfterTagCategoryChange();
         }
 
-        // ---- Import / export round-trip --------------------------------------------------
-
-        /// <summary>Snapshot every category (name + color) with the tags currently assigned to it, for YAML export.</summary>
         private List<GalleryUserTagYamlBrain.GalleryUserTagCategoryYaml> BuildUserTagCategoryExportList()
         {
             var outList = new List<GalleryUserTagYamlBrain.GalleryUserTagCategoryYaml>();
@@ -145,7 +134,6 @@ namespace VPB
             return outList;
         }
 
-        /// <summary>Create/update categories (name+color) from an import and assign their tags. Returns number of categories touched.</summary>
         private int UserTagEditorApplyImportedCategories(List<GalleryUserTagYamlBrain.GalleryUserTagCategoryYaml> categories)
         {
             if (categories == null || categories.Count == 0) return 0;
@@ -185,12 +173,6 @@ namespace VPB
             return applied;
         }
 
-        // ---- Modal chrome ----------------------------------------------------------------
-
-        /// <summary>
-        /// Category assign/manage shell: centered on floating tag editor panel, popup tokens + hover
-        /// (Jakob: match tag-menu chrome; Fitts: dense scaled rows).
-        /// </summary>
         private GameObject BuildTagCategoryModalShell(string title, out Transform rowsParent, out int bodyFont, out float rowH)
         {
             rowsParent = null;
@@ -208,7 +190,6 @@ namespace VPB
             float panelW = 440f * s;
 
             GameObject panel;
-            // Opaque work-surface fill — same family as DetailStripTagMenu panel.
             Color panelBg = new Color(0.08f, 0.08f, 0.10f, 1f);
             GameObject overlay = UI.CreateModalChrome(
                 host.gameObject, "VPB_TagCategoryModal", panelW, 80f * s,
@@ -233,7 +214,6 @@ namespace VPB
                 panelRT.sizeDelta = new Vector2(panelW, panelRT.sizeDelta.y);
             }
 
-            // Title bar hairline group — match tag-menu header weight.
             GameObject titleRow = UI.CreateChildRT(panel, "TitleRow");
             UI.AddHLG(titleRow, spacing: UI.GapTight(s), childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false);
             float titleH = DetailStripTagMenuChromeBtnRef * s;
@@ -301,8 +281,6 @@ namespace VPB
             return row;
         }
 
-        // ---- Assign view -----------------------------------------------------------------
-
         private void OpenTagCategoryAssignView()
         {
             CloseTagCategoryEditorModal();
@@ -314,7 +292,6 @@ namespace VPB
             var assign = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             try { VpbLocalDatabase.TryReadGalleryUserTagCategoryAssignments(assign); } catch { }
 
-            // Shared category across the whole selection (for the check mark), else -2 = mixed, -1 = all none.
             long sharedId = -3;
             bool mixed = false;
             foreach (var name in _userTagEditorRowSelection)
@@ -384,8 +361,6 @@ namespace VPB
                 new Color(0.5f, 0.2f, 0.2f, 1f), rowH, font, TextAnchor.MiddleCenter,
                 CloseTagCategoryEditorModal);
         }
-
-        // ---- Manage view (rename / recolor / delete) -------------------------------------
 
         private void OpenTagCategoryManageView()
         {

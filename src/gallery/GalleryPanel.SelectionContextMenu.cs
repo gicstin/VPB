@@ -13,8 +13,6 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
-        // Selection toolbox ("tbox") — bottom action chrome for selection / sticky tools.
-        // Not a floating OS-style context menu; grid RMB uses ShowGridItemContextMenu.
         private GameObject tbox;
         private Text tboxLabel;
         private GameObject tboxCopyPkgNamesBtn;
@@ -45,19 +43,13 @@ namespace VPB
         private GameObject tboxClearSelectionBtn;
         private GameObject tboxGridRateBtn;
         private Image tboxGridRateIconImage;
-        /// <summary>
-        /// Digit label on the toolbox rate button. Must be cached — selector option Texts are
-        /// children of the same button when closed, so GetComponentInChildren&lt;Text&gt; hits those
-        /// instead of the digit (display stays stale until selector is reparented open).
-        /// </summary>
         private Text tboxGridRateDigitText;
         private RatingHandler tboxGridRateHandler;
         private GameObject tboxGridRateSelectorGO;
         private GameObject tboxSettingsSaveBtn;
         private GameObject tboxSettingsCancelBtn;
 
-        // Appearance clothing-apply-mode segmented row (Preset / Keep / Only). Shown in the
-        // toolbox only while the Appearance category is active; single-select, one click.
+        // Appearance clothing-apply-mode segmented row (Preset / Keep / Only).
         private GameObject tboxClothingModeRowGO;
         private RectTransform tboxClothingModeRowRT;
         private LayoutElement tboxClothingModeRowLE;
@@ -88,7 +80,6 @@ namespace VPB
             catch { }
         }
 
-        // Copy Names icon swap (clipboard list -> clipboard check on success)
         private Sprite tboxClipboardListSprite;
         private Sprite tboxClipboardCheckSprite;
         private Image  tboxCopyNamesIconImage;
@@ -97,7 +88,6 @@ namespace VPB
         private bool tboxCopyNamesTooltipHovered = false;
         private string tboxCopyNamesTooltipLast = null;
 
-        // Responsive tbox action buttons: 1–3 rows, flexible widths
         private GameObject tboxButtonsFlexRoot;
         private RectTransform tboxButtonsFlexRootRT;
         private GameObject tboxBtnRow0GO;
@@ -151,10 +141,6 @@ namespace VPB
             le.flexibleHeight = 0f;
         }
 
-        /// <summary>
-        /// Uniform toolbox action-button height: ButtonSizeRef × ChromeScale, matching title chips
-        /// and side-rail buttons for a globally consistent 2× font ratio.
-        /// </summary>
         private float TboxActionButtonInnerHeight()
         {
             return GalleryUiDesignTokens.ButtonSizeRef * ChromeScale;
@@ -231,9 +217,6 @@ namespace VPB
             foreach (var go in tboxPersonAtomBtns)
             {
                 one(go);
-                // Also update inner children (e.g. the dropdown button inside the container row).
-                // minHeight on the inner button is a hard floor that prevents it from shrinking
-                // unless explicitly updated here.
                 if (go == null) continue;
                 foreach (Transform child in go.transform)
                 {
@@ -318,7 +301,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Wrap tbox actions to up to three rows when widths no longer fit; stretch button band height.</summary>
         private void RefreshTboxFlexButtonLayout()
         {
             if (tboxButtonsFlexRootRT == null || tboxBtnRow0HLG == null || tboxBtnRow1HLG == null || tboxBtnRow2HLG == null) return;
@@ -373,7 +355,6 @@ namespace VPB
             {
                 // "Target selector" counts as 4 button slots for balanced wrap + width allocation.
                 if (go != null && tboxTargetDropdownRowGO != null && go == tboxTargetDropdownRowGO) return 4;
-                // Rate chip is ★ + digit side-by-side — two slots so layout keeps readable width.
                 if (go != null && tboxGridRateBtn != null && go == tboxGridRateBtn) return 2;
                 return 1;
             }
@@ -384,8 +365,6 @@ namespace VPB
             var ltr = new List<GameObject>(28 + tboxPersonAtomBtns.Count);
 
             // Settings float owns Save/Cancel — never replace toolbox with settings chrome.
-            // Person atom target buttons appear leftmost in the flex pack.
-            // Details restore is fixed chrome on the buttons layer (not flex-packed).
             foreach (var go in tboxPersonAtomBtns) { if (vis(go)) ltr.Add(go); }
             // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
             if (vis(tboxSettingsCancelBtn)) ltr.Add(tboxSettingsCancelBtn);
@@ -402,7 +381,6 @@ namespace VPB
             if (vis(tboxCleanupClearBtn)) ltr.Add(tboxCleanupClearBtn);
             if (vis(tboxCleanupAddExcludeBtn)) ltr.Add(tboxCleanupAddExcludeBtn);
             if (vis(tboxCleanupRemoveExcludeBtn)) ltr.Add(tboxCleanupRemoveExcludeBtn);
-            // Scene Strip / Compress Cache near cleanup cluster (scene tools, not mid package ops).
             if (vis(tboxCreatorStripSceneBtn)) ltr.Add(tboxCreatorStripSceneBtn);
             if (vis(tboxCreatorCompressCacheBtn)) ltr.Add(tboxCreatorCompressCacheBtn);
             if (vis(tboxCreatorModeBtn)) ltr.Add(tboxCreatorModeBtn);
@@ -422,7 +400,6 @@ namespace VPB
             if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
             if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
 
-            // Prefer target selector on last row (acts like "wide control").
             if (tboxTargetDropdownRowGO != null && ltr.Contains(tboxTargetDropdownRowGO) && ltr.Count > 1)
             {
                 ltr.Remove(tboxTargetDropdownRowGO);
@@ -480,8 +457,6 @@ namespace VPB
                 }
             }
 
-            // Weighted slot packing.
-            // Goal: use available width, split slots roughly evenly across rows, with special wide controls (Target) using multiple slots.
             int totalSlots = 0;
             float unitMinW = 0f;
             for (int i = 0; i < rtl.Count; i++)
@@ -494,7 +469,6 @@ namespace VPB
                     unitMinW = Mathf.Max(unitMinW, mw / Mathf.Max(1, w));
             }
             if (unitMinW < 8f) unitMinW = 56f;
-            // Wrap against the tighter top band when Details is reserving left on row0.
             float wrapAvail = availRow0;
             int maxSlotsPerRow = Mathf.Max(1, Mathf.FloorToInt((wrapAvail + gap) / (unitMinW + gap)));
             int maxSlotsPerLowerRow = Mathf.Max(1, Mathf.FloorToInt((availFull + gap) / (unitMinW + gap)));
@@ -571,7 +545,6 @@ namespace VPB
             if (row1rtl.Count > 0) tboxButtonLayoutRows = 2;
             if (row2rtl.Count > 0) tboxButtonLayoutRows = 3;
 
-            // Apply widths per row — row0 may be narrower beside Details; lower rows full-bleed.
             if (tboxButtonLayoutRows == 1)
                 ApplySlotWidths(ltr, Mathf.Max(1, usedSlots0), availRow0);
             else if (tboxButtonLayoutRows == 2)
@@ -611,41 +584,32 @@ namespace VPB
 
             float rowGap = TboxBtnRowGapScaled();
             float band = TboxActionBandHeight(tboxButtonLayoutRows);
-            // Add appearance clothing-mode row height when active
             if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
                 band += tboxInfoRowHeight + rowGap;
             if (tboxButtonsLayerRT != null)
                 tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, band);
 
-            // Clothing / row pads depend on which top band is active.
             try { DetailStripApplyToolboxFlexLeftInset(s); } catch { }
 
             LayoutRebuilder.MarkLayoutForRebuild(tboxButtonsFlexRootRT);
             tboxLastFlexAvailW = tboxButtonsFlexRootRT.rect.width;
         }
 
-        // Expand/collapse state — expanded whenever there is actionable content (selection / cleanup /
-        // settings / person targets). No hover-auto-hide and no pin gate (those caused collapse/expand churn).
-        private float tboxExpandT = 0f;        // 0 = collapsed, 1 = expanded
+        // Expand/collapse state — expanded whenever there is actionable content (selection / cleanup / settings / person targets).
+        private float tboxExpandT = 0f;
 
         private RectTransform tboxRT;
-        private CanvasGroup tboxLabelCG;        // fades OUT when expanding
-        private CanvasGroup tboxButtonsCG;      // fades IN when expanding
+        private CanvasGroup tboxLabelCG;
+        private CanvasGroup tboxButtonsCG;
 
-        // Row height: matches the collapsed bar height set by the layout system.
-        // Updated by layout code (UI.Layout.cs) and innerPaneScaleActions.
-        private float tboxInfoRowHeight = GalleryUiDesignTokens.FooterInfoRowHeightRef;   // single row height (= collapsed bar height)
-        private float tboxTopOffsetBase = 120f;   // bar's top offset (offsetMax.y) when fully collapsed
+        private float tboxInfoRowHeight = GalleryUiDesignTokens.FooterInfoRowHeightRef;
+        private float tboxTopOffsetBase = 120f;
         private float tboxLastAppliedTop = float.NaN;
 
-        private RectTransform tboxLabelLayerRT;   // reference for scale updates
-        private RectTransform tboxButtonsLayerRT; // reference for scale updates
+        private RectTransform tboxLabelLayerRT;
+        private RectTransform tboxButtonsLayerRT;
         private RectTransform tboxRowSepRT;
 
-        // ─────────────────────────────────────────────────────────────────────────
-
-        // Build one segment of the appearance clothing-mode row. Single-select: clicking sets
-        // the mode and re-styles the row (see UpdateKeepClothingButtonState).
         private void TboxBuildClothingModeButton(string mode, string label, string tooltipKey, string tooltipText, out Image img, out Text text)
         {
             GameObject go = UI.CreateUIButton(
@@ -654,7 +618,6 @@ namespace VPB
             go.name = "TboxClothesMode_" + mode;
             img = go.GetComponent<Image>();
             text = go.GetComponentInChildren<Text>();
-            // Match the rest of the toolbox chrome font (scales with InnerPaneScale).
             if (text != null)
                 GalleryUiMetrics.ApplyFont(text, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
             var le = go.GetComponent<LayoutElement>();
@@ -671,23 +634,19 @@ namespace VPB
         private void EnsureTboxUI()
         {
             if (tbox != null) return;
-            // Reuse the unified info bar (hoverPath container) as the tbox
             if (hoverPathRT == null) return;
 
             tbox = hoverPathRT.gameObject;
             tboxRT = hoverPathRT;
             tbox.name = "InfoBar";
 
-            // Background already set to opaque grey in UI.cs; ensure raycastTarget on
             var img = tbox.GetComponent<Image>();
             if (img != null) { img.color = UI.ChromeDark; img.raycastTarget = true; }
 
-            // ── "X Selected" label row (collapsed view) ─────────────────────────
             var labelGO = new GameObject("TboxLabelLayer");
             labelGO.transform.SetParent(tbox.transform, false);
             tboxLabelCG = labelGO.AddComponent<CanvasGroup>();
 
-            // Label layer occupies the BOTTOM row (always visible).
             var labelLayerRT = labelGO.GetComponent<RectTransform>();
             if (labelLayerRT == null) labelLayerRT = labelGO.AddComponent<RectTransform>();
             labelLayerRT.anchorMin = new Vector2(0f, 0f);
@@ -718,7 +677,6 @@ namespace VPB
             labelCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             labelCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // ── Buttons panel (expanded view) ─────────────────────────────────────
             var bpGO = new GameObject("TboxButtonsLayer");
             bpGO.transform.SetParent(tbox.transform, false);
             tboxButtonsCG = bpGO.AddComponent<CanvasGroup>();
@@ -726,18 +684,15 @@ namespace VPB
             tboxButtonsCG.blocksRaycasts = false;
             tboxButtonsCG.interactable = false;
 
-            // Buttons layer sits in the TOP row — directly above the label row.
-            // Revealed by RectMask2D as the bar grows upward.
             var bpRT = bpGO.GetComponent<RectTransform>();
             if (bpRT == null) bpRT = bpGO.AddComponent<RectTransform>();
             bpRT.anchorMin = new Vector2(0f, 0f);
             bpRT.anchorMax = new Vector2(1f, 0f);
             bpRT.pivot = new Vector2(0.5f, 0f);
-            bpRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight); // sits one row above bottom
+            bpRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight);
             bpRT.sizeDelta = new Vector2(0f, tboxInfoRowHeight);
             tboxButtonsLayerRT = bpRT;
 
-            // Flex root + two HLG rows (second row toggled when wrapping)
             var flexGO = new GameObject("TboxButtonsFlexRoot");
             flexGO.transform.SetParent(bpGO.transform, false);
             tboxButtonsFlexRoot = flexGO;
@@ -748,7 +703,6 @@ namespace VPB
             tboxButtonsFlexRootRT.pivot = new Vector2(0.5f, 0f);
             var flexVlg = UI.AddVLG(flexGO, spacing: TboxBtnRowGapScaled(), childAlignment: TextAnchor.UpperRight);
 
-            // Hold buttons between relayout passes (sibling of flex root — not in the VLG).
             var stashGO = new GameObject("TboxBtnStash");
             stashGO.transform.SetParent(bpGO.transform, false);
             var stashRT = stashGO.AddComponent<RectTransform>();
@@ -792,9 +746,7 @@ namespace VPB
             tboxBtnRow2HLG = UI.AddHLG(tboxBtnRow2GO, spacing: btnGap, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             tboxBtnRow2GO.SetActive(false);
 
-            // ── Appearance Clothing Mode Row (Preset / Keep / Only) ────────────
-            // Segmented single-select control, shown only while the Appearance category is
-            // active. Replaces the old text side tab; one click picks the mode.
+            // ── Appearance Clothing Mode Row (Preset / Keep / Only) ──────────── Segmented single-select control.
             tboxClothingModeRowGO = new GameObject("TboxClothingModeRow");
             tboxClothingModeRowGO.transform.SetParent(flexGO.transform, false);
             tboxClothingModeRowGO.transform.SetAsFirstSibling();
@@ -806,10 +758,8 @@ namespace VPB
             tboxClothingModeRowHLG = UI.AddHLG(tboxClothingModeRowGO, spacing: btnGap, padding: UI.RowPad(), childForceExpandWidth: false, childForceExpandHeight: false);
             tboxClothingModeRowGO.SetActive(false);
 
-            // Leading label
             {
                 tboxClothingModeLabel = UI.CreateLabel(tboxClothingModeRowGO, VPBTranslation.T("gallery.clothes.mode_label", "Appearance loading:"), GalleryUiDesignTokens.FontBodyRef, new Color(0.8f, 0.8f, 0.82f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "ClothingModeLabel");
-                // Match the rest of the toolbox chrome font (scales with InnerPaneScale).
                 GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
                 // Wider than the text so there's clear right padding before the first button.
                 var lblLE = UI.AddLE(tboxClothingModeLabel.gameObject, minWidth: 240f, preferredWidth: 240f, flexibleWidth: 0f);
@@ -839,8 +789,6 @@ namespace VPB
             UpdateKeepClothingButtonState();
 
             const int tboxActionBtnFont = GalleryUiDesignTokens.FontBodyRef;
-
-            // Placeholders — layout is resolved in RefreshTboxFlexButtonLayout (stretch + LayoutElement).
 
             tboxOverwriteSceneBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -913,7 +861,7 @@ namespace VPB
                 CopySelectedPackageNamesToClipboard
             );
             tboxCopyPkgNamesBtn.name = "Tbox_CopyPackageNames";
-            TboxConfigureActionButtonFlex(tboxCopyPkgNamesBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxCopyPkgNamesBtn, innerRowH, innerRowH, innerRowH);
             WireCopyNamesTooltip(tboxCopyPkgNamesBtn);
 
             try
@@ -928,8 +876,6 @@ namespace VPB
             }
             catch { }
 
-            // Grid layout: rate selected package(s) in one action (list view keeps per-row digit control).
-            // Double-width chip: star (affordance) | colored digit (status) — no overlap.
             {
                 tboxGridRateBtn = UI.CreateUIButton(
                     tboxBtnRow0GO, 0, 0,
@@ -966,8 +912,6 @@ namespace VPB
                 tboxGridRateSelectorGO = new GameObject("TboxGridRatingSelector");
                 tboxGridRateSelectorGO.transform.SetParent(tboxGridRateBtn.transform, false);
                 RectTransform selectorRT = tboxGridRateSelectorGO.AddComponent<RectTransform>();
-                // Anchor top-right of chip, pivot bottom-right of panel so the grid opens **upward**
-                // into toolbox rows — not downward over gallery (was stealing clicks on bottom grid cells).
                 selectorRT.anchorMin = new Vector2(1f, 1f);
                 selectorRT.anchorMax = new Vector2(1f, 1f);
                 selectorRT.pivot = new Vector2(1f, 0f);
@@ -990,8 +934,6 @@ namespace VPB
                 selectorGrid.childAlignment = TextAnchor.UpperLeft;
 
                 tboxGridRateHandler = tboxGridRateBtn.AddComponent<RatingHandler>();
-                // Reparent open selector to backgroundBoxGO (RatingHandler) so it stacks above
-                // VPB_DetailStrip — strip is a later sibling under InfoBar and covers upward overflow.
                 tboxGridRateHandler.panel = this;
                 Image tboxGridRateBtnImage = tboxGridRateBtn.GetComponent<Image>();
                 tboxGridRateHandler.SetStatusChrome(true, tboxGridRateBtnImage);
@@ -1037,7 +979,6 @@ namespace VPB
                 tboxGridRateBtn.SetActive(false);
             }
 
-            // Settings mode: replace normal toolbox actions with Save/Cancel row.
             tboxSettingsCancelBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -1081,7 +1022,7 @@ namespace VPB
                 TboxCacheTexturesSelected
             );
             tboxCacheTexturesBtn.name = "Tbox_CacheTextures";
-            TboxConfigureActionButtonFlex(tboxCacheTexturesBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxCacheTexturesBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxCacheTexturesBtn, "gallery.tooltip.tbox_cache_textures", "Build VPB texture cache for selected .var packages (includes dependency packages). Hold Ctrl to rewrite existing zstd cache files. Hold Ctrl+Shift to purge the cache for selected items.");
             try
             {
@@ -1102,7 +1043,7 @@ namespace VPB
                 TboxOpenSelectedItemOnHub
             );
             tboxOpenHubBtn.name = "Tbox_OpenOnHub";
-            TboxConfigureActionButtonFlex(tboxOpenHubBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxOpenHubBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxOpenHubBtn, "gallery.tooltip.tbox_open_hub", "Open this item in Hub");
             try
             {
@@ -1147,7 +1088,7 @@ namespace VPB
                 TboxLoadDepsSelectedPackages
             );
             tboxLoadDepsBtn.name = "Tbox_LoadDeps";
-            TboxConfigureActionButtonFlex(tboxLoadDepsBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxLoadDepsBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxLoadDepsBtn, "gallery.tooltip.tbox_load_deps", "Copy selected packages and their dependencies from AllPackages to AddonPackages (respects Settings → load deps with package)");
             try
             {
@@ -1168,7 +1109,7 @@ namespace VPB
                 TboxUnloadSelectedPackages
             );
             tboxUnloadBtn.name = "Tbox_Unload";
-            TboxConfigureActionButtonFlex(tboxUnloadBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxUnloadBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxUnloadBtn, "gallery.tooltip.tbox_unload", "Move selected installed .var files from AddonPackages back to AllPackages");
             try
             {
@@ -1189,7 +1130,7 @@ namespace VPB
                 TboxLoadSelectedPackages
             );
             tboxLoadBtn.name = "Tbox_Load";
-            TboxConfigureActionButtonFlex(tboxLoadBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxLoadBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxLoadBtn, "gallery.tooltip.tbox_load", "Copy selected .var from AllPackages to AddonPackages (this package only, no dependencies)");
             try
             {
@@ -1239,7 +1180,7 @@ namespace VPB
                 TboxDeleteSelectedPackages
             );
             tboxDeleteBtn.name = "Tbox_Delete";
-            TboxConfigureActionButtonFlex(tboxDeleteBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxDeleteBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes. Confirm also offers Unused deps…. Delete / Backspace.");
             try
             {
@@ -1248,7 +1189,6 @@ namespace VPB
                     UI.AddIconToButton(tboxDeleteBtn, delIcon, padding: 6f, backdropOverride: new Color(0.35f, 0.15f, 0.15f, 1f));
                 else
                 {
-                    // Fallback: keep text label if icon missing
                     Text t = tboxDeleteBtn.GetComponentInChildren<Text>(true);
                     if (t != null) t.text = VPBTranslation.T("gallery.tbox.delete", "Delete");
                 }
@@ -1327,7 +1267,7 @@ namespace VPB
                 TboxOpenCleanupView
             );
             tboxCleanupBtn.name = "Tbox_Cleanup";
-            TboxConfigureActionButtonFlex(tboxCleanupBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxCleanupBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxCleanupBtn, "gallery.tooltip.tbox_cleanup", "Scan globally for duplicate, old, and damaged packages/local files.");
             try
             {
@@ -1511,7 +1451,7 @@ namespace VPB
                 TboxAutoInstallSelectedPackages
             );
             tboxAutoInstallBtn.name = "Tbox_AutoInstall";
-            TboxConfigureActionButtonFlex(tboxAutoInstallBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxAutoInstallBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxAutoInstallBtn, "gallery.tooltip.tbox_autoinstall", "Flag selected packages for auto-install and auto-load. When scan whitelist is enabled, this also adds a persistent per-package startup-scan whitelist override. Packages in AllPackages are copied to AddonPackages on the next VaM start (not immediately).");
             try
             {
@@ -1532,11 +1472,10 @@ namespace VPB
                 TboxHideSelectedPackages
             );
             tboxHideBtn.name = "Tbox_Hide";
-            TboxConfigureActionButtonFlex(tboxHideBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxHideBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxHideBtn, "gallery.tooltip.tbox_hide", "Hide the selected items in VaM file lists (AddonPackagesFilePrefs … .hide). A scene or preset inside a package hides on its own — sister files stay visible. Hold Ctrl to hide the whole package.");
             try
             {
-                // Hide = show_hidden ON
                 var hideIcon = UI.LoadIconSprite("ghost", Color.white);
                 if (hideIcon != null)
                     UI.AddIconToButton(tboxHideBtn, hideIcon, padding: 6f);
@@ -1555,11 +1494,10 @@ namespace VPB
                 TboxUnhideSelectedPackages
             );
             tboxUnhideBtn.name = "Tbox_Unhide";
-            TboxConfigureActionButtonFlex(tboxUnhideBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxUnhideBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxUnhideBtn, "gallery.tooltip.tbox_unhide", "Remove .hide markers for the selected items. Hold Ctrl to unhide the whole package.");
             try
             {
-                // Unhide = show_hidden OFF
                 var unhideIcon = UI.LoadIconSprite("ghost-off", Color.white);
                 if (unhideIcon != null)
                     UI.AddIconToButton(tboxUnhideBtn, unhideIcon, padding: 6f);
@@ -1601,7 +1539,7 @@ namespace VPB
                 TboxDisableAutoInstallSelectedPackages
             );
             tboxDisableAutoInstallBtn.name = "Tbox_NoAutoInstall";
-            TboxConfigureActionButtonFlex(tboxDisableAutoInstallBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            TboxConfigureActionButtonFlex(tboxDisableAutoInstallBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxDisableAutoInstallBtn, "gallery.tooltip.tbox_no_autoinstall", "Clear auto-install and VPB auto-load for selected packages. When scan whitelist is enabled, this also removes the persistent per-package startup-scan whitelist override.");
             try
             {
@@ -1615,7 +1553,6 @@ namespace VPB
             }
             catch { }
 
-            // Thin separator line at the row boundary (between tooltip row and toolbox row)
             {
                 var rowSepGO = new GameObject("RowSeparator");
                 rowSepGO.transform.SetParent(tbox.transform, false);
@@ -1627,7 +1564,6 @@ namespace VPB
                 tboxRowSepRT.sizeDelta = new Vector2(0f, 1f);
             }
 
-            // Scale actions to resize rows when InnerPaneScale changes
             innerPaneScaleActions.Add(s =>
             {
                 try { SyncTboxFooterRowChrome(s); } catch { }
@@ -1668,7 +1604,6 @@ namespace VPB
                 catch { }
             });
 
-            // Populate person atom buttons with whatever data is already loaded
             try { RefreshTboxPersonAtomButtons(); } catch { }
             try { SyncTboxFooterRowChrome(UiMetrics.ChromeScale); } catch { }
         }
@@ -1720,8 +1655,6 @@ namespace VPB
             try { DetailStripSyncExpandButtonChrome(s); } catch { }
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-
         /// <summary>Public wrapper called after scene loads to ensure toolbox person atom buttons are refreshed with the new atoms.</summary>
         public void RefreshTboxPersonAtomButtonsAfterSceneLoad()
         {
@@ -1729,7 +1662,6 @@ namespace VPB
             {
                 EnsureTboxUI();
                 RefreshTboxPersonAtomButtons();
-                // Force layout rebuild to ensure buttons appear immediately
                 try { Canvas.ForceUpdateCanvases(); } catch { }
             }
             catch { }
@@ -1742,7 +1674,6 @@ namespace VPB
             return GetPersonAtomDisplayLabel(atom, uid);
         }
 
-        /// <summary>CUA target label: the asset currently loaded into the atom, so several CUAs are tellable apart.</summary>
         private string GetCuaAtomDisplayLabel(Atom atom, string uid)
         {
             if (atom == null) return uid ?? "Unknown";
@@ -1752,7 +1683,6 @@ namespace VPB
                 string val = nameParam != null ? nameParam.val : null;
                 if (!string.IsNullOrEmpty(val) && !string.Equals(val, "None", StringComparison.OrdinalIgnoreCase))
                 {
-                    // assetName is a bundle-internal path ("assets/skyboxes/cloudy 1.unity").
                     string name = MVR.FileManagementSecure.FileManagerSecure.GetFileName(val);
                     if (!string.IsNullOrEmpty(name))
                         return $"{name} ({uid})";
@@ -1838,7 +1768,6 @@ namespace VPB
             Transform stash      = tboxButtonStash.transform;
             Color inactiveColor  = UI.PopupRowBackdrop;
 
-            // Single dropup button row (active person label). Click opens list of all people.
             tboxTargetDropdownRowGO = new GameObject("TboxTargetDropdownRow");
             tboxTargetDropdownRowGO.transform.SetParent(stash, false);
             var rowRT = tboxTargetDropdownRowGO.AddComponent<RectTransform>();
@@ -2020,7 +1949,6 @@ namespace VPB
                 bool isCurrent = (i == targetDropdownValue);
                 int captured = i;
 
-                // Row container: select button + (optional) save + rename icons
                 GameObject rowGO = new GameObject("TboxTargetMenuRow_" + i);
                 rowGO.transform.SetParent(tboxTargetMenuPanelGO.transform, false);
                 var rowRT = rowGO.AddComponent<RectTransform>();
@@ -2029,7 +1957,7 @@ namespace VPB
                 rowRT.pivot = new Vector2(0f, 1f);
                 rowRT.sizeDelta = new Vector2(0f, rowH);
 
-                var rowImg = UI.AddImage(rowGO, isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f), false); // children handle clicks
+                var rowImg = UI.AddImage(rowGO, isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f), false);
 
                 var rowHLG = UI.AddHLG(rowGO, spacing: UI.GapTight(), padding: UI.PadHV(GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef), childForceExpandWidth: false, childForceExpandHeight: true);
 
@@ -2092,7 +2020,6 @@ namespace VPB
                     rowT.fontStyle = FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
-                    // VPBUiFont.ApplyTo may reset size; force our desired dropdown font.
                     rowT.fontSize = labelFont;
                 }
 
@@ -2138,12 +2065,9 @@ namespace VPB
                 return;
             }
 
-            // Position panel directly above dropdown button (always expand up).
             RectTransform anchorBtnRT = null;
             try
             {
-                // Unity version in this project does not support GetComponentInParent<T>(bool includeInactive).
-                // Button is clicked only when active, so standard GetComponentInParent is enough.
                 if (tboxTargetDropdownBtnText != null)
                     anchorBtnRT = tboxTargetDropdownBtnText.GetComponentInParent<Button>()?.GetComponent<RectTransform>();
             }
@@ -2156,7 +2080,6 @@ namespace VPB
                 {
                     Bounds b = RectTransformUtility.CalculateRelativeRectTransformBounds(rootRT, anchorBtnRT);
                     float gap = 6f;
-                    // Align panel left edge with button left, place panel bottom at button top + gap.
                     Vector2 p = new Vector2(b.min.x, b.max.y + gap);
                     tboxTargetMenuPanelRT.anchorMin = tboxTargetMenuPanelRT.anchorMax = new Vector2(0.5f, 0.5f);
                     tboxTargetMenuPanelRT.pivot = new Vector2(0f, 0f);
@@ -2171,11 +2094,6 @@ namespace VPB
             tboxTargetMenuOpen = true;
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-
-        // Records the active subfilter chip's label Text so UpdateSelectionContextMenu can keep its
-        // "(N)" equal to the grid's live count. The captured Text is the same one CreateTabButton ran
-        // EllipsizeTextPreferredWidth on; the chip labels here are short enough not to ellipsize.
         private void CaptureActiveSubfilterChip(GameObject chipGO, string labelPrefix)
         {
             _activeSubfilterChipText = null;
@@ -2193,11 +2111,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Recompute InfoBar <c>offsetMax</c> from current expand state + scale bases.
-        /// Call after changing <see cref="tboxTopOffsetBase"/> / chrome scale so tooltip row
-        /// is not left crushed or shifted (offsetMin updated alone is not enough).
-        /// </summary>
         private void ApplyTboxBarHeightNow()
         {
             if (tboxRT == null) return;
@@ -2228,7 +2141,6 @@ namespace VPB
             int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
             int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
 
-            // Update label: "X Selected  ·  Y Items" when selected, or just "Y Items"
             if (tboxLabel != null)
             {
                 string countStr = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
@@ -2245,16 +2157,12 @@ namespace VPB
                 }
             }
 
-            // Active clothing/hair chip uses the same `total` as the bottom counter, so the selected
-            // chip's "(N)" can't diverge from the grid (survives package add/remove, hide-old-versions).
             if (_activeSubfilterChipText != null)
             {
                 try { _activeSubfilterChipText.text = _activeSubfilterChipLabelPrefix + " (" + total + ")"; }
                 catch { _activeSubfilterChipText = null; }
             }
 
-            // Action buttons when selection, cleanup session, strip selector, or person atoms.
-            // Scene Tools alone does not expand toolbox (von Restorff: grid stays primary).
             bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
             bool isSettingsMode = false;
             bool canExpand = isSettingsMode || sel > 0 || cleanupModeActive
@@ -2268,14 +2176,11 @@ namespace VPB
                     tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, collapsedHeight);
             }
 
-            // Stay expanded while actionable; no hover/pin auto-hide (hover gate caused expand/collapse churn).
             bool wantExpanded = canExpand;
 
-            // No animation: snap expanded/collapsed state immediately
             float targetT = wantExpanded ? 1f : 0f;
             tboxExpandT = targetT;
 
-            // Animate bar height: grow offsetMax upward to reveal the button band (1 or 2 rows)
             if (tboxRT != null)
             {
                 if ((sel > 0 || cleanupModeActive || IsStripKeepSelectorOpen() || hasPersonAtoms) && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
@@ -2287,33 +2192,25 @@ namespace VPB
                     }
                 }
 
-                // Detail strip: visible on selection when expanded (not gated on toolbox hover).
-                // Settings list is not packages — strip stays hidden (DetailStripRefresh early-out).
                 try { DetailStripRefresh(); } catch { }
                 try { ApplyTboxBarHeightNow(); } catch { }
                 if (_tryOnActive) TryOnLayoutBar();
                 try { DetailStripLayout(); } catch { }
                 try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }
                 // Docked only: bottom inset tracks toolbox height so Apply doesn't overlap.
-                // Floating uses point anchors + sizeDelta — writing offsetMin.y fights resize / collapse.
                 if (importSidebarActive && importSidebarRT != null && !importSidebarDetached)
                     importSidebarRT.offsetMin = new Vector2(importSidebarRT.offsetMin.x, SideTabScrollBottomInsetY());
             }
 
-            // Label is suppressed when path/status is actually visible, or buttons are expanded
             bool pathVisible = hoverPathText != null && hoverPathText.gameObject.activeSelf
                             && hoverPathCanvasGroup != null && hoverPathCanvasGroup.alpha > 0.1f;
             bool infoShowing = pathVisible
                              || !string.IsNullOrEmpty(dragStatusMsg)
                              || !string.IsNullOrEmpty(temporaryStatusMsg);
-            // Label alpha tracks collapse directly — no separate lerp needed
             float labelTarget = (infoShowing || tboxExpandT > 0.05f) ? 0f : 1f;
             if (tboxLabelCG != null)
                 tboxLabelCG.alpha = labelTarget;
 
-            // Buttons stay fully opaque — RectMask2D handles the slide-in reveal as the bar grows.
-            // Gate on tboxExpandT only (not infoShowing) so that a fading hover-path label
-            // doesn't suppress buttons and cause them to flash when the path finally fades out.
             if (tboxButtonsCG != null)
             {
                 bool showButtons = canExpand && tboxExpandT > 0.05f;
@@ -2337,7 +2234,6 @@ namespace VPB
                 _tboxConditionalRefreshCacheKey = "";
             }
 
-            // Keep grid / side tab scrollers above the footer while tbox height animates.
             try
             {
                 if (contentScrollRT != null)
@@ -2391,8 +2287,8 @@ namespace VPB
         private void RefreshTboxConditionalActionButtons()
         {
             int copyN = 0, deleteN = 0, hideN = 0, unhideN = 0, aiN = 0, noAiN = 0, scanWlTemporaryN = 0;
-            bool anyPkgInstalled = false;     // in AddonPackages
-            bool anyPkgNotInstalled = false;  // in AllPackages
+            bool anyPkgInstalled = false;
+            bool anyPkgNotInstalled = false;
 
             if (cleanupModeActive && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
             {
@@ -2469,7 +2365,6 @@ namespace VPB
             show(tboxSettingsCancelBtn, false);
             show(tboxSettingsSaveBtn, false);
 
-            // Sticky Eraser / Try-On: mass-hide browse peers (mode-conditioned chrome).
             if (TaskChromeTryApplyStickyTbox(show))
                 return;
 
@@ -2486,7 +2381,6 @@ namespace VPB
             show(tboxCleanupAddExcludeBtn, cleanupHasNonExcludedSelection);
             show(tboxCleanupRemoveExcludeBtn, cleanupHasExcludedSelection);
 
-            // Scene Tools stays in toolbox; Eraser lives on the facet rail.
             show(tboxCreatorModeBtn, !isCleanup);
             show(tboxCreatorStripSceneBtn, isCreator && !isCleanup);
             show(tboxCreatorCompressCacheBtn, isCreator && !isCleanup);
@@ -2505,7 +2399,6 @@ namespace VPB
             show(tboxOpenHubBtn, !isCleanup);
             show(tboxInsightsBtn, !isCleanup);
             // Non-settings mode must explicitly re-show buttons hidden by Settings mode.
-            // Otherwise, once Settings hides them, they stay inactive forever.
             show(tboxCopyPkgNamesBtn, true);
             show(tboxDeleteBtn, true);
             show(tboxOverwriteSceneBtn, !isCleanup);
@@ -2549,11 +2442,10 @@ namespace VPB
             if (selectedFiles != null && selectedFiles.Count > 0)
             {
                 // Large multi-select: avoid O(n) FileManager.GetFileEntry + GetDependenciesDeep storms.
-                // Enable bulk actions; exact work happens when user clicks an action.
                 if (SelectionExceedsHeavyScanBudget())
                 {
                     copyN = selectedFiles.Count;
-                    deleteN = selectedFiles.Count; // enable Delete; ClassifyUids/DependencyGraph runs on click
+                    deleteN = selectedFiles.Count;
                     hideN = 1;
                     unhideN = 1;
                     aiN = 1;
@@ -2587,8 +2479,6 @@ namespace VPB
                             if (scanWlEnabled && !uidWlAny) scanWlTemporaryN++;
 
                             // Fast install-state summary for Load/Unload buttons.
-                            // Use the resolved disk FileEntry (already computed by TryGetTboxResolvablePackageState) and
-                            // infer from its path prefix; avoids any rescans or heavy indexing work.
                             try
                             {
                                 // Local scenes (Saves/scene JSON) do not participate in load/unload.
@@ -2619,7 +2509,6 @@ namespace VPB
                         }
                     }
 
-                    // Temporary whitelist should account for selected packages + their dependencies.
                     if (ScanWhitelistManager.Instance.IsEnabled)
                     {
                         var tempCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2653,7 +2542,6 @@ namespace VPB
 
             if (tboxCopyPkgNamesBtn != null)
                 SetTboxCountButtonLabel(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names_count", "Copy Names ({0})", copyN);
-            // Delete is an icon button; count is intentionally not shown on the label.
             SetTboxButtonEnabledVisual(tboxDeleteBtn, deleteN > 0);
 
             bool showHide = hideN > 0;
@@ -2664,12 +2552,10 @@ namespace VPB
             if (tboxHideBtn != null)
             {
                 SetTboxButtonEnabledVisual(tboxHideBtn, showHide);
-                // Hide is an icon button; count is intentionally not shown on the label.
             }
             if (tboxUnhideBtn != null)
             {
                 SetTboxButtonEnabledVisual(tboxUnhideBtn, showUnhide);
-                // Unhide is an icon button; count is intentionally not shown on the label.
             }
             if (tboxScanWhitelistTemporaryBtn != null)
                 SetTboxButtonEnabledVisual(tboxScanWhitelistTemporaryBtn, scanWlTemporaryN > 0);
@@ -2731,13 +2617,11 @@ namespace VPB
             if (tboxOverwriteSceneBtn != null)
                 SetTboxButtonEnabledVisual(tboxOverwriteSceneBtn, canOverwriteScene);
 
-            // Details restore: leftmost toolbox action when strip collapsed + selection.
             bool showDetailsExpand = selectedFiles != null
                 && selectedFiles.Count > 0
                 && !DetailStripIsExpanded();
             show(_detailStripExpandBtnGO, showDetailsExpand);
 
-            // Mode-conditioned demotion last — cannot be resurrected by earlier show().
             try { TaskChromeApplyTboxPostPass(show); } catch { }
 
             try { RefreshSceneImportSideButtonVisibility(); } catch { }
@@ -2796,10 +2680,6 @@ namespace VPB
             return Mathf.Clamp(r0 == int.MinValue ? 0 : r0, 0, 5);
         }
 
-        /// <summary>
-        /// ★ left | digit right on a 2× slot chip. Star = rating affordance; digit = status
-        /// (color + number). Avoids digit-on-star collision that fails scan.
-        /// </summary>
         private void LayoutTboxGridRateChipContents()
         {
             if (tboxGridRateBtn == null) return;
@@ -2838,7 +2718,6 @@ namespace VPB
                 tboxGridRateDigitText.horizontalOverflow = HorizontalWrapMode.Overflow;
                 tboxGridRateDigitText.verticalOverflow = VerticalWrapMode.Overflow;
                 tboxGridRateDigitText.raycastTarget = false;
-                // Body+2 — column owns the glyph; color carries status (not giant overlay size).
                 int digitPt = GalleryUiDesignTokens.FontBodyRef + 2;
                 GalleryUiMetrics.ApplyFont(
                     tboxGridRateDigitText, digitPt, ChromeScale, GalleryUiDesignTokens.FontMinRef);
@@ -2859,8 +2738,6 @@ namespace VPB
                 {
                     FileEntry f = selectedFiles[i];
                     if (f == null) continue;
-                    // Allow rating for packages and local Custom Scenes (Saves/scene JSON).
-                    // RatingsManager.SetRating(FileEntry, ...) supports both.
                     if (!string.IsNullOrEmpty(TryGetPackageUidForEntry(f)) ||
                         LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false) ||
                         TryGetTboxResolvableLocalPresetHideState(f, out _, out _))
@@ -2898,7 +2775,6 @@ namespace VPB
                 }
                 catch { txt = null; }
             }
-            // Use stable synthetic id so selector stays open across recycled FileEntry instances (Custom Scenes in particular).
             string stableId = null;
             try { stableId = TryGetPackageUidForEntry(eligible[0]); } catch { stableId = null; }
             if (string.IsNullOrEmpty(stableId))
@@ -3065,7 +2941,6 @@ namespace VPB
             OpenFileOnHub(selectedFiles[0]);
         }
 
-        /// <summary>Open in-game Hub detail for this gallery row's package (deps download lives there).</summary>
         public void OpenFileOnHub(FileEntry file)
         {
             try
@@ -3084,7 +2959,6 @@ namespace VPB
                 }
 
                 var hub = HubBrowse.singleton;
-                // Open Hub first (ensures singleton is initialized in some VaM setups).
                 try { VamHookPlugin.singleton?.OpenHubBrowse(); } catch { }
                 if (hub == null) hub = HubBrowse.singleton;
                 if (hub == null)
@@ -3102,8 +2976,6 @@ namespace VPB
                     return;
                 }
 
-                // HubBrowse.OpenDetail supports package_name lookup when the second parameter is true.
-                // The Hub backend expects the full package name including ".var".
                 hub.OpenDetail(uid + ".var", isPackageName: true);
             }
             catch
@@ -3112,7 +2984,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Copy this item's missing dependency package ids to the system clipboard (newline-separated).</summary>
         public void CopyMissingDependenciesToClipboard(FileEntry file)
         {
             try
@@ -3155,7 +3026,6 @@ namespace VPB
                 t.text = string.Format(VPBTranslation.T(key, fallbackFmt), count);
         }
 
-        /// <summary>Unique gallery-relative paths for on-disk Saves/scene JSON rows (for Copy Names).</summary>
         private static HashSet<string> CollectUniqueLocalSceneGalleryRelativePathsFromSelection(IList<FileEntry> files)
         {
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3176,7 +3046,6 @@ namespace VPB
             return TryGetTboxResolvablePackageState(f, out uid, out diskFe, out isHidden, out fileAutoInstall, out uidAutoLoad, out _);
         }
 
-        /// <summary>Like <see cref="TryGetTboxResolvablePackageState(FileEntry, out string, out FileEntry, out bool, out bool, out bool)"/>, plus persistent scan-whitelist UID override state.</summary>
         private bool TryGetTboxResolvablePackageState(FileEntry f, out string uid, out FileEntry diskFe, out bool isHidden, out bool fileAutoInstall, out bool uidAutoLoad, out bool uidScanWhitelistPersisted)
         {
             uid = null;
@@ -3280,10 +3149,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Local custom presets live on disk (not inside .var) and use VaM-native .hide markers.
-        /// Keep separate from <see cref="TryGetTboxResolvablePackageState"/> so autoinstall/load logic stays package-only.
-        /// </summary>
         private bool TryGetTboxResolvableLocalPresetHideState(FileEntry f, out string key, out bool hidden)
         {
             key = null;
@@ -3294,7 +3159,7 @@ namespace VPB
             try { p = f.Path ?? f.Uid; } catch { p = null; }
             if (string.IsNullOrEmpty(p)) return false;
             p = p.Replace('\\', '/');
-            if (p.IndexOf(":/", StringComparison.Ordinal) >= 0) return false; // inside .var
+            if (p.IndexOf(":/", StringComparison.Ordinal) >= 0) return false;
 
             if (!LocalPresetDeleteSupport.IsAllowedLocalPresetRelativePath(p)) return false;
 
@@ -3302,8 +3167,6 @@ namespace VPB
             try { hidden = f.IsHidden(); } catch { hidden = false; }
             return true;
         }
-
-        // ─────────────────────────────────────────────────────────────────────────
 
         private static bool IsCtrlHeld()
         {
@@ -3387,7 +3250,6 @@ namespace VPB
 
         private IEnumerator CopyNamesTooltipCoroutine()
         {
-            // Update at a low rate; this is just for modifier-key responsiveness.
             var wait = new WaitForSecondsRealtime(0.05f);
             while (tboxCopyNamesTooltipHovered)
             {
@@ -3406,7 +3268,6 @@ namespace VPB
                     }
                     else
                     {
-                        // Another tooltip/status took over; stop updating.
                         break;
                     }
                 }
@@ -3445,7 +3306,6 @@ namespace VPB
                 var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
                 var list = new List<string>(uids.Count + 32);
 
-                // Packages
                 foreach (var uid in uids)
                 {
                     if (string.IsNullOrEmpty(uid)) continue;
@@ -3464,7 +3324,6 @@ namespace VPB
                     list.Add(!string.IsNullOrEmpty(p) ? p : (uid + ".var"));
                 }
 
-                // Local scenes (Saves/scene/*.json)
                 if (selectedFiles != null)
                 {
                     for (int i = 0; i < selectedFiles.Count; i++)
@@ -3502,8 +3361,6 @@ namespace VPB
             }
         }
 
-        // Ctrl+Shift variant: per-selected-file full disk path including the internal
-        // .json/.vap/etc. inside the .var (e.g. "C:\...\AddonPackages\Foo.var:/Custom/.../preset.vap").
         private void CopySelectedInternalFilePathsToClipboard()
         {
             try

@@ -4,6 +4,19 @@ using VPB.src.util;
 
 namespace VPB
 {
+    internal static class FloatPanelCoords
+    {
+        internal static Vector2 CenterToTopLeft(Vector2 center, Vector2 size)
+        {
+            return new Vector2(center.x - size.x * 0.5f, center.y + size.y * 0.5f);
+        }
+
+        internal static Vector2 TopLeftToCenter(Vector2 topLeft, Vector2 size)
+        {
+            return new Vector2(topLeft.x + size.x * 0.5f, topLeft.y - size.y * 0.5f);
+        }
+    }
+
     internal sealed class FloatGeometryKeys
     {
         internal readonly string PosSaved;
@@ -24,7 +37,6 @@ namespace VPB
         }
     }
 
-    /// <summary>Saved geometry of one float window for one interaction mode (VR or desktop).</summary>
     public sealed class FloatGeometrySlot
     {
         public bool PosSaved;
@@ -52,6 +64,33 @@ namespace VPB
             SizeSaved = false;
             WidthRef = _defaultWidthRef;
             HeightRef = _defaultHeightRef;
+        }
+
+        public Vector2? SavedPos
+        {
+            get { return PosSaved ? new Vector2(PosX, PosY) : (Vector2?)null; }
+        }
+
+        public Vector2? SavedSize(Vector2 min, Vector2 max)
+        {
+            if (!SizeSaved || WidthRef < min.x || HeightRef < min.y) return null;
+            return new Vector2(Mathf.Clamp(WidthRef, min.x, max.x), Mathf.Clamp(HeightRef, min.y, max.y));
+        }
+
+        public void StorePos(Vector2? pos)
+        {
+            if (!pos.HasValue) return;
+            PosSaved = true;
+            PosX = pos.Value.x;
+            PosY = pos.Value.y;
+        }
+
+        public void StoreSize(Vector2? size)
+        {
+            if (!size.HasValue) return;
+            SizeSaved = true;
+            WidthRef = size.Value.x;
+            HeightRef = size.Value.y;
         }
 
         public void CopyFrom(FloatGeometrySlot other)
@@ -95,11 +134,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Per-mode float geometry. VR and desktop keep independent slots; <see cref="Current"/>
-    /// resolves to the live mode so existing call sites stay mode-agnostic.
-    /// Configs written before the split seed both slots from the legacy unsuffixed keys.
-    /// </summary>
     public sealed class FloatGeometryPair
     {
         public readonly FloatGeometrySlot VR;

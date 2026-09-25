@@ -224,7 +224,7 @@ namespace VPB
             string[] lines = File.ReadAllLines(path);
             if (lines == null || lines.Length == 0) return false;
 
-            int section = 0; // 0 = none, 1 = high, 2 = low
+            int section = 0;
             for (int i = 0; i < lines.Length; i++)
             {
                 string raw = lines[i];

@@ -6,11 +6,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Strip Scene keep selector — expandable categories + per-atom picks.
-    /// Defaults: Persons + Lights. CoreControl/CameraRig kept silently.
-    /// Environment always dropped (blank new-scene look). Cold/warm path only.
-    /// </summary>
     public partial class GalleryPanel
     {
         private struct StripKeepItem
@@ -19,7 +14,6 @@ namespace VPB
             public string Name;
             public string Type;
             public CreatorStripKeepKind Kind;
-            /// <summary>True for synthetic rows (e.g. Default 3P Lights) — not live atoms.</summary>
             public bool Synthetic;
         }
 
@@ -90,7 +84,6 @@ namespace VPB
                     1.5f);
                 return;
             }
-            // Hotkey / toolbox can open strip while SubScene pick banner still active.
             if (_stripKeepSubScenePickActive)
             {
                 try { StripKeepAbortSubScenePickMode(reopenStrip: false); } catch { }
@@ -126,19 +119,12 @@ namespace VPB
             RefreshCreatorModeChrome();
         }
 
-        /// <summary>
-        /// Host for Strip Scene chrome. Prefer gallery canvas (sibling of pane) so modal
-        /// survives dock collapse / backgroundBox SetActive(false) — same pattern as tag menu.
-        /// </summary>
         private GameObject StripKeepResolveUiHost()
         {
             if (canvas != null) return canvas.gameObject;
             return backgroundBoxGO;
         }
 
-        /// <summary>
-        /// Empty check: ignore synthetic create-rows (Default 3P) — not strip targets.
-        /// </summary>
         private bool StripKeepHasAnyRealAtoms()
         {
             for (int i = 0; i < _stripKeepItems.Count; i++)
@@ -193,9 +179,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Single pass: fill item list + per-kind counts + system count. Does not touch selection.
-        /// </summary>
         private void RebuildStripKeepItemList()
         {
             _stripKeepItems.Clear();
@@ -251,7 +234,6 @@ namespace VPB
                 _stripKeepItems.Add(item);
             }
 
-            // Default 3P is an external create-option (not nested under Lights expand).
             StripKeepResortItems();
         }
 
@@ -279,9 +261,6 @@ namespace VPB
             return n;
         }
 
-        /// <summary>
-        /// Show create-3P when scene lights will be stripped (none kept) — easy check, outside Lights dropdown.
-        /// </summary>
         private bool StripKeepShouldShowDefault3P()
         {
             return StripKeepCountKeptRealLights() == 0;
@@ -302,7 +281,6 @@ namespace VPB
                     anyRealLight = true;
             }
 
-            // Lights kept but scene has none → auto-offer create fill (3P or saved SubScene).
             if (SceneUtils.CreatorStripMaskContains(_stripKeepMask, CreatorStripKeepKind.Lights)
                 && !anyRealLight)
             {
@@ -317,7 +295,7 @@ namespace VPB
             for (int i = 0; i < _stripKeepItems.Count; i++)
             {
                 StripKeepItem it = _stripKeepItems[i];
-                if (it.Synthetic) continue; // create-entry, not a live atom
+                if (it.Synthetic) continue;
                 if (_stripKeepSelectedUids.Contains(it.Uid))
                     _stripKeepKeepCount++;
                 else
@@ -364,10 +342,6 @@ namespace VPB
             HideStripKeepSelectorInternal(resetSession: true);
         }
 
-        /// <summary>
-        /// Destroy strip-keep chrome. When <paramref name="resetSession"/> is false, keep
-        /// selection/filter/sort for live ChromeScale rebuild.
-        /// </summary>
         private void HideStripKeepSelectorInternal(bool resetSession)
         {
             try { HideStripKeepRenameOverlay(); } catch { }
@@ -403,10 +377,8 @@ namespace VPB
                 try { StripKeepPowerUiClearUiRefsForRebuild(); } catch { }
             }
             RefreshCreatorModeChrome();
-            // Mode stays on — panel close ≠ exit Creator Mode.
         }
 
-        /// <summary>Live ChromeScale adapt — rebuild chrome, keep picks/filter/recipes session.</summary>
         private void RescaleStripKeepSelectorInternal(float s)
         {
             if (!IsStripKeepSelectorOpen()) return;
@@ -453,14 +425,12 @@ namespace VPB
             Vector2 panelSize = StripKeepResolvePanelSize(s);
             Vector2 panelPos = StripKeepResolvePanelPos();
 
-            // Floating panel on canvas (sibling of pane) — same host pattern as Settings float.
             GameObject host = StripKeepResolveUiHost();
             if (host == null) return;
             _stripKeepModalRoot = UI.CreateChildRT(host, "VPB_StripKeepFloat", AnchorPresets.stretchAll);
             try { _stripKeepModalRoot.transform.SetAsLastSibling(); } catch { }
             // No dim — work-surface float like Settings / Plugins (not locked modal).
 
-            // Top-left pivot — resize from BR keeps TL fixed. Config still stores center pos.
             GameObject panel = UI.CreateChildRT(
                 _stripKeepModalRoot, "Panel", AnchorPresets.middleCenter, panelSize,
                 StripKeepCenterPosToTopLeft(panelPos, panelSize));
@@ -482,7 +452,6 @@ namespace VPB
             panelVlg.childControlHeight = true;
             panelVlg.childForceExpandWidth = true;
 
-            // --- Titlebar: grip · window icon · title · X (drag handle) ---
             GameObject header = new GameObject("TitleBar");
             header.transform.SetParent(panel.transform, false);
             Image headerImg = UI.AddImage(header, StripKeepTitleBarBg);
@@ -516,7 +485,7 @@ namespace VPB
                     "/ filter · ? shortcuts · Space/F2/Enter"));
 
             // X / Cancel dismiss Scene Tools — Settings Cancel/X parity (not panel-only hide).
-            GameObject closeGo = SettingsFloatSquareIconButton(
+            GameObject closeGo = UI.CreateFloatChromeIconButton(
                 header.transform, chromeSz, "x",
                 GalleryUiColorTokens.ChromeIconWell, () => ExitCreatorMode());
             if (closeGo != null)
@@ -530,7 +499,6 @@ namespace VPB
             headerDrag.Target = _stripKeepPanelRT;
             headerDrag.OnMoved = StripKeepOnPanelMoved;
 
-            // Body — flush under titlebar; list owns flex space (no dead zone above footer).
             GameObject body = new GameObject("Body");
             body.transform.SetParent(panel.transform, false);
             VerticalLayoutGroup bodyVlg = UI.AddVLG(body, spacing: UI.GapTight(s), padding: UI.Pad(GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.ControlGapRef, GalleryUiDesignTokens.TightGapRef, GalleryUiDesignTokens.HairGapRef, s));
@@ -618,7 +586,6 @@ namespace VPB
             if (footer.GetComponent<RectMask2D>() == null)
                 footer.AddComponent<RectMask2D>();
 
-            // Full-footer drag hit (behind Cancel/Strip/resize) — same job as title bar.
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(footer);
             if (footerDragArea != null)
             {
@@ -627,7 +594,6 @@ namespace VPB
                 footerDrag.OnMoved = StripKeepOnPanelMoved;
             }
 
-            // Flex spacer pushes actions right; drag hit for empty footer area.
             GameObject footerSpacer = new GameObject("Spacer");
             footerSpacer.transform.SetParent(footer.transform, false);
             footerSpacer.AddComponent<RectTransform>();
@@ -656,7 +622,6 @@ namespace VPB
                 _stripKeepConfirmBtnLabel = confirmGo.GetComponentInChildren<Text>(true);
             }
 
-            // Resize — right of Strip (Settings float pattern).
             _stripKeepResizeGO = UI.AddChildGOImage(
                 footer, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
                 chromeSz, chromeSz, Vector2.zero, rounded: true);
@@ -680,7 +645,6 @@ namespace VPB
             resizer.Target = _stripKeepPanelRT;
             resizer.GetMinSize = StripKeepPanelMinSizeScaled;
             resizer.GetMaxSize = StripKeepPanelMaxSizeScaled;
-            // Live wrap while dragging; persist + final wrap on release.
             resizer.OnResizing = StripKeepPresetChipFlowNow;
             resizer.OnResized = StripKeepOnPanelResized;
             AddTooltipPlain(_stripKeepResizeGO,
@@ -724,9 +688,6 @@ namespace VPB
             return mask;
         }
 
-        /// <summary>
-        /// External 3P create row — pinned above list (not inside Lights expand). Visible when lights stripped.
-        /// </summary>
         private void BuildStripKeepDefault3PRow(Transform parent, float btnH, int font, float s)
         {
             _stripKeepDefault3PHost = new GameObject("Default3PRow");
@@ -883,7 +844,6 @@ namespace VPB
             StripKeepApplyNavHighlight();
         }
 
-        /// <summary>Flat-row variant used by name/type/kept sorts (no category chrome).</summary>
         private void AddStripKeepFlatItemRow(StripKeepItem it, float rowH, float expandW, int font, float s)
         {
             float itemH = rowH * 0.92f;
@@ -1005,7 +965,6 @@ namespace VPB
             if (go == null) return;
             RectTransform rt = go.GetComponent<RectTransform>();
             if (rt == null) return;
-            // Inside a sized host: stretch fill with zero sizeDelta so hit box == visible row.
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
             rt.pivot = new Vector2(0.5f, 0.5f);
@@ -1016,9 +975,6 @@ namespace VPB
             rt.localScale = Vector3.one;
         }
 
-        /// <summary>
-        /// Fixed-size HLG child: left-middle anchors + explicit size (no stretchAll overshoot).
-        /// </summary>
         private static void StripKeepFixedLayoutChild(GameObject go, float width, float height)
         {
             if (go == null) return;
@@ -1058,7 +1014,6 @@ namespace VPB
             bool canExpand = count > 0;
             bool expanded = canExpand && _stripKeepExpanded.Contains(kind);
 
-            // Expand affordance: chevron-right / chevron-down (shared tree language).
             GameObject expandBtn = UI.CreateUIButton(
                 row, expandW, rowH, "", font, 0, 0, AnchorPresets.middleLeft,
                 canExpand ? (UnityAction)(() => ToggleStripKeepExpand(captured)) : null);
@@ -1112,7 +1067,7 @@ namespace VPB
                 if (total <= 0)
                     toggleLabel.color = new Color(0.55f, 0.56f, 0.58f, 1f);
                 else if (selected > 0 && selected < total)
-                    toggleLabel.color = new Color(0.92f, 0.78f, 0.45f, 1f); // partial = amber cue
+                    toggleLabel.color = new Color(0.92f, 0.78f, 0.45f, 1f);
                 _stripKeepCatLabels[kind] = toggleLabel;
                 RectTransform lrt = toggleLabel.GetComponent<RectTransform>();
                 if (lrt != null)
@@ -1151,7 +1106,6 @@ namespace VPB
                 hlg.childControlHeight = true;
                 hlg.childForceExpandHeight = true;
 
-                // Indent under category expand column.
                 GameObject spacer = new GameObject("Indent");
                 spacer.transform.SetParent(row.transform, false);
                 if (spacer.GetComponent<RectTransform>() == null) spacer.AddComponent<RectTransform>();
@@ -1213,7 +1167,6 @@ namespace VPB
 
                 if (it.Synthetic) continue;
 
-                // Trailing rename — separate hit target from keep toggle (Fitts / risk separation).
                 string capturedUid = uid;
                 GameObject renameBtn = UI.CreateUIButton(
                     row, renameW, itemH, "", font, 0, 0, AnchorPresets.middleLeft,
@@ -1282,12 +1235,10 @@ namespace VPB
             if (on) _stripKeepMask |= kind;
             else _stripKeepMask &= ~kind;
 
-            // Lights kept but none in scene → auto-offer create fill (3P or saved SubScene).
             if (kind == CreatorStripKeepKind.Lights && on && !StripKeepHasAnyRealLightAtoms())
                 StripKeepSeedCreateFillWhenNoLights();
 
             RecalcStripKeepTotalsFromSelection();
-            // Refresh labels / partial tint without full rebuild when collapsed.
             if (_stripKeepExpanded.Contains(kind))
                 RebuildStripKeepToggleRows();
             else
@@ -1402,7 +1353,6 @@ namespace VPB
             catch { }
 
             bool canStrip = _stripKeepDropCount > 0;
-            // Always clickable — explain-why when empty (no silent disabled primary).
             if (_stripKeepConfirmBtn != null)
                 _stripKeepConfirmBtn.interactable = true;
             if (_stripKeepConfirmImg != null)
@@ -1489,7 +1439,6 @@ namespace VPB
 
         private bool StripKeepNeedsSoftConfirm()
         {
-            // Risk policy Medium: any drop requires second Confirm (no threshold lottery).
             return RiskPolicyStripNeedsSoftConfirm(_stripKeepDropCount);
         }
 
@@ -1550,7 +1499,6 @@ namespace VPB
             }
             _stripKeepAwaitingSoftConfirm = false;
 
-            // Re-apply rename mode so strip uses latest gender-aware names.
             if (_stripKeepPersonRenameMode != StripKeepPersonRenameMode.Off)
                 StripKeepApplyPersonRenameModeToSelection(overwriteExisting: true);
 
@@ -1611,7 +1559,6 @@ namespace VPB
             if (_stripKeepRenames.Count == 0) return true;
 
             HashSet<string> finalNames = new HashSet<string>(StringComparer.Ordinal);
-            // System ids always reserved.
             finalNames.Add("CameraRig");
             finalNames.Add("[CameraRig]");
             finalNames.Add("WindowCamera");
@@ -1783,7 +1730,6 @@ namespace VPB
                             2f);
                         return;
                     }
-                    // Clash against other kept atoms' final names.
                     for (int i = 0; i < _stripKeepItems.Count; i++)
                     {
                         StripKeepItem other = _stripKeepItems[i];
@@ -1801,7 +1747,6 @@ namespace VPB
                     }
 
                     _stripKeepRenames[capturedUid] = newName;
-                    // Selecting rename implies keep intent — auto-check atom.
                     if (!_stripKeepSelectedUids.Contains(capturedUid))
                     {
                         _stripKeepSelectedUids.Add(capturedUid);
@@ -1831,7 +1776,6 @@ namespace VPB
             Transform parent, float width, float height, string label, int font, float s,
             Color bg, UnityAction onClick, bool flexibleWidth = false)
         {
-            // Layout-group button (not stretchAll CreateUIButton) — keeps chip widths honest.
             float w = flexibleWidth ? 0f : (width > 0f ? width : StripKeepChipWidth(label, font, s));
             GameObject go = UI.CreateChromeLayoutButton(parent, w, height, label, font, bg, onClick);
             StripKeepStyleChromeButtonText(go, s);

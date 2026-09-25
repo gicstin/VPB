@@ -2,14 +2,9 @@ using System;
 
 namespace VPB
 {
-    /// <summary>
-    /// Gallery tile caption helpers (#90).
-    /// Rule: dual package/leaf when scrubbed file stem ≠ package name; otherwise package alone.
-    /// Creator lives on grid label right — not repeated in primary. Scroll bind: uid parse + stem scrub — no sibling SQL.
-    /// </summary>
+    /// <summary>Gallery tile caption helpers (#90).</summary>
     internal static partial class VpbLocalDatabase
     {
-        /// <summary>Path → category without SQL (scroll-safe). Covers common gallery prefixes.</summary>
         internal static string GuessGalleryCategoryFromInternalPath(string internalPath)
         {
             if (string.IsNullOrEmpty(internalPath)) return null;
@@ -45,7 +40,6 @@ namespace VPB
             if (p.StartsWith("Custom/Atom/", StringComparison.OrdinalIgnoreCase)
                 && p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
             {
-                // Appearance / pose / etc. share Atom presets — need tab hint for accuracy.
                 return null;
             }
 

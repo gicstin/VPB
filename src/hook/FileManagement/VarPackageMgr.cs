@@ -102,7 +102,6 @@ namespace VPB
             LogUtil.Log("VarPackageMgr.Init took " + sw.ElapsedMilliseconds + "ms (manifest load deferred to refresh)");
         }
 
-        /// <summary>Starts manifest load on a worker if not already started. Returns wait handle (may already be signaled).</summary>
         internal ManualResetEvent BeginManifestLoadIfNeeded()
         {
             if (manifestLoadState == 2 || manifestLoadState == -1)
@@ -195,7 +194,6 @@ namespace VPB
                 {
                     lock (lookupLock)
                     {
-                        // Scan workers may add manifests while SQLite writes this snapshot.
                         if (manifestMutationGeneration == snapshotGeneration)
                             dirtyExternal = false;
                         if (snapshotNeedsBlobUpgrade)

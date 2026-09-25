@@ -3,10 +3,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Resolved gallery UI scale. User pane scale is independent of grid cell size.
-    /// Layout/chrome uses <see cref="ChromeScale"/>; grid overlays use <see cref="CellOverlayScale"/>.
-    /// </summary>
     public readonly struct GalleryUiMetrics
     {
         public readonly float PaneScale;
@@ -15,7 +11,6 @@ namespace VPB
         public readonly bool RespectHostScale;
         public readonly bool DesktopFixedPanel;
 
-        /// <summary>Pane × host (VaM UI scale on desktop). Single factor for layout + chrome fonts.</summary>
         public float ChromeScale
         {
             get
@@ -36,7 +31,6 @@ namespace VPB
             DesktopFixedPanel = desktopFixedPanel;
         }
 
-        /// <param name="desktopFixedPanel">True when gallery uses screen-space overlay (fixed dock).</param>
         public static GalleryUiMetrics Resolve(bool desktopFixedPanel = false)
         {
             float pane = 1f;
@@ -58,7 +52,6 @@ namespace VPB
             {
                 try
                 {
-                    // Follow VaM Monitor UI Scale (User Preferences), not BepInEx Settings.UIScale.
                     float vam = VPBConfig.Instance != null
                         ? VPBConfig.Instance.UiScale
                         : GalleryUiDesignTokens.VamMonitorUiScaleDesignBaseline;
@@ -99,7 +92,6 @@ namespace VPB
         public int FontCaption(int minPt = GalleryUiDesignTokens.FontMinRef)
             => Font(GalleryUiDesignTokens.FontCaptionRef, minPt);
 
-        /// <param name="designControlHeightPx">Unscaled control height (design ref).</param>
         public static int GlyphFontFromControlHeight(float designControlHeightPx, float scale, int minPt = GalleryUiDesignTokens.FontMinRef)
         {
             if (designControlHeightPx <= 0f) designControlHeightPx = GalleryUiDesignTokens.TitleBarChipRef;
@@ -161,16 +153,11 @@ namespace VPB
             float extra = FontExtraScale(scale, designPt, minPt);
             txt.transform.localScale = new Vector3(extra, extra, 1f);
 
-            // Always re-apply pivot. Old code only set pivot when extra != 1, so after dipping
-            // below FontMin floor (UI scale ~0.55) bottom-anchored tooltip/status rows kept a
-            // center pivot and stayed shifted down until panel recreate.
             RectTransform rt = txt.rectTransform;
             if (rt == null) return;
             Vector2 pivot = Mathf.Abs(extra - 1f) > 0.001f
                 ? PivotFromTextAnchor(txt.alignment)
                 : new Vector2(0.5f, 0.5f);
-            // Fixed vertical anchor (status / hover-path row): keep pivot on that edge so
-            // localScale never drops half the rect below the InfoBar.
             if (Mathf.Abs(rt.anchorMin.y - rt.anchorMax.y) < 0.001f)
             {
                 if (rt.anchorMin.y <= 0.01f) pivot.y = 0f;
@@ -179,7 +166,6 @@ namespace VPB
             rt.pivot = pivot;
         }
 
-        /// <summary>Pivot matching <see cref="Text.alignment"/> so localScale shrinks from the reading edge.</summary>
         public static Vector2 PivotFromTextAnchor(TextAnchor alignment)
         {
             float x = 0.5f;
@@ -225,7 +211,6 @@ namespace VPB
             if (txt != null) txt.fontStyle = FontStyle.Normal;
         }
 
-        /// <summary>Modal / section header — title size + bold weight.</summary>
         public static void ApplyEmphasisTitle(Text txt, int scaledFontSize)
         {
             if (txt == null) return;

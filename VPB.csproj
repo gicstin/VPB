@@ -295,6 +295,7 @@
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\VpbScrollTuning.cs" />
     <Compile Include="src\util\VpbRandom.cs" />
+    <Compile Include="src\util\VpbNumberText.cs" />
     <Compile Include="src\util\VpbRandomHistory.cs" />
     <Compile Include="src\util\AtomGenderUtils.cs" />
     <Compile Include="src\util\AppearancePresetSuppress.cs" />
@@ -319,6 +320,7 @@
     <Compile Include="src\hook\perf\VamCatalogRefreshProfiler.cs" />
     <Compile Include="src\hook\perf\VamAssetBundleQueue.cs" />
     <Compile Include="src\hook\perf\VamFrameAttributionProfiler.cs" />
+    <Compile Include="src\hook\perf\VamIlCallScanner.cs" />
     <Compile Include="src\util\LooseVapGenderProbe.cs" />
     <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VpbImport.SubToggleFilter.cs" />
@@ -352,6 +354,7 @@
     <Compile Include="src\hook\TurboJpegNative.cs" />
     <Compile Include="src\hook\TurboJpegStats.cs" />
     <Compile Include="src\hook\HubImageLoaderThreaded.cs" />
+    <Compile Include="src\hook\ImageLoaderShared.cs" />
     <Compile Include="src\hook\HubPixelPackingJobs.cs" />
     <Compile Include="src\hook\CustomAssetLoader.cs" />
     <Compile Include="src\hook\GenericTextureHook.cs" />
@@ -507,6 +510,8 @@
     <Compile Include="src\gallery\GalleryPanel.PerfPreset.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.HubFetch.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.ScanWhitelist.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.ForceLatestExclusions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsPackageVersions.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.QuickMenuPos.cs" />
     <Compile Include="src\VamHookPlugin.GalleryModalsBridge.cs" />
     <Compile Include="src\VamHookPlugin.TextureCacheApi.cs" />
@@ -543,6 +548,7 @@
     <Compile Include="src\gallery\GalleryPanel.DetailStrip.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.QuickLaunch.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.Active.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.Default.cs" />
     <Compile Include="src\gallery\GalleryPanel.FilterRandomizer.cs" />
@@ -663,7 +669,6 @@
     <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.SceneMerge.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.SceneMerge.Regions.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.Import.cs" />
-    <Compile Include="src\gallery\Gallery.DependencyWhitelist.cs" />
     <Compile Include="src\gallery\AnchorPresets.cs" />
     <Compile Include="src\gallery\SceneUtils.cs" />
     <Compile Include="src\gallery\ChamferedRect.cs" />
@@ -701,6 +706,8 @@
     <Compile Include="src\hook\FileManagement\FileEntryStreamReader.cs" />
     <Compile Include="src\hook\FileManagement\FileManager.cs" />
     <Compile Include="src\hook\FileManagement\FileManagerBridge.cs" />
+    <Compile Include="src\hook\FileManagement\VamNativePackageListing.cs" />
+    <Compile Include="src\hook\FileManagement\VamPathFastPaths.cs" />
     <Compile Include="src\hook\FileManagement\FileStat.cs" />
     <Compile Include="src\hook\FileManagement\SystemFileEntry.cs" />
     <Compile Include="src\hook\FileManagement\SystemFileEntryStream.cs" />
@@ -712,6 +719,7 @@
     <Compile Include="src\hook\FileManagement\VarPackage.cs" />
     <Compile Include="src\hook\FileManagement\VarPackageGroup.cs" />
     <Compile Include="src\hook\FileManagement\PackageReferenceVersionResolver.cs" />
+    <Compile Include="src\hook\FileManagement\ForceLatestDependencyPolicy.cs" />
     <Compile Include="src\hook\FileManagement\VamScanFilter.cs" />
     <Compile Include="src\hook\FileManagement\LocalDiskEntryCache.cs" />
     <Compile Include="src\hook\FileManagement\VamOnDemandLoader.cs" />

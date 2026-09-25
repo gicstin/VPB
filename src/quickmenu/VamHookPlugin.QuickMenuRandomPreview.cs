@@ -14,8 +14,6 @@ namespace VPB
         private const float QmPreviewBuildGiveUpSec = 25f;
         private const string QmPreviewCurrentViewKey = "view";
 
-        // Thumbnails are the gallery's own 1:1 plates, so the widget is sized from a square side plus
-        // chrome rather than from an arbitrary box the image would have to stretch into.
         private const float QmPreviewDeskThumb = 300f;
         private const float QmPreviewWatchThumb = 300f;
         private const float QmPreviewScreenPad = 8f;
@@ -27,7 +25,6 @@ namespace VPB
         private const float QmPreviewSubLabelH = 15f;
         private const float QmPreviewFilterStripH = 30f;
         private const int QmPreviewFilterFont = 20;
-        // Fixed px at HUD local scale 1. A fraction of a panel this big rounds the backdrop into a lozenge.
         private const float QmPreviewCornerPx = 6f;
 
         private static readonly Color QmPreviewBackdrop = new Color(0.06f, 0.06f, 0.07f, 0.94f);
@@ -91,7 +88,6 @@ namespace VPB
                 QuickMenuEndRandomPreview();
         }
 
-        /// <summary>Random actions and the gallery category their pool comes from (null = current view).</summary>
         private static bool QuickMenuTryGetRandomPreviewCategory(QuickMenuAssignableAction a, out string category)
         {
             category = null;
@@ -115,10 +111,7 @@ namespace VPB
             return string.IsNullOrEmpty(category) ? QmPreviewCurrentViewKey : category;
         }
 
-        // ---------------------------------------------------------------- hover
-
-        // The action enum is private to this class, so the watch's namespace-level pointer handlers get
-        // slot-index entry points instead (an internal member may not expose a private type).
+        // Slot-index entry points since the action enum is private.
         internal void QuickMenuBeginWatchHudRandomPreview(int hudIdx)
         {
             QuickMenuBeginRandomPreview(QuickMenuWatchHudSlotAction(hudIdx), true);
@@ -141,8 +134,7 @@ namespace VPB
                 return;
             }
 
-            // Re-entering the same button while it is still shown must still re-roll (that is the feature),
-            // so no early-out on same action here.
+            // Re-entering the same button while it is still shown must still re-roll (that is the feature), so no early-out on same action here.
             unchecked { m_QmPreviewSerial++; }
             m_QmPreviewAction = act;
             m_QmPreviewCategory = category;
@@ -173,7 +165,6 @@ namespace VPB
                 return;
             }
 
-            // Cold category: defer the pool trip until the pointer actually settles on the button.
             m_QmPreviewWaiting = true;
             m_QmPreviewColdAt = Time.unscaledTime + QmPreviewColdDwellSec;
             QuickMenuApplyRandomPreviewVisual();
@@ -193,7 +184,6 @@ namespace VPB
             QuickMenuApplyRandomPreviewVisual();
         }
 
-        /// <summary>Take the pinned pick for <paramref name="act"/> (click). Null = launch path picks its own.</summary>
         private FileEntry QuickMenuConsumeRandomPreviewPick(QuickMenuAssignableAction act)
         {
             if (m_QmPreviewAction != act) return null;
@@ -201,8 +191,7 @@ namespace VPB
             m_QmPreviewPick = null;
             unchecked { m_QmPreviewSerial++; }
 
-            // The pointer usually stays on the button after a click; queue the next candidate so a
-            // second press is not a blind draw. Delayed so it never samples during the launch itself.
+            // The pointer usually stays on the button after a click; queue the next candidate so a second press is not a blind draw.
             m_QmPreviewWaiting = true;
             m_QmPreviewColdAt = Time.unscaledTime + QmPreviewRearmSec;
 
@@ -292,14 +281,12 @@ namespace VPB
                     return;
                 }
 
-                if (serial != m_QmPreviewSerial) return; // pointer moved on — keep the reel, drop the show
+                if (serial != m_QmPreviewSerial) return;
                 m_QmPreviewWaiting = false;
                 m_QmPreviewPick = count > 0 ? QuickMenuTakeFromReel(reel) : null;
                 QuickMenuApplyRandomPreviewVisual();
             });
         }
-
-        // ---------------------------------------------------------------- pools
 
         private FileEntry QuickMenuSampleFromCurrentView(GalleryPanel panel)
         {
@@ -309,7 +296,6 @@ namespace VPB
             int n = panel.QuickMenu_FillRandomSampleFromCurrentView(m_QmPreviewScratch, 3);
             if (n <= 0) return null;
 
-            // Prefer something other than the item shown last time so re-hovering visibly re-rolls.
             for (int i = 0; i < m_QmPreviewScratch.Count; i++)
             {
                 FileEntry cand = m_QmPreviewScratch[i];
@@ -403,8 +389,6 @@ namespace VPB
             return pick;
         }
 
-        // ---------------------------------------------------------------- widgets
-
         private void QuickMenuBuildRandomPreviewWidget(Transform parent, string name, float thumb, int font,
             out GameObject go, out RectTransform rt, out Image bg, out RawImage img, out Text label, out Text subLabel, out Text filterLabel)
         {
@@ -427,16 +411,13 @@ namespace VPB
             thumbRt.anchorMin = new Vector2(0.5f, 0.5f);
             thumbRt.anchorMax = new Vector2(0.5f, 0.5f);
             thumbRt.pivot = new Vector2(0.5f, 0.5f);
-            // Square box, centred over the caption block: gallery plates are 1:1 and a stretched
-            // RawImage has no way to letterbox them back.
+            // Square box, centred over the caption block: gallery plates are 1:1 and a stretched RawImage has no way to letterbox them back.
             thumbRt.sizeDelta = new Vector2(thumb, thumb);
             thumbRt.anchoredPosition = new Vector2(0f, captionH * 0.5f);
             img = thumbGo.AddComponent<RawImage>();
             img.raycastTarget = false;
-            // Same placeholder tint the gallery uses, so an unresolved thumbnail is a grey plate, not white.
             img.color = QmPreviewThumbPlaceholder;
 
-            // Two-band caption in the grid's own shape: leaf on top, creator/package muted underneath.
             label = UI.CreateLabel(go, "", font, GalleryUiColorTokens.TextPrimary, TextAnchor.MiddleCenter,
                 HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate, false, false,
                 AnchorPresets.bottomMiddle, new Vector2(w - QmPreviewPad * 2f, QmPreviewLabelH),
@@ -489,7 +470,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Park the card above the tooltip bar (same X), growing up — not under the buttons.</summary>
         private void QuickMenuPositionDeskPreview()
         {
             if (m_QmPreviewDeskRt == null || m_QmTooltipRT == null) return;
@@ -507,8 +487,6 @@ namespace VPB
             QuickMenuClampDeskPreviewToScreen();
         }
 
-        /// <summary>Pane pose vs mainHUD: Y180 then −X tilt. HUD canvas is already (32,180,0) — stacking −tilt overshoots.
-        /// Desk undoes canvas local; watch already faces the eye so it only applies extra −X.</summary>
         private void QuickMenuApplyPreviewVrTilt(RectTransform rt)
         {
             if (rt == null) return;

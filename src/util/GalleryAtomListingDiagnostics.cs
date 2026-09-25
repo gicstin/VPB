@@ -5,9 +5,6 @@ using MVR.FileManagement;
 
 namespace VPB.src.util
 {
-    /// <summary>
-    /// Ctrl+Shift+L diagnostic: lists every atom in the gallery's selected scene/preset file(s).
-    /// </summary>
     public static class GalleryAtomListingDiagnostics
     {
         public static void DumpGallerySelection(IList<FileEntry> selectedFiles, string categoryTitle, string tag)
@@ -52,7 +49,6 @@ namespace VPB.src.util
                 return;
             }
 
-            // Single-atom / preset JSON without a scene wrapper.
             if (root.HasKey("storables"))
             {
                 string atomId = root["id"] != null ? root["id"].Value : "(preset)";

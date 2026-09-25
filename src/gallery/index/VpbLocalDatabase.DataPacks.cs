@@ -19,7 +19,6 @@ namespace VPB
             public int LinkedPackages;
         }
 
-        /// <summary>Look-A-Pedia row linked to a library package (subject = "this looks like").</summary>
         internal struct DataPackLookOverlay
         {
             public bool Found;
@@ -82,11 +81,6 @@ namespace VPB
         static string[] s_SubjectPackIds;
         static int s_SubjectPackRev = -1;
 
-        /// <summary>
-        /// Packs that actually carry a subject. Only Look-A-Pedia does; the Hub pack has none,
-        /// so scoping subject probes by pack id keeps them off its links entirely.
-        /// Null means "unknown" — callers must then fall back to probing every pack.
-        /// </summary>
         internal static string[] DataPackSubjectPackIds()
         {
             int rev = VpbDataPackService.StatusRevision;
@@ -409,7 +403,6 @@ namespace VPB
             return s.ToLowerInvariant();
         }
 
-        /// <summary>Full subject/tag string for facet chips (quoted exact match). Not first-word LIKE.</summary>
         internal static string DataPackFacetValueToken(string name)
         {
             if (string.IsNullOrEmpty(name)) return "";
@@ -640,8 +633,6 @@ namespace VPB
 
             if (!ok)
             {
-                // Package-level fallback: the item-level query needs a ready category index, and an
-                // "ALL VAR" style category has no cat_mem rows at all.
                 return FillLookFacetPackageCounts(hubTags, dest);
             }
 
@@ -937,7 +928,6 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE datapack_entry ADD COLUMN size_kb INTEGER NOT NULL DEFAULT 0;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE datapack_entry ADD COLUMN flags INTEGER NOT NULL DEFAULT 0;");
 
-            // Live-sync bookkeeping for the hublive pack (see VpbLocalDatabase.DataPackLive.cs).
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE datapack ADD COLUMN sync_watermark TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE datapack ADD COLUMN sync_utc INTEGER NOT NULL DEFAULT 0;");
 

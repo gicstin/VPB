@@ -5,7 +5,6 @@ using SimpleJSON;
 
 namespace VPB
 {
-    /// <summary>SQLite-backed gallery filter presets (formerly Cache/VPB/quick_filters.json).</summary>
     internal static partial class VpbLocalDatabase
     {
         private const string FilterPresetsMigratedMetaKey = "gallery_filter_preset_migrated_v1";
@@ -79,7 +78,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Replace-all write of preset list. Assigns Ids for new rows. Returns false if SQLite unavailable.</summary>
         internal static bool TrySaveFilterPresets(IList<QuickFilterEntry> filters)
         {
             if (filters == null) return false;
@@ -185,9 +183,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// One-shot: if SQL table empty and legacy JSON exists, import rows and mark migrated.
-        /// </summary>
         internal static bool TryMigrateFilterPresetsFromJsonFile(string jsonFilePath)
         {
             if (!VpbSqlite3.IsAvailable) return false;

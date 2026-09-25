@@ -13,9 +13,6 @@ using ZstdNet;
 
 namespace VPB
 {
-    /// <summary>
-    /// Manages Zstd compression and loading from VPB_Cache.
-    /// </summary>
     public class ImageLoadingMgr : MonoBehaviour
     {
         public static ImageLoadingMgr singleton;
@@ -25,7 +22,6 @@ namespace VPB
         
         /// <summary>Max decompressed bytes for zstd serve on calling thread (LoadImage immediate, etc.).</summary>
         private const int MaxSyncDecompressedPayloadBytes = 8 * 1024 * 1024;
-        /// <summary>Sized for an 8K RGBA full mip chain (8192² × 4 × 4/3 ≈ 341 MiB); 512 MiB is the next round bucket.</summary>
         private const int MaxServeCachePayloadBytes = 512 * 1024 * 1024;
         private const int MaxCacheDimension = 8192;
 
@@ -164,7 +160,6 @@ namespace VPB
         private void Update()
         {
             if (stopping || VpbShutdown.IsQuitting) return;
-            // Worker completions may request retries or native fallbacks, which touch Unity state.
             for (int i = 0; i < MaxPendingMainThreadTextureCreates; i++)
             {
                 Action action;
@@ -291,8 +286,6 @@ namespace VPB
                 return quarantinedZstdPaths.Add(cachePath);
         }
 
-        // --- Corrupt .zvamcache cleanup ---
-
         private const int MaxCorruptZstdDeletionsPerSession = 512;
         private const int CorruptZstdSummaryQuietMs = 3000;
 
@@ -394,10 +387,10 @@ namespace VPB
             }
         }
 
-
         private class DecompressedData
         {
             public string CacheKey;
+            public string SourceZstdPath;
             public byte[] Data;
             public long PendingCreateBytes = -1;
             public MetadataEntry Meta;
@@ -414,7 +407,6 @@ namespace VPB
             public bool IsReadable;
             public bool CreateMipMaps;
             public int MipCount;
-            /// <summary><see cref="TextureUtil.MipStorageBase"/> or <see cref="TextureUtil.MipStorageFull"/>.</summary>
             public string MipStorage;
 
             public int VpbVer;
@@ -519,7 +511,6 @@ namespace VPB
             return IsZstdWritePathBusy(zstdPath);
         }
 
-        /// <summary>True while runtime or on-demand zstd write owns path (incl. .tmp on disk).</summary>
         public static bool IsZstdWritePathBusy(string zstdPath)
         {
             if (string.IsNullOrEmpty(zstdPath)) return false;
@@ -554,7 +545,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Claim path for exclusive zstd write. False if already claimed.</summary>
         public static bool TryAcquireZstdWritePath(string zstdPath)
         {
             if (string.IsNullOrEmpty(zstdPath)) return false;
@@ -631,6 +621,7 @@ namespace VPB
             var decompressed = new DecompressedData
             {
                 CacheKey = cacheKey,
+                SourceZstdPath = payload.FromZstd ? payload.CachePath : null,
                 Data = payload.Data,
                 Meta = payload.Meta,
                 OriginalQI = qi,
@@ -1860,13 +1851,7 @@ namespace VPB
 
                 if (qi.callback != null)
                 {
-                    // Scan-whitelist + on-demand registration: the image callback is deferred
-                    // until scene load finishes (DelayDoCallback) and the texture is often served
-                    // from VPB's own cache, so the source package may never have been registered in
-                    // VaM's FileManager. Plugins like MacGruber PostMagic enumerate sibling files in
-                    // their package directory (FileManagerSecure.GetFiles) inside this callback; if
-                    // the package isn't registered, VaM's GetFiles throws "non-existent path" and
-                    // aborts the plugin. Ensure the source package is live before invoking.
+                    // Register source package before deferred image callbacks, since plugins enumerate sibling files.
                     if (!qi.isThumbnail)
                     {
                         try
@@ -1891,14 +1876,9 @@ namespace VPB
             }
         }
         
-
-
         WaitForEndOfFrame waitForEndOfFrame = new WaitForEndOfFrame();
 
-        /// <summary>
-        /// MaterialOptions custom slots need OnTexture*Loaded ASAP after URL sync so GPU bind
-        /// races less with skin-wrap/cloth material reconnect (issue #80). Still wait out real scene loads.
-        /// </summary>
+        /// <summary>Fire MaterialOptions OnTexture*Loaded ASAP after URL sync (issue #80), still waiting out scene loads.</summary>
         static bool IsMaterialOptionsCustomCallback(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null || qi.callback == null) return false;
@@ -2102,8 +2082,6 @@ namespace VPB
                 return false;
             }
 
-            // VaM JSONStorableUrl.Reload / browse sets forceReload. Native UseCachedTex still
-            // reprocesses; VPB must not short-circuit to a silent RAM/disk hit (issue #80).
             if (qi.forceReload)
             {
                 try
@@ -2320,6 +2298,7 @@ namespace VPB
                 var decompressed = new DecompressedData
                 {
                     CacheKey = cacheKey,
+                    SourceZstdPath = cachePath,
                     Data = decompressedData,
                     Meta = meta,
                     OriginalQI = qi,
@@ -2522,14 +2501,17 @@ namespace VPB
                 if (!createMipMaps && data.OriginalQI != null)
                     createMipMaps = ResolveQueueCreateMipMaps(data.OriginalQI);
 
+                bool persistGeneratedMips = ShouldPersistGeneratedMipChain(data, createMipMaps, forceReadable);
                 Texture2D tex = TextureUtil.CreateTextureFromCachedRaw(data.Data, data.Meta.Width, data.Meta.Height, data.Meta.Format,
-                    createMipMaps, data.OriginalQI.linear, !forceReadable, forceReadable);
+                    createMipMaps, data.OriginalQI.linear, !forceReadable && !persistGeneratedMips, forceReadable);
                 if (tex == null)
                 {
                     LogFallbackToVaM("texture-create-returned-null", data.OriginalQI);
                     FallbackInflightToNative(data);
                     return;
                 }
+                if (persistGeneratedMips)
+                    PersistGeneratedMipChain(tex, data);
 
                 if (forceReadable)
                 {
@@ -2577,6 +2559,76 @@ namespace VPB
             }
         }
 
+        private static readonly HashSet<string> s_MipChainPersistedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private bool ShouldPersistGeneratedMipChain(DecompressedData data, bool createMipMaps, bool forceReadable)
+        {
+            if (forceReadable || data == null || data.Data == null || data.Meta == null) return false;
+            if (string.IsNullOrEmpty(data.SourceZstdPath)) return false;
+            int w = data.Meta.Width;
+            int h = data.Meta.Height;
+            TextureFormat fmt = data.Meta.Format;
+            bool create = createMipMaps;
+            TextureUtil.InferCreateMipMapsFromRawSize(ref create, data.Data.Length, w, h, fmt);
+            if (!TextureUtil.ShouldGenerateMipsOnApply(create, data.Data.Length, w, h, fmt)) return false;
+            int fullSize = TextureUtil.GetExpectedFullMipChainSize(w, h, fmt);
+            if (fullSize <= 0 || fullSize > MaxRuntimeZstdWritePayloadBytes) return false;
+            if (Thread.VolatileRead(ref activeRuntimeZstdWrites) >= MaxActiveRuntimeZstdWrites) return false;
+            lock (s_MipChainPersistedPaths)
+                return !s_MipChainPersistedPaths.Contains(data.SourceZstdPath);
+        }
+
+        private void PersistGeneratedMipChain(Texture2D tex, DecompressedData data)
+        {
+            string zstdPath = data.SourceZstdPath;
+            byte[] raw;
+            try { raw = tex.GetRawTextureData(); }
+            catch { raw = null; }
+            try { tex.Apply(false, true); }
+            catch { }
+
+            int w = data.Meta.Width;
+            int h = data.Meta.Height;
+            TextureFormat fmt = data.Meta.Format;
+            if (raw == null || raw.Length != TextureUtil.GetExpectedFullMipChainSize(w, h, fmt)) return;
+            lock (s_MipChainPersistedPaths)
+            {
+                if (!s_MipChainPersistedPaths.Add(zstdPath)) return;
+            }
+            if (!TryAcquireZstdWritePath(zstdPath)) return;
+
+            int level = 3;
+            try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
+            bool isReadable = data.Meta.IsReadable;
+            bool queued = false;
+            Interlocked.Increment(ref activeRuntimeZstdWrites);
+            try
+            {
+                queued = ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        WriteCapturedBytesToZstdCache(zstdPath, raw, w, h, fmt, isReadable, true, level);
+                        DropCachedZstdEntry(zstdPath);
+                        int lvl = Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0;
+                        if (lvl >= 1)
+                            LogUtil.Log("[VPB Load] stored generated mip chain so later loads skip main-thread mip generation: " + zstdPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning("[VPB Load] mip chain upgrade failed for " + zstdPath + ": " + ex.Message);
+                    }
+                    finally { Interlocked.Decrement(ref activeRuntimeZstdWrites); }
+                });
+            }
+            catch { queued = false; }
+            if (!queued)
+            {
+                Interlocked.Decrement(ref activeRuntimeZstdWrites);
+                ReleaseZstdWritePath(zstdPath);
+            }
+        }
+
         public void ResolveInflightForQueuedImage(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
@@ -2617,8 +2669,6 @@ namespace VPB
                 }
             }
         }
-
-        // --- Bulk Compression Logic ---
 
         public class ZstdStats
         {
@@ -2779,8 +2829,7 @@ namespace VPB
 
         private static void BulkZstdCompressNativeToZstd(string nativePath, string targetPath, int compressionLevel, JSONNode metaJson)
         {
-            // mip-meta needs only the raw .vamcache byte length, not the bytes; SaveCacheFromFile streams via
-            // external zstd. Reading the whole 64MB+ file into managed memory per file churned the Boehm heap.
+            // mip-meta needs only the raw .vamcache byte length, not the bytes; SaveCacheFromFile streams via external zstd.
             long rawByteLength = -1;
             try { rawByteLength = new FileInfo(nativePath).Length; } catch { }
             ZstdCompressor.SaveCacheFromFile(targetPath, nativePath, compressionLevel);
@@ -3118,7 +3167,6 @@ namespace VPB
             var nativeBaseNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (rescanZstd)
             {
-
                 for (int i = 0; i < files.Length; i++)
                 {
                     if (string.IsNullOrEmpty(files[i])) continue;
@@ -3357,13 +3405,12 @@ namespace VPB
                         byte[] decompressed = ZstdCompressor.Decompress(compressed);
                         File.WriteAllBytes(targetPath, decompressed);
                         
-                        // Restore native meta format
                         try
                         {
                             var metaJson = JSON.Parse(File.ReadAllText(metaPath));
                             metaJson["type"] = "image";
-                            metaJson["width"] = metaJson["width"].Value; // Ensure it's a string
-                            metaJson["height"] = metaJson["height"].Value; // Ensure it's a string
+                            metaJson["width"] = metaJson["width"].Value;
+                            metaJson["height"] = metaJson["height"].Value;
                             metaJson.Remove("zstdLevel");
                             File.WriteAllText(targetPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(metaJson, 1024));
                         }
@@ -3377,7 +3424,6 @@ namespace VPB
                     long originalSize = new FileInfo(targetPath).Length;
                     CurrentZstdStats.TotalOriginalSize += originalSize;
 
-                    // Decompressed successfully, remove the compressed versions
                     try
                     {
                         File.Delete(file);
@@ -3415,8 +3461,6 @@ namespace VPB
             ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi);
         }
 
-        // --- Runtime zstd write-after-load (lazy cache) ---
-
         private struct CandidateStamp
         {
             internal WeakReference QueuedImage;
@@ -3452,11 +3496,6 @@ namespace VPB
         private const int MaxRuntimeZstdWritePayloadBytes = 512 * 1024 * 1024;
         private int activeRuntimeZstdWrites;
 
-        /// <summary>
-        /// Spread runtime zstd cache writes across frames. VaM native Finish already writes .vamcache
-        /// synchronously; VPB zstd writes were duplicated in PostFinish and caused periodic hitches
-        /// (soft-body physics jitter when frame time spikes).
-        /// </summary>
         public void DrainPendingRuntimeZstdWrites()
         {
             if (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive()) return;
@@ -3921,10 +3960,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Match native ImageLoaderThreaded: character skin stays CPU-readable so
-        /// DAZCharacterTextureControl.BlendGenitalTexture GetPixels can run after torso load.
-        /// </summary>
         private static bool ShouldForceCpuReadable(ImageLoaderThreaded.QueuedImage qi, bool metaIsReadable)
         {
             if (metaIsReadable) return true;

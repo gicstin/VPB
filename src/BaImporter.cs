@@ -7,18 +7,13 @@ using VPB.src.util;
 
 namespace VPB
 {
-	/// <summary>
-	/// One-time import from BrowserAssist to VPB. Owns all BA file access.
-	/// </summary>
 	internal static class BaImporter
 	{
-		// BA paths (relative to VaM root)
 		private const string BaRelativeDataDir = @"Saves\PluginData\JayJayWon\BrowserAssist";
 		private const string BaSettingsFileName = "BASettings.cfg";
 		private const string BaUserDataSubfolder = "VARResourcesUserData";
 		private const string BaUserDataExt = ".userData";
 
-		// VPB output paths (relative to VaM root)
 		private const string ManifestRelPath = @"Saves\PluginData\VPB\ba_migration_manifest.json";
 		private const string LogRelPath = @"Saves\PluginData\VPB\ba_migration_log.yaml";
 
@@ -32,13 +27,11 @@ namespace VPB
 			public string Error;
 		}
 
-		// --- Internal data types ---
-
 		private struct BaResourceEntry
 		{
 			public string CreatorName;
 			public string PackageName;
-			public string InternalPath; // forward-slash, version-independent
+			public string InternalPath;
 			public List<string> UserDefinedTags;
 		}
 
@@ -66,10 +59,7 @@ namespace VPB
 			[JsonProperty("pkgUid")] public string PkgUid;
 		}
 
-		// --- Public API ---
-
-		// In-session cache: TryDetectBaDataDir is called from many UI rebuild paths (per-row settings render, tab rebuild)
-		// and would otherwise spam the log + hit the disk dozens of times per second while the settings panel is open.
+		// In-session cache: TryDetectBaDataDir runs on many UI rebuild paths and would spam log and disk.
 		private static bool _detectCached;
 		private static bool _detectCachedResult;
 		private static string _detectCachedPath;
@@ -121,10 +111,6 @@ namespace VPB
 			return Path.Combine(Directory.GetCurrentDirectory(), relPath);
 		}
 
-		/// <summary>
-		/// Reads BASettings.cfg and unions all tag names that appear in any resource type's
-		/// hiddenTags list. These are tags that BA auto-hides resources for.
-		/// </summary>
 		private static HashSet<string> ParseAutoHideTags(string baDataDir)
 		{
 			var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -157,7 +143,6 @@ namespace VPB
 			return result;
 		}
 
-		/// <summary>Walks the JSON tree to depth 3 collecting all "hiddenTags" string arrays.</summary>
 		private static void CollectHiddenTagsRecursive(JSONNode node, HashSet<string> tags, int depth)
 		{
 			if (node == null || depth > 3) return;
@@ -182,12 +167,6 @@ namespace VPB
 			}
 		}
 
-		/// <summary>
-		/// True if the resourceFullFileName is a DAZ clothing or hair .vam item - the only resource types where BA
-		/// auto-extracts creator metadata tags into the same "User" tagCategory bucket as user-added tags
-		/// (see ResourceManifest.cs:6032-6036). Other types (scenes, presets, subscenes, audio, plugins, cua)
-		/// don't auto-extract, so all their "User" tags are genuinely user-added.
-		/// </summary>
 		private static bool IsClothingOrHairItem(string internalPath)
 		{
 			if (string.IsNullOrEmpty(internalPath)) return false;
@@ -197,14 +176,7 @@ namespace VPB
 				|| p.StartsWith("Custom\\Hair\\",     StringComparison.OrdinalIgnoreCase);
 		}
 
-		/// <summary>
-		/// For a clothing/hair resource entry, returns the set of tag names BA recorded as user-added
-		/// (vs auto-extracted from the .vam metadata). Reads the embedded baClothingUserPrefs /
-		/// vamClothingUserPrefs / baHairUserPrefs / vamHairUserPrefs.userTags field
-		/// (comma-separated; see ResourceManifest.cs:6045-6052, 6385-6394).
-		/// Returns null when no userPrefs block exists on the entry - caller should treat that as
-		/// "no user-added tags here, drop everything".
-		/// </summary>
+		/// <summary>BA user-added clothing/hair tags from userPrefs.userTags; null when no userPrefs block.</summary>
 		private static HashSet<string> ReadClothingHairUserTagsAllowList(JSONNode res)
 		{
 			HashSet<string> allowed = null;
@@ -225,10 +197,6 @@ namespace VPB
 			return allowed;
 		}
 
-		/// <summary>
-		/// Parses all *.userData files in VARResourcesUserData/. Returns entries with
-		/// only userDefined tags. Skips entries with no tags.
-		/// </summary>
 		private static List<BaResourceEntry> ParseUserDataFiles(string baDataDir)
 		{
 			var entries = new List<BaResourceEntry>(256);
@@ -282,7 +250,6 @@ namespace VPB
 							foreach (JSONNode tag in tags)
 							{
 								string cat = tag["tagCategory"]?.Value;
-								// BA uses "User" for user-defined tags; "Body Region"/"Clothing Type" are BA system tags - drop them.
 								if (!string.Equals(cat, "User", StringComparison.OrdinalIgnoreCase))
 								{
 									fileSystemTagsDropped++;
@@ -299,12 +266,6 @@ namespace VPB
 							continue;
 						}
 
-						// For clothing/hair items the .userData "User"-category tag list mixes user-added tags with
-						// creator metadata BA auto-extracts from the .vam (ResourceManifest.cs:6035). Discriminator
-						// lives in the per-entry baClothingUserPrefs / vamClothingUserPrefs (and hair equivalents)
-						// userTags field (ResourceManifest.cs:4204-4227, 6045-6052). Other resource types (scenes,
-						// presets, subscenes, plugins, audio, cua) don't auto-extract creator tags so all "User"
-						// entries there are genuinely user-added.
 						var userTags = userTagsRaw;
 						if (IsClothingOrHairItem(ipath))
 						{
@@ -352,11 +313,7 @@ namespace VPB
 			return entries;
 		}
 
-		/// <summary>
-		/// Full import: parse BA data → resolve VPB package UIDs → write tags to SQLite
-		/// → write .hide sidecars → write audit YAML → write reversibility manifest.
-		/// Returns false only on unrecoverable error; partial results are reflected in <paramref name="result"/>.
-		/// </summary>
+		/// <summary>Full import: BA data to VPB tags, .hide sidecars, audit YAML and undo manifest; false only on fatal error.</summary>
 		public static bool RunImport(string baDataDir, out BaMigrationResult result)
 		{
 			result = default;
@@ -364,8 +321,7 @@ namespace VPB
 			LogUtil.LogWarning("[VPB BA] RunImport START | baDataDir='" + baDataDir + "'");
 			try
 			{
-				// If a prior import is recorded, undo it first so re-running cleanly replaces stale rows
-				// (older builds had a wrong tagCategory filter and may have left non-User tags in the DB).
+				// Undo any prior import first so re-runs replace stale rows.
 				if (MigrationManifestExists())
 				{
 					int prevTags, prevHides;
@@ -376,15 +332,12 @@ namespace VPB
 						LogUtil.LogWarning("[VPB BA] RunImport: pre-import reset failed or had nothing to do");
 				}
 
-				// Step 1 - parse auto-hide tags from BASettings.cfg
 				HashSet<string> autoHideTags = ParseAutoHideTags(baDataDir);
 				if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] RunImport step1 done | autoHideTags=" + autoHideTags.Count);
 
-				// Step 2 - parse resource→tag assignments
 				List<BaResourceEntry> resourceEntries = ParseUserDataFiles(baDataDir);
 				if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] RunImport step2 done | resourceEntries=" + resourceEntries.Count);
 
-				// Steps 3–5 - resolve UIDs, collect rows
 				var tagRows   = new List<VpbLocalDatabase.GalleryUserTagImportRow>(resourceEntries.Count);
 				var hideUids  = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 				var pkgsByUid = FileManager.PackagesByUid; // snapshot; thread-safe read
@@ -408,13 +361,11 @@ namespace VPB
 						string uid = kvp.Key;
 						anyVersionMatched = true;
 
-						// Auto-hide: if any user tag on this entry matches a BA auto-hide tag
 						foreach (string t in entry.UserDefinedTags)
 						{
 							if (autoHideTags.Contains(t)) { hideUids.Add(uid); break; }
 						}
 
-						// Tags: need a VPB category for the item
 						if (entry.UserDefinedTags.Count > 0)
 						{
 							entriesWithTags++;
@@ -445,7 +396,6 @@ namespace VPB
 				}
 				LogUtil.LogWarning("[VPB BA] RunImport step3 done | entriesWithTags=" + entriesWithTags + " tagRows=" + tagRows.Count + " hideUids=" + hideUids.Count + " skipped=" + result.ItemsSkipped);
 
-				// Step 4 - write tags to SQLite (merge - preserves existing)
 				if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] RunImport step4: writing " + tagRows.Count + " tag rows to SQLite");
 				VpbLocalDatabase.BulkMergeGalleryUserTags(tagRows);
 				result.TagRowsImported = tagRows.Count;
@@ -454,7 +404,6 @@ namespace VPB
 				result.PackagesTagged = taggedPkgs.Count;
 				if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] RunImport step4 done | tagRows=" + result.TagRowsImported + " pkgsTagged=" + result.PackagesTagged);
 
-				// Step 5 - propagate auto-hide markers
 				if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] RunImport step5: writing " + hideUids.Count + " hide marker(s)");
 				foreach (string uid in hideUids)
 				{
@@ -472,7 +421,6 @@ namespace VPB
 					}
 				}
 
-				// Step 6 - write audit YAML
 				var itemToTags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 				foreach (var row in tagRows)
 				{
@@ -487,7 +435,6 @@ namespace VPB
 				string yaml = GalleryUserTagYamlBrain.BuildItemToTagsYaml(itemToTags, null);
 				WriteTextSafe(GetAbsPath(LogRelPath), yaml);
 
-				// Step 7 - write reversibility manifest
 				var manifest = new BaMigrationManifest
 				{
 					Timestamp = DateTime.UtcNow.ToString("O"),
@@ -508,7 +455,6 @@ namespace VPB
 				LogUtil.LogWarning(string.Format("[VPB BA] Import complete in {4}ms: {0} tag rows, {1} pkgs tagged, {2} hide markers, {3} skipped.",
 					result.TagRowsImported, result.PackagesTagged, result.HideMarkersWritten, result.ItemsSkipped, sw.ElapsedMilliseconds));
 
-				// Invalidate user-tag caches on every gallery panel so the "Your Tags" sidebar repopulates from SQLite.
 				try
 				{
 					var g = Gallery.singleton;
@@ -553,11 +499,7 @@ namespace VPB
 			}
 		}
 
-		/// <summary>
-		/// Reverses the last import: removes only the specific tag rows recorded in the manifest,
-		/// removes .hide sidecars for packages that received them. Deletes the manifest and audit log.
-		/// Returns false if manifest does not exist or is unreadable.
-		/// </summary>
+		/// <summary>Reverses the last import: removes only the specific tag rows recorded in the manifest.</summary>
 		public static bool TryResetMigration(out int tagsRemoved, out int hideMarkersRemoved)
 		{
 			tagsRemoved = hideMarkersRemoved = 0;
@@ -583,7 +525,6 @@ namespace VPB
 					" | importedTags=" + (manifest.ImportedTags?.Count ?? 0) +
 					" | hideMarkers=" + (manifest.CreatedHideMarkers?.Count ?? 0));
 
-				// Remove tags
 				if (manifest.ImportedTags != null)
 				{
 					foreach (var entry in manifest.ImportedTags)
@@ -600,7 +541,6 @@ namespace VPB
 					}
 				}
 
-				// Remove hide markers
 				var pkgsByUid = FileManager.PackagesByUid;
 				if (pkgsByUid == null) pkgsByUid = new Dictionary<string, VarPackage>();
 				if (manifest.CreatedHideMarkers != null)
@@ -627,7 +567,6 @@ namespace VPB
 					}
 				}
 
-				// Delete manifest + log
 				try { File.Delete(manifestPath); if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] TryResetMigration: deleted manifest"); } catch { }
 				try { File.Delete(GetAbsPath(LogRelPath)); if (VPBLogger.Verbose || Settings.Instance?.LogVerboseUi?.Value == true) LogUtil.Log("[VPB BA] TryResetMigration: deleted audit log"); } catch { }
 

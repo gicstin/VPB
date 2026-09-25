@@ -99,7 +99,6 @@ namespace VPB
             bool anyAdded = false;
             string baseDir = Directory.GetCurrentDirectory();
 
-            // 1. VAR package favorites: AddonPackagesFilePrefs\<packageUid>\...\<resource>.<ext>.fav
             try
             {
                 string prefsDir = GetAddonPackagesFilePrefsDir();
@@ -122,8 +121,6 @@ namespace VPB
             }
             catch { }
 
-            // 2. System file favorites: .fav sits next to the actual file (e.g. Saves/scene/MyScene.json.fav)
-            //    Key = relative path from VAM root with forward slashes, minus the .fav suffix.
             string[] systemDirs = new string[]
             {
                 "Saves/scene",
@@ -170,8 +167,6 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return new string[0];
             string sig = "0";
-            // Deep dir-mtime so additions in subfolders invalidate this cache (FileManager.SafeGetFiles
-            // walks AllDirectories).
             try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
             string cacheKey = "markers:fav|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|pat=" + (pattern ?? "");
 
@@ -216,7 +211,7 @@ namespace VPB
             try
             {
                 string txt = File.ReadAllText(favPath);
-                if (IsNullOrWhiteSpace(txt)) return 1; // VAM native .fav files are empty markers → treat as 1 star
+                if (IsNullOrWhiteSpace(txt)) return 1;
                 if (int.TryParse(txt.Trim(), out int r)) return Mathf.Clamp(r, 1, 5);
             }
             catch { }
@@ -244,8 +239,8 @@ namespace VPB
                 if (string.IsNullOrEmpty(rel)) return false;
 
                 rel = rel.Replace('\\', '/');
-                if (rel.StartsWith("./")) rel = rel.Substring(2);
-                if (rel.StartsWith("../")) return false;
+                if (rel.StartsWith("./", StringComparison.Ordinal)) rel = rel.Substring(2);
+                if (rel.StartsWith("../", StringComparison.Ordinal)) return false;
 
                 int slash = rel.IndexOf('/');
                 if (slash <= 0) return false;
@@ -255,11 +250,9 @@ namespace VPB
                 if (string.IsNullOrEmpty(pkgUid) || string.IsNullOrEmpty(rest)) return false;
                 if (!rest.EndsWith(".fav", StringComparison.OrdinalIgnoreCase)) return false;
 
-                // remove .fav -> get original relative file reference used by VaM
                 string originalRef = rest.Substring(0, rest.Length - 4);
                 originalRef = originalRef.Replace('\\', '/');
 
-                // Case 1: package-level .var marker (e.g. AddonPackages/Foo.Bar.1.var)
                 if (originalRef.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
                     originalRef.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
                 {
@@ -267,7 +260,6 @@ namespace VPB
                     return true;
                 }
 
-                // Case 2: a file inside a var package: key is the VarFileEntry uid "<pkgUid>:/<internalPath>"
                 key = pkgUid + ":/" + originalRef;
                 return true;
             }
@@ -289,7 +281,7 @@ namespace VPB
                 if (f.Length == b.Length) return "";
 
                 string rel = f.Substring(b.Length);
-                if (rel.StartsWith("\\") || rel.StartsWith("/")) rel = rel.Substring(1);
+                if (rel.StartsWith("\\", StringComparison.Ordinal) || rel.StartsWith("/", StringComparison.Ordinal)) rel = rel.Substring(1);
                 return rel;
             }
             catch { }
@@ -349,7 +341,6 @@ namespace VPB
                     if (TryLoadFile(backupPath))
                     {
                         hasLoadedSuccessfully = true;
-                        // Restore main file from backup immediately
                         try { File.Copy(backupPath, jsonPath, true); } catch {}
                         return;
                     }
@@ -363,7 +354,7 @@ namespace VPB
 
                 ratings.Clear();
                 packagePrefixRatings = null;
-                hasLoadedSuccessfully = true; // Even if empty, we start fresh
+                hasLoadedSuccessfully = true;
             }
         }
 
@@ -508,9 +499,6 @@ namespace VPB
         public int GetRating(FileEntry entry)
         {
             if (entry == null) return 0;
-            // Package rows in deps/dependents filter use PackageListEntry (Uid = .var path).
-            // Ratings for the same package are often stored under VarFileEntry Uids (pkgUid:/internalPath)
-            // from list/grid before filtering — resolve all plausible keys so the star matches.
             if (entry is PackageListEntry ple)
                 return GetRatingForPackageListEntry(ple);
             return GetRating(entry.Uid);
@@ -668,7 +656,6 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(prefsDir) || entry == null) return false;
 
-                // Var-internal file
                 if (entry is VarFileEntry vfe && vfe.Package != null)
                 {
                     string pkgUid = vfe.Package.Uid;
@@ -686,14 +673,12 @@ namespace VPB
                     return true;
                 }
 
-                // Package (.var) file on disk
                 if (entry is SystemFileEntry sfe && sfe.package != null)
                 {
                     string pkgUid = sfe.package.Uid;
                     string sysPath = (sfe.Path ?? "").Replace('\\', '/');
                     if (string.IsNullOrEmpty(sysPath)) return false;
 
-                    // Store under AddonPackagesFilePrefs\<pkgUid>\<sysPath>.fav
                     favPath = Path.Combine(Path.Combine(prefsDir, pkgUid), sysPath.Replace('/', '\\') + ".fav");
                     return true;
                 }

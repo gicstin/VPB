@@ -58,9 +58,6 @@ namespace VPB
         bool m_RefreshPendingClean = false;
         bool m_RefreshPendingRemoveOldVersion = false;
 
-        // Reason tracking for the current and pending refresh passes.
-        // Used to identify which startup actor triggered each scan (init/autoload/autoinstall/manual)
-        // so coalesced passes can be diagnosed without a stack trace.
         readonly HashSet<string> m_CurrentRefreshReasons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         readonly HashSet<string> m_PendingRefreshReasons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         readonly object m_RefreshReasonsLock = new object();
@@ -72,7 +69,6 @@ namespace VPB
             get
             {
                 return packagesByUid;
-
             }
         }
 
@@ -150,19 +146,13 @@ namespace VPB
             protected set;
         }
 
-        // Cache for missing dependency package-IDs (strings that look like package uids but are not present locally).
-        // Computing this requires scanning every package's RecursivePackageDependencies, which is expensive on large libraries.
-        // We cache it per package refresh timestamp to keep UI actions (Hub missing packages panel) fast.
         private static readonly object s_MissingDependenciesCacheLock = new object();
         private static DateTime s_MissingDependenciesCacheForRefreshTime;
         private static List<string> s_MissingDependenciesCache;
 
-        // Packages added/removed in the most recent scan — consumed by the gallery for incremental updates.
-        // Written on the main thread inside RefreshCo; read on the main thread inside AutoRefreshAfterPackageScan.
         public static readonly List<VarPackage> lastAddedPackages = new List<VarPackage>();
         public static readonly List<VarPackage> lastRemovedPackages = new List<VarPackage>();
 
-        /// <summary>Gallery consumed the pending add/remove delta for the current scan.</summary>
         public static void AckPackageGalleryDeltaConsumed()
         {
             int a = lastAddedPackages.Count;
@@ -179,7 +169,6 @@ namespace VPB
             }
         }
 
-        /// <summary>True when the latest package scan produced adds/removes not yet consumed by the gallery.</summary>
         public static bool HasPendingGalleryPackageDelta()
         {
             try { return lastAddedPackages.Count > 0 || lastRemovedPackages.Count > 0; }
@@ -425,7 +414,6 @@ namespace VPB
                     addByUid[candidateUid] = varPath;
             }
 
-            // Resolve UID conflicts: relocate (old path gone) vs true duplicate (old path still on disk).
             if (uidPathConflicts.Count > 0)
             {
                 foreach (KeyValuePair<string, string> kv in uidPathConflicts)
@@ -446,7 +434,6 @@ namespace VPB
                             existingStillPresent = true;
                         else
                         {
-                            // Symlink/junction subfolders may be omitted from enum while path still resolves.
                             try { existingStillPresent = File.Exists(existing.Path); } catch { existingStillPresent = false; }
                         }
                     }
@@ -464,7 +451,6 @@ namespace VPB
                         continue;
                     }
 
-                    // File moved: RemoveSet drops old path; AddSet registers at new path.
                     diff.AddSet.Add(newPath);
                     VpbPackageIndexDiagnostics.Log(uid, "diffRelocate", "path='" + newPath + "'");
                 }
@@ -480,7 +466,6 @@ namespace VPB
                 VarPackage pkg = packagesSnapshot[i];
                 if (pkg == null || string.IsNullOrEmpty(pkg.Path)) continue;
                 if (diff.PathHashSet.Contains(pkg.Path)) continue;
-                // Keep packages whose path still resolves (junction/symlink enum gaps).
                 try
                 {
                     if (File.Exists(pkg.Path)) continue;
@@ -759,7 +744,7 @@ namespace VPB
         {
             string input = vpath.Replace('\\', '/');
             input = Regex.Replace(input, "\\.(var|zip)$", string.Empty);
-            return Regex.Replace(input, ".*/", string.Empty);
+            return VamPathFastPaths.StripThroughLastSlash(input);
         }
 
         static bool UidHasWhitespace(string s)
@@ -772,11 +757,7 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Whitespace-trimmed <c>Creator.Name.Version</c> alias used only for LOOKUP fallback and Hub queries.
-        /// Never a registry key and never a dedup criterion: <c>verytoxic. Laid_Edges.2.var</c> and
-        /// <c>verytoxic.Laid_Edges.2.var</c> are two distinct packages, exactly as VaM treats them.
-        /// </summary>
+        /// <summary>Whitespace-trimmed Creator.Name.Version alias used only for LOOKUP fallback and Hub queries.</summary>
         internal static string CanonicalizeUidSegments(string uid)
         {
             if (string.IsNullOrEmpty(uid) || !UidHasWhitespace(uid)) return uid;
@@ -955,10 +936,7 @@ namespace VPB
             return new string(buf);
         }
 
-        /// <summary>
-        /// Parses the final <c>&lt;version&gt;</c> segment: digits only, or digits plus Windows copy suffix
-        /// <c>(n)</c> / <c> (n)</c> (e.g. <c>2(1)</c> → version <c>2</c>). Rejects digit-stripping junk like <c>1_1</c>.
-        /// </summary>
+        /// <summary>Parses the final &lt;version&gt; segment: digits only, or digits plus Windows copy suffix (n) / (n) (e.g. 2(1) → version 2).</summary>
         internal static bool TryParseVarVersionSegment(string segment, out int version)
         {
             version = 0;
@@ -1072,12 +1050,7 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Reasons that must re-walk the disk instead of trusting the cached var-path inventory.
-        /// Deletions self-heal (the per-row existence check fails the cache), but ADDITIONS are invisible
-        /// to a cached path list, so any reason that can introduce a new .var belongs here — including
-        /// <c>gallery_manual</c>, which is the user explicitly saying "I changed the folder, go look".
-        /// </summary>
+        /// <summary>Reasons that must re-walk the disk instead of trusting the cached var-path inventory.</summary>
         static bool RefreshReasonNeedsFreshVarDiskEnum(string refreshReason)
         {
             if (string.IsNullOrEmpty(refreshReason)) return false;
@@ -1093,13 +1066,6 @@ namespace VPB
                 || refreshReason.IndexOf("hub_deferred", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>
-        /// Register a hub direct-download .var immediately so hub UI Refresh() does not clear alreadyHave
-        /// before the coalesced FileManager refresh finishes. Also appends path inventory for later cache hits.
-        /// </summary>
-        /// <param name="notifyInventoryChange">
-        /// When false, the Hub queue schedules the content scan after its downloads drain.
-        /// </param>
         public static VarPackage RegisterHubDownloadedPackage(string varPath, bool notifyInventoryChange = true)
         {
             if (string.IsNullOrEmpty(varPath)) return null;
@@ -1116,7 +1082,6 @@ namespace VPB
             try { VpbLocalDatabase.TryAppendVarPathInventory(cleanPath); } catch { }
             if (registered != null)
             {
-                // Keep downloads separate until scanning finishes so opening a gallery cannot acknowledge unscanned content.
                 if (singleton != null) singleton.m_HubDownloadedPackages.Add(registered);
                 VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(1, 0, scheduleUpdate: false);
                 if (notifyInventoryChange) ScheduleHubDownloadRefresh();
@@ -1142,7 +1107,6 @@ namespace VPB
         private IEnumerator HubDownloadRefreshCo()
         {
             yield return null;
-            // StartScan stops its previous coroutine; wait so existing ZIP workers cannot overlap a new scan.
             while (IsScanning && !VpbShutdown.IsQuitting) yield return null;
             m_HubDownloadRefreshCo = null;
             if (VpbShutdown.IsQuitting) yield break;
@@ -1230,7 +1194,6 @@ namespace VPB
 
                         VpbPackageIndexDiagnostics.Log(canonicalUid, "registerOk", "path='" + cleanPath + "'");
 
-                        // Disabling a var package means creating a "disable" file in the same path
                         if (varPackage.Enabled)
                         {
                             if (varPackage.FileEntries != null)
@@ -1301,7 +1264,6 @@ namespace VPB
                 VpbPackageIndexDiagnostics.LogPathEvent(vpath, "registerReject", "reason=bad_name_segment_count segments=" + array.Length);
             }
 
-            // Reaching here means it is invalid
             if (clean)
             {
                 if (isDuplicated)
@@ -1332,7 +1294,7 @@ namespace VPB
             }
 
             string moveToPath = null;
-            if (vpath.StartsWith("AllPackages"))
+            if (vpath.StartsWith("AllPackages", StringComparison.Ordinal))
             {
                 moveToPath = "InvalidPackages" + vpath.Substring("AllPackages".Length);
                 if (!string.IsNullOrEmpty(subPath))
@@ -1340,7 +1302,7 @@ namespace VPB
                     moveToPath = "InvalidPackages/" + subPath + "/" + vpath.Substring("AllPackages".Length);
                 }
             }
-            else if (vpath.StartsWith("AddonPackages"))
+            else if (vpath.StartsWith("AddonPackages", StringComparison.Ordinal))
             {
                 moveToPath = "InvalidPackages" + vpath.Substring("AddonPackages".Length);
                 if (!string.IsNullOrEmpty(subPath))
@@ -1858,7 +1820,6 @@ namespace VPB
             }
         }
 
-        /// <summary>Immediate child files and virtual subdirectories under a VAR internal browse path.</summary>
         public static void FindVarBrowseImmediateChildren(string dir, string pattern, List<FileEntry> foundFiles, List<string> foundSubdirs)
         {
             if (foundFiles == null || string.IsNullOrEmpty(pattern)) return;
@@ -1972,7 +1933,7 @@ namespace VPB
             if (string.IsNullOrEmpty(customPath)) return false;
 
             string p = customPath.Replace('\\', '/');
-            if (p.StartsWith("/")) p = p.Substring(1);
+            if (p.StartsWith("/", StringComparison.Ordinal)) p = p.Substring(1);
             if (!p.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return false;
 
             lock (internalPathToUidPathLock)
@@ -1983,18 +1944,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Lightweight post-install/uninstall sync. Skips the full filesystem scan and does NOT
-        /// signal observers. Safe to call after InstallSelf/UninstallSelf because those methods
-        /// already update VarPackage.Path in-place, so PackagesByUid is already accurate.
-        /// Resync packagesByPath and recount s_InstalledCount (read via OnGUI — no event needed).
-        /// lastPackageRefreshTime is intentionally NOT updated so the gallery does not see a
-        /// spurious change and trigger a RefreshFiles: the file list is identical before and after
-        /// a path-only move (AllPackages ↔ AddonPackages).
-        /// </summary>
-        /// <param name="galleryPathRefreshForPackageUids">
-        /// When non-null and non-empty, refresh cached <see cref="FileEntry.Path"/> only for gallery rows for these package UIDs.
-        /// </param>
+        /// <summary>Post-install/uninstall path resync without full scan, observer signal, or lastPackageRefreshTime bump; optional gallery path refresh for given uids.</summary>
         public static void NotifyInstalled(ICollection<string> galleryPathRefreshForPackageUids)
         {
             lock (packagesLock)
@@ -2019,7 +1969,6 @@ namespace VPB
                     }
                 }
             }
-            // No lastPackageRefreshTime update, no MessageKit.post — gallery content is unchanged.
             if (galleryPathRefreshForPackageUids != null && galleryPathRefreshForPackageUids.Count > 0)
             {
                 try { Gallery.NotifyDisplayedPathsAfterPackagePathChanges(galleryPathRefreshForPackageUids); } catch { }
@@ -2032,20 +1981,13 @@ namespace VPB
             Refresh(null, init, clean, removeOldVersion);
         }
 
-        /// <summary>
-        /// Refresh with an explicit reason tag (e.g. "init", "autoload", "autoinstall", "manual").
-        /// Reasons are accumulated across coalesced calls and emitted in the per-pass scan stats log.
-        /// </summary>
+        /// <summary>Refresh with an explicit reason tag (e.g. "init", "autoload", "autoinstall", "manual").</summary>
         public static void Refresh(string reason, bool init = false, bool clean = false, bool removeOldVersion = false)
         {
             if (singleton == null) return;
 
             string normalizedReason = string.IsNullOrEmpty(reason) ? "manual" : reason;
 
-            // Coalesce refresh requests.
-            // Refresh triggers a full var enumeration which is expensive on large libraries.
-            // Some UI actions can call Refresh multiple times in short succession; stopping/restarting
-            // the coroutine causes repeated enumerations.
             if (singleton.m_RefreshCo != null)
             {
                 singleton.m_RefreshPending = true;
@@ -2198,8 +2140,6 @@ namespace VPB
                     try { LogUtil.Log(VamStartupOptimizations.LogTag + " var disk enum skipped (path inventory cache)"); } catch { }
                 }
 
-                // VPB package indexing intentionally bypasses scan-whitelist filtering.
-                // The whitelist applies only to VaM's native startup registration path.
                 if (ScanWhitelistManager.Instance.IsEnabled)
                 {
                     LogUtil.Log(string.Format(
@@ -2280,6 +2220,7 @@ namespace VPB
                     }
                 }
                 VamOnDemandLoader.ClearCache();
+                ClearForcedEntryPresenceCache();
                 m_RefreshCo = null;
                 if (m_RefreshPending)
                 {
@@ -2718,8 +2659,7 @@ namespace VPB
 			System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 1);
 			try
 			{
-			// Reset per-pass scan counters so logged stats reflect THIS pass only,
-			// not the cumulative totals across all coalesced/follow-up passes.
+			// Reset per-pass scan counters so logged stats reflect THIS pass only.
 			VarPackage.ResetScanCounters();
 			s_DeepScanLastManifestFlushScanned = 0;
 			Stopwatch indexAllSw = Stopwatch.StartNew();
@@ -2834,7 +2774,6 @@ namespace VPB
 				System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 0);
 				// Dead paths the scan just proved gone: prune before the index gate reads coverage.
 				try { VpbLocalDatabase.FlushMissingVarPathPrune(); } catch { }
-				// RebuildCore may have coalesced while bulk scan held caches incomplete.
 				try { VpbLocalDatabase.FlushPendingGalleryIndexAfterDeepScan(); } catch { }
 			}
 		}
@@ -3020,9 +2959,7 @@ namespace VPB
 			return set.Count == 0 ? s_EmptyPackageGroupSet : set;
 		}
 
-		/// <summary>
-		/// Cached force/ignore sets — NormalizeLoadPath hits this often; avoid Regex.Split + HashSet per call.
-		/// </summary>
+		/// <summary>Cached force/ignore sets — NormalizeLoadPath hits this often; avoid Regex.Split + HashSet per call.</summary>
 		private static void EnsureForceLatestGroupCache()
 		{
 			string forceRaw = null;
@@ -3053,42 +2990,18 @@ namespace VPB
 			s_CachedForceLatestIgnoreSet = ParsePackageGroupList(ignoreRaw);
 		}
 
-		private static bool TryGetPackageGroupFromDependencyId(string depId, out string packageGroup)
-		{
-			packageGroup = null;
-			if (string.IsNullOrEmpty(depId)) return false;
-			Match match;
-			if ((match = Regex.Match(depId, "^([^\\.]+\\.[^\\.]+)\\.[0-9]+$", RegexOptions.CultureInvariant)).Success)
-			{
-				packageGroup = match.Groups[1].Value;
-				return true;
-			}
-			if ((match = Regex.Match(depId, "^([^\\.]+\\.[^\\.]+)\\.min[0-9]+$", RegexOptions.CultureInvariant)).Success)
-			{
-				packageGroup = match.Groups[1].Value;
-				return true;
-			}
-			if ((match = Regex.Match(depId, "^([^\\.]+\\.[^\\.]+)\\.latest$", RegexOptions.CultureInvariant)).Success)
-			{
-				packageGroup = match.Groups[1].Value;
-				return true;
-			}
-			return false;
-		}
-
 		private static readonly HashSet<string> s_ForceLatestDepLogOnce = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		private static bool s_ForceLatestSummaryLogged = false;
-		private const int MaxForceLatestSkipDetailLogs = 10;
-		private static int s_ForceLatestSkipDetailLogged;
-		private static bool s_ForceLatestSkipCapNoteLogged;
+		private static readonly object s_ForceLatestLogLock = new object();
+		private const int MaxForceLatestDetailLogs = 200;
+		private static bool s_ForceLatestDetailCapNoteLogged;
 
-		private static bool ShouldLogForceLatestDependencies()
+		private static bool ShouldLogForceLatestDetail()
 		{
 			try
 			{
+				if (VPBLogger.Verbose) return true;
 				if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode) return true;
-				if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value) return true;
-				return false;
+				return Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value;
 			}
 			catch
 			{
@@ -3096,108 +3009,178 @@ namespace VPB
 			}
 		}
 
-		private static void LogForceLatestDecisionOnce(string key, string message)
+		private static void LogForceLatestDetailOnce(string key, string message)
 		{
-			if (!ShouldLogForceLatestDependencies()) return;
 			if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(message)) return;
-			try
+			if (!ShouldLogForceLatestDetail()) return;
+			lock (s_ForceLatestLogLock)
 			{
-				if (!s_ForceLatestDepLogOnce.Add(key))
-					return;
-
-				// SKIP (not in force / whitelisted) is high-volume; show first N then silence.
-				// APPLY / KEEP stay uncapped — those are actionable.
-				bool isSkipNoise = key.Length >= 3
-					&& (key.StartsWith("nf:", StringComparison.OrdinalIgnoreCase)
-						|| key.StartsWith("wl:", StringComparison.OrdinalIgnoreCase));
-				if (isSkipNoise)
+				if (s_ForceLatestDepLogOnce.Count >= MaxForceLatestDetailLogs)
 				{
-					if (s_ForceLatestSkipDetailLogged >= MaxForceLatestSkipDetailLogs)
-					{
-						if (!s_ForceLatestSkipCapNoteLogged)
-						{
-							s_ForceLatestSkipCapNoteLogged = true;
-							LogUtil.Log("[VPB] ForceLatestDeps: further SKIP details silenced (cap=" + MaxForceLatestSkipDetailLogs + ")");
-						}
-						return;
-					}
-					s_ForceLatestSkipDetailLogged++;
+					if (s_ForceLatestDetailCapNoteLogged) return;
+					s_ForceLatestDetailCapNoteLogged = true;
+					message = "[VPB] Always-newest versions: further per-dependency details silenced (cap=" + MaxForceLatestDetailLogs + ")";
 				}
-
-				LogUtil.Log(message);
+				else if (!s_ForceLatestDepLogOnce.Add(key))
+				{
+					return;
+				}
 			}
-			catch { }
+			LogUtil.Log(message);
 		}
 
-		/// <summary>
-		/// True when ForceLatestDependencies is on and <paramref name="packageGroup"/> is in the force list
-		/// (and not ignored). Used by on-demand path rewrite.
-		/// </summary>
+		public static bool IsForceLatestAllEnabled()
+		{
+			try
+			{
+				return Settings.Instance != null
+					&& Settings.Instance.ForceLatestAllDependencies != null
+					&& Settings.Instance.ForceLatestAllDependencies.Value;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
 		public static bool ShouldForceLatestForPackageGroup(string packageGroup)
 		{
 			try
 			{
 				if (string.IsNullOrEmpty(packageGroup)) return false;
-				if (Settings.Instance == null || Settings.Instance.ForceLatestDependencies == null || !Settings.Instance.ForceLatestDependencies.Value)
-					return false;
+				Settings s = Settings.Instance;
+				if (s == null) return false;
+				bool forceAll = s.ForceLatestAllDependencies != null && s.ForceLatestAllDependencies.Value;
+				bool listMode = s.ForceLatestDependencies != null && s.ForceLatestDependencies.Value;
+				if (!forceAll && !listMode) return false;
 
 				EnsureForceLatestGroupCache();
-				if (s_CachedForceLatestIgnoreSet != null && s_CachedForceLatestIgnoreSet.Contains(packageGroup))
-					return false;
-				return s_CachedForceLatestSet != null && s_CachedForceLatestSet.Contains(packageGroup);
+				return ForceLatestDependencyPolicy.AppliesToGroup(
+					packageGroup,
+					forceAll,
+					listMode,
+					s_CachedForceLatestSet,
+					s_CachedForceLatestIgnoreSet,
+					PackageReferenceVersionResolver.ForceExactGlobally());
 			}
 			catch
 			{
 				return false;
 			}
+		}
+
+		private static bool IsForceLatestReferrerGroup(string packageGroup)
+		{
+			string referrer = null;
+			try { referrer = PackageReferenceVersionResolver.PeekReferrerUid(); } catch { referrer = null; }
+			return !string.IsNullOrEmpty(referrer) && ForceLatestDependencyPolicy.IsSameGroup(packageGroup, referrer);
+		}
+
+		private static bool IsAnyForceLatestModeOn()
+		{
+			try
+			{
+				Settings s = Settings.Instance;
+				if (s == null) return false;
+				if (s.ForceLatestAllDependencies != null && s.ForceLatestAllDependencies.Value) return true;
+				if (s.ForceLatestDependencies == null || !s.ForceLatestDependencies.Value) return false;
+				EnsureForceLatestGroupCache();
+				return s_CachedForceLatestSet != null && s_CachedForceLatestSet.Count > 0;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		internal static string TryForceLatestDependencyUid(string dependencyId, Func<string, string> newestUidWhenGroupUnknown = null)
+		{
+			if (!IsAnyForceLatestModeOn()) return null;
+			DependencyVersionRequest request;
+			if (!ForceLatestDependencyPolicy.TryParse(dependencyId, out request)) return null;
+			if (request.Kind == DependencyVersionKind.Latest) return null;
+			if (!ShouldForceLatestForPackageGroup(request.Group)) return null;
+
+			if (IsForceLatestReferrerGroup(request.Group))
+			{
+				LogForceLatestDetailOnce("self:" + request.Group,
+					"[VPB] Always-newest versions: kept " + dependencyId + " (referenced from its own package group)");
+				return null;
+			}
+
+			string newestUid = null;
+			int newestVersion = -1;
+			VarPackageGroup group = GetPackageGroup(request.Group);
+			VarPackage newest = SelectForceLatestTarget(group);
+			if (newest != null && !string.IsNullOrEmpty(newest.Uid))
+			{
+				newestUid = newest.Uid;
+				newestVersion = newest.Version;
+			}
+			else if (group == null && newestUidWhenGroupUnknown != null)
+			{
+				newestUid = newestUidWhenGroupUnknown(request.Group);
+				if (!ForceLatestDependencyPolicy.TryParseVersionOfUid(newestUid, out newestVersion)) return null;
+			}
+
+			if (string.IsNullOrEmpty(newestUid)) return null;
+			if (!ForceLatestDependencyPolicy.ShouldUpgrade(request, newestVersion)) return null;
+
+			LogForceLatestDetailOnce("ap:" + dependencyId + ">" + newestUid,
+				"[VPB] Always-newest versions: " + dependencyId + " -> " + newestUid);
+			return newestUid;
+		}
+
+		private static VarPackage SelectForceLatestTarget(VarPackageGroup group)
+		{
+			if (group == null) return null;
+			VarPackage newest = group.NewestPackage;
+			if (newest == null) return null;
+			if (!IsDisabledByVam(newest)) return newest;
+
+			VarPackage[] snapshot;
+			try { snapshot = group.Packages.ToArray(); }
+			catch { return null; }
+
+			VarPackage best = null;
+			for (int i = 0; i < snapshot.Length; i++)
+			{
+				VarPackage p = snapshot[i];
+				if (p == null || string.IsNullOrEmpty(p.Uid)) continue;
+				if (best != null && p.Version <= best.Version) continue;
+				if (IsDisabledByVam(p)) continue;
+				best = p;
+			}
+			return best;
+		}
+
+		private static readonly Dictionary<string, bool> s_DisabledMarkerByPath = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+		private static bool IsDisabledByVam(VarPackage package)
+		{
+			string path = package != null ? package.Path : null;
+			if (string.IsNullOrEmpty(path)) return false;
+			bool disabled;
+			lock (s_ForcedEntryPresenceLock)
+			{
+				if (s_DisabledMarkerByPath.TryGetValue(path, out disabled)) return disabled;
+			}
+			try { disabled = File.Exists(path + ".disabled"); }
+			catch { disabled = false; }
+			lock (s_ForcedEntryPresenceLock)
+			{
+				if (s_DisabledMarkerByPath.Count >= MaxForcedEntryPresenceCache) s_DisabledMarkerByPath.Clear();
+				s_DisabledMarkerByPath[path] = disabled;
+			}
+			return disabled;
 		}
 
 		private static string MaybeForceLatestDependency(string dependencyId)
 		{
 			try
 			{
-				if (Settings.Instance == null || Settings.Instance.ForceLatestDependencies == null || !Settings.Instance.ForceLatestDependencies.Value)
-					return dependencyId;
-
-				// One-time dev-mode summary so you can confirm settings and list sizes.
-				if (!s_ForceLatestSummaryLogged && ShouldLogForceLatestDependencies())
-				{
-					s_ForceLatestSummaryLogged = true;
-					try
-					{
-						EnsureForceLatestGroupCache();
-						int ignoreCount0 = s_CachedForceLatestIgnoreSet != null ? s_CachedForceLatestIgnoreSet.Count : 0;
-						int forceCount0 = s_CachedForceLatestSet != null ? s_CachedForceLatestSet.Count : 0;
-						LogUtil.Log("[VPB] ForceLatestDeps: ENABLED | forceCount=" + forceCount0 + " | whitelistCount=" + ignoreCount0);
-					}
-					catch { }
-				}
-
-				if (!TryGetPackageGroupFromDependencyId(dependencyId, out string packageGroup) || string.IsNullOrEmpty(packageGroup))
-					return dependencyId;
-
-				EnsureForceLatestGroupCache();
-				if (s_CachedForceLatestIgnoreSet != null && s_CachedForceLatestIgnoreSet.Contains(packageGroup))
-				{
-					LogForceLatestDecisionOnce("wl:" + packageGroup, "[VPB] ForceLatestDeps: SKIP (whitelisted) dep='" + dependencyId + "'");
-					return dependencyId;
-				}
-
-				if (s_CachedForceLatestSet == null || !s_CachedForceLatestSet.Contains(packageGroup))
-				{
-					LogForceLatestDecisionOnce("nf:" + packageGroup, "[VPB] ForceLatestDeps: SKIP (not in force list) dep='" + dependencyId + "'");
-					return dependencyId;
-				}
-
-				if (dependencyId.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
-				{
-					LogForceLatestDecisionOnce("al:" + dependencyId, "[VPB] ForceLatestDeps: KEEP (already .latest) dep='" + dependencyId + "'");
-					return dependencyId;
-				}
-
-				string forced = packageGroup + ".latest";
-				LogForceLatestDecisionOnce("ap:" + dependencyId + "=>" + forced, "[VPB] ForceLatestDeps: APPLY dep='" + dependencyId + "' -> '" + forced + "'");
-				return forced;
+				string forced = TryForceLatestDependencyUid(dependencyId);
+				return string.IsNullOrEmpty(forced) ? dependencyId : forced;
 			}
 			catch
 			{
@@ -3205,17 +3188,181 @@ namespace VPB
 			}
 		}
 
+		public static void LogForceLatestPolicyState(string reason)
+		{
+			try
+			{
+				bool forceAll = IsForceLatestAllEnabled();
+				bool listMode = Settings.Instance != null
+					&& Settings.Instance.ForceLatestDependencies != null
+					&& Settings.Instance.ForceLatestDependencies.Value;
+				EnsureForceLatestGroupCache();
+				int excluded = s_CachedForceLatestIgnoreSet != null ? s_CachedForceLatestIgnoreSet.Count : 0;
+				int listed = listMode && s_CachedForceLatestSet != null ? s_CachedForceLatestSet.Count : 0;
+				bool exact = PackageReferenceVersionResolver.ForceExactGlobally();
+
+				string msg = "[VPB] Always-newest package versions: " + (forceAll ? "ON" : "OFF") + " | excluded groups=" + excluded;
+				if (listed > 0) msg += " | groups listed in ForceLatestDependencyPackageGroups=" + listed;
+				if (exact && (forceAll || listed > 0)) msg += " | INACTIVE: ForceExactPackageVersions is on";
+				if (!string.IsNullOrEmpty(reason)) msg += " | " + reason;
+				LogUtil.Log(msg);
+			}
+			catch { }
+		}
+
+		public static void LogForceLatestPolicyStateAtStartup()
+		{
+			bool listed = false;
+			try
+			{
+				EnsureForceLatestGroupCache();
+				listed = Settings.Instance != null
+					&& Settings.Instance.ForceLatestDependencies != null
+					&& Settings.Instance.ForceLatestDependencies.Value
+					&& s_CachedForceLatestSet != null
+					&& s_CachedForceLatestSet.Count > 0;
+			}
+			catch { listed = false; }
+			if (IsForceLatestAllEnabled() || listed)
+				LogForceLatestPolicyState("startup");
+		}
+
+		public static void NotifyForceLatestPolicyChanged(string reason)
+		{
+			lock (s_ForceLatestLogLock)
+			{
+				s_ForceLatestDepLogOnce.Clear();
+				s_ForceLatestDetailCapNoteLogged = false;
+				s_ForceLatestKeptNotices.Clear();
+			}
+			ClearForcedEntryPresenceCache();
+			try { InvalidateAllMissingDepsCounts(); } catch { }
+			try { DependencyGraph.Invalidate(); } catch { }
+			if (reason != null) LogForceLatestPolicyState(reason);
+		}
+
+		private static readonly Dictionary<string, bool> s_ForcedEntryPresence = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+		private static readonly object s_ForcedEntryPresenceLock = new object();
+		private const int MaxForcedEntryPresenceCache = 8192;
+		private static readonly HashSet<string> s_ForceLatestKeptNotices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		private const int MaxForceLatestKeptNotices = 50;
+
+		internal static void ClearForcedEntryPresenceCache()
+		{
+			lock (s_ForcedEntryPresenceLock)
+			{
+				s_ForcedEntryPresence.Clear();
+				s_DisabledMarkerByPath.Clear();
+			}
+		}
+
+		internal static bool ForcedTargetHasEntry(string pinnedUid, string targetUid, string entryPathAfterUid)
+		{
+			try
+			{
+				string internalPath = ForceLatestDependencyPolicy.NormalizeEntryInternalPath(entryPathAfterUid);
+				if (internalPath.Length == 0) return true;
+				if (string.IsNullOrEmpty(pinnedUid) || string.IsNullOrEmpty(targetUid)) return true;
+				if (GetPackage(pinnedUid, ensureInstalled: false) == null) return true;
+
+				string key = targetUid + "|" + internalPath;
+				bool cached;
+				lock (s_ForcedEntryPresenceLock)
+				{
+					if (s_ForcedEntryPresence.TryGetValue(key, out cached)) return cached;
+				}
+
+				VarPackage target = GetPackage(targetUid, ensureInstalled: false);
+				if (target == null) return true;
+
+				bool found;
+				if (!TryPackageContainsEntry(target, internalPath, out found))
+					return true;
+
+				lock (s_ForcedEntryPresenceLock)
+				{
+					if (s_ForcedEntryPresence.Count >= MaxForcedEntryPresenceCache) s_ForcedEntryPresence.Clear();
+					s_ForcedEntryPresence[key] = found;
+				}
+
+				if (!found) NoteForcedUpgradeKept(pinnedUid, targetUid, "it does not contain '" + internalPath + "'");
+				return found;
+			}
+			catch
+			{
+				return true;
+			}
+		}
+
+		private static bool TryPackageContainsEntry(VarPackage package, string internalPath, out bool found)
+		{
+			found = false;
+			List<string> names;
+			if (package.TryGetCachedFileEntryData(out names, out _, out _) && names != null && names.Count > 0)
+			{
+				for (int i = 0; i < names.Count; i++)
+				{
+					if (SameEntryPath(names[i], internalPath))
+					{
+						found = true;
+						break;
+					}
+				}
+				return true;
+			}
+
+			List<VarFileEntry> entries = package.FileEntries;
+			if (entries == null || entries.Count == 0) return false;
+			VarFileEntry[] snapshot = entries.ToArray();
+			for (int i = 0; i < snapshot.Length; i++)
+			{
+				if (snapshot[i] != null && SameEntryPath(snapshot[i].InternalPath, internalPath))
+				{
+					found = true;
+					break;
+				}
+			}
+			return true;
+		}
+
+		private static bool SameEntryPath(string candidate, string internalPath)
+		{
+			if (string.IsNullOrEmpty(candidate) || candidate.Length != internalPath.Length) return false;
+			return string.Equals(candidate.Replace('\\', '/'), internalPath, StringComparison.OrdinalIgnoreCase);
+		}
+
+		internal static void NoteForcedUpgradeKept(string pinnedUid, string targetUid, string reason)
+		{
+			lock (s_ForceLatestLogLock)
+			{
+				if (s_ForceLatestKeptNotices.Count >= MaxForceLatestKeptNotices) return;
+				if (!s_ForceLatestKeptNotices.Add(pinnedUid + ">" + targetUid)) return;
+			}
+			LogUtil.Log("[VPB] Always-newest versions: kept " + pinnedUid + " instead of " + targetUid
+				+ " because " + reason + " (further files from this pair are not logged)");
+		}
+
 		public static VarPackage GetPackageForDependency(string dependencyId, bool ensureInstalled = true)
 		{
 			string resolvedId = MaybeForceLatestDependency(dependencyId);
 			VarPackage pkg = GetPackage(resolvedId, ensureInstalled);
 			if (pkg != null) return pkg;
-			return ResolveVersionedDependencyFallback(resolvedId, ensureInstalled);
+			if (!string.Equals(resolvedId, dependencyId, StringComparison.Ordinal))
+			{
+				pkg = GetPackage(dependencyId, ensureInstalled);
+				if (pkg != null) return pkg;
+			}
+			return ResolveVersionedDependencyFallback(dependencyId, ensureInstalled);
 		}
 
-		/// <summary>
-		/// When an exact / min pin is missing, resolve per ReferenceVersionOption (referrer context or Latest).
-		/// </summary>
+		public static VarPackage GetInstalledPackageOrDependency(string packageUid, bool ensureInstalled = false)
+		{
+			if (string.IsNullOrEmpty(packageUid)) return null;
+			VarPackage exact = GetPackage(packageUid, ensureInstalled);
+			if (exact != null) return exact;
+			return GetPackageForDependency(packageUid, ensureInstalled);
+		}
+
 		static VarPackage ResolveVersionedDependencyFallback(string dependencyId, bool ensureInstalled)
 		{
 			if (string.IsNullOrEmpty(dependencyId)) return null;
@@ -3255,11 +3402,6 @@ namespace VPB
 			}
 		}
 
-		/// <summary>
-		/// True when a local package satisfies <paramref name="dependencyId"/> for gallery missing-deps /
-		/// Hub download. Exact meta pins follow <see cref="VarPackage.ReferenceVersionOption"/> when
-		/// RespectPackageReferenceVersionOption is on; otherwise newer installed versions still satisfy.
-		/// </summary>
 		public static bool IsDependencySatisfiedByInstalled(string dependencyId)
 		{
 			return IsDependencySatisfiedByInstalled(dependencyId, PackageReferenceVersionResolver.GetEffectiveOption(null));
@@ -3355,9 +3497,7 @@ namespace VPB
 			}
 		}
 
-		// Builds a reverse-dependency index: for every installed package D, counts how many
-		// other packages list D as a (transitive) dependency and stores it in D.DependentCount.
-		// Called once at the end of each scan, before the FileManagerRefresh message is posted.
+		// Builds a reverse-dependency index: for every installed package D.
 		public static void RebuildDependentCounts()
 		{
 			try
@@ -3369,16 +3509,12 @@ namespace VPB
 					snapshot = packagesByUid.Values.ToArray();
 				}
 
-				// Reset
 				for (int i = 0; i < snapshot.Length; i++)
 					snapshot[i].DependentCount = 0;
 
-				// Fast path: one pkg_dep table scan + invert edges (O(edges), not O(pkgs * query)).
 				if (TryRebuildDependentCountsFromBulkEdges(snapshot))
 					return;
 
-				// Prefer the persisted SQLite dependency edges when available to avoid forcing
-				// package meta parsing/scans just to compute dependent counts.
 				try
 				{
 					var depsFromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3397,7 +3533,7 @@ namespace VPB
 						foreach (var depId in depsFromSql)
 						{
 							if (string.IsNullOrEmpty(depId)) continue;
-							VarPackage dep = GetPackageForDependency(depId, false);
+							VarPackage dep = GetInstalledPackageOrDependency(depId);
 							if (dep != null) dep.DependentCount++;
 						}
 					}
@@ -3405,15 +3541,13 @@ namespace VPB
 				}
 				catch { }
 
-				// Fallback: Each package's RecursivePackageDependencies is already a de-duped set,
-				// so we can increment directly without per-package seen-tracking.
 				for (int i = 0; i < snapshot.Length; i++)
 				{
 					var deps = snapshot[i].RecursivePackageDependencies;
 					if (deps == null) continue;
 					for (int j = 0; j < deps.Count; j++)
 					{
-						VarPackage dep = GetPackageForDependency(deps[j], false);
+						VarPackage dep = GetInstalledPackageOrDependency(deps[j]);
 						if (dep != null)
 							dep.DependentCount++;
 					}
@@ -3428,7 +3562,6 @@ namespace VPB
 		public List<string> GetMissingDependenciesNames()
 		{
             // Fast path: return cached value if nothing has refreshed since it was computed.
-            // lastPackageRefreshTime is updated at the end of RefreshCo.
             lock (s_MissingDependenciesCacheLock)
             {
                 if (s_MissingDependenciesCache != null && s_MissingDependenciesCacheForRefreshTime == lastPackageRefreshTime)
@@ -3437,11 +3570,6 @@ namespace VPB
                 }
             }
 
-            // Normalize missing dependency ids for hub queries:
-            // - Treat any versioned dependency "Author.Name.3" as "Author.Name.latest"
-            //   so we only search/download the newest hub version (user preference).
-            // - Keep ".latest" as-is.
-            // - Keep ".minN" as ".latest" as well, because the hub can satisfy it with the latest.
             string NormalizeForHub(string depId)
             {
                 if (string.IsNullOrEmpty(depId)) return depId;
@@ -3636,7 +3764,7 @@ namespace VPB
                 MethodBase method = frame.GetMethod();
                 AssemblyName name = method.DeclaringType.Assembly.GetName();
                 string name2 = name.Name;
-                if (name2.StartsWith("MVRPlugin_"))
+                if (name2.StartsWith("MVRPlugin_", StringComparison.Ordinal))
                 {
                     result = Regex.Replace(name2, "_[0-9]+$", string.Empty);
                     break;
@@ -3663,12 +3791,10 @@ namespace VPB
         public static bool IsPackagePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
-            // Windows drive abs paths contain ":/" (C:/...) — not VaM pkg:/internal.
             if (LocalSceneGallerySupport.IsWindowsDriveAbsolutePath(path)) return false;
             string input = path.Replace('\\', '/');
             string packageUidOrPath = Regex.Replace(input, ":/.*", string.Empty);
             // IMPORTANT: do not use GetPackage default (ensureInstalled: true) here.
-            // IsPackagePath is called from UI / thumbnail / filtering codepaths and must not trigger installs.
             VarPackage package = GetPackage(packageUidOrPath, ensureInstalled: false);
             return package != null;
         }
@@ -3725,8 +3851,6 @@ namespace VPB
         {
             VarFileEntry value;
             string path2 = (uidToVarFileEntry != null && uidToVarFileEntry.TryGetValue(path, out value)) ?
-                //((!returnSlashPath) ? value.Path : value.SlashPath) : 
-                //((!returnSlashPath) ? path.Replace('/', '\\') : path.Replace('\\', '/'));
                 value.Path : path.Replace('\\', '/');
             return Path.GetDirectoryName(path2);
         }
@@ -3768,14 +3892,12 @@ namespace VPB
         {
             uid = MaybeForceLatestDependency(uid);
 
-            // Try exact match
             if (packagesByUid.ContainsKey(uid)) return packagesByUid[uid];
 
             string aliasUid;
             if (TryResolveWhitespaceAliasUid(uid, out aliasUid) && packagesByUid.ContainsKey(aliasUid))
                 return packagesByUid[aliasUid];
 
-            // Try to resolve group
             string groupId = PackageIDToPackageGroupID(uid);
             if (!packageGroups.ContainsKey(groupId))
             {
@@ -3786,7 +3908,7 @@ namespace VPB
             if (packageGroups.ContainsKey(groupId))
             {
                 VarPackageGroup group = packageGroups[groupId];
-                if (uid.EndsWith(".latest")) return group.NewestPackage;
+                if (uid.EndsWith(".latest", StringComparison.Ordinal)) return group.NewestPackage;
 
                 string verStr = PackageIDToPackageVersion(uid);
                 if (verStr != null && int.TryParse(verStr, out int ver))
@@ -3803,7 +3925,6 @@ namespace VPB
                         option == VarPackage.ReferenceVersionOption.Latest);
                 }
 
-                // Fallback to newest if we can't parse version but found group
                 return group.NewestPackage;
             }
             return null;
@@ -3905,7 +4026,7 @@ namespace VPB
 
 		public static string NormalizeID(string id)
 		{
-			if (id.StartsWith("SELF:"))
+			if (id.StartsWith("SELF:", StringComparison.Ordinal))
 			{
 				string currentPackageUid = CurrentPackageUid;
 				if (currentPackageUid != null)
@@ -3920,6 +4041,7 @@ namespace VPB
 		protected static string NormalizeCommon(string path)
 		{
 			string text = path;
+			if (text != null && text.IndexOf(':') < 0) return text;
 			Match match;
 			if ((match = Regex.Match(text, "^(([^\\.]+\\.[^\\.]+)\\.latest):")).Success)
 			{
@@ -3941,7 +4063,14 @@ namespace VPB
 				string value4 = match.Groups[2].Value;
 				int requestVersion = int.Parse(match.Groups[3].Value);
 				VarPackageGroup packageGroup2 = GetPackageGroup(value4);
-				if (packageGroup2 != null)
+				string forcedMin = TryForceLatestDependencyUid(value3);
+				if (!string.IsNullOrEmpty(forcedMin) && !ForcedTargetHasEntry(value3, forcedMin, text.Substring(value3.Length)))
+					forcedMin = null;
+				if (!string.IsNullOrEmpty(forcedMin))
+				{
+					text = forcedMin + text.Substring(value3.Length);
+				}
+				else if (packageGroup2 != null)
 				{
 					VarPackage closestMatchingPackageVersion = packageGroup2.GetClosestMatchingPackageVersion(requestVersion, true, false);
 					if (closestMatchingPackageVersion != null)
@@ -3953,8 +4082,16 @@ namespace VPB
 			else if ((match = Regex.Match(text, "^([^\\.]+\\.[^\\.]+\\.[0-9]+):")).Success)
 			{
 				string value5 = match.Groups[1].Value;
-				VarPackage package = GetPackage(value5);
-				if (package == null || !package.Enabled)
+				string forcedExact = TryForceLatestDependencyUid(value5);
+				if (!string.IsNullOrEmpty(forcedExact) && !ForcedTargetHasEntry(value5, forcedExact, text.Substring(value5.Length)))
+					forcedExact = null;
+				VarPackage forcedPackage = string.IsNullOrEmpty(forcedExact) ? null : GetPackage(forcedExact);
+				VarPackage package = forcedPackage != null ? forcedPackage : GetPackage(value5);
+				if (forcedPackage != null)
+				{
+					text = forcedExact + text.Substring(value5.Length);
+				}
+				else if (package == null || !package.Enabled)
 				{
 					string packageGroupUid = PackageIDToPackageGroupID(value5);
 					string verStr = PackageIDToPackageVersion(value5);
@@ -4006,7 +4143,7 @@ namespace VPB
 						result = Regex.Replace(result, "^\\./", currentLoadDir + "/");
 					}
 				}
-				if (result.StartsWith("SELF:/"))
+				if (result.StartsWith("SELF:/", StringComparison.Ordinal))
 				{
 					string currentPackageUid = CurrentPackageUid;
 					result = ((currentPackageUid == null) ? result.Replace("SELF:/", string.Empty) : result.Replace("SELF:/", currentPackageUid + ":/"));
@@ -4143,11 +4280,6 @@ namespace VPB
 			return false;
 		}
 
-		/// <summary>
-		/// Canonical <c>Author.Name.version</c> from gallery index fields. Index sometimes stores full
-		/// <c>AddonPackages/Author.Name.version.var</c> in <paramref name="storedPackageUid"/>; <c>packagesByUid</c> keys never use that form.
-		/// Prefer filename from <paramref name="lastKnownVarPath"/> when present.
-		/// </summary>
 		private static string CanonicalPackageUidFromIndexedRow(string storedPackageUid, string lastKnownVarPath)
 		{
 			string fromPath = null;
@@ -4197,10 +4329,6 @@ namespace VPB
 				StringComparison.OrdinalIgnoreCase);
 		}
 
-		/// <summary>
-		/// Resolve a <see cref="VarPackage"/> for an indexed gallery row without assuming the on-disk path is still correct:
-		/// prefer <c>packagesByUid</c>, then last-known path from the index, then <c>AddonPackages/</c> / <c>AllPackages/</c> by .var file name.
-		/// </summary>
 		public static bool TryResolveVarPackageForIndexedGalleryRow(string packageUid, string lastKnownVarPath, out VarPackage pkg)
 		{
 			pkg = null;
@@ -4246,7 +4374,6 @@ namespace VPB
 				pkg = null;
 			}
 
-			// Legacy: stored UID column is a full path — try direct path resolve.
 			if (!string.IsNullOrEmpty(packageUid))
 			{
 				string p = packageUid.Replace('\\', '/').Trim();
@@ -4356,10 +4483,6 @@ namespace VPB
 			if (package == null) return;
 
 			// Scan-whitelist: packages already in AddonPackages/ need no install/move work.
-			// Do not promote them into VaM's FileManager from GetPackage(ensureInstalled) —
-			// catalog plugins enumerate the whole library that way and would temp-whitelist
-			// every package. VaM registration stays on-demand via entry-path hooks and
-			// explicit preset/dependency callers.
 			if (ScanWhitelistManager.Instance.IsEnabled)
 			{
 				string normPath = (package.Path ?? "").Replace('\\', '/');
@@ -4371,7 +4494,6 @@ namespace VPB
 			}
 
 			// Recursively install this package and its dependencies if needed.
-			// InstallRecursive will return true if ANYTHING was moved (self or dependency).
 			bool moved = package.InstallRecursive();
 			if (moved)
 			{
@@ -4439,6 +4561,19 @@ namespace VPB
 			return new List<VarPackageGroup>();
 		}
 
+		public static void CopyPackageGroupIds(List<string> into)
+		{
+			if (into == null) return;
+			lock (packagesLock)
+			{
+				if (packageGroups == null) return;
+				foreach (string key in packageGroups.Keys)
+				{
+					if (!string.IsNullOrEmpty(key)) into.Add(key);
+				}
+			}
+		}
+
 		public static VarPackageGroup GetPackageGroup(string packageGroupUid)
 		{
 			VarPackageGroup value = null;
@@ -4460,11 +4595,6 @@ namespace VPB
 			return path?.Replace('\\', '/');
 		}
 
-		// Pick the canonical path for a duplicate-UID pair. Preference order:
-		// 1) AddonPackages over AllPackages (Addon is the live install location).
-		// 2) Path under a junction/symlink folder (e.g. AddonPackages/NEW) over a flatter
-		//    sibling path to the same files — otherwise Path list never shows that folder.
-		// 3) Shorter path (closer to the package root) over deeper normal subfolders.
 		private static string ChooseCanonicalDuplicatePath(string a, string b)
 		{
 			if (string.IsNullOrEmpty(a)) return b;
@@ -4481,10 +4611,6 @@ namespace VPB
 			return string.Compare(a, b, StringComparison.OrdinalIgnoreCase) <= 0 ? a : b;
 		}
 
-		/// <summary>
-		/// True when any directory segment of the .var path (below AddonPackages/AllPackages) is a
-		/// junction/symlink. Used so duplicate resolution keeps those folder names in the Path list.
-		/// </summary>
 		private static bool VarPathHasReparsePointDirectory(string varPath)
 		{
 			try
@@ -4554,11 +4680,6 @@ namespace VPB
 			return TryGetWindowsFileId(path, openReparsePoint: false, out fileId);
 		}
 
-		/// <summary>
-		/// File index id for cycle/dedup. When <paramref name="openReparsePoint"/> is true, identifies the
-		/// junction/symlink node itself (so each AddonPackages junction is scanned under its own path).
-		/// When false, follows the reparse target (same-file dedup across links).
-		/// </summary>
 		private static bool TryGetWindowsFileId(string path, bool openReparsePoint, out string fileId)
 		{
 			fileId = null;
@@ -4567,9 +4688,7 @@ namespace VPB
 				if (string.IsNullOrEmpty(path))
 					return false;
 
-				// Fast path: Only check file ID if it's a reparse point (junction/symlink)
-				// or if we really need it for deduplication. 
-				// For most files, we can skip the expensive CreateFile call.
+				// Fast path: Only check file ID if it's a reparse point (junction/symlink) or if we really need it for deduplication.
 				var attr = File.GetAttributes(path);
 				if ((attr & FileAttributes.ReparsePoint) == 0)
 				{
@@ -4582,7 +4701,7 @@ namespace VPB
 
 				using (SafeFileHandle handle = CreateFile(
 					path,
-					0x80, // FILE_READ_ATTRIBUTES
+					0x80,
 					(uint)(FileShare.ReadWrite | FileShare.Delete),
 					IntPtr.Zero,
 					OPEN_EXISTING,
@@ -4607,13 +4726,6 @@ namespace VPB
 			}
 		}
 
-		/// <summary>
-		/// Directory LastWriteTime as <see cref="DateTime.ToBinary"/>, following junctions/symlinks to the
-		/// real directory. <c>Directory.GetLastWriteTimeUtc</c> on a reparse point reports the LINK node's
-		/// own timestamp, which never moves when content is added to the target — a symlinked AddonPackages
-		/// therefore looks permanently unchanged. Returns false when the link cannot be resolved, so callers
-		/// can refuse to treat an unreadable root as "unchanged".
-		/// </summary>
 		internal static bool TryGetDirectoryLastWriteBinaryFollowingLinks(string path, out long binary, out bool isReparsePoint)
 		{
 			binary = 0;
@@ -4675,8 +4787,6 @@ namespace VPB
 			try
 			{
 				string dirId;
-				// Use the reparse node's own id (not the target). Following target ids skipped
-				// sibling junctions that point at the same library — Path list lost those subfolders.
 				if (TryGetWindowsFileId(path, openReparsePoint: true, out dirId))
 				{
 					if (!visited.Add(dirId))
@@ -4703,7 +4813,6 @@ namespace VPB
 			}
 			catch (Exception)
 			{
-				// Ignore access denied or other errors
 			}
 		}
 
@@ -4737,7 +4846,6 @@ namespace VPB
 			}
 			catch (Exception)
 			{
-				// Ignore
 			}
 		}
 
@@ -4840,26 +4948,6 @@ namespace VPB
 			return false;
 		}
 
-		//public static bool IsHidden(string path, bool restrictPath = false)
-		//{
-		//	FileEntry fileEntry = GetVarFileEntry(path);
-		//	if (fileEntry == null)
-		//	{
-		//		fileEntry = GetSystemFileEntry(path, restrictPath);
-		//	}
-		//	return fileEntry?.IsHidden() ?? false;
-		//}
-
-		//public static void SetHidden(string path, bool hide, bool restrictPath = false)
-		//{
-		//	FileEntry fileEntry = GetVarFileEntry(path);
-		//	if (fileEntry == null)
-		//	{
-		//		fileEntry = GetSystemFileEntry(path, restrictPath);
-		//	}
-		//	fileEntry?.SetHidden(hide);
-		//}
-
 		public static FileEntry GetFileEntry(string path, bool restrictPath = false)
 		{
 			FileEntry fileEntry = GetVarFileEntry(path);
@@ -4896,7 +4984,7 @@ namespace VPB
 
 			if (key != null)
 			{
-				int colonIdx = key.IndexOf(":/");
+				int colonIdx = key.IndexOf(":/", StringComparison.Ordinal);
 				if (colonIdx > 0 && colonIdx + 2 < key.Length)
 				{
 					string pkgPath = key.Substring(0, colonIdx);
@@ -4967,8 +5055,6 @@ namespace VPB
 
 	private static int FolderContentsCount(string path, HashSet<string> visited)
 	{
-		// Cycle guard: identify the junction/symlink node itself (not the target) so sibling
-		// links to the same library are still counted under their own paths.
 		try
 		{
 			string dirId;
@@ -4977,12 +5063,9 @@ namespace VPB
 		}
 		catch { }
 
-		// Count files in this directory, tolerating access-denied or other errors.
 		int num = 0;
 		try { num = Directory.GetFiles(path).Length; } catch { }
 
-		// Recurse into each subdirectory independently so an error in one branch
-		// does not zero-out the count for sibling directories.
 		string[] dirs = null;
 		try { dirs = Directory.GetDirectories(path); } catch { }
 		if (dirs != null)
@@ -5003,36 +5086,18 @@ namespace VPB
 
 		public static bool IsDirectoryInPackage(string path)
 		{
-			//string key = CleanDirectoryPath(path);
-			//if (uidToVarDirectoryEntry != null && uidToVarDirectoryEntry.ContainsKey(key))
-			//{
-			//	return true;
-			//}
-			//if (pathToVarDirectoryEntry != null && pathToVarDirectoryEntry.ContainsKey(key))
-			//{
-			//	return true;
-			//}
 			return false;
 		}
 
 		public static VarDirectoryEntry GetVarDirectoryEntry(string path)
 		{
 			VarDirectoryEntry value = null;
-			//string key = CleanDirectoryPath(path);
-			//if ((uidToVarDirectoryEntry != null && uidToVarDirectoryEntry.TryGetValue(key, out value)) 
-			//	|| pathToVarDirectoryEntry == null || pathToVarDirectoryEntry.TryGetValue(key, out value))
-			//{
-			//}
 			return value;
 		}
 
 		public static VarDirectoryEntry GetVarRootDirectoryEntryFromPath(string path)
 		{
 			VarDirectoryEntry value = null;
-			//if (varPackagePathToRootVarDirectory != null)
-			//{
-			//	varPackagePathToRootVarDirectory.TryGetValue(path, out value);
-			//}
 			return value;
 		}
 
@@ -5041,10 +5106,6 @@ namespace VPB
 			path = ConvertSimulatedPackagePathToNormalPath(path);
 			if (!DirectoryExists(path))
 			{
-				//if (!IsSecureWritePath(path))
-				//{
-				//	throw new Exception("Attempted to create directory at non-secure path " + path);
-				//}
 				Directory.CreateDirectory(path);
 			}
 		}
@@ -5292,7 +5353,6 @@ namespace VPB
 			DoFileCopy(oldPath, newPath);
 		}
 
-
 		protected static void DoFileMove(string oldPath, string newPath, bool overwrite = true)
 		{
 			if (File.Exists(newPath))
@@ -5331,5 +5391,4 @@ namespace VPB
 			ClearAll();
 		}
 	}
-
 }

@@ -161,6 +161,34 @@ namespace VPB.Tests
             }
         }
 
+        [Fact]
+        public void AFullRebuildKeepsAnUnchangedPackagesLicenseWithoutReopeningItsArchive()
+        {
+            using (var install = new TempInstall("idx_license_carry"))
+            {
+                IndexLibrary library = IndexFixture.Build(install, IndexFixture.SceneVar("Alpha", "Scene", 1));
+                library.Rebuild();
+
+                VarPackage package = library.Packages["Alpha.Scene.1"];
+                File.Delete(Path.Combine(install.AddonPackagesDir, "Alpha.Scene.1.var"));
+                typeof(VarPackage).GetProperty("LicenseType").SetValue(package, null, null);
+                typeof(VarPackage)
+                    .GetField("_metaJsonLiteLoaded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    .SetValue(package, false);
+
+                library.AdvanceClock();
+                library.Rebuild();
+
+                using (var db = new IndexDb(install.DatabasePath))
+                {
+                    string license = db.Column("SELECT ifnull(license,'') FROM pkg WHERE uid='Alpha.Scene.1'").Single();
+                    Assert.True(license == "CC BY",
+                        "A full gallery index rebuild re-read the package archive for its license instead of keeping the value " +
+                        "from the unchanged row, so every rebuild reopens all ~20k .var files. Got '" + license + "'.");
+                }
+            }
+        }
+
         private static List<string> IndexSnapshot(string dbPath)
         {
             var rows = new List<string>();

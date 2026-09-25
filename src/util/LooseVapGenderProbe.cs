@@ -5,19 +5,9 @@ using SimpleJSON;
 
 namespace VPB.src.util
 {
-    /// <summary>
-    /// Classifies a loose .vap appearance preset by reading the <c>geometry</c> storable's <c>character</c> field
-    /// (DAZCharacter displayName). Resolution order:
-    ///   1. Live <see cref="JSONExtensions.CharacterGenderMap"/> lookup, when the user has the pack installed —
-    ///      this matches what VaM itself would set on load.
-    ///   2. displayName prefix heuristic ("Female"/"Male"/"Futa") for packs not installed locally.
-    ///   3. useFemaleMorphsOnMale toggle promotes a male-base classification to Futa (plugin convention).
-    /// Results are cached in <c>loose_vap_gender</c> keyed by (path, mtime, size).
-    /// </summary>
     public static class LooseVapGenderProbe
     {
-        /// <summary>Matches <see cref="GalleryPanel.AppearanceGender"/> ordering: 0=Unknown, 1=Female, 2=Male, 3=Futa.
-        /// <see cref="Classify"/> still folds Futa→Male for appearance filters. Atom badges use <see cref="ClassifyStorables"/> and keep Futa.</summary>
+        /// <summary>Matches AppearanceGender ordering: 0=Unknown, 1=Female, 2=Male, 3=Futa.</summary>
         public enum Gender { Unknown = 0, Female = 1, Male = 2, Futa = 3 }
 
         private static readonly Dictionary<string, Gender> s_MemCache =
@@ -42,7 +32,6 @@ namespace VPB.src.util
             return Classify(filePath, null);
         }
 
-        // bulk != null routes the SQLite read/write through a preloaded table snapshot + batched flush so a scan over many files doesn't open a connection (and run EnsureSchema) per file.
         public static Gender Classify(string filePath, LooseVapGenderBulkCache bulk)
         {
             if (string.IsNullOrEmpty(filePath)) return Gender.Unknown;
@@ -79,8 +68,7 @@ namespace VPB.src.util
             if (haveDbRow)
             {
                 Gender g = (Gender)dbGender;
-                // An Unknown verdict cached before the DAZ character map finished loading is provisional — the file
-                // might reference a character that's now resolvable. Re-probe instead of trusting it.
+                // An Unknown verdict cached before the DAZ character map finished loading is provisional.
                 if (g != Gender.Unknown || !mapReady)
                 {
                     PutMemCache(filePath, g);
@@ -98,8 +86,7 @@ namespace VPB.src.util
 
             Gender resolved = Resolve(characterName, useFemaleMorphsOnMale);
 
-            // Only persist verdicts that won't change once the map finishes loading. A definitive answer (Female /
-            // Male / Futa) is stable; an Unknown computed without the map should not be locked in.
+            // Only persist verdicts that won't change once the map finishes loading.
             bool persist = (resolved != Gender.Unknown) || mapReady;
             if (persist)
             {
@@ -132,13 +119,11 @@ namespace VPB.src.util
             return Gender.Unknown;
         }
 
-        /// <summary>Apply the resolution rules from gender-findings/03 to a (characterName, flag) pair.</summary>
         public static Gender Resolve(string characterName, bool useFemaleMorphsOnMale)
         {
             string name = (characterName ?? "").Trim();
             if (name.Length == 0) return Gender.Unknown;
 
-            // 1. Live prefab map (authoritative when user has the pack).
             bool? isMaleFromMap = null;
             try
             {
@@ -192,7 +177,6 @@ namespace VPB.src.util
             return next == ' ' || next == '_' || next == '-';
         }
 
-        /// <summary>Reads the smallest set of fields needed: storables[*].id=="geometry" → character + useFemaleMorphsOnMale.</summary>
         private static bool TryReadGeometryFields(string filePath, out string characterName, out bool useFemaleMorphsOnMale)
         {
             characterName = null;
@@ -234,8 +218,6 @@ namespace VPB.src.util
         }
     }
 
-    // Scan-scoped snapshot of loose_vap_gender: one bulk read up front, (wtime,size)-validated lookups in memory,
-    // freshly-probed verdicts batched and flushed once. Replaces per-file connection + EnsureSchema churn.
     public sealed class LooseVapGenderBulkCache
     {
         private readonly Dictionary<string, VpbLocalDatabase.LooseVapGenderRow> _rows =

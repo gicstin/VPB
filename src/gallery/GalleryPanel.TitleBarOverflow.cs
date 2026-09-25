@@ -7,8 +7,6 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Title bar overflow menu (narrow widths hide lang/presets/creator behind "...").
-
         private const float TitleBarOverflowWidthThresholdRef = 768f;
 
         private GameObject _titleBarOverflowBtnGO;
@@ -94,7 +92,6 @@ namespace VPB
                 tipKey: "gallery.tooltip.layout_presets",
                 tipDefault: "Layout presets — save and restore window arrangements{hint:layout_presets}");
 
-            // Session recent applies (recognition).
             try
             {
                 var recent = new System.Collections.Generic.List<QuickFilterEntry>(4);
@@ -125,7 +122,6 @@ namespace VPB
             }
             catch { }
 
-            // Pinned filter presets → Apply + Dice (preserveUi).
             try
             {
                 var pinned = new System.Collections.Generic.List<QuickFilterEntry>(4);
@@ -298,7 +294,6 @@ namespace VPB
             return titleBarWidth < TitleBarOverflowWidthThresholdRef * s;
         }
 
-        /// <summary>Width of settings + overflow/lang/presets/creator/source cluster for title-bar layout math.</summary>
         private float TitleBarLeftPackWidthEstimate(bool overflowMode, bool hasSourceFilter, float sourceW, float chip, float gap)
         {
             int n = 0;

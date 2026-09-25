@@ -11,16 +11,11 @@ namespace VPB
         VpbOnly,
         /// <summary>Coalesced MVR.FileManagement.FileManager.Refresh only (preset / on-demand catalog).</summary>
         NativeOnly,
-        /// <summary>Full VPB scan plus coalesced native refresh.</summary>
         Both,
         /// <summary>Lightweight path sync (NotifyInstalled) plus coalesced native — no full VPB walk.</summary>
         InstallOnly
     }
 
-    /// <summary>
-    /// Single entry point for package / native FileManager refresh.
-    /// Replaces ad-hoc dual calls to MVR and VPB FileManager.Refresh.
-    /// </summary>
     public static class FileManagerBridge
     {
         public static void Refresh(string reason, RefreshScope scope, bool init = false, bool clean = false, bool removeOldVersion = false, bool flushNativeImmediately = false)
@@ -67,8 +62,6 @@ namespace VPB
         {
             if (flushImmediately)
             {
-                // ForceRunPendingCoalescedVamRefresh returns false when nothing is queued; fall through
-                // to a direct Refresh so flushNativeImmediately:true callers actually get one.
                 try
                 {
                     if (!VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh(reason))
@@ -80,12 +73,6 @@ namespace VPB
             FileManager.ScheduleCoalescedNativeRefresh();
         }
 
-        /// <summary>
-        /// Scene-load refresh: yields while VPB <see cref="FileManager.RefreshCo"/> runs,
-        /// then runs native VaM refresh on a later frame so the top banner can animate.
-        /// Native <c>MVR.FileManagement.FileManager.Refresh</c> still completes in one main-thread
-        /// slice — Step 1 removes VPB scan blocking and adds frame breaks around native work.
-        /// </summary>
         public static IEnumerator RefreshForSceneLoadCoroutine(
             string reason,
             RefreshScope scope,

@@ -29,7 +29,6 @@ namespace VPB
         public static int IconCount { get { return _rects != null ? _rects.Count : 0; } }
         public static string LoadError { get { return _loadError; } }
 
-        /// <summary>Atlas key = Tabler source id (<c>shirt-off</c>, <c>filled/star</c>). Also accepts leftover <c>vpb_icons/*.png</c> paths.</summary>
         public static string ToAtlasKey(string roleOrPath)
         {
             if (string.IsNullOrEmpty(roleOrPath)) return null;

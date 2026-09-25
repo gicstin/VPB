@@ -8,11 +8,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Part-4 UX consistency: sticky enter gate (Try-On Keep/Revert/Esc),
-    /// armed apply reset, file-move Undo pairs, grid RMB actions menu,
-    /// first-run modes onboarding. Warm/cold only — no per-frame alloc.
-    /// </summary>
     public partial class GalleryPanel
     {
         private bool _confirmEscIsDismiss;
@@ -25,7 +20,6 @@ namespace VPB
         private GridCtxPage _gridCtxMenuPage = GridCtxPage.Root;
         private const float GridCtxPanelWidthRef = 300f;
         private const float GridCtxAccelColRef = 28f;
-        /// <summary>Inset from row right edge to accelerator column right edge.</summary>
         private const float GridCtxAccelPadRef = GalleryUiDesignTokens.RegionGapRef;
         private readonly List<RaycastResult> _gridCtxRaycastResults = new List<RaycastResult>(16);
 
@@ -43,10 +37,7 @@ namespace VPB
             public string ToOriginalPath;
         }
 
-        /// <summary>
-        /// Sticky enter never blocks on an open Try-On: the preview auto-commits (Undo
-        /// restores it) and the tool opens immediately. Always returns true.
-        /// </summary>
+        /// <summary>Sticky enter never blocks on an open Try-On: the preview auto-commits (Undo restores it) and the tool opens immediately.</summary>
         private bool GateStickyEnterWhileTryOn(StickyToolMode entering)
         {
             if (!_tryOnActive || entering == StickyToolMode.TryOn)
@@ -58,10 +49,6 @@ namespace VPB
             return true;
         }
 
-        /// <summary>
-        /// Clear Hold-launch / 1-Click when leaving sticky tools (idle).
-        /// Prevents mode-error applies after Eraser / Scene Tools exit.
-        /// </summary>
         private void ResetArmedApplySemanticsIfIdle(bool toast)
         {
             if (GetActiveStickyToolMode() != StickyToolMode.None)
@@ -169,10 +156,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Context-menu keyboard: Esc/Backspace/← back or dismiss; single-letter/digit accelerators
-        /// (Galitz menu accelerators; power-user dual path). No modifiers — avoids Ctrl/Alt chords.
-        /// </summary>
         private bool TryHandleGridContextMenuKeys()
         {
             if (_gridCtxMenuGO == null) return false;
@@ -191,7 +174,6 @@ namespace VPB
                     CloseGridContextMenu();
                     return true;
                 }
-                // Backspace/← on root: still dismiss (locus of control exit).
                 if (Input.GetKeyDown(KeyCode.Backspace) || Input.GetKeyDown(KeyCode.LeftArrow))
                 {
                     CloseGridContextMenu();
@@ -216,10 +198,6 @@ namespace VPB
             return false;
         }
 
-        /// <summary>
-        /// Screen-space RMB context menu on grid row (Galitz popup: object verbs near cursor).
-        /// Icons + single-key accelerators; Tools/Rate/Tags/Select cascades (►).
-        /// </summary>
         private void ShowGridItemContextMenu(FileEntry file)
         {
             CloseGridContextMenu();
@@ -698,7 +676,6 @@ namespace VPB
                 KeyCode.Alpha0, "0",
                 GridCtxIcon("star"),
                 () => GridCtxRunRating(0));
-            // Also accept keypad 0.
             GridCtxRegisterHotkey(KeyCode.Keypad0, () => GridCtxRunRating(0));
 
             for (int r = 1; r <= 5; r++)
@@ -812,7 +789,6 @@ namespace VPB
             try { GridCtxApplyRatingToSelection(ratingValue); } catch { }
         }
 
-        /// <summary>Apply rating without requiring toolbox rate handler to exist.</summary>
         private void GridCtxApplyRatingToSelection(int ratingValue)
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return;
@@ -1014,7 +990,6 @@ namespace VPB
                 try { VPBUiFont.ApplyTo(accel); } catch { }
                 GridCtxLayoutAccel(accel.rectTransform, 1f);
 
-                // Leave room for accel on the main label.
                 Text labelT = row.transform.Find("Text") != null
                     ? row.transform.Find("Text").GetComponent<Text>()
                     : null;
@@ -1047,10 +1022,6 @@ namespace VPB
                 GridCtxRegisterHotkey(hotkey, onClick);
         }
 
-        /// <summary>
-        /// Pin accelerator in a right-side column with explicit edge insets.
-        /// Uses offsetMin/Max (not sizeDelta alone) so stretch leftovers cannot flush the glyph.
-        /// </summary>
         private static void GridCtxLayoutAccel(RectTransform art, float scale)
         {
             if (art == null) return;
@@ -1061,14 +1032,12 @@ namespace VPB
             art.anchorMin = new Vector2(1f, 0f);
             art.anchorMax = new Vector2(1f, 1f);
             art.pivot = new Vector2(1f, 0.5f);
-            // Right edge inset by pad; left edge inset by pad+col (column width).
             art.offsetMin = new Vector2(-(pad + col), 0f);
             art.offsetMax = new Vector2(-pad, 0f);
         }
 
         private void GridCtxAddSubmenu(string label, KeyCode hotkey, string accelGlyph, Sprite icon, UnityAction onOpen)
         {
-            // Galitz intent indicator: triangle / ► means cascade.
             GridCtxAddAction((label ?? "") + "  \u25B8", hotkey, accelGlyph, icon, onOpen);
         }
 

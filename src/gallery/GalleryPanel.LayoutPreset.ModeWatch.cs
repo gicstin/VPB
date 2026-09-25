@@ -13,11 +13,6 @@ namespace VPB
 
         private const int LayoutModeSuggestMaxDeclines = 3;
 
-        /// <summary>
-        /// Watches for a VR/desktop switch and *offers* that mode's startup layout. Never applies it
-        /// silently: relocating someone's windows without asking is the failure mode the semi-automated
-        /// finding in the research warns about.
-        /// </summary>
         private void TickLayoutModeWatch()
         {
             VPBConfig cfg = VPBConfig.Instance;
@@ -31,8 +26,6 @@ namespace VPB
 
             if (!_layoutStartupApplied)
             {
-                // Wait for the pane to finish its first load — applying into a half-built pane
-                // fights the initial category bind.
                 if (!hasLoadedContent) return;
                 if (cfg.IsLoadingScene) return;
                 TryApplyStartupLayoutPreset(mode);
@@ -72,7 +65,6 @@ namespace VPB
             return e;
         }
 
-        /// <summary>Opt-in, per mode, off by default — a startup layout is a contract the user signed.</summary>
         private void TryApplyStartupLayoutPreset(int mode)
         {
             if (_layoutStartupApplied) return;
@@ -341,7 +333,6 @@ namespace VPB
             MarkSessionArrangementDirty();
         }
 
-        /// <summary>Reuses the Revert bar chrome as a one-tap suggestion: Apply, or dismiss.</summary>
         private void ShowLayoutSuggestBar(GalleryLayoutPreset target)
         {
             if (target == null) return;
@@ -361,7 +352,6 @@ namespace VPB
             return _layoutSuggestTarget != null;
         }
 
-        /// <summary>Accepts a pending mode-switch suggestion. Exposed for the palette and quick menu.</summary>
         internal bool ApplySuggestedLayoutPreset()
         {
             GalleryLayoutPreset t = _layoutSuggestTarget;

@@ -23,7 +23,6 @@ namespace VPB
             get { lock (lockObj) { return pooledBytes; } }
         }
 
-        // Round up to next power of 2
         private static int NextPowerOfTwo(int v)
         {
             if (v <= 0) return 4096;

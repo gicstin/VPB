@@ -5,7 +5,6 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>Appearance preset gender: Unknown=0, Female=1, Male=2, Futa=3.</summary>
     internal enum AppearanceGender
     {
         Unknown = 0,
@@ -14,7 +13,6 @@ namespace VPB
         Futa = 3,
     }
 
-    /// <summary>Unified appearance gender resolution: gallery user tags, legacy UserTags.json, loose .vap probe, path tokens.</summary>
     internal static class AppearanceGenderClassifier
     {
         private static readonly char[] s_TokenSeps = { '/', '\\', '.', '_', '-', ' ', '(', ')', '[', ']', '{', '}', ',', ';', ':' };
@@ -39,7 +37,6 @@ namespace VPB
             return (active & ~genderMask) | genderFlag;
         }
 
-        /// <summary>Facet badge for Presets/Custom chips (replace type bits, keep gender flags).</summary>
         internal static GalleryPanel.AppearanceSubfilter HypotheticalTypeFacet(GalleryPanel.AppearanceSubfilter active, GalleryPanel.AppearanceSubfilter typeFlag)
         {
             if ((active & typeFlag) != 0) return active;
@@ -48,7 +45,6 @@ namespace VPB
             return (active & ~typeMask) | typeFlag;
         }
 
-        /// <summary>VaM-relative path used for appearance folder / preset vs custom checks.</summary>
         internal static bool TryGetAppearanceScopePath(FileEntry entry, out string scopePath)
         {
             scopePath = "";

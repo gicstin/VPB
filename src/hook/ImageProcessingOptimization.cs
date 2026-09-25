@@ -38,7 +38,6 @@ namespace VPB
             if (dstBpp != 4 && dstBpp != 3)
                 throw new ArgumentException("dstBpp must be 3 or 4");
             
-            // Validate buffers are large enough for the operation
             if (srcData.Length < (srcHeight - 1) * srcStride + srcWidth * srcBpp)
                 throw new ArgumentException("Source buffer too small");
 
@@ -64,7 +63,6 @@ namespace VPB
             int copyWidth = Math.Min(srcWidth, dstWidth);
             int copyHeight = Math.Min(srcHeight, dstHeight);
 
-            // Validate destination buffer
             if (dstLength < (dstHeight - 1) * dstStride + dstWidth * dstBpp)
                 throw new ArgumentException("Destination buffer too small");
 
@@ -76,12 +74,10 @@ namespace VPB
                     byte* pSrc = srcData + y * srcStride;
                     byte* pDst = dstData + y * dstStride;
                     
-                    // Simple byte copy for now, or use the int/long loop optimization locally
                     byte* s = pSrc;
                     byte* d = pDst;
                     int i = 0;
                     
-                    // 8-byte unroll
                     long* dL = (long*)d;
                     long* sL = (long*)s;
                     int longCount = copyBytes >> 3;
@@ -92,7 +88,6 @@ namespace VPB
             }
             else
             {
-                // Format conversion needed (e.g., RGBA -> RGB or RGB -> RGBA)
                 for (int y = 0; y < copyHeight; y++)
                 {
                     byte* pSrcRow = srcData + y * srcStride;
@@ -103,13 +98,13 @@ namespace VPB
                         byte* pSrc = pSrcRow + x * srcBpp;
                         byte* pDst = pDstRow + x * dstBpp;
 
-                        pDst[0] = pSrc[0]; // R
-                        pDst[1] = pSrc[1]; // G
-                        pDst[2] = pSrc[2]; // B
+                        pDst[0] = pSrc[0];
+                        pDst[1] = pSrc[1];
+                        pDst[2] = pSrc[2];
 
                         if (dstBpp == 4)
                         {
-                            pDst[3] = (srcBpp == 4) ? pSrc[3] : (byte)255; // A
+                            pDst[3] = (srcBpp == 4) ? pSrc[3] : (byte)255;
                         }
                     }
                 }
@@ -120,7 +115,6 @@ namespace VPB
                                                   byte* dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp,
                                                   bool fillWhiteBackground, int dstLength)
         {
-             // Validate buffers are large enough
             if (dstLength < (dstHeight - 1) * dstStride + dstWidth * dstBpp)
                 throw new ArgumentException("Destination buffer too small");
 
@@ -129,11 +123,6 @@ namespace VPB
 
             if (fillWhiteBackground)
             {
-                // Clear with white/transparent
-                // Memset to 0
-                // For large arrays, P/Invoke memset or similar is faster, but loop is okay for now or use Array.Clear
-                // But we have a pointer now.
-                // Manual memset 0
                 long* pDstL = (long*)pDstBase;
                 int len = dstLength;
                 int longCount = len >> 3;
@@ -142,16 +131,13 @@ namespace VPB
                 
                 if (dstBpp == 4)
                 {
-                    // Set Alpha to 255
                     for (int i = 3; i < len; i += 4)
                         pDstBase[i] = 255;
                 }
             }
 
-
                 float scaleX = (float)srcWidth / dstWidth;
                 float scaleY = (float)srcHeight / dstHeight;
-                // Use Max to fit the image inside the destination (Aspect Fit)
                 float scale = Math.Max(scaleX, scaleY);
 
                 int scaledWidth = (int)(srcWidth / scale);

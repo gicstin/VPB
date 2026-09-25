@@ -35,7 +35,6 @@ namespace ZstdNet
             try
             {
                 string dllName = "libzstd.dll";
-                // Try to find where the DLL is
                 string location = "";
                 try { location = typeof(ExternMethods).Assembly.Location; } catch {}
                 
@@ -54,7 +53,6 @@ namespace ZstdNet
                 // 1. Standard installation: BepInEx/plugins/VPB/native/
                 searchDirs.Add(VPB.VpbPaths.Native);
 
-                // 2. Same directory as VPB.dll (Handles scripts folder or custom location)
                 if (!string.IsNullOrEmpty(assemblyDir))
                 {
                     searchDirs.Add(assemblyDir);
@@ -62,14 +60,12 @@ namespace ZstdNet
                     searchDirs.Add(Path.Combine(assemblyDir, "x64"));
                 }
 
-                // 3. Pre-subfolder layouts
                 if (!string.IsNullOrEmpty(pluginDir))
                 {
                     searchDirs.Add(Path.Combine(pluginDir, "VPB\\zstd\\dll"));
                     searchDirs.Add(Path.Combine(pluginDir, "zstd\\dll"));
                 }
                 
-                // 3. Scripts directory specific (if VPB.dll is in scripts, libzstd.dll might be in a subfolder there)
                 if (!string.IsNullOrEmpty(scriptDir))
                 {
                     searchDirs.Add(scriptDir);
@@ -78,14 +74,12 @@ namespace ZstdNet
                     searchDirs.Add(Path.Combine(scriptDir, "VPB\\zstd\\dll"));
                 }
 
-                // 4. BepInEx plugins directory (fallback)
                 if (!string.IsNullOrEmpty(pluginDir))
                 {
                     searchDirs.Add(pluginDir);
                     searchDirs.Add(Path.Combine(pluginDir, "x64"));
                 }
 
-                // 4. One level up from plugins (BepInEx folder)
                 if (!string.IsNullOrEmpty(pluginDir))
                 {
                     string parent = Path.GetDirectoryName(pluginDir);
@@ -109,10 +103,8 @@ namespace ZstdNet
                     {
                         foundPath = fullPath;
                         
-                        // Set DLL directory so subsequent DllImports can find it
                         SetDllDirectory(dir);
                         
-                        // Explicitly load it to ensure it's in memory
                         IntPtr handle = LoadLibrary(fullPath);
                         if (handle != IntPtr.Zero)
                         {

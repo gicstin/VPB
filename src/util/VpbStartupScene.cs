@@ -96,10 +96,6 @@ namespace VPB
             return categoryTitle.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>
-        /// Warm-path identity check for gallery rows. Exact uid/path, or scene-category
-        /// package row whose package uid matches the stored scene's package prefix.
-        /// </summary>
         internal static bool MatchesGalleryRow(FileEntry file, bool sceneCategoryLikely)
         {
             EnsureMatchCache();

@@ -18,7 +18,6 @@ namespace VPB
         private GameObject _activeFilterChipBarGO;
         private RectTransform _activeFilterChipScrollContentRT;
         private readonly List<GameObject> _activeFilterChipButtons = new List<GameObject>(12);
-        // Warm-path pool: reuse chip GOs instead of Destroy+new on every SyncBrowseFilterChipChrome.
         private readonly List<GameObject> _filterChipPoolStandard = new List<GameObject>(16);
         private readonly List<GameObject> _filterChipPoolCompact = new List<GameObject>(4);
         private const int FilterChipPoolMaxIdle = 24;
@@ -41,22 +40,18 @@ namespace VPB
 
             Image barBg = UI.AddImage(_activeFilterChipBarGO, new Color(0f, 0f, 0f, 0f), false);
 
-            // Manual flow-wrap host: chips are positioned by hand (top-left origin) so the row
-            // wraps to a new line whenever the next chip would exceed the available width.
             GameObject contentGO = UI.CreateChildRT(_activeFilterChipBarGO, "Content", AnchorPresets.stretchAll);
             _activeFilterChipScrollContentRT = contentGO.GetComponent<RectTransform>();
 
             _activeFilterChipBarGO.SetActive(false);
         }
 
-        /// <summary>Extra top inset for main grid when browse filter chips are visible (not side tab columns).</summary>
         public float ActiveFilterChromeTopInsetPx(float paneScale)
         {
             float s = paneScale <= 0f ? 1f : paneScale;
             float total = TitleSearchChipChromeTopInsetPx(s);
             if (_activeFilterChipBarVisible)
             {
-                // Context Bar: hard-cap filter chip rows (overflow goes to +N popup).
                 int maxRows = GalleryUiDesignTokens.ContextBarMaxFilterChipRows;
                 if (maxRows < 1) maxRows = 1;
                 int rows = _activeFilterChipRowCount < 1 ? 1 : _activeFilterChipRowCount;
@@ -78,7 +73,6 @@ namespace VPB
 
         private bool IsBrowseFilterChipContextActive()
         {
-            // History browse uses its own side panel; title-bar chips would disagree with that mode.
             if (activeContentType == ContentType.History) return false;
             if (leftActiveContent == ContentType.History || rightActiveContent == ContentType.History) return false;
             return true;
@@ -94,7 +88,6 @@ namespace VPB
 
         private bool HasActiveSubPaneOrExtraBrowseFilters()
         {
-            // Scene/Appearance Local merged into global Source (HasTitleBarBrowseFilterActive).
             if (clothingSubfilter != 0) return true;
             if (hairSubfilter != 0) return true;
             if (appearanceSubfilter != 0) return true;
@@ -116,7 +109,6 @@ namespace VPB
             CollectActiveFilterChipSpecs(_filterChipSpecScratch);
 
             _activeFilterChipBarVisible = ShouldShowActiveFilterChipBar();
-            // Title-search chips own their host; empty filter specs → no bar strip.
             if (_filterChipSpecScratch.Count == 0)
                 _activeFilterChipBarVisible = false;
 
@@ -137,14 +129,9 @@ namespace VPB
             int fontSize = UiMetrics.FontBody();
             float chipH = FilterChipRowHeightRef * s;
 
-            // Context Bar: hard-cap one row; rest → +N overflow popup.
             PackActiveFilterChipsOneRow(_filterChipSpecScratch, s, fontSize, chipH);
         }
 
-        /// <summary>
-        /// Position chips LTR on one row (Context Bar). Packer already capped contents;
-        /// row count forced to <see cref="GalleryUiDesignTokens.ContextBarMaxFilterChipRows"/>.
-        /// </summary>
         private void FlowActiveFilterChips(float s)
         {
             if (_activeFilterChipScrollContentRT == null) return;
@@ -214,7 +201,6 @@ namespace VPB
             HideOldVersions,
             ShowHiddenItems,
             License,
-            /// <summary>Context Bar compact "+N" — opens overflow popup (not a dismissible filter).</summary>
             Overflow,
         }
 
@@ -317,7 +303,6 @@ namespace VPB
 
             ContentSizeFitter chipCsf = chip.AddComponent<ContentSizeFitter>();
             chipCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            // Self-size height (chip is flow-positioned with no parent layout group driving it).
             chipCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             Text labelTxt = UI.CreateLabel(chip, "", fontSize, Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Label");
@@ -457,7 +442,6 @@ namespace VPB
                     catch { }
                 };
 
-                // Icon button tint (if present) follows dismiss backdrop.
                 Image iconImg = null;
                 for (int i = 0; i < dismissT.childCount; i++)
                 {
@@ -492,11 +476,8 @@ namespace VPB
         {
             if (specs == null) return;
 
-            // Package dep/dependent/missing mode — primary constraint; list first.
             CollectPackageFilterChipSpecs(specs);
 
-            // Committed title-search chips live in TitleSearchChipHost (incl/excl rows).
-            // Only show aggregate Search chip while live-typing (no committed chips yet).
             if (!HasTitleSearchChips())
             {
                 string search = nameFilter != null ? nameFilter.Trim() : "";
@@ -990,7 +971,6 @@ namespace VPB
             int wasSearchRows = _titleSearchChipRowCount;
             try { RebuildTitleSearchChipUi(); } catch { }
             try { RefreshActiveFilterChips(); } catch { }
-            // Keep mode banner cache coherent if sticky chrome is up.
             try
             {
                 InvalidateModeSemanticsBannerCache();
@@ -1062,7 +1042,6 @@ namespace VPB
             pool.Add(go);
         }
 
-        /// <summary>Align chip bar with main grid column — same horizontal insets as <see cref="contentScrollRT"/>.</summary>
         private void ApplyActiveFilterChipBarLayout(float leftOffset, float rightOffset, float paneScale)
         {
             float s = paneScale <= 0f ? 1f : paneScale;
@@ -1073,7 +1052,6 @@ namespace VPB
 
             if (_activeFilterChipBarGO == null || !_activeFilterChipBarVisible) return;
 
-            // Title-search chip host sits under title bar; ActiveFilterChipBar stacks below it.
             float titleBottom = -GalleryUiDesignTokens.SideTabTopOffsetRef * s;
             float searchChipH = TitleSearchChipChromeTopInsetPx(s);
             float barTop = titleBottom - searchChipH;
@@ -1086,11 +1064,9 @@ namespace VPB
             rt.anchorMin = new Vector2(0f, 1f);
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
-            // Match grid column exactly (contentScrollRT offsetMin/Max X).
             rt.offsetMin = new Vector2(leftOffset + pad, gridTop + margin);
             rt.offsetMax = new Vector2(rightOffset - pad, barTop - margin);
 
-            // Re-flow against the resolved bar width (covers cases where the up-front estimate differs).
             try
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
@@ -1105,7 +1081,6 @@ namespace VPB
 
             try
             {
-                // Above grid, below side-tab scroll columns. Title search chips stay above this bar.
                 if (contentScrollRT != null)
                 {
                     int gridIdx = contentScrollRT.transform.GetSiblingIndex();

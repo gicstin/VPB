@@ -6,23 +6,17 @@ using UnityEngine;
 
 namespace VPB.src.util
 {
-    // Diagnostics for the scene-import pose path. VpbImport captures the source pose JSON + target uid right
-    // before it hands the pose to VaM's native PosePresets PresetManager; Ctrl+Shift+P then dumps, side by side,
-    // what the SOURCE pose specified for the foot/toe/hand/root controls vs the LIVE applied controller states
-    // and toe/foot bone angles. Purpose: find why toes curl up / hands drift after an appearance+pose import.
     public static class PoseImportDiagnostics
     {
-        public static JSONClass LastSourcePose;   // the Person atom node handed to the native pose loader
+        public static JSONClass LastSourcePose;
         public static string LastTargetUid;
         public static float LastCapturedTime;
 
-        // Controls we care about for the toe/hand fidelity bug. Substrings are matched case-insensitively so
-        // variants (lToeControl, rToeControl, lFootControl, ...) are all captured.
+        // Controls we care about for the toe/hand fidelity bug.
         private static readonly string[] InterestingControlSubstrings =
             { "toe", "foot", "hand", "hip", "pelvis" };
         private static readonly string[] InterestingRootControls = { "control" };
 
-        // Bones whose local angle reveals a curled toe / mis-angled foot.
         private static readonly string[] InterestingBoneSubstrings = { "toe", "foot" };
 
         public static void CaptureSource(JSONClass poseNode, string targetUid)
@@ -54,9 +48,6 @@ namespace VPB.src.util
             DumpBones(tag, person);
         }
 
-        // Ground-truth dump of the source pose preset so we can see EXACTLY what native VaM was handed:
-        // the top-level keys, the full list of storable ids, and the raw serialized JSON of each interesting
-        // control storable (so we can confirm whether e.g. rFootControl carries positionState=On or omits it).
         private static void DumpSourceStructure(string tag)
         {
             if (LastSourcePose == null) { LogUtil.Log($"[VPB][POSE][dump:{tag}] SRC (no captured source pose)."); return; }
@@ -80,7 +71,6 @@ namespace VPB.src.util
             }
             LogUtil.Log($"[VPB][POSE][dump:{tag}] SRC storableIds=[{ids}]");
 
-            // Raw JSON of each interesting control storable — the definitive answer on what state the pose carries.
             for (int i = 0; i < storables.Count; i++)
             {
                 JSONClass s = storables[i] as JSONClass;

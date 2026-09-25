@@ -6,9 +6,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    // Scene Eraser: hover-to-erase tool. While active, item under pointer fades and an
-    // "Erase …" hint is shown; click erases it. Clothing/hair = immediate + Undo; atoms/Person =
-    // world confirm. Distinct from Creators author facet and from Scene Tools (strip/authoring).
     public partial class GalleryPanel
     {
         private enum RemoveTargetKind { None, ClothingItem, HairItem, Atom }
@@ -18,11 +15,11 @@ namespace VPB
         private sealed class RemoveTarget
         {
             public RemoveTargetKind kind;
-            public DAZDynamicItem item;            // clothing / hair sub-item
-            public DAZCharacterSelector selector;  // owner of the sub-item
-            public Atom atom;                      // whole-atom target
-            public GameObject highlightRoot;       // subtree to fade
-            public UnityEngine.Object identity;    // item or atom, for change detection
+            public DAZDynamicItem item;
+            public DAZCharacterSelector selector;
+            public Atom atom;
+            public GameObject highlightRoot;
+            public UnityEngine.Object identity;
 
             public string DisplayName()
             {
@@ -44,7 +41,6 @@ namespace VPB
                 return "item";
             }
 
-            // Richer label for the floating pointer popup: "Erase <type>: <name>" (Scene Eraser).
             public string PopupLabel()
             {
                 try
@@ -58,10 +54,6 @@ namespace VPB
             }
         }
 
-        // Reversible half-transparency highlight. VaM skin/clothing/hair fade through the
-        // MaterialOptions "Alpha Adjust" storable (the proper _AlphaAdjust knob, range -1..1);
-        // generic props with real Renderers fade through a per-renderer MaterialPropertyBlock.
-        // Both are restored exactly on clear, so nothing is mutated permanently.
         private sealed class RemoveModeHighlight
         {
             private static readonly int AlphaAdjustId = Shader.PropertyToID("_AlphaAdjust");
@@ -77,9 +69,7 @@ namespace VPB
                 if (root == null) return;
 
                 MaterialOptions[] mos = null;
-                // MaterialOptions fade is only used for individual clothing/hair items (scoped to
-                // that item's subtree). It is intentionally skipped for whole-atom targets so that
-                // hovering a Person does NOT mass-fade every garment it wears.
+                // MaterialOptions fade is only used for individual clothing/hair items (scoped to that item's subtree).
                 if (includeMaterialOptions)
                 {
                     try { mos = root.GetComponentsInChildren<MaterialOptions>(false); } catch { mos = null; }
@@ -142,27 +132,17 @@ namespace VPB
             }
         }
 
-        // Negative = more transparent on VaM shaders. -0.5 reads as roughly half opacity.
         private const float RemoveModeAlphaAdjust = -0.5f;
 
-        // When the nearest surface is bare skin but a clothing/hair collider sits within this
-        // distance behind it, prefer removing the clothing (matches "remove the item, not the
-        // person" intent for garments that hug the body).
         private const float RemoveModeItemBias = 0.12f;
 
-        // Only the owner panel runs the per-frame scene logic, so left/right rails of the same
-        // instance (or any stray duplicate) never double-process.
+        // Only the owner panel runs the per-frame scene logic.
         private static GalleryPanel _removeModeOwner;
 
         private bool _removeModeActive;
         private RemoveModeHighlight _removeHighlight;
         private UnityEngine.Object _removeHighlightedIdentity;
 
-        // Baked world-space geometry for one garment wrap, captured once per remove-mode session.
-        // Remove mode freezes all animation + physics on enter, so the garment verts are static for
-        // the whole session; recomputing them (UpdateVerts), re-reading them, and rebuilding their
-        // AABB every frame was the dominant per-frame cost. We bake them once and only re-run the
-        // (ray-dependent) triangle intersection each frame.
         private sealed class WrapGeom
         {
             public DAZDynamicItem item;
@@ -178,9 +158,6 @@ namespace VPB
             public Vector3 e2;
         }
 
-        // Per body atom: its baked garment geometry. Built lazily on first hover and reused every
-        // frame while the scene is frozen; cleared on enter/exit and after any removal so a changed
-        // garment set is re-baked exactly once.
         private readonly Dictionary<Atom, List<WrapGeom>> _wrapGeomCache = new Dictionary<Atom, List<WrapGeom>>();
         private const float RemoveModeHoverInterval = 1f / 30f;
         private float _removeNextHoverTime;
@@ -188,7 +165,6 @@ namespace VPB
         private bool _removeHoverValid;
         private bool _removeEatPress;
 
-        // Side buttons (for square-chrome sizing) + their outline and icon image (recolored by state).
         private GameObject rightRemoveModeSideBtn;
         private GameObject leftRemoveModeSideBtn;
         private Outline rightRemoveModeBtnOutline;
@@ -196,27 +172,21 @@ namespace VPB
         private Image rightRemoveModeBtnIconImage;
         private Image leftRemoveModeBtnIconImage;
 
-        // Rail button look: red backdrop always; outline + icon glyph go white when idle and magenta
-        // when the mode is active.
         private static readonly Color RemoveModeRailBackdrop = GalleryUiColorTokens.AccentDanger;
         private static readonly Color RemoveModeOutlineIdle = Color.white;
         private static readonly Color RemoveModeOutlineActive = new Color(1f, 0.2f, 0.9f, 1f);
 
-        // Remembers the user's freeze-animation toggle so entering remove mode can pause all
-        // animation + sound while active and restore the prior state on exit.
+        // Remembers freeze-animation toggle to restore on remove mode exit.
         private bool _removePrevFreeze;
 
         // Tracks whether we currently own the on-screen help text, so we only clear what we set.
         private bool _removeHelpShown;
         private string _removeHelpCached;
 
-        // Which rail opened remove mode — keep siderail on that side in VR/floating (not isFixedLocally).
         private bool _removeModeSiderailUseLeft;
-        // User closed remove list while mode still on — stop layout from forcing it back open.
         private bool _removeModeSiderailDismissed;
         private ContentType? _removeModeSiderailLastWant;
 
-        // Floating "Remove <type>: <name>" popup that follows the desktop pointer while hovering.
         private GameObject _removePopupGO;
         private RectTransform _removePopupRT;
         private Text _removePopupText;
@@ -224,7 +194,6 @@ namespace VPB
         private Outline _removePopupOutline;
         private bool _removePopupPersonStyle;
 
-        // World-space Atom/Person erase confirm (not VaM Alert / not gallery overlay).
         private bool _removeAtomConfirmOpen;
         private GameObject _removeAtomConfirmGO;
         private Canvas _removeAtomConfirmCanvas;
@@ -239,8 +208,6 @@ namespace VPB
         private static readonly Color RemovePopupTextDefault = Color.white;
         private static readonly Color RemovePopupTextPerson = new Color(0.12f, 0.10f, 0.02f, 1f);
 
-        /// <param name="fromLeftRailButton">Which rail button was pressed.</param>
-        /// <param name="rightClick">True for RMB; only affects side when docked.</param>
         internal void ToggleRemoveMode(bool fromLeftRailButton, bool rightClick = false)
         {
             if (_removeModeActive) RemoveModeExit();
@@ -498,7 +465,6 @@ namespace VPB
             try { ResetArmedApplySemanticsIfIdle(toast: true); } catch { }
         }
 
-        /// <summary>Open clothing/hair/atom remove list siderail to match current gallery category (with Remove Mode).</summary>
         private void EnsureRemoveSiderailOpenForCurrentCategory()
         {
             bool isClothing, isHair, isScene;
@@ -545,7 +511,6 @@ namespace VPB
             UpdateTabs();
         }
 
-        /// <summary>Close remove-list siderails opened with Remove Mode.</summary>
         private void CloseRemoveSiderailsIfOpen()
         {
             bool changed = false;
@@ -571,8 +536,7 @@ namespace VPB
         private void RemoveModeUpdateButtonVisual()
         {
             Color c = _removeModeActive ? RemoveModeOutlineActive : RemoveModeOutlineIdle;
-            // Prefer UIHoverBorder selection rim — Unity Outline implements ILayoutElement and can
-            // nudge preferred size / fight StripLegacyOutline on chrome refresh.
+            // Prefer UIHoverBorder rim; Outline implements ILayoutElement and nudges sizing.
             try { ApplyRemoveModeRailHoverSelected(rightRemoveModeSideBtn, _removeModeActive, c); } catch { }
             try { ApplyRemoveModeRailHoverSelected(leftRemoveModeSideBtn, _removeModeActive, c); } catch { }
             try { if (rightRemoveModeBtnOutline != null) rightRemoveModeBtnOutline.enabled = false; } catch { }
@@ -594,8 +558,6 @@ namespace VPB
             try { hb.ApplyBorderSettings(); } catch { }
         }
 
-        // Pauses all animation + sound while remove mode is active (VaM's built-in freeze, the same
-        // one behind the "Pause Animations and Sounds" toggle) and restores the prior state on exit.
         private void RemoveModeFreezeAnimation(bool freeze)
         {
             SuperController sc = SuperController.singleton;
@@ -612,8 +574,6 @@ namespace VPB
             }
         }
 
-        // Adds/styles the rail button outline (idle white). Called from button construction (Init).
-        // Kept for field wiring; live chrome uses UIHoverBorder.isSelected (see RemoveModeUpdateButtonVisual).
         private Outline RemoveModeAddRailOutline(GameObject btn)
         {
             if (btn == null) return null;
@@ -637,7 +597,6 @@ namespace VPB
             return o;
         }
 
-        // Shows "Click to remove X" on VaM's on-screen help HUD while a target is hovered.
         private void RemoveModeSetHelp(string text)
         {
             try { SuperController.singleton.helpText = text; _removeHelpShown = true; } catch { }
@@ -651,7 +610,6 @@ namespace VPB
             _removeHelpShown = false;
         }
 
-        // Lazily builds a standalone screen-space-overlay canvas holding the floating pointer popup.
         private void RemoveModeEnsurePopup()
         {
             if (_removePopupGO != null) return;
@@ -660,7 +618,7 @@ namespace VPB
                 GameObject canvasGO = new GameObject("VPB_RemovePopup");
                 Canvas c = canvasGO.AddComponent<Canvas>();
                 c.renderMode = RenderMode.ScreenSpaceOverlay;
-                c.sortingOrder = 32760; // above the gallery and most HUDs
+                c.sortingOrder = 32760;
                 canvasGO.AddComponent<CanvasScaler>();
 
                 GameObject panel = new GameObject("Panel");
@@ -670,8 +628,8 @@ namespace VPB
                 _removePopupOutline.effectColor = RemovePopupOutlineDefault;
                 _removePopupOutline.effectDistance = new Vector2(1.5f, -1.5f);
                 RectTransform prt = panel.GetComponent<RectTransform>();
-                prt.anchorMin = prt.anchorMax = Vector2.zero; // bottom-left origin = Input.mousePosition space
-                prt.pivot = new Vector2(0f, 1f);              // top-left corner pinned to the cursor
+                prt.anchorMin = prt.anchorMax = Vector2.zero;
+                prt.pivot = new Vector2(0f, 1f);
 
                 Text txt = UI.CreateLabel(panel, "", 26, RemovePopupTextDefault, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, name: "Text");
                 RectTransform trt = txt.GetComponent<RectTransform>();
@@ -711,7 +669,6 @@ namespace VPB
                 _removePopupText.color = person ? RemovePopupTextPerson : RemovePopupTextDefault;
         }
 
-        // Shows the popup with the given label and positions it next to the desktop cursor (clamped).
         private void RemoveModeShowPopup(RemoveTarget target)
         {
             if (target == null) return;
@@ -732,9 +689,9 @@ namespace VPB
             Vector3 m = Input.mousePosition;
             float px = m.x + 18f;
             float py = m.y - 18f;
-            if (px + w > Screen.width) px = m.x - 18f - w; // flip to the cursor's left near the right edge
+            if (px + w > Screen.width) px = m.x - 18f - w;
             if (px < 0f) px = 0f;
-            if (py < h) py = h;                            // keep fully on screen vertically
+            if (py < h) py = h;
             if (py > Screen.height) py = Screen.height;
             _removePopupRT.anchoredPosition = new Vector2(px, py);
         }
@@ -794,15 +751,13 @@ namespace VPB
             bool desktop = true;
             try { desktop = SuperController.singleton.IsMonitorOnly; } catch { desktop = true; }
 
-            // Right-click anywhere also ends remove mode (desktop).
             if (desktop)
             {
                 bool rdown = false; try { rdown = Input.GetMouseButtonDown(1); } catch { }
                 if (rdown) { RemoveModeExit(); return; }
             }
 
-            // Don't fight the gallery UI: when the mouse is over the gallery window on desktop,
-            // clear any highlight and skip scene picking so hovering the panel is harmless.
+            // Don't fight the gallery UI: when the mouse is over the gallery window on desktop.
             bool pressHeld = RemoveModePrimaryHeld(desktop);
             if (desktop)
             {
@@ -834,9 +789,6 @@ namespace VPB
                 RemoveModeClearHighlight();
                 if (target != null && target.highlightRoot != null)
                 {
-                    // MaterialOptions "Alpha Adjust" fade is scoped to a single clothing/hair item's
-                    // subtree. For whole-atom (e.g. Person) targets we MUST skip it, otherwise it
-                    // mass-fades every garment the person wears instead of just the hovered item.
                     bool fadeMat = target.kind == RemoveTargetKind.ClothingItem
                                    || target.kind == RemoveTargetKind.HairItem;
                     try { _removeHighlight.Apply(target.highlightRoot, RemoveModeAlphaAdjust, fadeMat); } catch { }
@@ -850,12 +802,9 @@ namespace VPB
                 _removeHoverValid = true;
             }
 
-            // Re-assert help every frame: VaM SyncHelpText overwrites with its own point target
-            // (e.g. "wall") while remove mode is active. Reuse cached string — no per-frame concat.
             if (_removeHelpCached != null) RemoveModeSetHelp(_removeHelpCached);
             else RemoveModeClearHelp();
 
-            // Floating popup follows the desktop pointer every frame while a target is held.
             bool eatingHeldPress = _removeEatPress && pressHeld;
             if (desktop && target != null && !eatingHeldPress) RemoveModeShowPopup(target);
             else RemoveModeHidePopup();
@@ -868,7 +817,6 @@ namespace VPB
                 if (_removeAtomConfirmOpen || IsConfirmOverlayOpen())
                     return;
 
-                // Atom/Person remove is high cost — world-space confirm (works when gallery collapsed / VR).
                 if (target.kind == RemoveTargetKind.Atom && target.atom != null)
                 {
                     Atom atomRef = target.atom;
@@ -901,8 +849,7 @@ namespace VPB
                     return;
                 }
 
-                // Restore the look before mutating the scene so a removed-but-recreated (undo)
-                // item never carries a stale property block.
+                // Restore the look before mutating the scene so a removed-but-recreated (undo) item never carries a stale property block.
                 RemoveModeClearHighlight();
                 RemoveModeClearHelp();
                 RemoveModeHidePopup();
@@ -911,9 +858,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// World-space Remove/Cancel panel in front of the player — not VaM Alert, not gallery overlay.
-        /// </summary>
         private void RemoveModeConfirmAtomRemoval(string uid, string label, bool isPerson)
         {
             if (string.IsNullOrEmpty(uid)) return;
@@ -996,7 +940,6 @@ namespace VPB
             GalleryModalTypography type = new GalleryModalTypography(s);
             rootRT.sizeDelta = new Vector2(520f * s, 280f * s);
 
-            // Face player camera — independent of gallery collapsed / fixed overlay.
             Transform camTf = null;
             try
             {
@@ -1048,7 +991,6 @@ namespace VPB
             panelRT.offsetMin = Vector2.zero;
             panelRT.offsetMax = Vector2.zero;
 
-            // Top accent stripe (Person = yellow).
             GameObject stripe = new GameObject("AccentStripe");
             stripe.transform.SetParent(panel.transform, false);
             Image stripeImg = UI.AddImage(stripe, accent, false);
@@ -1180,9 +1122,6 @@ namespace VPB
             }
         }
 
-        // Resolves the best target under the pointer. Desktop: a single ray from the monitor
-        // camera. VR: the nearer of the two controller rays. Also reports whether the matching
-        // select input fired this frame.
         private RemoveTarget RemoveModeResolve(bool desktop, out bool clickThisFrame)
         {
             clickThisFrame = false;
@@ -1190,9 +1129,7 @@ namespace VPB
 
             if (desktop)
             {
-                // GetMouseSelect() alone proved unreliable here (clicks never registered), so also
-                // accept a raw left-mouse-down. The gallery-window guard above already prevents this
-                // from firing while the pointer is over the panel.
+                // GetMouseSelect() alone proved unreliable here (clicks never registered), so also accept a raw left-mouse-down.
                 bool sel = false; try { sel = sc.GetMouseSelect(); } catch { }
                 bool down = false; try { down = Input.GetMouseButtonDown(0); } catch { }
                 clickThisFrame = sel || down;
@@ -1228,8 +1165,6 @@ namespace VPB
 
             if (best != null)
             {
-                // GetRight/LeftSelect returns false while *GUIInteract is set (gallery laser on UI).
-                // Desktop already falls back to raw mouse; mirror that for VR selectAction.
                 try { clickThisFrame = bestIsRight ? sc.GetRightSelect() : sc.GetLeftSelect(); }
                 catch { clickThisFrame = false; }
                 if (!clickThisFrame) clickThisFrame = RemoveModePollVrSelectBypassGui(bestIsRight);
@@ -1238,7 +1173,6 @@ namespace VPB
         }
 
         // Cached OpenVR selectAction.GetStateDown — warm path (click poll), not per-triangle hot path.
-        // All SteamVR types accessed via reflection so VPB does not need a SteamVR assembly reference.
         private static MethodInfo _vrSelectGetStateDown;
         private static object _vrSelectSrcRight;
         private static object _vrSelectSrcLeft;
@@ -1278,7 +1212,6 @@ namespace VPB
                     if (_vrSelectGetStateDown != null)
                     {
                         Type srcType = _vrSelectGetStateDown.GetParameters()[0].ParameterType;
-                        // IL: GetRightSelect uses InputSources=2, GetLeftSelect uses 1
                         _vrSelectSrcRight = Enum.ToObject(srcType, 2);
                         _vrSelectSrcLeft = Enum.ToObject(srcType, 1);
                     }
@@ -1295,13 +1228,6 @@ namespace VPB
             return ResolveTargetForRay(ray, out _);
         }
 
-        // Core picker. Two signals are combined:
-        //  1. Collider hits that resolve (parent walk) to an active DAZDynamicItem — the fast path
-        //     for items that own colliders (rare).
-        //  2. Garment mesh raycast — VaM clothing/hair render via Graphics.DrawMesh with NO collider,
-        //     so a collider hit lands on the body and resolves to the Person. We then raycast the
-        //     actual garment mesh triangles (TryRaycastGarmentMesh) to pick the garment drawn under
-        //     the cursor; if none is pierced the whole atom (Person) is the target.
         private RemoveTarget ResolveTargetForRay(Ray ray, out float score)
         {
             score = float.MaxValue;
@@ -1313,7 +1239,7 @@ namespace VPB
 
             try
             {
-                int mask = ~(1 << 5); // everything except the UI layer
+                int mask = ~(1 << 5);
                 RaycastHit[] hits = Physics.RaycastAll(ray, 1000f, mask, QueryTriggerInteraction.Collide);
                 for (int i = 0; i < hits.Length; i++)
                 {
@@ -1344,11 +1270,9 @@ namespace VPB
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] RemoveMode raycast error: " + ex); }
 
-            // Fast path: an item that owns colliders and sits in front of (or close behind) the body.
             if (bestDyn != null && bestDynDist <= bestAtomDist + RemoveModeItemBias)
                 return MakeItemTarget(bestDyn, bestDynDist, out score);
 
-            // Body hit: try to resolve which garment the line of sight passes through.
             if (bestAtom != null)
             {
                 DAZDynamicItem garment = TryRaycastGarmentMesh(ray, bestAtom);
@@ -1383,14 +1307,6 @@ namespace VPB
             };
         }
 
-        // Resolves which garment is under the cursor by raycasting the ACTUAL rendered garment
-        // geometry. In play mode VaM draws each clothing/hair DAZSkinWrap via Graphics.DrawMesh at an
-        // identity matrix (DAZSkinWrap.DrawMesh, ref/vam line 1404), so wrap.Mesh.vertices are the
-        // live WORLD-SPACE vertices and the mesh triangles index them directly. We intersect the
-        // cursor ray against those triangles (Moller-Trumbore) and pick the garment whose surface the
-        // ray pierces FIRST (smallest t) — exactly the garment drawn at that pixel. Position- and
-        // depth-correct by construction: pointing at bare skin (head, etc.) pierces no garment, and
-        // an outer layer is hit before the inner layer it sits on.
         private DAZDynamicItem TryRaycastGarmentMesh(Ray ray, Atom bodyAtom)
         {
             Vector3 o = ray.origin;
@@ -1407,8 +1323,6 @@ namespace VPB
                 WrapGeom geom = geoms[g];
                 if (geom == null || geom.triangles == null) continue;
 
-                // A garment removed (or undone) mid-session changes which items are live; skip any
-                // baked geometry whose item is no longer active rather than re-bake every frame.
                 bool active = false;
                 try { active = geom.item != null && geom.item.active; } catch { active = false; }
                 if (!active) continue;
@@ -1425,11 +1339,6 @@ namespace VPB
             return best;
         }
 
-        // Bakes (and caches) the world-space garment geometry for a body atom. Remove mode freezes
-        // animation + physics, so this is computed once and reused every frame; the expensive
-        // skinning recompute (UpdateVerts), vertex read, and AABB build run here instead of per
-        // frame. The triangle topology is captured alongside the verts and the AABB is precomputed
-        // for the per-frame ray fast-reject.
         private List<WrapGeom> GetGarmentGeom(Atom bodyAtom)
         {
             List<WrapGeom> geoms;
@@ -1455,10 +1364,6 @@ namespace VPB
                 try { ok = ok && item.active && item.characterSelector != null; } catch { ok = false; }
                 if (!ok) continue;
 
-                // VaM skins clothing on the GPU, so the CPU-side mesh.vertices are stale bind-pose
-                // geometry (sits nowhere near the on-screen garment). UpdateVerts recomputes the
-                // garment verts from the LIVE body skin (rawSkinnedVerts) and writes them into the
-                // mesh — same math VaM uses in CPU-skinning mode, harmless to the GPU render path.
                 try { wrap.UpdateVerts(); } catch { }
 
                 Mesh m = null;
@@ -1473,8 +1378,6 @@ namespace VPB
                 try { verts = m.vertices; } catch { }
                 if (verts == null || verts.Length < 3) continue;
 
-                // Build the AABB once from the (now live, world-space) verts; mesh.bounds is junk in
-                // play mode so we cannot use it.
                 Vector3 mn = verts[0], mx = mn;
                 for (int i = 1; i < verts.Length; i++)
                 {
@@ -1490,7 +1393,6 @@ namespace VPB
             return geoms;
         }
 
-        // Slab ray/AABB test; d is normalized, hits accepted on the forward half-line [0, +inf).
         private static bool RayHitsAabb(Vector3 o, Vector3 d, Vector3 mn, Vector3 mx)
         {
             float tmin = 0f, tmax = float.MaxValue;
@@ -1541,7 +1443,6 @@ namespace VPB
             return result;
         }
 
-        // Nearest double-sided ray/triangle hit over a mesh (Moller-Trumbore). t is in world units.
         private static bool RayMeshNearest(Vector3 o, Vector3 d, RemoveModeTriangle[] triangles, out float bestT)
         {
             bestT = float.MaxValue;
@@ -1580,8 +1481,6 @@ namespace VPB
         {
             if (target == null) return;
 
-            // Any removal changes which garments/atoms are live, so drop the baked geometry; the
-            // next hover re-bakes the new set exactly once.
             _wrapGeomCache.Clear();
 
             if ((target.kind == RemoveTargetKind.ClothingItem || target.kind == RemoveTargetKind.HairItem)
@@ -1603,7 +1502,6 @@ namespace VPB
                     catch { }
                 }
 
-                // Same undo snapshot the remove-siderail path uses (geometry toggles + storables).
                 if (atom != null) RemoveModePushClothingHairUndo(atom);
 
                 if (!RemoveModeDeactivateWornItem(atom, sel, dyn, isClothing))
@@ -1643,9 +1541,6 @@ namespace VPB
             }
         }
 
-        // Canonical wear/remove is geometry clothing:/hair: bool (same as remove siderail).
-        // SetActive* on DAZCharacterSelector is (item, active, fromRestore) — never call 2-arg
-        // overload; older IL that did throws MissingMethodException on current VaM.
         private static bool RemoveModeDeactivateWornItem(
             Atom atom, DAZCharacterSelector sel, DAZDynamicItem dyn, bool isClothing)
         {

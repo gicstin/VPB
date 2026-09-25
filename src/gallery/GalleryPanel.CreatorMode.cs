@@ -9,10 +9,6 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>
-    /// Scene Tools: sticky power-user scene-authoring mode (toolbox toggle).
-    /// When ON, toolbox reveals Scene Tools actions (Strip Scene, …). Distinct from Creators author list.
-    /// </summary>
     public partial class GalleryPanel
     {
         private bool creatorModeActive;
@@ -26,22 +22,14 @@ namespace VPB
         private Image tboxSceneOutlinerBtnImage;
         private Image tboxCreatorStripSceneBtnImage;
 
-        /// <summary>
-        /// When true, SuperControllerHook.PostRemoveAtom skips per-atom gallery target sync.
-        /// </summary>
         internal static bool SuppressAtomRemovedGalleryNotify;
 
-        /// <summary>Side-rail / hotkey / QM toggle.</summary>
         internal void ToggleCreatorMode(bool fromLeftRailButton = false, bool rightClick = false)
         {
             if (creatorModeActive) ExitCreatorMode();
             else EnterCreatorMode();
-            // fromLeft/rightClick reserved for future side-panel affinity (parity with Scene Eraser).
         }
 
-        /// <summary>
-        /// Open Strip keep selector. Enters Scene Tools when needed (hotkey / QM direct path).
-        /// </summary>
         private void OpenSceneStripKeepSelector()
         {
             if (!creatorModeActive)
@@ -49,10 +37,6 @@ namespace VPB
             TboxCreatorStripSceneOpenKeepSelector();
         }
 
-        /// <summary>
-        /// Ctrl+Shift+S — toggle Strip Scene window (canvas-hosted; independent of pane collapse).
-        /// Enters Scene Tools when opening.
-        /// </summary>
         private void HotkeyOpenStripSceneDirect()
         {
             if (IsStripKeepSelectorOpen())
@@ -113,8 +97,7 @@ namespace VPB
                 creatorModeStripRoutine = null;
                 creatorModeStripBusy = false;
                 SuppressAtomRemovedGalleryNotify = false;
-                // Do not Raise/ForceReset while VaM Load from strip may still be running —
-                // RecoverAfterBulkAtomTeardown would orphan mid-rebuild AsyncFlags.
+                // Do not Raise/ForceReset while VaM Load from strip may still be running.
                 bool loadOngoing = false;
                 try
                 {
@@ -188,7 +171,6 @@ namespace VPB
             }
             catch { atomType = null; }
             if (SceneUtils.IsSystemProtectedSceneAtom(id, atomType)) return true;
-            // Environment sky/sphere — always drop for blank new-scene look.
             if (SceneUtils.IsCreatorStripAlwaysDropAtomType(atomType)) return false;
             if (!string.IsNullOrEmpty(id)
                 && string.Equals(id, "Environment", StringComparison.Ordinal))
@@ -222,7 +204,6 @@ namespace VPB
             if (sceneJson == null) return false;
 
             // Pre-strip full scene for Ctrl+Z (one GetSaveJSON — write before filter mutate).
-            // Cold path: disk IO OK. LoadScene(merge:false) on undo matches strip replace.
             try
             {
                 undoScenePath = Path.Combine(
@@ -270,7 +251,6 @@ namespace VPB
                 return false;
             }
 
-            // CoreControl always kept — blank Skyshop sphere so strip ≠ inherit old backdrop.
             CreatorStripBlankSkyInSceneJson(sceneJson);
 
             if (renames != null && renames.Count > 0)
@@ -300,12 +280,6 @@ namespace VPB
             try { if (File.Exists(path)) File.Delete(path); } catch { }
         }
 
-        /// <summary>
-        /// Remap atom ids in keepers JSON. Updates atom id, then rewrites atom-reference
-        /// string values (parentAtom / receiverAtom / <c>uid:storable</c> links).
-        /// Skips non-ref keys (<c>type</c>/<c>id</c>/urls) so renaming uid <c>Person</c>
-        /// cannot corrupt every <c>"type":"Person"</c>. Cold path only.
-        /// </summary>
         private static void ApplyCreatorStripRenamesInJson(JSONClass sceneJson, Dictionary<string, string> renames)
         {
             if (sceneJson == null || renames == null || renames.Count == 0) return;
@@ -331,7 +305,6 @@ namespace VPB
                 try { node["id"] = newId; } catch { }
             }
 
-            // Two-phase remap: old→temp→new so Person→Actor1 + Actor1→Actor2 cannot collide.
             List<string> fromList = new List<string>(renames.Count);
             List<string> toList = new List<string>(renames.Count);
             Dictionary<string, string>.Enumerator en = renames.GetEnumerator();
@@ -356,10 +329,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Keys that hold atom types / storable ids / paths — never rewrite exact uid matches here.
-        /// Compound <c>uid:</c> prefixes still remapped (they cannot appear as type strings).
-        /// </summary>
+        /// <summary>Keys that hold atom types / storable ids / paths — never rewrite exact uid matches here.</summary>
         private static bool CreatorStripJsonKeyIsNonAtomRef(string key)
         {
             if (string.IsNullOrEmpty(key)) return true;
@@ -425,7 +395,6 @@ namespace VPB
                     node.Value = toUid;
                     return;
                 }
-                // Compound atom:storable / atom:control links (VaM trigger / parent refs).
                 string fromPrefix = fromUid + ":";
                 if (val.StartsWith(fromPrefix, StringComparison.Ordinal))
                     node.Value = toUid + val.Substring(fromUid.Length);
@@ -433,9 +402,6 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>
-        /// Strip keepers JSON: force blank Skyshop sphere (CoreControl). Cold path only.
-        /// </summary>
         private static void CreatorStripBlankSkyInSceneJson(JSONClass sceneJson)
         {
             if (sceneJson == null) return;
@@ -473,7 +439,6 @@ namespace VPB
         {
             if (st == null) return;
 
-            // SkyshopLightController + any ImageControl-like url on CoreControl.
             if (st["skyName"] != null)
                 st["skyName"] = "";
             if (st["showSkybox"] != null)
@@ -499,16 +464,13 @@ namespace VPB
                 if (ambient["h"] != null) ambient["h"].AsFloat = 0f;
                 if (ambient["s"] != null) ambient["s"].AsFloat = 0f;
                 if (ambient["v"] != null) ambient["v"].AsFloat = 0f;
-                // Some saves use r/g/b.
                 if (ambient["r"] != null) ambient["r"].AsFloat = 0f;
                 if (ambient["g"] != null) ambient["g"].AsFloat = 0f;
                 if (ambient["b"] != null) ambient["b"].AsFloat = 0f;
             }
         }
 
-        /// <summary>
-        /// Runtime blank after load — covers params not forced in JSON / live Skyshop URL.
-        /// </summary>
+        /// <summary>Runtime blank after load — covers params not forced in JSON / live Skyshop URL.</summary>
         private static void CreatorModeBlankBackdropSkyRuntime()
         {
             try
@@ -761,7 +723,6 @@ namespace VPB
                 catch { }
                 if (stillLoading)
                 {
-                    // VaM may still hold the temp path — delay delete; orphan cleaner sweeps later.
                     deleteTempWhenDone = false;
                     LogUtil.LogError("[VPB] Creator Strip load timed out (still isLoading) path=" + tempPath);
                     ShowTemporaryStatus(
@@ -809,8 +770,6 @@ namespace VPB
                     yield return null;
                 }
 
-                // Mutual exclusive fills — prefer SubScene when path set (caller should not pass both).
-                // Explicit MoveNext — Unity 2018 nested yield return IEnumerator is unreliable here.
                 if (!string.IsNullOrEmpty(importDefaultSubScenePath))
                 {
                     try

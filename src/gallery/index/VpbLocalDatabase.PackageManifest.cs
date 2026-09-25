@@ -6,9 +6,6 @@ using Prime31.MessageKit;
 
 namespace VPB
 {
-    /// <summary>
-    /// Persistent VAR zip manifest cache in SQLite (<c>pkg_manifest</c> blob payload).
-    /// </summary>
     internal static partial class VpbLocalDatabase
     {
         const int PackageManifestSchemaVersion = 1;

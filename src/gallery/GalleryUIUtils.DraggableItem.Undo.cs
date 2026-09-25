@@ -106,17 +106,12 @@ namespace VPB
             
             if (FileEntry != null && FileEntry.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                // Try reading using SuperController.singleton.ReadFileIntoString first if path is normalized or manageable
-                // Otherwise try stream
-                
                 string content = null;
                 try
                 {
-                    // Prefer using FileManager or SuperController which handles reading better
                     string normalized = UI.NormalizePath(FileEntry.Path);
-                    if (UI.IsLikelyVarPackageReference(normalized)) // Var (not Windows C:/)
+                    if (UI.IsLikelyVarPackageReference(normalized))
                     {
-                         // Use OpenStreamReader for vars as it handles the archive access
                          using (var reader = FileEntry.OpenStreamReader())
                          {
                              content = reader.ReadToEnd();
@@ -124,9 +119,6 @@ namespace VPB
                     }
                     else
                     {
-                        // For loose files, standard file IO might be safer or SuperController
-                        // But FileEntry.OpenStreamReader should ideally work.
-                        // However, let's try SuperController read if it's a file path
                          using (var reader = FileEntry.OpenStreamReader())
                          {
                              content = reader.ReadToEnd();
@@ -138,7 +130,6 @@ namespace VPB
                         _dualPoseNode = JSON.Parse(content);
                         if (_dualPoseNode != null)
                         {
-                            // Check PeopleCount (string or int)
                             if (_dualPoseNode["PeopleCount"] != null)
                             {
                                 int count = _dualPoseNode["PeopleCount"].AsInt;
@@ -154,7 +145,6 @@ namespace VPB
                             }
                             else
                             {
-                                 // LogUtil.LogVerbose($"[DragDropDebug] Not Dual Pose: No PeopleCount in {FileEntry.Name}");
                             }
                         }
                     }
@@ -185,7 +175,6 @@ namespace VPB
             string p = entry.Path.Replace('\\', '/');
             // .var display paths ("AddonPackages/pkg.var:/Custom/Atom/..."): prefix checks need internal path only
             int varSep = p.IndexOf(":/", StringComparison.Ordinal);
-            // "E:/..." is a Windows drive, not a var prefix; skip it so an absolute path isn't sliced to junk.
             if (varSep == 1 && char.IsLetter(p[0]))
                 varSep = p.IndexOf(":/", varSep + 1, StringComparison.Ordinal);
             if (varSep >= 0 && varSep + 2 < p.Length)
@@ -194,7 +183,6 @@ namespace VPB
             bool isJson = p.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
             bool isVam = p.EndsWith(".vam", StringComparison.OrdinalIgnoreCase);
             
-            // Person presets
             if (p.StartsWith("Custom/Atom/Person/AnimationPresets", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Animation;
             if (p.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Appearance;
             if (p.StartsWith("Custom/Atom/Person/BreastPhysics", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.BreastPhysics;
@@ -207,11 +195,9 @@ namespace VPB
             if ((p.StartsWith("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) && isVap) || p.EndsWith(".vac", StringComparison.OrdinalIgnoreCase)) return ItemType.Pose;
             if (p.StartsWith("Custom/Atom/Person/Skin", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Skin;
             
-            // SubScenes and scenes
             if (p.StartsWith("Custom/SubScene", StringComparison.OrdinalIgnoreCase) && isJson) return ItemType.SubScene;
             if (p.StartsWith("Saves/scene", StringComparison.OrdinalIgnoreCase) && isJson) return ItemType.Scene;
 
-            // Clothing and hair
             if ((p.StartsWith("Custom/Clothing/Female", StringComparison.OrdinalIgnoreCase) || p.StartsWith("Custom/Clothing/Male", StringComparison.OrdinalIgnoreCase)) && isVam)
             {
                 return ItemType.ClothingItem;
@@ -229,14 +215,12 @@ namespace VPB
                 return ItemType.HairPreset;
             }
 
-            // CUA
             if (p.StartsWith("Custom/Assets", StringComparison.OrdinalIgnoreCase) &&
                 (p.EndsWith(".assetbundle", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".scene", StringComparison.OrdinalIgnoreCase)))
             {
                 return ItemType.CUA;
             }
 
-            // Session plugins and plugin presets
             if (p.StartsWith("Custom/Scripts", StringComparison.OrdinalIgnoreCase) &&
                 (p.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".cslist", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
             {
@@ -247,7 +231,6 @@ namespace VPB
                 return ItemType.Plugins;
             }
 
-            // Compatibility fallbacks
             if (isJson && p.IndexOf("scene", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 return ItemType.Scene;
@@ -276,8 +259,8 @@ namespace VPB
                 case ItemType.General: return "Preset";
                 case ItemType.Hair: return "HairPresets";
                 case ItemType.HairItem: return "HairPresets";
-                case ItemType.ClothingPreset: return null; // Targets specific clothing items
-                case ItemType.HairPreset: return null; // Targets specific hair items
+                case ItemType.ClothingPreset: return null;
+                case ItemType.HairPreset: return null;
                 case ItemType.Morphs: return "MorphPresets";
                 case ItemType.Plugins: return "PluginPresets";
                 case ItemType.Pose: return "PosePresets";
@@ -285,8 +268,5 @@ namespace VPB
                 default: return null;
             }
         }
-
-
     }
-
 }

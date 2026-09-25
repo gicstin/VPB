@@ -139,7 +139,6 @@ namespace VPB
 
             bool localOnly = IsGlobalSourceFilterLocal();
 
-            // Mirrors title-bar Source Local (one Local story for Scenes + Appearance + global).
             string label = VPBTranslation.T("gallery.filter.local_only", "Local only");
             Color btnColor = localOnly ? appearanceColor : ColorInactiveRow;
 
@@ -170,10 +169,10 @@ namespace VPB
                     Color btnColor2 = isGenderActive ? active : inactive;
 
                     int cnt = 0;
-                    if (opt == "Male") cnt = isGenderActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
-                    else if (opt == "Female") cnt = isGenderActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
-                    else if (opt == "Futa") cnt = isGenderActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
-                    else if (opt == "Unknown") cnt = isGenderActive ? appearanceSubfilterCurrentCountUnknown : appearanceSubfilterFacetCountUnknown;
+                    if (opt == "Male") cnt = isGenderActive ? tagFacets.AppearanceSubfilterCurrentCountMale : tagFacets.AppearanceSubfilterFacetCountMale;
+                    else if (opt == "Female") cnt = isGenderActive ? tagFacets.AppearanceSubfilterCurrentCountFemale : tagFacets.AppearanceSubfilterFacetCountFemale;
+                    else if (opt == "Futa") cnt = isGenderActive ? tagFacets.AppearanceSubfilterCurrentCountFuta : tagFacets.AppearanceSubfilterFacetCountFuta;
+                    else if (opt == "Unknown") cnt = isGenderActive ? tagFacets.AppearanceSubfilterCurrentCountUnknown : tagFacets.AppearanceSubfilterFacetCountUnknown;
 
                     string label2 = opt + " (" + cnt + ")";
 
@@ -319,4 +318,3 @@ namespace VPB
         }
     }
 }
-

@@ -12,8 +12,6 @@ namespace VPB
         public string GetCurrentPath() => currentPath;
         public string GetCurrentExtension() => currentExtension;
         public string GetCurrentCreator() => currentCreator;
-        // Prefer browse category over chrome titleText — Settings/History overlays paint
-        // titleText without changing currentCategoryTitle; hide/restore must not treat those as category.
         public string GetTitle() =>
             !string.IsNullOrEmpty(currentCategoryTitle)
                 ? currentCategoryTitle
@@ -41,11 +39,6 @@ namespace VPB
             UpdateTabs();
         }
 
-        /// <summary>
-        /// Applies side-rail / Import layout for a new pane.
-        /// Cold VaM launch: <see cref="VPBConfig.GalleryDefaultLeftSidePanel"/> / Right (settings).
-        /// In-session Close/reopen: <see cref="VPBConfig.LastGalleryLeftSidePanel"/> / Right (browse memory).
-        /// </summary>
         public void ApplySidePanelDefaultsFromConfig()
         {
             if (VPBConfig.Instance == null) return;
@@ -77,8 +70,7 @@ namespace VPB
 
             ContentType? targetL = l;
             ContentType? targetR = r;
-            // Floating fallback: only for desktop (non-VR) floating mode on first-open defaults —
-            // not when restoring remembered None/None (user closed both rails).
+            // Floating fallback: only for desktop (non-VR) floating mode on first-open defaults.
             bool isVR = XrUtils.IsVrActive();
             bool vrAnchorMode = isVR && VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu;
             bool wantImport = !importSidebarInitAsClone && (leftImport || rightImport);
@@ -149,7 +141,6 @@ namespace VPB
             return null;
         }
 
-        /// <summary>Maps open side content to config token (None / Category / Creator / Tags / Path / History).</summary>
         private static string ContentTypeToSidePanelString(ContentType? type)
         {
             if (!type.HasValue) return "None";
@@ -178,29 +169,25 @@ namespace VPB
 
         private void CreateResizeHandles()
         {
-            // Handles are seated as real children of the bar layout groups so they inherit the exact
-            // padding/spacing of the existing bar buttons. Only the show/hide (dock mode + anchor) differs.
+            // Handles are real bar children so they inherit bar padding/spacing; only show/hide differs.
             GameObject leftSlot = _footerLeftSectionRT != null ? _footerLeftSectionRT.gameObject : backgroundBoxGO;
             GameObject rightSlot = _footerRightSectionRT != null ? _footerRightSectionRT.gameObject : backgroundBoxGO;
             Transform titleBarTr = backgroundBoxGO != null ? backgroundBoxGO.transform.Find("TitleBar") : null;
             GameObject titleBar = titleBarTr != null ? titleBarTr.gameObject : backgroundBoxGO;
 
-            // Floating-mode corner handles, alongside the bar buttons.
             _resizeHandleBottomRightGO = CreateFloatingResizeHandle(AnchorPresets.bottomRight, rightSlot, false);
             _resizeHandleBottomLeftGO = CreateFloatingResizeHandle(AnchorPresets.bottomLeft, leftSlot, true);
             _resizeHandleTopLeftGO = CreateTitleBarResizeHandle(titleBar);
 
-            // Fixed-dock handles share the same footer corner slots.
             CreateFixedModeResizeHandle(leftSlot, rightSlot);
         }
 
         private void CreateFixedModeResizeHandle(GameObject leftSlot, GameObject rightSlot)
         {
-            // Create Preview Border
             GameObject previewGO = new GameObject("ResizePreviewBorder");
             previewGO.transform.SetParent(canvas.transform, false);
             Image previewImg = previewGO.AddComponent<Image>();
-            previewImg.color = new Color(0.1f, 0.3f, 0.1f, 0.4f); // 40% visibility fill
+            previewImg.color = new Color(0.1f, 0.3f, 0.1f, 0.4f);
             previewImg.raycastTarget = false;
             Outline previewOutline = previewGO.AddComponent<Outline>();
             previewOutline.effectColor = new Color(0.1f, 0.3f, 0.1f, 0.4f); // 40% visibility border
@@ -209,7 +196,6 @@ namespace VPB
             previewGO.SetActive(false);
             previewGO.transform.SetAsLastSibling();
 
-            // Handle for Right/Top dock: footer left slot, drags anchorMin.x (width) + height.
             {
                 GameObject handleGO = UI.AddChildGOImage(leftSlot, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
                     GalleryUiDesignTokens.ResizeHandleFixedHitRef, GalleryUiDesignTokens.ResizeHandleFixedHitRef, Vector2.zero, rounded: true);
@@ -264,7 +250,6 @@ namespace VPB
                 _resizeHandleFixedBottomGO = handleGO;
             }
 
-            // Handle for Left dock: footer right slot, drags anchorMax.x (width) + height.
             {
                 GameObject handleGO = UI.AddChildGOImage(rightSlot, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
                     GalleryUiDesignTokens.ResizeHandleFixedHitRef, GalleryUiDesignTokens.ResizeHandleFixedHitRef, Vector2.zero, rounded: true);
@@ -286,8 +271,8 @@ namespace VPB
                 resizer.resizeX = true;
                 resizer.resizeY = true;
                 resizer.resizeAnchorMaxX = true;
-                resizer.minAnchorX = 0.15f; // min panel width (anchorMax.x)
-                resizer.maxAnchorX = 0.95f; // max panel width (anchorMax.x)
+                resizer.minAnchorX = 0.15f;
+                resizer.maxAnchorX = 0.95f;
                 resizer.minAnchorY = 0.05f;
                 resizer.maxAnchorY = 0.85f;
 
@@ -326,10 +311,9 @@ namespace VPB
             if (anchor == AnchorPresets.bottomRight) return "chevrons-down-right";
             if (anchor == AnchorPresets.bottomLeft) return "chevrons-down-left";
             if (anchor == AnchorPresets.topRight) return "chevrons-up-right";
-            return "chevrons-up-left"; // topLeft
+            return "chevrons-up-left";
         }
 
-        /// <summary>Floating-mode corner handle seated as a footer-bar layout child (inherits bar padding/spacing).</summary>
         private GameObject CreateFloatingResizeHandle(int anchor, GameObject parent, bool asFirstSibling)
         {
             GameObject handleGO = UI.AddChildGOImage(parent, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
@@ -353,13 +337,11 @@ namespace VPB
             if (asFirstSibling) handleGO.transform.SetAsFirstSibling();
             else handleGO.transform.SetAsLastSibling();
 
-            // Match the bar buttons: 40px square scaled by chrome scale.
             { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
 
             return handleGO;
         }
 
-        /// <summary>Floating-mode top-left handle in the (non-layout) title bar, vertically centred like its buttons.</summary>
         private GameObject CreateTitleBarResizeHandle(GameObject titleBar)
         {
             const int anchor = AnchorPresets.topLeft;
@@ -369,7 +351,6 @@ namespace VPB
             handleGO.GetComponent<Image>().raycastTarget = true;
             handleGO.AddComponent<UIHoverBorder>();
 
-            // Far-left of the title bar, vertically centred on the bar like the title-bar buttons.
             RectTransform handleRT = handleGO.GetComponent<RectTransform>();
             handleRT.pivot = new Vector2(0.5f, 0.5f);
             float xInset = GalleryUiDesignTokens.ResizeHandleEdgeMarginRef + GalleryUiDesignTokens.ButtonSizeRef * 0.5f;

@@ -5,11 +5,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>
-    /// Unified tag editor: Apply (selection tagging) + Database (vocab admin) in one
-    /// DetailStripTagMenu window. Side-pane Edit opens Database mode; strip opens Apply.
-    /// Path class: warm/cold UI — rebuild on demand, no per-frame work.
-    /// </summary>
     public partial class GalleryPanel
     {
         private enum DetailStripTagMenuMode
@@ -42,7 +37,6 @@ namespace VPB
         private GameObject _detailStripTagMenuDbNewTagBlockGO;
         private Text _detailStripTagMenuDbListHintText;
 
-        /// <summary>Side-pane Edit — open unified window in Database mode (vocab CRUD).</summary>
         private void ShowUserTagListEditor()
         {
             DestroyLegacyUserTagEditorOverlayIfPresent();
@@ -73,7 +67,6 @@ namespace VPB
             DetailStripCloseTagMenu();
         }
 
-        /// <summary>Ensures Database pane exists inside unified tag menu (no separate modal overlay).</summary>
         private void EnsureUserTagEditorUiBuilt()
         {
             DestroyLegacyUserTagEditorOverlayIfPresent();
@@ -132,10 +125,6 @@ namespace VPB
             ClearUserTagEditorUiFieldRefs();
         }
 
-        /// <summary>
-        /// Keep mode tabs + Database pane on global ChromeScale (ButtonSizeRef / PopupMenu fonts).
-        /// Called from <see cref="DetailStripSyncTagMenuLayout"/>.
-        /// </summary>
         private void DetailStripSyncTagMenuUnifiedChrome(float s)
         {
             if (s <= 0f) s = 1f;
@@ -227,7 +216,6 @@ namespace VPB
                     rowsVlg.spacing = GalleryUiDesignTokens.PopupMenuRowSpacingRef * s;
                 }
                 // Do NOT RebuildUserTagEditorRows here — full row recreate is warm-path heavy.
-                // Scale applied on next open / filter / sort rebuild.
             }
 
             float newH = DetailStripTagMenuDbNewTagHRef * s;
@@ -461,7 +449,6 @@ namespace VPB
                 minHeight: 80f * s,
                 preferredHeight: 80f * s);
 
-            // List header: sort + clear selection
             _detailStripTagMenuDbListHeaderGO = UI.CreateChildRT(_detailStripTagMenuDbHostGO, "DbListHeader");
             UI.AddHLG(
                 _detailStripTagMenuDbListHeaderGO,
@@ -542,7 +529,6 @@ namespace VPB
                 }
             }
 
-            // Compact multiline create — height follows ChromeScale.
             _detailStripTagMenuDbNewTagBlockGO = UI.CreateChildRT(_detailStripTagMenuDbHostGO, "NewTagBlock");
             UI.AddVLG(_detailStripTagMenuDbNewTagBlockGO, UI.GapHair(s));
             float newH = DetailStripTagMenuDbNewTagHRef * s;
@@ -638,7 +624,6 @@ namespace VPB
             arPadR.transform.SetParent(_detailStripTagMenuDbActionRowGO.transform, false);
             UI.AddLE(arPadR, minWidth: 0f, flexibleWidth: 1f);
 
-            // Nested modals on tag-menu root (same canvas freedom as parent window).
             UserTagEditorBuildNameDialog(
                 _detailStripTagMenuRoot.transform, "UserTagEditorMergeModal", "MergeDialogPanel", "MergeDialogInput", "MergeDialogButtons",
                 VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…"), "MergeTitle",
@@ -659,7 +644,6 @@ namespace VPB
                 UserTagEditorCloseRenameDialog, UserTagEditorConfirmRenameFromDialog,
                 out _userTagEditorRenameModalGo, out _userTagEditorRenameModalTitleText, out _userTagEditorRenameModalInput);
 
-            // Reuse title text slot for DB count when in Database mode.
             _userTagEditorTitleText = _detailStripTagMenuSelText;
             _userTagEditorRoot = _detailStripTagMenuRoot;
             _userTagEditorFilterInput = _detailStripTagMenuSearch;
@@ -677,7 +661,6 @@ namespace VPB
             CacheUserTagsSideTab();
         }
 
-        /// <summary>Open unified tag menu in a mode (Apply or Database).</summary>
         private void DetailStripOpenTagMenu(DetailStripTagMenuMode mode)
         {
             DetailStripEnsureTagMenu();
@@ -689,7 +672,6 @@ namespace VPB
             if (_detailStripTagMenuRoot.activeSelf
                 && _detailStripTagMenuMode == mode)
             {
-                // Already open in requested mode — bring to front + refresh.
                 _detailStripTagMenuRoot.transform.SetAsLastSibling();
                 DetailStripApplyTagMenuModeUi(mode, rebuild: true);
                 return;
@@ -715,12 +697,12 @@ namespace VPB
             {
                 Vector2 size = _detailStripTagMenuPanelRT.sizeDelta;
                 _detailStripTagMenuPanelRT.anchoredPosition =
-                    DetailStripTagMenuCenterToTopLeft(_detailStripTagMenuSavedPos.Value, size);
+                    FloatPanelCoords.CenterToTopLeft(_detailStripTagMenuSavedPos.Value, size);
             }
             DetailStripClampTagMenuPanelInView();
             if (_detailStripTagMenuDragged && _detailStripTagMenuPanelRT != null)
             {
-                Vector2 center = DetailStripTagMenuTopLeftToCenter(
+                Vector2 center = FloatPanelCoords.TopLeftToCenter(
                     _detailStripTagMenuPanelRT.anchoredPosition, _detailStripTagMenuPanelRT.sizeDelta);
                 _detailStripTagMenuSavedPos = center;
                 DetailStripPersistTagMenuPos(center);
@@ -762,7 +744,6 @@ namespace VPB
             _detailStripTagMenuMode = mode;
             bool db = mode == DetailStripTagMenuMode.Database;
 
-            // Keep root alive for whole mode switch — no intermediate hide.
             if (!_detailStripTagMenuRoot.activeSelf)
                 _detailStripTagMenuRoot.SetActive(true);
 
@@ -889,7 +870,6 @@ namespace VPB
                 && _detailStripTagMenuRoot.activeSelf;
         }
 
-        /// <summary>Shared filter path for Apply + Database list rebuilds.</summary>
         private void DetailStripOnTagMenuFilterChanged(string val)
         {
             _detailStripTagMenuFilter = val ?? "";
@@ -920,7 +900,6 @@ namespace VPB
 
         private Transform DetailStripTagMenuCategoryModalHost()
         {
-            // Prefer tag-menu panel so dim + dialog center on floating window (not full canvas).
             if (_detailStripTagMenuPanelGO != null) return _detailStripTagMenuPanelGO.transform;
             if (_detailStripTagMenuRoot != null) return _detailStripTagMenuRoot.transform;
             if (_userTagEditorRoot != null) return _userTagEditorRoot.transform;

@@ -4,10 +4,7 @@ using System.Text;
 
 namespace VPB
 {
-    /// <summary>
-    /// One AND-group inside a title-bar search (all atoms must match).
-    /// Top-level query is OR of these groups.
-    /// </summary>
+    /// <summary>One AND-group inside a title-bar search (all atoms must match).</summary>
     internal sealed class GallerySearchBranch
     {
         internal readonly List<string> BroadTerms = new List<string>();
@@ -66,9 +63,6 @@ namespace VPB
         }
     }
 
-    /// <summary>
-    /// Parsed title-bar search AST.
-    /// </summary>
     internal sealed class GallerySearchQuery
     {
         [Flags]
@@ -97,25 +91,17 @@ namespace VPB
             StatusFlags.Issues | StatusFlags.PluginContent | StatusFlags.Flagged
             | StatusFlags.Unreviewed | StatusFlags.Undeclared;
 
-        /// <summary>Fresh empty query (not a shared mutable singleton).</summary>
         internal static GallerySearchQuery Empty { get { return new GallerySearchQuery(); } }
 
-        /// <summary>OR of AND-branches. Empty list = empty query.</summary>
         internal readonly List<GallerySearchBranch> Branches = new List<GallerySearchBranch>();
 
-        /// <summary>Union of all branch broad terms (tag-key lookup / legacy helpers).</summary>
         internal readonly List<string> BroadTerms = new List<string>();
-        /// <summary>Union of all branch broad excludes.</summary>
         internal readonly List<string> BroadExclude = new List<string>();
-        /// <summary>Union of all branch tag includes (tag-key lookup).</summary>
         internal readonly List<string> TagInclude = new List<string>();
-        /// <summary>Union of all branch tag excludes (tag-key lookup).</summary>
         internal readonly List<string> TagExclude = new List<string>();
-        /// <summary>Union of all branch creator terms.</summary>
         internal readonly List<string> CreatorTerms = new List<string>();
         internal readonly List<string> FileTerms = new List<string>();
         internal PkgIssueFlags IssueMask = PkgIssueFlags.None;
-        /// <summary>Union of status flags across branches (for RequiresSqlRefresh).</summary>
         internal StatusFlags Status = StatusFlags.None;
 
         internal bool IsEmpty
@@ -133,7 +119,6 @@ namespace VPB
 
         internal bool HasStatusFlags { get { return Status != StatusFlags.None; } }
 
-        /// <summary>Which shipped-data-pack field an atom searches.</summary>
         internal enum DataPackAtomKind
         {
             Subject = 0,
@@ -147,7 +132,6 @@ namespace VPB
         internal readonly List<string> PackHubCatTerms = new List<string>();
         internal readonly List<string> PackAnyTerms = new List<string>();
 
-        /// <summary>True when any branch carries a data-pack atom (include or exclude).</summary>
         internal bool HasDataPackAtoms
         {
             get
@@ -163,7 +147,6 @@ namespace VPB
 
         internal static bool Any(List<string> list) { return list != null && list.Count > 0; }
 
-        /// <summary>Needs SQL refresh (loaded / tagged) rather than pure in-memory name scan.</summary>
         internal bool RequiresSqlRefresh
         {
             get
@@ -235,7 +218,6 @@ namespace VPB
                 if (string.IsNullOrEmpty(tok)) continue;
                 string lower = tok.ToLowerInvariant();
 
-                // Boolean keywords
                 if (lower == "or")
                 {
                     if (!branch.IsEmpty)
@@ -334,10 +316,7 @@ namespace VPB
             return q;
         }
 
-        /// <summary>
-        /// Clone with BroadTerms/BroadExclude stripped (NameOnly / NameStartsWith cannot use path LIKE).
-        /// Keeps tag:/creator:/status so SQL can still narrow structured atoms.
-        /// </summary>
+        /// <summary>Clone with BroadTerms/BroadExclude stripped (NameOnly / NameStartsWith cannot use path LIKE).</summary>
         internal GallerySearchQuery WithoutBroadTerms()
         {
             if (IsEmpty || Branches == null || Branches.Count == 0) return Empty;
@@ -402,10 +381,6 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Comma-separated tag list. Leading <c>-</c> on a part = exclude.
-        /// Examples: <c>wet,shiny,-nsfw</c>, <c>#a,#b,-c</c>.
-        /// </summary>
         private static void AddCommaTagList(GallerySearchBranch branch, string body, bool forceExclude)
         {
             if (branch == null || string.IsNullOrEmpty(body)) return;
