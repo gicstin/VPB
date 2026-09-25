@@ -1,10 +1,18 @@
 {
   "IndexVersion": 1,
-  "UpdatedUtc": "2026-09-23T16:37:09Z",
+  "UpdatedUtc": "2026-09-25T16:58:37Z",
   "MinRollbackVersion": "0.32.406",
   "ExcludedBelowMin": 0,
   "Keep": 60,
   "Releases": [
+    {
+      "Version": "0.32.893",
+      "Tag": "build-0.32.893-80b36dd",
+      "Commit": "80b36dd750cfd3648b30c46a9e562f1267881fca",
+      "DateUtc": "2026-09-25T16:58:29Z",
+      "Notes": "fix: cleanup and fixes - option to force to always load .latest deps - quick launch button on grid label - perfromance fixes",
+      "Schema": 13
+    },
     {
       "Version": "0.32.880",
       "Tag": "build-0.32.880-fdbd043",
