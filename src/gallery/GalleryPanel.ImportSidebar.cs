@@ -88,7 +88,7 @@ namespace VPB
                     {
                         ShowTemporaryStatus(VPBTranslation.T(
                             "gallery.import.sidebar_gated_tip",
-                            "Import sidebar opens in Scenes category only"), 2f);
+                            "Import opens in Scenes or Appearances"), 2f);
                     }
                     catch { }
                     return;
@@ -272,10 +272,9 @@ namespace VPB
             }
         }
 
-        // The Scene Import sidebar only makes sense in the Scenes category (its source is a scene's Person atoms).
         private bool ImportSidebarCategoryAllowed()
         {
-            return currentCategoryTitle == "Scenes";
+            return currentCategoryTitle == "Scenes" || IsAppearanceCategoryTitle();
         }
 
         /// <summary>Float outside Scenes: keep panel, freeze source scene/person picks.</summary>
@@ -364,7 +363,9 @@ namespace VPB
             if (selectedFiles == null || selectedFiles.Count == 0) return;
             if (ImportSidebarMultiSelectBlocked()) return;
             FileEntry sel = selectedFiles[selectedFiles.Count - 1];
-            if (sel == null || importSidebarSourceScene == sel) return;
+            if (sel == null || (importSidebarSourceScene == sel && importSidebarSourceError == null
+                && (importSidebarSceneJsonLoading || importSidebarLoadedSceneJSON != null)
+                && importSidebarReadRequest != null && importSidebarReadRequest.IsCurrent())) return;
             LoadSourceScene(sel);
         }
 

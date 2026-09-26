@@ -49,7 +49,7 @@ namespace VPB
                     {
                         SetStatus(VPBTranslation.T(
                             "gallery.import.sidebar_gated_tip",
-                            "Import sidebar opens in Scenes category only"));
+                            "Import opens in Scenes or Appearances"));
                     }
                     catch { }
                     return;
@@ -130,7 +130,7 @@ namespace VPB
                     {
                         ShowTemporaryStatus(VPBTranslation.T(
                             "gallery.import.dock_needs_scenes",
-                            "Switch to Scenes to dock Import as a side panel"), 2.5f);
+                            "Switch to Scenes or Appearances to dock Import"), 2.5f);
                     }
                     catch { }
                     return;
@@ -237,7 +237,7 @@ namespace VPB
 
             importSidebarFloatTitleLabel = UI.CreateEmphasisTitleLabel(
                 importSidebarFloatTitleBarGO,
-                VPBTranslation.T("gallery.import.float_title", "Scene Import"),
+                VPBTranslation.T("gallery.import.float_title", "Import"),
                 GalleryUiDesignTokens.PopupMenuRowFontRef,
                 GalleryUiColorTokens.TextPrimary, TextAnchor.MiddleLeft, name: "Title");
             UI.AddLE(importSidebarFloatTitleLabel.gameObject, flexibleWidth: 1f, minWidth: 60f);

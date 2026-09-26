@@ -1188,6 +1188,23 @@ namespace VPB
             return false;
         }
 
+        internal static void ClearOutlinerUndoForSceneLoad()
+        {
+            if (Gallery.singleton == null || Gallery.singleton.Panels == null) return;
+            var panels = Gallery.singleton.Panels;
+            for (int i = 0; i < panels.Count; i++)
+            {
+                GalleryPanel panel = panels[i];
+                if (panel == null) continue;
+                panel._outlinerUndo.Clear();
+                panel._outlinerResetUndo = null;
+                panel._outlinerResetUndoUntil = 0f;
+                panel._outlinerPendingVamUid = null;
+                panel.SyncOutlinerResetUndoBar();
+                panel.SyncOutlinerUndoButtons();
+            }
+        }
+
         internal void RefreshOutlinerAfterSceneChange()
         {
             if (_outlinerRoot == null) return;

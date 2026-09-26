@@ -9,6 +9,39 @@ namespace VPB.Tests
     {
         public SearchRescueTests(VamFixture vam) { }
 
+        [Fact]
+        public void FileFilterIncludesOwnersBeyondTwentyThousandMatchingFiles()
+        {
+            using (var install = new TempInstall("content-owners"))
+            {
+                long files, packages;
+                Assert.True(VpbLocalDatabase.TryGetContentIndexFileCount(out files, out packages));
+                using (var conn = new VpbSqlite3.Connection(VpbLocalDatabase.GetLocalDatabasePathForDiagnostics()))
+                {
+                    conn.ExecUtf8("BEGIN;");
+                    using (var st = conn.Prepare("INSERT INTO pkg_file(pkg_uid, internal_path, size, seq, wtime) VALUES(?, ?, 1, ?, 0)"))
+                    {
+                        for (int i = 0; i < 20001; i++)
+                        {
+                            st.BindText(1, i < 20000 ? "A.Pack.1" : "B.Pack.1");
+                            st.BindText(2, (i < 20000 ? "a/morph/" : "z/morph/") + i);
+                            st.BindInt64(3, i);
+                            st.Step();
+                            st.Reset();
+                        }
+                    }
+                    conn.ExecUtf8("COMMIT;");
+                }
+                var owners = new HashSet<string>();
+                Assert.True(VpbLocalDatabase.TrySearchPackageFileOwners("morph", owners));
+                Assert.Equal(2, owners.Count);
+                Assert.Contains("B.Pack.1", owners);
+                owners.Clear();
+                Assert.True(VpbLocalDatabase.TrySearchPackageFileOwners("%", owners));
+                Assert.Empty(owners);
+            }
+        }
+
         private static int Distance(string a, string b, int max)
         {
             var prev = new int[64];

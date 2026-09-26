@@ -9,6 +9,7 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private Action<List<string>> _mergeOutfitApplySelection;
         private GameObject _mergeOutfitModalRoot;
         private Transform _mergeOutfitListParent;
         private Text _mergeOutfitTitleText;
@@ -101,6 +102,7 @@ namespace VPB
 
         private void HideMergeOutfitPicker()
         {
+            _mergeOutfitApplySelection = null;
             if (_mergeOutfitModalRoot != null)
             {
                 try { UnityEngine.Object.Destroy(_mergeOutfitModalRoot); } catch { }
@@ -499,7 +501,9 @@ namespace VPB
             _mergeOutfitPresetJC = null;
             _mergeOutfitItems = null;
             _mergeOutfitSelectedUids = null;
+            Action<List<string>> applySelection = _mergeOutfitApplySelection;
             HideMergeOutfitPicker();
+            if (applySelection != null) { applySelection(selected); return; }
 
             try
             {

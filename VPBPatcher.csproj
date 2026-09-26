@@ -14,6 +14,7 @@
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <VaMPath Condition="'$(OS)' == 'Windows_NT' And ('$(VaMPath)' == '' Or $([System.String]::Copy('$(VaMPath)').StartsWith('/'))) And Exists('C:/vam/VaM_Data/Managed/Assembly-CSharp.dll')">C:/vam</VaMPath>
     <VaMPath Condition="'$(VaMPath)' == ''">F:/VamDev</VaMPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">

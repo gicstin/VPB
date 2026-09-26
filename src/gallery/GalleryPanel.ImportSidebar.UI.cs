@@ -429,14 +429,17 @@ namespace VPB
             float gap = ImportSidebarBaseRowSpacing * s;
             float gridW = Mathf.Floor(contentWidth);
             float cellW = Mathf.Floor((gridW - gap) * 0.5f);
-            const int typeRadioRows = 6;
+            int visibleTypes = 0;
+            foreach (GameObject button in importSidebarTypeRadioButtons.Values)
+                if (button.activeSelf) visibleTypes++;
+            int typeRadioRows = (visibleTypes + 1) / 2;
             g.cellSize = new Vector2(cellW, rowH);
             g.spacing = new Vector2(gap, gap);
             if (le != null)
             {
                 le.preferredWidth = gridW;
                 le.flexibleWidth = 0f;
-                le.preferredHeight = typeRadioRows * rowH + (typeRadioRows - 1) * gap;
+                le.preferredHeight = typeRadioRows * rowH + Mathf.Max(0, typeRadioRows - 1) * gap;
             }
         }
 
@@ -762,9 +765,9 @@ namespace VPB
                 if (go == null) return;
                 if (gatedSide)
                     AddTooltip(go, "gallery.import.sidebar_gated_tip",
-                        "Import needs Scenes — click to switch category and restore");
+                        "Import needs Scenes or Appearances; click to return");
                 else if (importSidebarDetached && importSidebarOpenIntent)
-                    AddTooltip(go, "gallery.import.tip.float_toggle", "Scene Import floating — click to close. Toggle float{hint:import_sidebar}");
+                    AddTooltip(go, "gallery.import.tip.float_toggle", "Import floating: click to close. Toggle float{hint:import_sidebar}");
                 else
                     AddTooltip(go, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
             }

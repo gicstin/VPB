@@ -65,7 +65,8 @@ namespace VPB
             string storableNameOverride = null,
             bool skipDependencyPrewarm = false,
             bool updateLastRestoredData = true,
-            bool? suppressScaleChange = null)
+            bool? suppressScaleChange = null,
+            bool sourcePrepared = false)
         {
             bool probe = resourceType == VpbResourceType.Appearance;
             if (probe)
@@ -92,7 +93,7 @@ namespace VPB
             {
                 LoadPresetCore(sourceEntry, targetAtom, resourceType, clothingMode, presetJC,
                     suppressRoot, storableNameOverride, skipDependencyPrewarm,
-                    updateLastRestoredData, suppressScaleChange, probe);
+                    updateLastRestoredData, suppressScaleChange, probe, sourcePrepared);
             }
             finally
             {
@@ -150,7 +151,7 @@ namespace VPB
             bool skipDependencyPrewarm,
             bool updateLastRestoredData,
             bool? suppressScaleChange,
-            bool probe)
+            bool probe, bool sourcePrepared)
         {
             if (targetAtom == null)
             {
@@ -199,8 +200,10 @@ namespace VPB
 
             if (probe) AppearanceApplyProbe.Phase("preset_summary", AppearanceApplyProbe.SummarizePreset(preset));
 
+            bool importsMorphs = resourceType == VpbResourceType.Appearance || resourceType == VpbResourceType.Morphs
+                || (resourceType == VpbResourceType.General && storableNameOverride == "MorphPresets");
             bool presetClonedForOwnerlessMorphs = false;
-            if (resourceType == VpbResourceType.Appearance
+            if (!sourcePrepared && importsMorphs
                 && sourceEntry != null
                 && !UI.IsLikelyVarPackageReference(UI.NormalizePath(sourceEntry.Uid)))
             {
@@ -274,7 +277,7 @@ namespace VPB
             }
 
             // Appearance / Morphs: ensure package morphs are in DAZ banks before LoadPresetFromJSON.
-            if (resourceType == VpbResourceType.Appearance || resourceType == VpbResourceType.Morphs)
+            if (importsMorphs)
             {
                 try
                 {
@@ -299,7 +302,7 @@ namespace VPB
                 }
             }
 
-            if (resourceType == VpbResourceType.Appearance && sourceEntry != null)
+            if (!sourcePrepared && resourceType == VpbResourceType.Appearance && sourceEntry != null)
             {
                 if (presetJC != null && !presetClonedForOwnerlessMorphs)
                     preset = CloneJsonClassStatic(preset);
@@ -678,7 +681,7 @@ namespace VPB
                         }
 
                         ApplyPresetToStorable(targetAtom, storableNameOverride, "'" + storableNameOverride + "'", "Generic '" + storableNameOverride + "' preset", preset,
-                            clothingMode == ClothingApplyMode.Merge, sourceEntry, updateLastRestoredData);
+                            clothingMode == ClothingApplyMode.Merge, sourceEntry, updateLastRestoredData, applyManagerOptions: true);
                     }
                     catch (Exception ex)
                     {
@@ -696,7 +699,7 @@ namespace VPB
         }
 
         private static bool ApplyPresetToStorable(Atom targetAtom, string storableName, string storableLabel, string appliedLabel,
-            JSONClass preset, bool mergeLoad, FileEntry sourceEntry, bool updateLastRestoredData)
+            JSONClass preset, bool mergeLoad, FileEntry sourceEntry, bool updateLastRestoredData, bool applyManagerOptions = false)
         {
             JSONStorable presetStorable = targetAtom.GetStorableByID(storableName);
             if (presetStorable == null)
@@ -717,21 +720,37 @@ namespace VPB
             // PresetManager.LoadPresetFromJSON overwrites the storable's "storable" lock-state child plus loadPresetOnSelect/presetName.
             PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
 
+            bool includeAppearance = presetManager.includeAppearance;
+            bool includePhysical = presetManager.includePhysical;
+            bool includeOptional = presetManager.includeOptional;
+            JSONClass options = applyManagerOptions ? FindPresetOptions(preset, storableName) : null;
             MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
             try
             {
+                if (options != null)
+                {
+                    if (options["includeAppearance"] != null) presetManager.includeAppearance = options["includeAppearance"].AsBool;
+                    if (options["includePhysical"] != null) presetManager.includePhysical = options["includePhysical"].AsBool;
+                    if (options["includeOptional"] != null) presetManager.includeOptional = options["includeOptional"].AsBool;
+                }
                 if (!string.IsNullOrEmpty(sourcePath))
                     MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
                 InvokeLoadPresetFromJSON(presetManager, preset, mergeLoad, appliedLabel);
             }
             finally
             {
+                if (applyManagerOptions)
+                {
+                    presetManager.includeAppearance = includeAppearance;
+                    presetManager.includePhysical = includePhysical;
+                    presetManager.includeOptional = includeOptional;
+                }
+                RestorePresetParamsSnapshot(targetAtom, snap);
                 if (!string.IsNullOrEmpty(sourcePath))
                     MVR.FileManagement.FileManager.PopLoadDir();
             }
 
-            RestorePresetParamsSnapshot(targetAtom, snap);
             return true;
         }
 
@@ -1207,6 +1226,82 @@ namespace VPB
             return slice;
         }
 
+        internal static JSONClass BuildOutfitComponentSlice(JSONClass preset, VpbResourceType type, HashSet<string> selected = null)
+        {
+            if (type == VpbResourceType.Skin)
+                return selected != null && selected.Contains(MergeOutfitSkinUid) ? VpbImportSource.Slice(preset, type) : null;
+            if (type == VpbResourceType.Clothing)
+            {
+                JSONClass clothing = BuildSelectedClothingMergeSlice(preset, selected);
+                if (clothing != null) clothing["setUnlistedParamsToDefault"] = selected == null ? "true" : "false";
+                return VpbImportSource.Clone(clothing);
+            }
+            JSONClass geometry = FindGeometryStorable(preset["storables"].AsArray);
+            JSONClass hair = BuildSelectedHairMergeSlice(preset, selected ?? CollectGeometryArrayUids(geometry, "hair"));
+            if (hair != null) hair["setUnlistedParamsToDefault"] = selected == null ? "true" : "false";
+            return VpbImportSource.Clone(hair);
+        }
+
+        internal static JSONClass BuildRealClothingReplacement(JSONClass preset, Atom target)
+        {
+            JSONStorable geometry = target != null ? target.GetStorableByID("geometry") : null;
+            if (geometry == null) throw new InvalidOperationException("Target has no clothing geometry");
+            JSONClass keep = new JSONClass();
+            JSONArray storables = new JSONArray();
+            storables.Add(geometry.GetJSON());
+            foreach (JSONClass storable in ClothingLoadingUtils.CaptureActiveClothingStorableSnapshots(target))
+                storables.Add(storable);
+            keep["storables"] = storables;
+            return VpbImportSource.Clone(BuildClothingOnlyPresetSlice(preset, keep));
+        }
+
+        internal static JSONClass CapturePresetForUndo(Atom atom, string managerId)
+        {
+            JSONStorable control = atom != null ? atom.GetStorableByID(managerId) : null;
+            MeshVR.PresetManager manager = control != null ? control.GetComponentInChildren<MeshVR.PresetManager>() : null;
+            if (manager == null) return null;
+            MethodInfo store = typeof(MeshVR.PresetManager).GetMethod("StoreStorables",
+                BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { typeof(JSONClass), typeof(bool) }, null);
+            if (store == null) return null;
+            bool physical = manager.includePhysical, appearance = manager.includeAppearance, optional = manager.includeOptional;
+            try
+            {
+                manager.includePhysical = manager.includeAppearance = manager.includeOptional = true;
+                JSONClass snapshot = new JSONClass();
+                store.Invoke(manager, new object[] { snapshot, true });
+                snapshot["setUnlistedParamsToDefault"] = new JSONData(true);
+                JSONClass options = FindPresetOptions(snapshot, managerId);
+                if (options == null)
+                {
+                    options = new JSONClass();
+                    options["id"] = managerId;
+                    snapshot["storables"].AsArray.Add(options);
+                }
+                options["includePhysical"] = new JSONData(true);
+                options["includeAppearance"] = new JSONData(true);
+                options["includeOptional"] = new JSONData(true);
+                return CloneJsonClassStatic(snapshot);
+            }
+            finally
+            {
+                manager.includePhysical = physical;
+                manager.includeAppearance = appearance;
+                manager.includeOptional = optional;
+            }
+        }
+
+        private static JSONClass FindPresetOptions(JSONClass preset, string id)
+        {
+            JSONArray storables = preset != null ? preset["storables"] as JSONArray : null;
+            if (storables == null) return null;
+            foreach (JSONNode node in storables)
+            {
+                JSONClass s = node as JSONClass;
+                if (s != null && s["id"].Value == id) return s;
+            }
+            return null;
+        }
+
         private static JSONClass ResolvePresetJson(FileEntry sourceEntry, JSONClass presetJC)
         {
             if (presetJC != null) return presetJC;
@@ -1586,9 +1681,7 @@ namespace VPB
 
         private static JSONClass CloneJsonClassStatic(JSONClass jc)
         {
-            if (jc == null) return null;
-            try { return JSON.Parse(JsonSerializationUtil.Serialize(jc, 8192)).AsObject; }
-            catch { return jc; }
+            return VpbImportSource.Clone(jc);
         }
 
         private static bool IsClothingItemStorableIdStatic(string sid)

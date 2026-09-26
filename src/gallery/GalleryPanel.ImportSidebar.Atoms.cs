@@ -1,7 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Threading;
+using System.IO;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,6 +12,26 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private VpbImportSourceKind importSidebarSourceKind;
+        private readonly VpbImportReadQueue importSidebarReadQueue = new VpbImportReadQueue();
+        private VpbImportReadRequest importSidebarReadRequest;
+        private string importSidebarSourceError;
+        private JSONClass importSidebarPresetView;
+        private string importSidebarPresetViewAtomId;
+        private Text importSidebarSourceCaption;
+        private Text importSidebarRandomLabel;
+        private bool ImportSidebarHasSceneSource { get { return importSidebarSourceKind == VpbImportSourceKind.Scene; } }
+
+        private JSONClass GetImportSidebarPresetView()
+        {
+            if (importSidebarPresetView == null || importSidebarPresetViewAtomId != importSidebarSourceAtomId)
+            {
+                importSidebarPresetView = VpbImportSource.Preset(importSidebarLoadedSceneJSON, importSidebarSourceKind, importSidebarSourceAtomId);
+                importSidebarPresetViewAtomId = importSidebarSourceAtomId;
+            }
+            return importSidebarPresetView;
+        }
+
         private Transform importSidebarSourceListContainer;
         private Transform importSidebarTargetListContainer;
 
@@ -50,10 +70,11 @@ namespace VPB
                 rndRow.transform,
                 VPBTranslation.T("gallery.import.wizard.random_scene", "\u21ba  Random Scene"),
                 ImportSidebarBaseFontSize);
+            importSidebarRandomLabel = rndLabel;
             rndLabel.alignment = TextAnchor.MiddleCenter;
             rndBtn.onClick.AddListener(OnImportSidebarRandomSceneClicked);
             AddTooltip(rndRow, "gallery.import.wizard.random_scene_tip",
-                "Pick a random scene from the Scenes grid and load it as the import source");
+                "Pick and import a random source from the current Scenes or Appearances grid");
             LayoutElement rndLeCaptured = rndLe;
             Text rndLabelCaptured = rndLabel;
             innerPaneScaleActions.Add(s => {
@@ -61,7 +82,7 @@ namespace VPB
                 ApplyScaledFont(rndLabelCaptured, ImportSidebarBaseFontSize, s);
             });
 
-            AddImportListCaption(content, VPBTranslation.T("gallery.import.source_list_caption", "Source (from scene)"));
+            importSidebarSourceCaption = AddImportListCaption(content, VPBTranslation.T("gallery.import.source_list_caption", "Source (from scene)"));
             importSidebarSourceListContainer = content;
             for (int i = 0; i < ImportSidebarMaxRowsPerList; i++)
                 importSidebarSourceRowPool.Add(CreateImportSidebarAtomRow(content, i, true));
@@ -75,7 +96,7 @@ namespace VPB
             foreach (GameObject go in importSidebarTargetRowPool) go.SetActive(false);
         }
 
-        private void AddImportListCaption(Transform parent, string label)
+        private Text AddImportListCaption(Transform parent, string label)
         {
             Text t = UI.CreateLabel(parent.gameObject, label, ImportSidebarBaseFontSize, UI.PopupMutedText, TextAnchor.MiddleLeft, raycastTarget: false, name: "Caption");
             LayoutElement le = UI.AddLE(t.gameObject, preferredHeight: ImportSidebarBaseRowHeight * 0.7f, flexibleWidth: 1f);
@@ -86,6 +107,7 @@ namespace VPB
                 if (leCaptured != null) leCaptured.preferredHeight = ImportSidebarBaseRowHeight * 0.7f * s;
                 ApplyScaledFont(tCaptured, ImportSidebarBaseFontSize, s);
             });
+            return t;
         }
 
         private GameObject CreateImportSidebarAtomRow(Transform parent, int index, bool isSource)
@@ -370,13 +392,14 @@ namespace VPB
 
         private void OnImportSidebarAtomRowClicked(int index, bool isSource)
         {
+            if (importSidebarApplying) return;
             if (isSource && ImportSidebarSourceEditsLocked())
             {
                 try
                 {
                     ShowTemporaryStatus(VPBTranslation.T(
                         "gallery.import.wizard.scenes_locked",
-                        "Source locked — return to Scenes to change scene/person."), 2f);
+                        "Source locked: return to Scenes or Appearances to select a source."), 2f);
                 }
                 catch { }
                 return;
@@ -384,6 +407,7 @@ namespace VPB
 
             if (isSource)
             {
+                if (!ImportSidebarHasSceneSource) return;
                 if (index >= 0 && index < importSidebarSourcePersonIds.Count)
                 {
                     importSidebarSourceAtomId = importSidebarSourcePersonIds[index];
@@ -413,6 +437,24 @@ namespace VPB
 
         private void RenderSourceList()
         {
+            if (importSidebarSourceCaption != null)
+                importSidebarSourceCaption.text = ImportSidebarHasSceneSource ? "Source (from scene)" : "Source appearance";
+            if (importSidebarRandomLabel != null)
+                importSidebarRandomLabel.text = IsAppearanceCategoryTitle() ? "Random Appearance" : "Random Scene";
+            if (!ImportSidebarHasSceneSource)
+            {
+                for (int i = 0; i < importSidebarSourceRowPool.Count; i++)
+                {
+                    GameObject row = importSidebarSourceRowPool[i];
+                    row.SetActive(i == 0 && importSidebarSourceScene != null);
+                    if (i != 0) continue;
+                    SetImportSidebarRowText(row, importSidebarSourceScene != null ? importSidebarSourceScene.Name : "");
+                    SetImportSidebarRowGender(importSidebarSourceRowGenderSlots, i, LooseVapGenderProbe.Gender.Unknown);
+                    SetImportSidebarRowSelected(row, true);
+                }
+                RebuildImportSidebarContent();
+                return;
+            }
             int n = importSidebarSourcePersonIds.Count;
 
             if (n == 1 && string.IsNullOrEmpty(importSidebarSourceAtomId))
@@ -454,14 +496,24 @@ namespace VPB
                 {
                     ShowTemporaryStatus(VPBTranslation.T(
                         "gallery.import.wizard.scenes_locked",
-                        "Source locked — return to Scenes to change scene/person."), 2f);
+                        "Source locked: return to Scenes or Appearances to select a source."), 2f);
                 }
                 catch { }
                 return;
             }
 
+            if (importSidebarApplying) return;
             CancelImportSceneJsonLoad();
             importSidebarSourceScene = entry;
+            importSidebarSourceKind = entry != null && (AppearanceGenderClassifier.ResolveIsPresetAppearance(entry)
+                || AppearanceGenderClassifier.ResolveIsCustomAppearance(entry))
+                ? VpbImportSourceKind.Appearance : VpbImportSourceKind.Scene;
+            if (!ImportSidebarHasSceneSource && importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance))
+                VpbImportSource.Select(importSidebarMultiSelectedTypes, VpbResourceType.Appearance);
+            importSidebarReadRequest = null;
+            importSidebarSourceError = null;
+            importSidebarPresetView = null;
+            importSidebarPresetViewAtomId = null;
             importSidebarLoadedSceneJSON = null;
             importSidebarSourcePersonIds.Clear();
             importSidebarSourceGenders.Clear();
@@ -475,21 +527,12 @@ namespace VPB
                 return;
             }
 
-            if (VpbLocalDatabase.TryReadSceneAtomIds(entry, importSidebarSourcePersonIds, importSidebarSourceGenders))
-            {
-                if (importSidebarSourcePersonIds.Count > 0)
-                    importSidebarSourceAtomId = importSidebarSourcePersonIds[0];
-                RenderSourceList();
-                RefreshImportSidebarAfterSourceChange();
-                BeginImportSceneJsonLoad(entry, writePersonCache: false);
-                return;
-            }
-
-            // MISS / STALE: read+parse across frames (VAR ZipFile stay on main; JSON.Parse on ThreadPool).
-            importSidebarSourcePersonsPending = true;
+            bool cached = ImportSidebarHasSceneSource && VpbLocalDatabase.TryReadSceneAtomIds(entry,
+                importSidebarSourcePersonIds, importSidebarSourceGenders);
+            if (importSidebarSourcePersonIds.Count > 0) importSidebarSourceAtomId = importSidebarSourcePersonIds[0];
+            BeginImportSceneJsonLoad(entry, writePersonCache: !cached);
             RenderSourceList();
             RefreshImportSidebarAfterSourceChange();
-            BeginImportSceneJsonLoad(entry, writePersonCache: true);
         }
 
         private void RefreshImportSidebarAfterSourceChange()
@@ -506,6 +549,7 @@ namespace VPB
         private void CancelImportSceneJsonLoad()
         {
             importSidebarSceneJsonLoadGen++;
+            importSidebarReadQueue.Cancel();
             importSidebarSceneJsonLoading = false;
             importSidebarSourcePersonsPending = false;
             if (importSidebarSceneJsonLoadCo != null)
@@ -515,101 +559,62 @@ namespace VPB
             }
         }
 
-        /// <summary>Warm-path scene JSON: yield one frame so Import UI paints, read bytes on main (ZipFile unsafe off-thread), parse on ThreadPool.</summary>
         private void BeginImportSceneJsonLoad(FileEntry entry, bool writePersonCache)
         {
-            if (entry == null) return;
-            if (importSidebarLoadedSceneJSON != null) return;
-            if (importSidebarSceneJsonLoading) return;
-            int gen = importSidebarSceneJsonLoadGen;
-            importSidebarSceneJsonLoading = true;
-            if (writePersonCache) importSidebarSourcePersonsPending = true;
-            importSidebarSceneJsonLoadCo = StartCoroutine(ImportSceneJsonLoadRoutine(entry, writePersonCache, gen));
-        }
-
-        private IEnumerator ImportSceneJsonLoadRoutine(FileEntry entry, bool writePersonCache, int gen)
-        {
-            // Let SetImportSidebarActive / layout complete before multi-MB I/O.
-            yield return null;
-            if (gen != importSidebarSceneJsonLoadGen || entry == null)
-            {
-                importSidebarSceneJsonLoading = false;
-                yield break;
-            }
-
-            string raw = null;
+            if (entry == null || importSidebarLoadedSceneJSON != null || importSidebarSceneJsonLoading || importSidebarSourceError != null) return;
             try
             {
-                using (FileEntryStreamReader r = entry.OpenStreamReader())
-                    raw = r.ReadToEnd();
+                VarFileEntry vfe = entry as VarFileEntry;
+                VarPackage package = vfe != null ? vfe.Package : null;
+                string path = Path.GetFullPath(package != null ? package.Path : entry.Path);
+                FileInfo file = new FileInfo(path);
+                importSidebarReadRequest = new VpbImportReadRequest {
+                    Path = path, InternalPath = package != null ? vfe.InternalPath : null,
+                    CodePage = package != null ? package.GetKnownZipNameCodePage() : 0,
+                    Size = file.Length, WriteTicks = file.LastWriteTimeUtc.Ticks,
+                    Generation = importSidebarSceneJsonLoadGen,
+                    WritePersonCache = writePersonCache && ImportSidebarHasSceneSource
+                };
+                importSidebarSceneJsonLoading = true;
+                importSidebarSourcePersonsPending = ImportSidebarHasSceneSource;
+                importSidebarReadQueue.Submit(importSidebarReadRequest);
+                importSidebarSceneJsonLoadCo = StartCoroutine(ImportSceneJsonLoadRoutine(entry, importSidebarReadRequest));
             }
             catch (Exception ex)
             {
-                LogUtil.LogWarning("[VPB import] Failed to read source scene " + entry.Uid + ": " + ex.Message);
-                if (gen == importSidebarSceneJsonLoadGen)
-                {
-                    importSidebarSceneJsonLoading = false;
-                    importSidebarSourcePersonsPending = false;
-                    importSidebarSceneJsonLoadCo = null;
-                }
-                yield break;
-            }
-
-            if (gen != importSidebarSceneJsonLoadGen)
-            {
+                importSidebarSourceError = ex.Message;
                 importSidebarSceneJsonLoading = false;
-                yield break;
+                importSidebarSourcePersonsPending = false;
+                RefreshApplyButtonEnabled();
             }
+        }
 
+        private IEnumerator ImportSceneJsonLoadRoutine(FileEntry entry, VpbImportReadRequest request)
+        {
             yield return null;
-
-            JSONClass[] parsedBox = new JSONClass[1];
-            Exception parseEx = null;
-            int parseDone = 0;
-            string rawCaptured = raw;
-            raw = null;
-            ThreadPool.QueueUserWorkItem(_ =>
+            VpbImportReadQueue.Result result;
+            while ((result = importSidebarReadQueue.Take()) == null)
             {
-                try
-                {
-                    if (!string.IsNullOrEmpty(rawCaptured))
-                    {
-                        JSONNode n = JSON.Parse(rawCaptured);
-                        parsedBox[0] = n != null ? n.AsObject : null;
-                    }
-                }
-                catch (Exception ex) { parseEx = ex; }
-                finally { Interlocked.Exchange(ref parseDone, 1); }
-            });
-
-            while (Interlocked.CompareExchange(ref parseDone, 0, 0) == 0)
+                if (request.Generation != importSidebarSceneJsonLoadGen) yield break;
                 yield return null;
-
-            rawCaptured = null;
-
-            if (gen != importSidebarSceneJsonLoadGen)
-            {
-                importSidebarSceneJsonLoading = false;
-                yield break;
             }
-
+            if (request.Generation != importSidebarSceneJsonLoadGen || result.Request != request) yield break;
+            Exception parseEx = result.Error;
             if (parseEx != null)
                 LogUtil.LogWarning("[VPB import] Failed to parse source scene " + entry.Uid + ": " + parseEx.Message);
-
-            importSidebarLoadedSceneJSON = parsedBox[0];
+            importSidebarSourceError = parseEx != null ? parseEx.Message : null;
+            importSidebarLoadedSceneJSON = result.Root;
             importSidebarSceneJsonLoading = false;
             importSidebarSceneJsonLoadCo = null;
-
-            bool jsonReady = importSidebarLoadedSceneJSON != null;
-            bool healGenders = jsonReady
-                && !writePersonCache
-                && importSidebarSourcePersonIds.Count > 0
-                && ImportSidebarSourceGendersNeedProbe();
-
-            if (jsonReady && (writePersonCache || healGenders || importSidebarSourcePersonIds.Count == 0))
-                ExtractAndCachePersonAtomsFromLoadedScene(entry, writePersonCache || healGenders);
-
+            if (ImportSidebarHasSceneSource && result.Root != null)
+                ExtractAndCachePersonAtomsFromLoadedScene(entry, request.WritePersonCache || ImportSidebarSourceGendersNeedProbe());
+            if (!ImportSidebarHasSceneSource && GetImportSidebarPresetView() == null)
+            {
+                importSidebarSourceError = "Appearance contains no preset data";
+                importSidebarLoadedSceneJSON = null;
+            }
             importSidebarSourcePersonsPending = false;
+            RenderSourceList();
             ApplyImportSidebarAfterSceneJsonReady();
         }
 
@@ -691,6 +696,7 @@ namespace VPB
 
         private void OnImportSidebarRandomSceneClicked()
         {
+            if (importSidebarApplying) return;
             if (ImportSidebarSourceEditsLocked())
             {
                 if (!TryNavigateGalleryToScenes())
@@ -699,7 +705,7 @@ namespace VPB
                     {
                         ShowTemporaryStatus(VPBTranslation.T(
                             "gallery.import.wizard.scenes_locked",
-                            "Source locked — return to Scenes to change scene/person."), 2f);
+                            "Source locked: return to Scenes or Appearances to select a source."), 2f);
                     }
                     catch { }
                     return;
@@ -726,6 +732,7 @@ namespace VPB
         {
             if (pick == null) yield break;
             LoadSourceScene(pick);
+            int generation = importSidebarSceneJsonLoadGen;
 
             selectedFiles.Clear();
             selectedFilePaths.Clear();
@@ -737,8 +744,9 @@ namespace VPB
             try { RefreshSelectionVisuals(); } catch { }
 
             yield return WaitForImportSourceSceneReady(30f);
+            if (generation != importSidebarSceneJsonLoadGen) yield break;
 
-            if (importSidebarSourcePersonIds.Count == 0)
+            if (GetImportSidebarPresetView() == null)
             {
                 LogUtil.LogWarning("[VPB import] Random Scene: no Person atoms in scene.");
                 yield break;
@@ -792,6 +800,10 @@ namespace VPB
 
         private void UnsubscribeFromAtomEvents()
         {
+            CancelImportSceneJsonLoad();
+            importSidebarLoadedSceneJSON = null;
+            importSidebarPresetView = null;
+            importSidebarReadRequest = null;
             if (SuperController.singleton == null) return;
             SuperController.singleton.onAtomAddedHandlers -= OnImportSidebarAtomAdded;
             SuperController.singleton.onAtomRemovedHandlers -= OnImportSidebarAtomRemoved;

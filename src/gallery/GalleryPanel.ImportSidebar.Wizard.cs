@@ -225,7 +225,7 @@ namespace VPB
                 _importWizardMultiSelectHint.color = GalleryUiColorTokens.ModeStatusTextApply;
                 _importWizardMultiSelectHint.text = VPBTranslation.T(
                     "gallery.import.wizard.multi_select",
-                    "Select only one scene package in the grid to import.");
+                    "Select one scene or appearance in the grid to import.");
                 return;
             }
 
@@ -235,7 +235,7 @@ namespace VPB
                 _importWizardMultiSelectHint.color = ImportSidebarScenesLockedBanner;
                 _importWizardMultiSelectHint.text = VPBTranslation.T(
                     "gallery.import.wizard.scenes_locked",
-                    "Source locked — return to Scenes to change scene/person.");
+                    "Source locked: return to Scenes or Appearances to select a source.");
                 return;
             }
 

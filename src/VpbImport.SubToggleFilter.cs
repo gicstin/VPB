@@ -77,6 +77,10 @@ namespace VPB
                 s[key] = new JSONData(value);
                 return;
             }
+            JSONClass option = new JSONClass();
+            option["id"] = storableId;
+            option[key] = new JSONData(value);
+            storables.Add(option);
         }
 
         private static void RemoveStorable(JSONClass presetJSON, string storableId)

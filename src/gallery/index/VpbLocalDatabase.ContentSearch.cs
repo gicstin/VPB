@@ -71,6 +71,35 @@ namespace VPB
             }
         }
 
+        internal static bool TrySearchPackageFileOwners(string term, HashSet<string> into)
+        {
+            if (into == null || string.IsNullOrEmpty(term) || !VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    EnsurePackageManifestSchema(conn);
+                    using (var st = conn.Prepare(
+                        "SELECT DISTINCT pkg_uid FROM pkg_file WHERE internal_path LIKE ? ESCAPE '\\'"))
+                    {
+                        st.BindText(1, "%" + EscapeLikeTerm(term) + "%");
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string uid = st.ColumnText(0);
+                            if (!string.IsNullOrEmpty(uid)) into.Add(uid);
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                into.Clear();
+                return false;
+            }
+        }
+
         internal static bool TrySearchPackageFiles(string term, int limit, List<ContentFileHit> into, bool allowIndexBuild = false)
         {
             if (into == null) return false;

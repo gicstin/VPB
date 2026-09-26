@@ -15,6 +15,7 @@
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <VaMPath Condition="'$(OS)' == 'Windows_NT' And ('$(VaMPath)' == '' Or $([System.String]::Copy('$(VaMPath)').StartsWith('/'))) And Exists('C:/vam/VaM_Data/Managed/Assembly-CSharp.dll')">C:/vam</VaMPath>
     <VaMPath Condition="'$(VaMPath)' == ''">F:/VamDev</VaMPath>
     <TargetFrameworkProfile>
     </TargetFrameworkProfile>
@@ -323,6 +324,7 @@
     <Compile Include="src\hook\perf\VamIlCallScanner.cs" />
     <Compile Include="src\util\LooseVapGenderProbe.cs" />
     <Compile Include="src\VpbImport.cs" />
+    <Compile Include="src\VpbImportSource.cs" />
     <Compile Include="src\VpbImport.SubToggleFilter.cs" />
     <Compile Include="src\VpbImport.IsolationGuard.cs" />
     <Compile Include="src\VdsLauncher.cs" />

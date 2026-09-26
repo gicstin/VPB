@@ -1726,7 +1726,7 @@ namespace VPB
             catch { isPackageList = false; }
 
             if (isPackageList && query.TagInclude.Count == 0 && query.TagExclude.Count == 0
-                && query.CreatorTerms.Count == 0 && query.BroadTerms.Count > 0
+                && query.CreatorTerms.Count == 0 && query.FileTerms.Count == 0 && query.BroadTerms.Count > 0
                 && (query.BroadExclude == null || query.BroadExclude.Count == 0))
             {
                 // Package UID SQL fast path (name terms only).
@@ -1913,7 +1913,7 @@ namespace VPB
                 bool importDoubleClick = (importClickTime - lastClickTime < 0.3f)
                     && string.Equals(selectedPath, importFileKey, StringComparison.OrdinalIgnoreCase);
                 lastClickTime = importClickTime;
-                if (!importDoubleClick)
+                if (!importDoubleClick || IsAppearanceCategoryTitle())
                 {
                     selectedFiles.Clear();
                     selectedFilePaths.Clear();

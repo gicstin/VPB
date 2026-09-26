@@ -14,14 +14,15 @@ namespace VPB.src.util
 
         public static void Apply(JSONClass presetJson, string normalizedSourcePath)
         {
-            if (presetJson == null || string.IsNullOrEmpty(normalizedSourcePath)) return;
-            if (!UI.IsLikelyVarPackageReference(normalizedSourcePath)) return;
-
-            int colon = normalizedSourcePath.IndexOf(':');
-            if (colon <= 0) return;
-            string presetPackageName = normalizedSourcePath.Substring(0, colon);
-
-            JSONExtensions.ReplaceSelfPrefixWithPackageUidMutable(presetJson, presetPackageName);
+            if (presetJson == null || string.IsNullOrEmpty(normalizedSourcePath) || normalizedSourcePath.Trim().Length == 0) return;
+            string presetPackageName = null;
+            if (UI.IsLikelyVarPackageReference(normalizedSourcePath))
+            {
+                int colon = normalizedSourcePath.IndexOf(':');
+                if (colon <= 0) return;
+                presetPackageName = normalizedSourcePath.Substring(0, colon);
+                JSONExtensions.ReplaceSelfPrefixWithPackageUidMutable(presetJson, presetPackageName);
+            }
 
             string folderFullPath = FileManagerSecure.GetDirectoryName(normalizedSourcePath);
             folderFullPath = FileManagerSecure.NormalizeLoadPath(folderFullPath);

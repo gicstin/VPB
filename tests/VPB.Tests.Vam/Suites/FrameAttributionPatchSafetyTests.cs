@@ -101,24 +101,20 @@ namespace VPB.Tests
                 "A tail. call must be followed directly by ret; inserting the timing call between them makes the method unloadable.");
         }
 
-        [Fact]
-        public void SceneLoadCoroutineIsNeverRewrittenByTheProfiler()
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.InternalCall)]
+        static extern void MissingInternalCall();
+
+        static void CallsMissingInternalCall()
         {
-            Type loadCo = null;
-            foreach (Type nested in typeof(SuperController).GetNestedTypes(BindingFlags.NonPublic))
-            {
-                if (nested.Name.StartsWith("<LoadCo>", StringComparison.Ordinal))
-                {
-                    loadCo = nested;
-                    break;
-                }
-            }
-            Assert.True(loadCo != null, "Precondition: SuperController.LoadCo state machine must exist in this VaM build.");
+            MissingInternalCall();
+        }
 
-            MethodInfo moveNext = loadCo.GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-            Assert.True(VamFrameAttributionProfiler.CallsGameNativeMethod(moveNext),
-                "LoadCo calls VaM's EnableGC/DisableGC internal calls; a Harmony copy cannot bind them, so profiling it throws inside the scene-load coroutine and every scene load hangs.");
+        [Fact]
+        public void MethodCallingPluginInternalCallIsSkipped()
+        {
+            MethodInfo method = typeof(FrameAttributionPatchSafetyTests).GetMethod(nameof(CallsMissingInternalCall), BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.True(VamFrameAttributionProfiler.CallsGameNativeMethod(method),
+                "Rewriting a game or plugin internal call can prevent scene-loading coroutines from completing.");
         }
 
         [Fact]

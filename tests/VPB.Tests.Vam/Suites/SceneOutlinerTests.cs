@@ -1092,7 +1092,6 @@ namespace VPB.Tests
             m.displayName = name;
             m.region = region;
             m.isPoseControl = pose;
-            m.wasTouched = true;
             m.morphValue = value;
             return m;
         }

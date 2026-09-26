@@ -365,31 +365,23 @@ namespace VPB
 		int _resolvedZipNameCodePage = int.MinValue;
 
 		// Only central-directory name decode shares global code-page lock; enumeration is isolated after open.
-		static ZipFile OpenZipFileForRead(string varPath, int codePage)
+		internal static ZipFile OpenZipFileForRead(string varPath, int codePage)
 		{
 			FileStream file = File.Open(varPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
-			if (codePage == CodePageSystemDefault)
-			{
-				ZipFile zf = new ZipFile(file);
-				zf.IsStreamOwner = true;
-				return zf;
-			}
-			lock (ZipDefaultCodePageLock)
-			{
-				int prev = ZipConstants.DefaultCodePage;
-				try
-				{
-					ZipConstants.DefaultCodePage = codePage;
-					ZipFile zf = new ZipFile(file);
-					zf.IsStreamOwner = true;
-					return zf;
-				}
-				finally
-				{
-					ZipConstants.DefaultCodePage = prev;
-				}
-			}
-		}
+            lock (ZipDefaultCodePageLock)
+            {
+                int previous = ZipConstants.DefaultCodePage;
+                try
+                {
+                    if (codePage != CodePageSystemDefault) ZipConstants.DefaultCodePage = codePage;
+                    ZipFile zip = new ZipFile(file);
+                    zip.IsStreamOwner = true;
+                    return zip;
+                }
+                catch { file.Dispose(); throw; }
+                finally { ZipConstants.DefaultCodePage = previous; }
+            }
+        }
 
 		void RememberZipNameCodePage(int codePage)
 		{
@@ -427,7 +419,7 @@ namespace VPB
 			LogUtil.LogWarning(context + " " + uid + " : " + msg);
 		}
 
-		private int GetZipNameCodePageForVar(string varPath)
+		internal int GetKnownZipNameCodePage()
 		{
 			if (_resolvedZipNameCodePage != int.MinValue)
 				return _resolvedZipNameCodePage;
@@ -445,6 +437,14 @@ namespace VPB
 				}
 				catch { }
 			}
+
+            return int.MinValue;
+        }
+
+        private int GetZipNameCodePageForVar(string varPath)
+        {
+            int known = GetKnownZipNameCodePage();
+            if (known != int.MinValue) return known;
 
 			if (string.IsNullOrEmpty(varPath))
 			{
@@ -501,7 +501,7 @@ namespace VPB
 			return detected;
 		}
 
-		private static int DetectZipNameCodePage(string cleanPath)
+		internal static int DetectZipNameCodePage(string cleanPath)
 		{
 			// Clean default decode skips fallback candidates because UTF-8 and ASCII packages dominate.
 			double sysScore = ScoreZipNames(cleanPath, CodePageSystemDefault);

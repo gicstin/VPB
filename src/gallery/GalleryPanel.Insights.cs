@@ -20,6 +20,8 @@ namespace VPB
         private void InsightsPumpMainThread()
         {
             InsightsFollowSelectionIfOpen();
+            PumpInsightFileTermSearch();
+            PumpInsightsContentSearch();
 
             int rev = _insightsRevision;
             if (rev == _insightsSeenRevision)
@@ -184,40 +186,87 @@ namespace VPB
             return true;
         }
 
+        private sealed class InsightFileTermResult
+        {
+            internal string Query;
+            internal int Revision;
+            internal Dictionary<string, HashSet<string>> Matches;
+            internal bool Success = true;
+        }
+
+        private bool _insightFileTermWorkerPending;
+        private volatile InsightFileTermResult _insightFileTermResult;
+
         private Dictionary<string, HashSet<string>> GetInsightFileTermSetsCached()
         {
             string key = nameFilter ?? "";
             if (_insightFileTermCache != null
                 && string.Equals(_insightFileTermCacheFor, key, StringComparison.Ordinal))
                 return _insightFileTermCache;
+            if (_insightFileTermWorkerPending) return null;
+            if (nameFilterQuery == null || nameFilterQuery.FileTerms.Count == 0) return null;
 
-            var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-            GallerySearchQuery q = nameFilterQuery;
-            if (q != null && q.FileTerms.Count > 0)
+            string[] terms = nameFilterQuery.FileTerms.ToArray();
+            var result = new InsightFileTermResult
             {
-                for (int i = 0; i < q.FileTerms.Count; i++)
+                Query = key,
+                Revision = _insightsRevision,
+                Matches = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
+            };
+            _insightFileTermWorkerPending = true;
+            try
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    string term = q.FileTerms[i];
-                    if (string.IsNullOrEmpty(term) || map.ContainsKey(term)) continue;
-                    var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    var hits = new List<ContentFileHit>(4096);
-                    try { VpbLocalDatabase.TrySearchPackageFiles(term, InsightsFileTermUidLimit, hits, allowIndexBuild: false); }
-                    catch { }
-                    for (int h = 0; h < hits.Count; h++)
+                    try
                     {
-                        string u = hits[h].PackageUid;
-                        if (!string.IsNullOrEmpty(u)) set.Add(u);
+                        for (int i = 0; i < terms.Length; i++)
+                        {
+                            var owners = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            if (!VpbLocalDatabase.TrySearchPackageFileOwners(terms[i], owners))
+                                result.Success = false;
+                            result.Matches[terms[i]] = owners;
+                        }
                     }
-                    map[term] = set;
-                }
+                    catch { result.Success = false; }
+                    finally { _insightFileTermResult = result; }
+                });
             }
-
-            _insightFileTermCache = map;
-            _insightFileTermCacheFor = key;
-            return map;
+            catch
+            {
+                result.Success = false;
+                _insightFileTermResult = result;
+            }
+            return null;
         }
 
-        private const int InsightsFileTermUidLimit = 20000;
+        private void PumpInsightFileTermSearch()
+        {
+            InsightFileTermResult result = _insightFileTermResult;
+            if (result != null)
+            {
+                _insightFileTermResult = null;
+                _insightFileTermWorkerPending = false;
+                if (result.Revision == _insightsRevision
+                    && string.Equals(result.Query, nameFilter ?? "", StringComparison.Ordinal))
+                {
+                    _insightFileTermCache = result.Matches;
+                    _insightFileTermCacheFor = result.Query;
+                    if (!result.Success)
+                        ShowTemporaryStatus(VPBTranslation.T("insights.content.search_failed",
+                            "The archive index is not available."), 3f);
+                    if (IsFilterActive) ApplySearchWithinFilter(nameFilter);
+                    else if (topSearchBaseFiles != null)
+                    {
+                        ApplyTitleSearchToBaseListInMemory();
+                        FinishTitleSearchUiRefresh();
+                    }
+                    else ScheduleTitleSearchSqlRefresh();
+                }
+            }
+            if (nameFilterQuery != null && nameFilterQuery.FileTerms.Count > 0)
+                GetInsightFileTermSetsCached();
+        }
 
         private static readonly Color InsightsColorClean = new Color(0.62f, 0.76f, 0.62f, 1f);
         private static readonly Color InsightsColorIssue = new Color(0.92f, 0.76f, 0.42f, 1f);

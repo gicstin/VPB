@@ -72,7 +72,7 @@ namespace VPB
                     {
                         ShowTemporaryStatus(VPBTranslation.T(
                             "gallery.import.sidebar_gated_tip",
-                            "Import sidebar opens in Scenes category only"), 2f);
+                            "Import opens in Scenes or Appearances"), 2f);
                     }
                     catch { }
                     return;

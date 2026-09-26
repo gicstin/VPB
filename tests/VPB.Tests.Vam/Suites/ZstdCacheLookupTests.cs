@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Xunit;
 
@@ -8,6 +9,161 @@ namespace VPB.Tests
     public class ZstdCacheLookupTests
     {
         public ZstdCacheLookupTests(VamFixture vam) { }
+
+        [Fact]
+        public void PrewarmedIndexPrefersExactFlagsAndSkipsDeletedOrIncompleteVariants()
+        {
+            TextureUtil.ResetZstdCacheDirectoryIndex();
+            string dir = Path.Combine(Path.GetTempPath(), "vpb_zstd_variants_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                const string time = "133881638589648118";
+                string stem = "face_jpg_10_" + time;
+                WriteCache(dir, stem + "_C");
+                WriteCache(dir, stem + "_C_L");
+                TextureUtil.PrewarmZstdCacheDirectoryIndex(dir);
+                string exact = Path.Combine(dir, stem + "_C_L.zvamcache");
+                string fallback = Path.Combine(dir, stem + "_C.zvamcache");
+                Assert.Equal(exact, TextureUtil.ResolveZstdCacheFileInDirectory(dir, "face_jpg", "10", time, "_C_L"));
+
+                TextureUtil.TryDeleteZstdCacheFile(exact);
+                Assert.Equal(fallback, TextureUtil.ResolveZstdCacheFileInDirectory(dir, "face_jpg", "10", time, "_C_L"));
+
+                File.Delete(fallback + "meta");
+                Assert.Null(TextureUtil.ResolveZstdCacheFileInDirectory(dir, "face_jpg", "10", time, "_C_L"));
+
+                WriteCache(dir, stem + "_C_L");
+                TextureUtil.NoteZstdCacheFileWritten(exact);
+                Assert.Equal(exact, TextureUtil.ResolveZstdCacheFileInDirectory(dir, "face_jpg", "10", time, "_C_L"));
+                Assert.Equal(1, TextureUtil.ZstdCacheDirectoryIndexBuilds);
+            }
+            finally
+            {
+                TextureUtil.ResetZstdCacheDirectoryIndex();
+                try { Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        [Theory]
+        [InlineData("_C", "_C_L", "_C_A", "10", false)]
+        [InlineData("_C", "_C_L", "_C_A", "10", true)]
+        [InlineData("_C", "_C_L", "_C_A", "20", false)]
+        [InlineData("_C", "_C_L", "_C_A", "20", true)]
+        [InlineData("_C_L", "_C_A", "_C", "10", false)]
+        [InlineData("_C_L", "_C_A", "_C", "10", true)]
+        [InlineData("_C_L", "_C_A", "_C", "20", false)]
+        [InlineData("_C_L", "_C_A", "_C", "20", true)]
+        public void IndexedVariantsFollowFallbackSignatureOrder(string requested, string preferred, string lowerPriority,
+            string storedSize, bool lowerPriorityFirst)
+        {
+            TextureUtil.ResetZstdCacheDirectoryIndex();
+            string dir = Path.Combine(Path.GetTempPath(), "vpb_zstd_signature_order_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                const string time = "133881638589648118";
+                string stem = "face_jpg_" + storedSize + "_" + time;
+                WriteCache(dir, stem + preferred);
+                WriteCache(dir, stem + lowerPriority);
+                string preferredPath = Path.Combine(dir, stem + preferred + ".zvamcache");
+                string lowerPriorityPath = Path.Combine(dir, stem + lowerPriority + ".zvamcache");
+                TextureUtil.PrewarmZstdCacheDirectoryIndex(dir);
+
+                var indexField = typeof(TextureUtil).GetField("s_ZstdDirIndexByNameTime",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                Assert.NotNull(indexField);
+                var index = (Dictionary<string, List<string>>)indexField.GetValue(null);
+                List<string> entries = Assert.Single(index).Value;
+                Assert.Equal(2, entries.Count);
+                entries.Clear();
+                entries.Add(lowerPriorityFirst ? lowerPriorityPath : preferredPath);
+                entries.Add(lowerPriorityFirst ? preferredPath : lowerPriorityPath);
+
+                Assert.Equal(preferredPath, TextureUtil.ResolveZstdCacheFileInDirectory(dir, "face_jpg", "10", time, requested));
+                Assert.Equal(1, TextureUtil.ZstdCacheDirectoryIndexBuilds);
+            }
+            finally
+            {
+                TextureUtil.ResetZstdCacheDirectoryIndex();
+                try { Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void IncompleteIndexedVariantCannotHideAValidSizeFallback()
+        {
+            TextureUtil.ResetZstdCacheDirectoryIndex();
+            string dir = Path.Combine(Path.GetTempPath(), "vpb_zstd_incomplete_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                const string time = "133881638589648118";
+                WriteCache(dir, "face_jpg_10_" + time + "_C");
+                WriteCache(dir, "face_jpg_20_" + time + "_C");
+                File.Delete(Path.Combine(dir, "face_jpg_10_" + time + "_C.zvamcachemeta"));
+                TextureUtil.PrewarmZstdCacheDirectoryIndex(dir);
+                Assert.Equal(Path.Combine(dir, "face_jpg_20_" + time + "_C.zvamcache"),
+                    TextureUtil.ResolveZstdCacheFileInDirectory(dir, "face_jpg", "10", time, "_C"));
+            }
+            finally
+            {
+                TextureUtil.ResetZstdCacheDirectoryIndex();
+                try { Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void FullSizeIndexedCacheBeatsSameSizeTokenThumbnail()
+        {
+            TextureUtil.ResetZstdCacheDirectoryIndex();
+            string dir = Path.Combine(Path.GetTempPath(), "vpb_zstd_full_before_thumb_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                const string time = "133881638589648118";
+                WriteCache(dir, "face_jpg_10_" + time + "_512_512_C");
+                WriteCache(dir, "face_jpg_20_" + time + "_C");
+                TextureUtil.PrewarmZstdCacheDirectoryIndex(dir);
+
+                Assert.Equal(Path.Combine(dir, "face_jpg_20_" + time + "_C.zvamcache"),
+                    TextureUtil.ResolveZstdCacheFileInDirectory(dir, "face_jpg", "10", time, "_C"));
+                Assert.Equal(1, TextureUtil.ZstdCacheDirectoryIndexBuilds);
+            }
+            finally
+            {
+                TextureUtil.ResetZstdCacheDirectoryIndex();
+                try { Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void PublishingIndexInvalidatesRevisionCapturedByAnEarlierLookup()
+        {
+            TextureUtil.ResetZstdCacheDirectoryIndex();
+            string dir = Path.Combine(Path.GetTempPath(), "vpb_zstd_publish_revision_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                const string time = "133881638589648118";
+                WriteCache(dir, "face_jpg_20_" + time + "_C");
+                var revision = typeof(TextureUtil).GetField("s_ZstdResolveRevision",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                Assert.NotNull(revision);
+                int capturedBeforeBuild = (int)revision.GetValue(null);
+
+                TextureUtil.PrewarmZstdCacheDirectoryIndex(dir);
+
+                Assert.NotEqual(capturedBeforeBuild, (int)revision.GetValue(null));
+                Assert.Equal(Path.Combine(dir, "face_jpg_20_" + time + "_C.zvamcache"),
+                    TextureUtil.ResolveZstdCacheFileInDirectory(dir, "face_jpg", "10", time, "_C"));
+            }
+            finally
+            {
+                TextureUtil.ResetZstdCacheDirectoryIndex();
+                try { Directory.Delete(dir, true); } catch { }
+            }
+        }
 
         private static void WriteCache(string dir, string baseName)
         {

@@ -59,7 +59,7 @@ function Copy-FileWithRetry {
     $srcName = Split-Path -Leaf $SourcePath
     $destFull = Join-Path $DestDir $srcName
 
-    if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
         # robocopy retries on a locked dest (SHARING_VIOLATION); /R:5 /W:2 = 5 tries, 2s apart.
         & robocopy $srcDir $DestDir $srcName /R:5 /W:2 /NJH /NJS /NDL /NFL /NC /NS /NP | Out-Null
         $rc = $LASTEXITCODE
@@ -101,7 +101,7 @@ function Copy-DirRecursive {
     if (-not (Test-Path -LiteralPath $SourceDir -PathType Container)) { return }
     Ensure-Dir $DestDir
 
-    if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
         & robocopy $SourceDir $DestDir /E /NFL /NDL /NJH /NJS /NC /NS /NP /R:5 /W:2 | Out-Null
         $rc = $LASTEXITCODE
 

@@ -158,6 +158,7 @@ namespace VPB
 
         private void FloatsOnlyUpdateTick()
         {
+            try { PumpInsightsContentSearch(); } catch { }
             try { ApplyVamMenuGateVisibility(); } catch { }
             try { GalleryVrThumbstickScroll.TickOncePerFrame(); } catch { }
             try { PluginSettingsHotkeyCaptureUpdate(); } catch { }

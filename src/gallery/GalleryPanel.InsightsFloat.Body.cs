@@ -386,23 +386,12 @@ namespace VPB
                 GalleryUiColorTokens.AccentConfirm,
                 () => RunInsightsContentSearch(_insightsContentInput != null ? _insightsContentInput.text : ""));
             AddTooltipPlain(go, VPBTranslation.T("insights.tip.content_search",
-                "Searches the cached archive index. No package is opened, so this is instant even on large libraries."));
+                "Searches the cached archive index in the background without opening packages."));
 
             if (!_insightsContentSearched)
             {
-                long files, packages;
-                string note;
-                if (VpbLocalDatabase.TryGetContentIndexFileCount(out files, out packages) && files > 0)
-                {
-                    note = string.Format(VPBTranslation.T("insights.content.index_fmt",
-                        "{0} files indexed across {1} packages."), files, packages);
-                }
-                else
-                {
-                    note = VPBTranslation.T("insights.content.index_empty",
-                        "The archive index is still building — refresh the gallery once, then try again.");
-                }
-                AddInsightsNoteRow(note, type, s);
+                AddInsightsNoteRow(VPBTranslation.T("insights.content.search_intro",
+                    "Search file paths inside indexed packages."), type, s);
                 return;
             }
 
@@ -437,9 +426,58 @@ namespace VPB
                 return;
             }
 
-            bool ok = false;
-            try { ok = VpbLocalDatabase.TrySearchPackageFiles(_insightsContentQuery, InsightsContentSearchLimit, _insightsContentHits, allowIndexBuild: true); }
-            catch { ok = false; }
+            _insightsContentStatus = VPBTranslation.T("insights.content.searching", "Searching...");
+            StartInsightsContentSearchIfIdle();
+            RebuildInsightsFloatBody();
+        }
+
+        private sealed class InsightContentSearchResult
+        {
+            internal string Query;
+            internal readonly List<ContentFileHit> Hits = new List<ContentFileHit>(64);
+            internal bool Success;
+        }
+
+        private bool _insightsContentWorkerPending;
+        private volatile InsightContentSearchResult _insightsContentResult;
+
+        private void StartInsightsContentSearchIfIdle()
+        {
+            if (_insightsContentWorkerPending || _insightsContentQuery.Length < 2) return;
+            var result = new InsightContentSearchResult { Query = _insightsContentQuery };
+            _insightsContentWorkerPending = true;
+            try
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        result.Success = VpbLocalDatabase.TrySearchPackageFiles(
+                            result.Query, InsightsContentSearchLimit, result.Hits, allowIndexBuild: true);
+                    }
+                    catch { result.Success = false; }
+                    finally { _insightsContentResult = result; }
+                });
+            }
+            catch { _insightsContentResult = result; }
+        }
+
+        private void PumpInsightsContentSearch()
+        {
+            InsightContentSearchResult result = _insightsContentResult;
+            if (result == null) return;
+            if (_insightsContentInput != null && _insightsContentInput.isFocused) return;
+            _insightsContentResult = null;
+            _insightsContentWorkerPending = false;
+            if (!string.Equals(result.Query, _insightsContentQuery, StringComparison.Ordinal))
+            {
+                StartInsightsContentSearchIfIdle();
+                return;
+            }
+            _insightsContentHits.Clear();
+            _insightsContentHits.AddRange(result.Hits);
+            _insightsContentStatus = "";
+            bool ok = result.Success;
 
             if (!ok)
             {

@@ -1,4 +1,12 @@
 /obj/
+!/tests/
+/tests/*
+!/tests/VPB.Tests.Runtime/
+!/tests/VPB.Tests.Vam/
+/tests/VPB.Tests.*/**
+!/tests/VPB.Tests.*/Suites/
+!/tests/VPB.Tests.Runtime/Suites/AppearanceImportSuite.cs
+!/tests/VPB.Tests.Vam/Suites/AppearanceImportTests.cs
 /bin/
 tests/**/bin/
 tests/**/obj/

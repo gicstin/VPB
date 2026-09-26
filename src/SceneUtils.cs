@@ -1320,6 +1320,7 @@ namespace VPB
                 if (!loadMerge)
                 {
                     unchecked { sceneLoadSerial++; }
+                    GalleryPanel.ClearOutlinerUndoForSceneLoad();
                 }
             }
             catch { }
