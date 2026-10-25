@@ -38,6 +38,13 @@ namespace VPB
             return null;
         }
 
+        internal static VpbImportSourceKind Kind(JSONClass root)
+        {
+            if (root != null && root["atoms"] is JSONArray) return VpbImportSourceKind.Scene;
+            if (root != null && root["storables"] is JSONArray) return VpbImportSourceKind.Appearance;
+            throw new InvalidDataException("Import source contains no scene atoms or preset storables");
+        }
+
         internal static JSONClass Clone(JSONClass node)
         {
             if (node == null) return null;
@@ -66,6 +73,7 @@ namespace VPB
                         foreach (JSONNode item in items)
                             if (item != null && !string.Equals(item["enabled"].Value, "false", StringComparison.OrdinalIgnoreCase)) count++;
                     if (type == VpbResourceType.Appearance && s.Count > 1) count++;
+                    if (type == VpbResourceType.Skin && s["character"] != null) count++;
                 }
                 if (type == VpbResourceType.Plugins && id == "PluginManager")
                 {
@@ -121,6 +129,14 @@ namespace VPB
                 string id = s["id"].Value;
                 if (id == "geometry")
                 {
+                    if (type == VpbResourceType.Skin && s["character"] != null)
+                    {
+                        JSONClass skinGeometry = new JSONClass();
+                        skinGeometry["id"] = "geometry";
+                        skinGeometry["character"] = s["character"];
+                        result.Add(skinGeometry);
+                        continue;
+                    }
                     string key = type == VpbResourceType.Morphs || type == VpbResourceType.Pose ? "morphs" : null;
                     if (key == null || !(s[key] is JSONArray)) continue;
                     JSONClass geometry = new JSONClass();
@@ -159,13 +175,17 @@ namespace VPB
         internal long WriteTicks;
         internal int Generation;
         internal bool WritePersonCache;
+        internal string CacheRoot;
+        internal string ResolvedPath;
+        internal List<string> EmbeddedPackages;
 
         internal bool IsCurrent()
         {
             try
             {
                 FileInfo file = new FileInfo(Path);
-                return file.Exists && file.Length == Size && file.LastWriteTimeUtc.Ticks == WriteTicks;
+                return file.Exists && file.Length == Size && file.LastWriteTimeUtc.Ticks == WriteTicks
+                    && (ResolvedPath == null || File.Exists(ResolvedPath));
             }
             catch { return false; }
         }
@@ -176,7 +196,11 @@ namespace VPB
             JSONClass root;
             if (InternalPath == null)
             {
-                using (var reader = new StreamReader(Path)) root = ReadJson(reader);
+                if (Path.EndsWith(".vac", StringComparison.OrdinalIgnoreCase))
+                    ResolvedPath = VpbVacImport.Prepare(Path, CacheRoot, out EmbeddedPackages);
+                using (var reader = new StreamReader(ResolvedPath ?? Path)) root = ReadJson(reader);
+                if (ResolvedPath != null)
+                    VpbVacImport.ResolveAssetPaths(root, System.IO.Path.GetDirectoryName(ResolvedPath));
             }
             else
             {
@@ -190,6 +214,7 @@ namespace VPB
                 }
             }
             if (!IsCurrent()) throw new IOException("Import source changed while reading");
+            VpbImportSource.Kind(root);
             return root;
         }
         internal static JSONClass ReadJson(TextReader input)

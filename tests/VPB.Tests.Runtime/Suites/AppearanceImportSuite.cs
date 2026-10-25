@@ -88,9 +88,34 @@ namespace VPB.Tests.Runtime
             yield return ApplyOnTemporaryPerson(new[] { VpbResourceType.Skin, VpbResourceType.Morphs }, VpbImportSourceKind.Scene);
         }
 
+        [VpbRuntimeTest(TimeoutSeconds = 120)]
+        public static IEnumerator LocalVacCanImportAFullAppearance()
+        {
+            GalleryPanel panel = FindAppearancePanel(VpbImportSourceKind.Scene);
+            FileEntry entry = SourceEntry(panel);
+            if (!(entry is SystemFileEntry) || !entry.Path.EndsWith(".vac", StringComparison.OrdinalIgnoreCase))
+                RuntimeAssert.Inconclusive("Browse to a local VAC scene in Import first.");
+            FileEntry resolved = (FileEntry)typeof(GalleryPanel).GetProperty("ImportSidebarApplySource", Fields).GetValue(panel, null);
+            RuntimeAssert.False(ReferenceEquals(entry, resolved), "VAC import must use the extracted scene and asset folder.");
+            yield return ApplyOnTemporaryPerson(new[] { VpbResourceType.Appearance }, VpbImportSourceKind.Scene);
+        }
+
         private static FileEntry SourceEntry(GalleryPanel panel)
         {
             return (FileEntry)typeof(GalleryPanel).GetField("importSidebarSourceScene", Fields).GetValue(panel);
+        }
+
+        [VpbRuntimeTest]
+        public static void ImportOffersALocalSourcePicker()
+        {
+            GalleryPanel panel = FindAppearancePanel();
+            UnityEngine.GameObject root = (UnityEngine.GameObject)typeof(GalleryPanel)
+                .GetField("importSidebarRoot", Fields).GetValue(panel);
+            RuntimeAssert.NotNull(root, "Open the Import sidebar first.");
+            bool found = false;
+            foreach (UnityEngine.UI.Button button in root.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+                if (button.name == "BrowseImportSource") found = true;
+            RuntimeAssert.True(found, "Import must offer local preset and VAC selection.");
         }
 
         [VpbRuntimeTest(TimeoutSeconds = 120)]
@@ -178,7 +203,7 @@ namespace VPB.Tests.Runtime
             GalleryPanel panel = FindAppearancePanel(kind);
             JSONClass source = (JSONClass)typeof(GalleryPanel).GetMethod("GetImportSidebarPresetView", Fields).Invoke(panel, null);
             RuntimeAssert.NotNull(source, "Choose a source Person or appearance first.");
-            FileEntry entry = (FileEntry)typeof(GalleryPanel).GetField("importSidebarSourceScene", Fields).GetValue(panel);
+            FileEntry entry = (FileEntry)typeof(GalleryPanel).GetProperty("ImportSidebarApplySource", Fields).GetValue(panel, null);
             var slices = new List<JSONClass>();
             foreach (VpbResourceType type in types)
             {
@@ -216,6 +241,8 @@ namespace VPB.Tests.Runtime
                     }
                 string beforeAll = StableState(target, new VpbResourceType[0]);
                 string beforeUnselected = StableState(target, types);
+                var request = (VpbImportReadRequest)typeof(GalleryPanel).GetField("importSidebarReadRequest", Fields).GetValue(panel);
+                VpbVacImport.InstallEmbeddedPackages(request.EmbeddedPackages);
                 for (int i = 0; i < types.Length; i++)
                 {
                     VpbResourceType type = types[i];
@@ -234,6 +261,18 @@ namespace VPB.Tests.Runtime
                         ? manager.filteredJSON != null && manager.filteredJSON["storables"].Count > 0
                         : VpbImportSource.Count(manager.filteredJSON, type) > 0,
                         "Native filtering discarded the selected " + type + " data.");
+                    if (type == VpbResourceType.Skin)
+                        foreach (JSONNode node in source["storables"].AsArray)
+                        {
+                            if (node["id"].Value != "geometry" || node["character"] == null) continue;
+                            DAZCharacterSelector selector = target.GetComponentInChildren<DAZCharacterSelector>();
+                            RuntimeAssert.NotNull(selector, "Skin import target has no character selector.");
+                            RuntimeAssert.NotNull(selector.selectedCharacter, "Skin import selected no skin mesh.");
+                            string expected = node["character"].Value;
+                            if (expected.Length == 0) expected = selector.startingCharacterName;
+                            RuntimeAssert.Equal(expected, selector.selectedCharacter.displayName,
+                                "Skin textures must use the source character's mesh and UV layout.");
+                        }
                 }
                 RuntimeAssert.Equal(beforeUnselected, StableState(target, types), "Component import changed unselected appearance data.");
                 undo();
@@ -282,7 +321,7 @@ namespace VPB.Tests.Runtime
                 if (!skip.Contains(VpbResourceType.Morphs)) state["morphs"] = data["morphs"];
                 if (!skip.Contains(VpbResourceType.Clothing)) state["clothing"] = data["clothing"];
                 if (!skip.Contains(VpbResourceType.Hair)) state["hair"] = data["hair"];
-                if (!appearance) state["character"] = data["character"];
+                if (!appearance && !skip.Contains(VpbResourceType.Skin)) state["character"] = data["character"];
             }
             foreach (string id in target.GetStorableIDs())
             {

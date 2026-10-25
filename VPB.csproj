@@ -325,6 +325,7 @@
     <Compile Include="src\util\LooseVapGenderProbe.cs" />
     <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VpbImportSource.cs" />
+    <Compile Include="src\VpbVacImport.cs" />
     <Compile Include="src\VpbImport.SubToggleFilter.cs" />
     <Compile Include="src\VpbImport.IsolationGuard.cs" />
     <Compile Include="src\VdsLauncher.cs" />

@@ -1447,7 +1447,7 @@ namespace VPB
             if (importSidebarSourceScene == null) return null;
             try
             {
-                using (FileEntryStreamReader r = importSidebarSourceScene.OpenStreamReader())
+                using (FileEntryStreamReader r = ImportSidebarApplySource.OpenStreamReader())
                 {
                     JSONNode parsed = JSON.Parse(r.ReadToEnd());
                     importSidebarLoadedSceneJSON = parsed != null ? parsed.AsObject : null;
@@ -2094,7 +2094,7 @@ namespace VPB
             {
                 int generation = importSidebarSceneJsonLoadGen;
                 Atom target = importSidebarTargetAtom;
-                ShowMergeOutfitPicker(importSidebarSourceScene, target, GetImportSidebarPresetView());
+                ShowMergeOutfitPicker(ImportSidebarApplySource, target, GetImportSidebarPresetView());
                 _mergeOutfitApplySelection = selected => {
                     if (generation != importSidebarSceneJsonLoadGen || target != importSidebarTargetAtom)
                     { ShowTemporaryStatus("Source or target changed; select Import again", 3f); return; }
@@ -2159,6 +2159,7 @@ namespace VPB
             RefreshApplyButtonEnabled();
             try
             {
+                VpbVacImport.InstallEmbeddedPackages(importSidebarReadRequest.EmbeddedPackages);
                 if (importSidebarTargetAtom != null)
                 {
                     Action undo = CaptureImportSnapshotAction(importSidebarTargetAtom, imports);
@@ -2183,7 +2184,7 @@ namespace VPB
                         || SuperController.singleton.GetAtomByUid(selectedTarget.uid) != selectedTarget)))
                     throw new InvalidOperationException("Source or target changed during import preparation");
                 foreach (PreparedImport prepared in imports)
-                    VarPresetPathFixups.Apply(prepared.Json, UI.NormalizePath(importSidebarSourceScene.Uid));
+                    VarPresetPathFixups.Apply(prepared.Json, UI.NormalizePath(ImportSidebarApplySource.Uid));
                 foreach (PreparedImport prepared in imports)
                     if (prepared != pose) ApplyOneTypeImport(prepared, sourceHostUid);
                 bool cua = ImportSidebarHasSceneSource && ((importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
@@ -2202,7 +2203,12 @@ namespace VPB
                 if (cua) RunCUAImportWithOptionalDelete(!importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance));
                 if (atoms) StartImportSelectedSceneAtoms(sourceHostUid);
             }
-            catch (Exception ex) { ShowTemporaryStatus("Import failed: " + ex.Message + (undoCaptured ? ". Undo is available." : ""), 5f); }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB import] Apply failed for "
+                    + (importSidebarSourceScene != null ? importSidebarSourceScene.Uid : "(none)") + ": " + ex);
+                ShowTemporaryStatus("Import failed: " + ex.Message + (undoCaptured ? ". Undo is available." : ""), 5f);
+            }
             finally
             {
                 if (!deferred) { importSidebarApplying = false; RefreshApplyButtonEnabled(); }
@@ -2258,7 +2264,7 @@ namespace VPB
 
             string sourceHostUid = (importSidebarSourceScene is VarFileEntry sceneVar && sceneVar.Package != null)
                 ? sceneVar.Package.Uid : null;
-            StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
+            StartImportLinkedCUAs(ImportSidebarApplySource, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
         }
 
         private IEnumerator ApplyDeferredPoseThenSpawnImports(string sourceHostUid, bool importCUAs, bool importSceneAtoms,
@@ -2399,7 +2405,7 @@ namespace VPB
                 if (nonRealSlice != null)
                 {
                     VpbImport.LoadPreset(
-                        sourceEntry: importSidebarSourceScene,
+                        sourceEntry: ImportSidebarApplySource,
                         targetAtom: importSidebarTargetAtom,
                         resourceType: VpbResourceType.Clothing,
                         clothingMode: ClothingApplyMode.Merge,
@@ -2417,7 +2423,7 @@ namespace VPB
                     morphLocks.StorePresetLocks(importSidebarTargetAtom, lockMorphPreset: true);
                 }
                 VpbImport.LoadPreset(
-                    sourceEntry: importSidebarSourceScene,
+                    sourceEntry: ImportSidebarApplySource,
                     targetAtom: importSidebarTargetAtom,
                     resourceType: dispatchType,
                     clothingMode: mode,
@@ -2441,7 +2447,7 @@ namespace VPB
         {
             if (!ImportSidebarHasSceneSource || source == null || string.IsNullOrEmpty(sourceAtomId) || target == null) return;
             JSONClass scene = null;
-            if (source == importSidebarSourceScene)
+            if (source == ImportSidebarApplySource)
             {
                 scene = EnsureLoadedSceneJSON();
                 if (scene == null) scene = EnsureLoadedSceneJSONSync();

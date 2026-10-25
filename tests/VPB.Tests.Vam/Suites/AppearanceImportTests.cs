@@ -27,6 +27,157 @@ namespace VPB.Tests
             ]}").AsObject;
         }
 
+
+        [Theory]
+        [InlineData("{\"storables\":[]}", (int)VpbImportSourceKind.Appearance)]
+        [InlineData("{\"atoms\":[]}", (int)VpbImportSourceKind.Scene)]
+        public void ImportKindComesFromContentRatherThanTheFileLocation(string json, int expected)
+        {
+            Assert.Equal((VpbImportSourceKind)expected, VpbImportSource.Kind(JSON.Parse(json).AsObject));
+            Assert.Throws<InvalidDataException>(() => VpbImportSource.Kind(JSON.Parse("{}").AsObject));
+        }
+
+        [Fact]
+        public void LocalVapOutsideAppearanceFoldersKeepsEverySavedComponent()
+        {
+            using (var install = new TempInstall("local-vap-import"))
+            {
+                string path = Path.GetFullPath("outside.vap");
+                JSONClass expected = Appearance();
+                JSONArray storables = expected["storables"].AsArray;
+                storables.Add(JSON.Parse("{\"id\":\"FemaleBreastPhysics\",\"spring\":1}"));
+                storables.Add(JSON.Parse("{\"id\":\"FemaleGlutePhysics\",\"spring\":1}"));
+                storables.Add(JSON.Parse("{\"id\":\"PluginManager\",\"plugins\":{\"plugin#0\":\"./plugin.cs\"}}"));
+                storables.Add(JSON.Parse("{\"id\":\"hipControl\",\"position\":{\"x\":1}}"));
+                storables.Add(JSON.Parse("{\"id\":\"Preset\",\"includeAppearance\":true}"));
+                File.WriteAllText(path, JsonSerializationUtil.Serialize(expected, 8192));
+                VpbImportReadRequest request = LocalRequest(path);
+                JSONClass root = request.Read();
+                Assert.Equal(VpbImportSourceKind.Appearance, VpbImportSource.Kind(root));
+                Assert.Equal(JsonSerializationUtil.Serialize(expected, 8192), JsonSerializationUtil.Serialize(root, 8192));
+                foreach (VpbResourceType type in new[] { VpbResourceType.Appearance, VpbResourceType.Morphs,
+                    VpbResourceType.Skin, VpbResourceType.Clothing, VpbResourceType.Hair, VpbResourceType.BreastPhysics,
+                    VpbResourceType.Glute, VpbResourceType.Plugins, VpbResourceType.Pose, VpbResourceType.General })
+                {
+                    Assert.True(VpbImportSource.Count(root, type) > 0);
+                    Assert.NotNull(VpbImportSource.Slice(root, type));
+                }
+            }
+        }
+
+        [Fact]
+        public void VacKeepsBundledFilesTogetherAndResolvesPathsForEveryAtom()
+        {
+            using (var install = new TempInstall("vac-import"))
+            {
+                string source = WriteVac(new VarFixture("Test", "Vac", 1)
+                    .WithText("different-name.json", "{\"atoms\":[{\"id\":\"Person\",\"type\":\"Person\",\"storables\":[{\"id\":\"Skin\",\"texture\":\"./textures/face.png\"}]},{\"id\":\"Prop\",\"storables\":[{\"id\":\"asset\",\"assetUrl\":\"prop.assetbundle\",\"displayName\":\"prop.assetbundle\"}]}]}")
+                    .WithText("textures/face.png", "texture")
+                    .WithText("prop.assetbundle", "asset")
+                    .WithText("Custom/Atom/Person/Morphs/female/body.vmi", "{}")
+                    .WithText("Embedded.Other.1.var", "package")
+                    .WithMeta());
+                byte[] before = File.ReadAllBytes(source);
+                VpbImportReadRequest request = LocalRequest(source);
+                JSONClass root = request.Read();
+                Assert.Equal(VpbImportSourceKind.Scene, VpbImportSource.Kind(root));
+                string folder = Path.GetDirectoryName(request.ResolvedPath);
+                Assert.Equal("texture", File.ReadAllText(Path.Combine(folder, "textures/face.png")));
+                Assert.True(File.Exists(Path.Combine(folder, "Custom/Atom/Person/Morphs/female/body.vmi")));
+                Assert.Equal(Path.Combine(folder, "textures/face.png").Replace('\\', '/'), root["atoms"][0]["storables"][0]["texture"].Value);
+                Assert.Equal(Path.Combine(folder, "prop.assetbundle").Replace('\\', '/'), root["atoms"][1]["storables"][0]["assetUrl"].Value);
+                Assert.Equal("prop.assetbundle", root["atoms"][1]["storables"][0]["displayName"].Value);
+                Assert.Single(request.EmbeddedPackages);
+                Assert.False(File.Exists("AddonPackages/Embedded.Other.1.var"));
+                Assert.Equal(before, File.ReadAllBytes(source));
+                Assert.Equal(request.ResolvedPath, ReadAgain(source).ResolvedPath);
+            }
+        }
+
+        [Fact]
+        public void VacCanContainAPresetAndDoesNotSelectMetadata()
+        {
+            using (var install = new TempInstall("vac-preset"))
+            {
+                string source = WriteVac(new VarFixture("Test", "Vac", 1)
+                    .WithText("look.vap", JsonSerializationUtil.Serialize(Appearance(), 8192)).WithMeta());
+                JSONClass root = LocalRequest(source).Read();
+                Assert.Equal(VpbImportSourceKind.Appearance, VpbImportSource.Kind(root));
+                Assert.NotNull(VpbImportSource.Slice(root, VpbResourceType.Clothing));
+                Assert.NotNull(VpbImportSource.Slice(root, VpbResourceType.Hair));
+            }
+        }
+
+        [Theory]
+        [InlineData("../escape.txt")]
+        [InlineData("a/../../escape.txt")]
+        [InlineData("C:/escape.txt")]
+        [InlineData("/escape.txt")]
+        [InlineData("a/file:stream")]
+        [InlineData("a/NUL.txt")]
+        [InlineData("a./file")]
+        public void VacRejectsUnsafePathsBeforeExtractingAnything(string name)
+        {
+            using (var install = new TempInstall("vac-unsafe"))
+            {
+                string source = WriteVac(new VarFixture("Test", "Vac", 1)
+                    .WithText("scene.json", "{\"atoms\":[]}")
+                    .WithText(name, "unsafe"));
+                Assert.Throws<InvalidDataException>(() => LocalRequest(source).Read());
+                Assert.False(File.Exists("escape.txt"));
+                Assert.Empty(Directory.GetFiles("Cache", "*", SearchOption.AllDirectories));
+            }
+        }
+
+        [Theory]
+        [InlineData("second.json")]
+        [InlineData("SCENE.JSON")]
+        public void VacRejectsAmbiguousDocumentsAndDuplicatePaths(string other)
+        {
+            using (var install = new TempInstall("vac-ambiguous"))
+            {
+                string source = WriteVac(new VarFixture("Test", "Vac", 1)
+                    .WithText("scene.json", "{\"atoms\":[]}")
+                    .WithText(other, "{\"atoms\":[]}"));
+                Assert.Throws<InvalidDataException>(() => LocalRequest(source).Read());
+            }
+        }
+
+        [Fact]
+        public void VacCacheDamageCannotBeAppliedSilently()
+        {
+            using (var install = new TempInstall("vac-cache"))
+            {
+                string source = WriteVac(new VarFixture("Test", "Vac", 1).WithText("scene.json", "{\"atoms\":[]}"));
+                VpbImportReadRequest request = ReadAgain(source);
+                File.Delete(request.ResolvedPath);
+                Assert.False(request.IsCurrent());
+                Assert.Throws<InvalidDataException>(() => LocalRequest(source).Read());
+            }
+        }
+
+        private static VpbImportReadRequest ReadAgain(string path)
+        {
+            VpbImportReadRequest request = LocalRequest(path);
+            request.Read();
+            return request;
+        }
+
+        private static VpbImportReadRequest LocalRequest(string path)
+        {
+            var file = new FileInfo(path);
+            return new VpbImportReadRequest { Path = file.FullName, Size = file.Length,
+                WriteTicks = file.LastWriteTimeUtc.Ticks, CacheRoot = Path.GetFullPath("Cache") };
+        }
+
+        private static string WriteVac(VarFixture fixture)
+        {
+            string original = fixture.WriteTo(Path.GetFullPath("Sources"));
+            string path = Path.ChangeExtension(original, ".vac");
+            File.Move(original, path);
+            return path;
+        }
+
         private static JSONClass Storable(JSONClass preset, string id)
         {
             foreach (JSONNode node in preset["storables"].AsArray)
@@ -74,10 +225,49 @@ namespace VPB.Tests
         public void SkinExcludesClothingTexturesMorphsAndHair()
         {
             JSONClass slice = VpbImportSource.Slice(Appearance(), VpbResourceType.Skin);
-            Assert.Equal(1, slice["storables"].AsArray.Count);
-            Assert.Equal("Skin", slice["storables"][0]["id"].Value);
+            Assert.Equal(2, slice["storables"].AsArray.Count);
+            JSONClass geometry = Storable(slice, "geometry");
+            Assert.NotNull(geometry);
+            Assert.Equal("Female 1", geometry["character"].Value);
+            Assert.Equal(2, geometry.Count);
             JSONExtensions.ReplaceSelfPrefixWithPackageUidMutable(slice, "Author.Look.1");
-            Assert.Equal("Author.Look.1:/Custom/Textures/face.png", slice["storables"][0]["customTexture_MainTex"].Value);
+            Assert.Equal("Author.Look.1:/Custom/Textures/face.png", Storable(slice, "Skin")["customTexture_MainTex"].Value);
+        }
+
+        [Theory]
+        [InlineData("Female 1")]
+        [InlineData("")]
+        public void BuiltInSkinSelectionIsAvailableWithoutCustomTextures(string character)
+        {
+            JSONClass source = JSON.Parse("{\"storables\":[{\"id\":\"geometry\"}]}").AsObject;
+            source["storables"][0]["character"] = character;
+            Assert.Equal(1, VpbImportSource.Count(source, VpbResourceType.Skin));
+            JSONClass slice = VpbImportSource.Slice(source, VpbResourceType.Skin);
+            Assert.NotNull(slice);
+            Assert.Equal(character, Storable(slice, "geometry")["character"].Value);
+        }
+
+        [Fact]
+        public void SkinWithoutCharacterDoesNotInventAGeometrySelection()
+        {
+            JSONClass source = Appearance();
+            Storable(source, "geometry").Remove("character");
+            JSONClass slice = VpbImportSource.Slice(source, VpbResourceType.Skin);
+            Assert.NotNull(Storable(slice, "Skin"));
+            Assert.Null(Storable(slice, "geometry"));
+        }
+
+        [Fact]
+        public void OutfitSkinSelectionRetainsItsCharacterWithoutMutatingTheSource()
+        {
+            JSONClass source = Appearance();
+            var selected = new HashSet<string> { VpbImport.MergeOutfitSkinUid };
+            JSONClass slice = VpbImport.BuildOutfitComponentSlice(source, VpbResourceType.Skin, selected);
+            JSONClass geometry = Storable(slice, "geometry");
+            Assert.NotNull(geometry);
+            Assert.Equal("Female 1", geometry["character"].Value);
+            geometry["character"] = "Female 2";
+            Assert.Equal("Female 1", Storable(source, "geometry")["character"].Value);
         }
 
         [Fact]

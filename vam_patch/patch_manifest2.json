@@ -1,7 +1,7 @@
 {
     "ManifestVersion":  2,
-    "Version":  "0.32.895",
-    "BuiltUtc":  "2026-09-25T22:37:21Z",
+    "Version":  "0.32.897",
+    "BuiltUtc":  "2026-10-25T20:50:13Z",
     "Schema":  13,
     "Files":  [
                   {
@@ -157,7 +157,7 @@
                   {
                       "RelativePath":  "BepInEx/patchers/VPB.Patcher.dll",
                       "IsDirectory":  false,
-                      "Sha1":  "a2ec79d57423d7653882e63c5e4ae0695116ae8b",
+                      "Sha1":  "a433ba0b67c2f0550992308203ecaeedb3db14ea",
                       "Size":  23552
                   },
                   {
@@ -175,8 +175,8 @@
                   {
                       "RelativePath":  "BepInEx/plugins/VPB/VPB.dll",
                       "IsDirectory":  false,
-                      "Sha1":  "d6b3e3526f02ad25b1edcca4f5f9a6a92f8a8ca2",
-                      "Size":  6136320
+                      "Sha1":  "8b2ebf4206253f2d66132b76a3e8a53c87e4f669",
+                      "Size":  6145024
                   },
                   {
                       "RelativePath":  "BepInEx/plugins/VPB/assets",

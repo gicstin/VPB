@@ -15,6 +15,8 @@ namespace VPB
         private VpbImportSourceKind importSidebarSourceKind;
         private readonly VpbImportReadQueue importSidebarReadQueue = new VpbImportReadQueue();
         private VpbImportReadRequest importSidebarReadRequest;
+        private FileEntry importSidebarResolvedSource;
+        private FileEntry ImportSidebarApplySource { get { return importSidebarResolvedSource ?? importSidebarSourceScene; } }
         private string importSidebarSourceError;
         private JSONClass importSidebarPresetView;
         private string importSidebarPresetViewAtomId;
@@ -83,6 +85,23 @@ namespace VPB
             });
 
             importSidebarSourceCaption = AddImportListCaption(content, VPBTranslation.T("gallery.import.source_list_caption", "Source (from scene)"));
+            GameObject browseRow = new GameObject("BrowseImportSource");
+            browseRow.transform.SetParent(content, false);
+            LayoutElement browseLayout = UI.AddLE(browseRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            Image browseBackground = AddImportSidebarRoundedBg(browseRow, ImportSidebarSecondaryActionBg);
+            Button browseButton = browseRow.AddComponent<Button>();
+            browseButton.targetGraphic = browseBackground;
+            UI.NeutralizeSelectableColorTint(browseButton);
+            UI.EnsureFloatChromeHoverBorder(browseRow, inward: true);
+            Text browseLabel = CreateImportSidebarLabel(browseRow.transform,
+                VPBTranslation.T("gallery.import.browse_source", "Browse local source..."), ImportSidebarBaseFontSize);
+            browseLabel.alignment = TextAnchor.MiddleCenter;
+            browseButton.onClick.AddListener(BrowseImportSource);
+            AddTooltip(browseRow, "gallery.import.browse_source_tip", "Import components from a local .vap preset, .json scene, or .vac pack");
+            innerPaneScaleActions.Add(s => {
+                if (browseLayout != null) browseLayout.preferredHeight = ImportSidebarBaseRowHeight * s;
+                ApplyScaledFont(browseLabel, ImportSidebarBaseFontSize, s);
+            });
             importSidebarSourceListContainer = content;
             for (int i = 0; i < ImportSidebarMaxRowsPerList; i++)
                 importSidebarSourceRowPool.Add(CreateImportSidebarAtomRow(content, i, true));
@@ -108,6 +127,19 @@ namespace VPB
                 ApplyScaledFont(tCaptured, ImportSidebarBaseFontSize, s);
             });
             return t;
+        }
+
+        private void BrowseImportSource()
+        {
+            if (importSidebarApplying || ImportSidebarSourceEditsLocked() || SuperController.singleton == null) return;
+            int generation = importSidebarSceneJsonLoadGen;
+            if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
+                SuperController.singleton.ShowMainHUDMonitor();
+            SuperController.singleton.GetMediaPathDialog((string path) => {
+                if (string.IsNullOrEmpty(path) || !importSidebarActive || importSidebarApplying
+                    || generation != importSidebarSceneJsonLoadGen || ImportSidebarSourceEditsLocked()) return;
+                LoadSourceScene(new SystemFileEntry(path));
+            }, "vap|vac|json", "Saves", true, true, false, null, false, null, false);
         }
 
         private GameObject CreateImportSidebarAtomRow(Transform parent, int index, bool isSource)
@@ -505,6 +537,7 @@ namespace VPB
             if (importSidebarApplying) return;
             CancelImportSceneJsonLoad();
             importSidebarSourceScene = entry;
+            importSidebarResolvedSource = null;
             importSidebarSourceKind = entry != null && (AppearanceGenderClassifier.ResolveIsPresetAppearance(entry)
                 || AppearanceGenderClassifier.ResolveIsCustomAppearance(entry))
                 ? VpbImportSourceKind.Appearance : VpbImportSourceKind.Scene;
@@ -573,6 +606,7 @@ namespace VPB
                     CodePage = package != null ? package.GetKnownZipNameCodePage() : 0,
                     Size = file.Length, WriteTicks = file.LastWriteTimeUtc.Ticks,
                     Generation = importSidebarSceneJsonLoadGen,
+                    CacheRoot = Path.GetFullPath(GlobalInfo.PluginFile("Imports")),
                     WritePersonCache = writePersonCache && ImportSidebarHasSceneSource
                 };
                 importSidebarSceneJsonLoading = true;
@@ -604,6 +638,17 @@ namespace VPB
                 LogUtil.LogWarning("[VPB import] Failed to parse source scene " + entry.Uid + ": " + parseEx.Message);
             importSidebarSourceError = parseEx != null ? parseEx.Message : null;
             importSidebarLoadedSceneJSON = result.Root;
+            if (result.Root != null)
+            {
+                importSidebarSourceKind = VpbImportSource.Kind(result.Root);
+                if (request.ResolvedPath != null)
+                {
+                    importSidebarResolvedSource = new SystemFileEntry(request.ResolvedPath);
+                    LogUtil.Log("[VPB import] Prepared VAC " + entry.Uid + " source=" + request.ResolvedPath);
+                }
+                if (!ImportSidebarHasSceneSource && importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance))
+                    VpbImportSource.Select(importSidebarMultiSelectedTypes, VpbResourceType.Appearance);
+            }
             importSidebarSceneJsonLoading = false;
             importSidebarSceneJsonLoadCo = null;
             if (ImportSidebarHasSceneSource && result.Root != null)
