@@ -1,331 +1,443 @@
-# Graph Report - src  (2026-09-01)
+# Graph Report - src  (2026-11-07)
 
 ## Corpus Check
-- Large corpus: 393 files · ~896,424 words. Semantic extraction will be expensive (many Claude tokens). Consider running on a subfolder.
+- 508 files · ~969,930 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12864 nodes · 41071 edges · 313 communities (278 shown, 27 thin omitted)
-- Extraction: 88% EXTRACTED · 12% INFERRED · 0% AMBIGUOUS · INFERRED: 4791 edges (avg confidence: 0.84)
+- 16300 nodes · 52649 edges · 420 communities (360 shown, 51 thin omitted)
+- Extraction: 88% EXTRACTED · 12% INFERRED · 0% AMBIGUOUS · INFERRED: 6065 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
+## Graph Freshness
+- Built from commit: `b0b8ed42`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
+
 ## Community Hubs (Navigation)
-- Gallery Panel
-- Gallery UI Utils Load Icon
-- Vpb Local Database Exclusive Deps
-- VPB Help Content Text
-- Auto Load Packages Manager VPB
-- Gallery Panel UI Layout Update
-- Scene Utils Creator Strip Keep
-- Gallery Panel Lifecycle Runtime Show
-- Gallery UI Utils Draggable Item
-- Vam Hook Plugin Gallery Modals
-- Mono Behaviour
-- VPB Translation T
-- Gallery Panel Remove Mode Atom
-- Scene Utils Loading
-- Gallery Panel Lifecycle Runtime Update
-- Gallery Panel Import Sidebar Options
-- Gallery Types List
-- File Entry
-- VPB Config
-- Log Util
-- File Manager
-- Gallery UI Utils Add LE
-- Gallery Search Query
-- Native Texture On Demand Cache
-- Gallery Panel IO Refresh Files
-- Gallery Panel Lifecycle Runtime Update
-- Vpb Import Load Preset Core
-- Gallery Ui Metrics Apply Font
-- Gallery Panel Settings Internal Refresh
-- Vam On Demand Loader
-- Log Util Warning
-- Hub Browse
-- Gallery Panel Selection Context Menu
-- Vam Startup Profiler Milestone
-- Gallery Panel Import Sidebar Set
-- Gallery UI Utils
-- Gallery Panel Plugins Float Tree
-- Custom Image Loader Threaded
-- Vam Hook Plugin Create Quick
-- Vpb Perf Controller
-- Hub Resource Package
-- Super Controller Hook
-- Gallery UI Utils Behaviours Hover
-- File Manager Bridge Refresh
-- Vpb Local Database Rebuild Core
-- Extern Methods
-- Gallery UI Utils Create Label
-- Gallery UI Utils Add Image
-- Gallery Panel Detail Strip Refresh
-- Image Loading Mgr
-- File Browser
-- Gallery Panel UI Layout Update
-- Vpb Local Database Gallery User
-- Gallery Panel User Tags Rebuild
-- Var File Entry
-- Custom Image Loader Threaded Queued
-- Gallery Subsystem
-- Vam Hook Plugin Quick Menu
-- Dictionary Subsystem
-- Vpb Shortcut Map
-- Game Object
-- Gallery Panel Toolbox Cleanup Var
-- Context Menu Panel
-- Gallery Panel Actions Show Core
-- Gallery Panel Tabs Bind File
-- Gallery Layout Preset
-- DAZ Hair Swap Hook
-- Log Util
-- Gallery Panel Ui Scale Apply
-- Gallery Sort Manager
-- Var Package
-- Cleanup Candidate
-- Gallery Panel Quick Filter Active
-- Pointer Event Data
-- Gallery Panel UI Update Pagination
-- Gallery Panel Thumbnails Load Thumbnail
-- Gallery Dock Layout
-- Gallery Panel UI Overlays Display
-- Texture Util
-- Gallery Panel Tabs Create Tab
-- Vpb Sqlite3
-- UI Color Picker
-- Vam Hook Plugin Update
-- Gallery Panel Toolbox Delete Packages
-- Vpb Updater Service
-- Vpb Progress Service
-- Gallery Panel IO Refresh Files
-- Vpb Busy Chrome
-- Scene Atom Importer
-- Pointer Event Data
-- Gallery Panel Tabs Builders User
-- Vam Hook Plugin Quick Menu
-- CUA Atom Importer
-- Gallery Panel Settings Internal Build
-- Scene Utils Is Person Like
-- Scan Whitelist Manager
-- Hub Resource Item
-- Vpb Os Busy Heartbeat
-- Vam Startup Optimizations
-- Gallery Panel Scene Overwrite Save
-- Gallery Panel IO Deferred Side
-- Quick Filters UI Keyboard
-- Gallery Panel Ux Consistency Grid
-- Vam Hook Plugin Quick Menu
-- File Manager Apply Package Refresh
-- Gallery Panel Helpers Rating Handler
-- File Manager Get Package
-- Third Party Fix Hook
-- Ratings Manager
-- Gallery Panel In App Help
-- Hub Resource Item Detail
-- VPB Help Content
-- Spawn Atom Element
-- Hub Browse Post Request
-- Hub Image Loader Threaded
-- Turbo Jpeg Native
-- Appearance Gender Classifier
-- Vpb Random History
-- Vector2 Subsystem
-- File Button
-- Gallery Panel Appearance Auto Spawn
-- Vpb Perf Telemetry
-- Gallery Panel UI Hover Preview
-- VPB Logger Log Source
-- VPB Patcher
-- Generic Texture Hook
-- Gallery Panel Toolbox Load Unload
-- Image Loading Mgr Try Apply
-- Gallery Panel Filter Chips Collect
-- File Manager Get Entry
-- Gallery Panel Modal Remap Atom
-- Gallery User Tag Yaml Brain
-- Zstd Compressor
-- Gallery Panel IO Apply Dependencies
-- Dependency Graph
-- File Browser List Cache Build
-- Gallery Thumbnail Cache
-- DAZ Clothing Hook
-- Super Controller Hook Post Get
-- Pool Manager
-- Gallery Layout Preset Pane State
-- Exclusive Dependency Finder
-- Vam Scene Load Phase Profiler
-- Appearance Preset Suppress
-- JSON Extensions
-- Gallery Panel Sticky Tooltip Set
-- Extern Methods ZSTD c Parameter
-- Ba Importer Run Import
-- Gallery Panel Thumb Placeholder Bitmap
-- Gallery Panel Settings Internal Setting
-- Gallery Panel Settings Internal Build
-- Vam Scan Filter
-- File Browser Start
-- Material Options Texture Guard
-- Gallery Panel Creator Ratings Rating
-- Gallery Panel Title Search Chips
-- Gallery Panel Tabs Helpers Apply
-- File Browser Sync Displayed
-- Hub Resource Item UI
-- Gallery Panel Remove Mode Target
-- Gallery Title Search Chip
-- Vam Frame Attribution Profiler
-- Gallery Panel Global Source Filter
-- Gallery Panel User Tags Tag
-- Gallery UI Utils Draggable Item
-- Va M Daz Import Material
-- Extern Methods ZSTD Error Code
-- File Browser And Dir Info
-- Message Kit
-- Gallery Panel Layout Preset Float
-- Gallery Panel Modal Merge Outfit
-- Hub Browse Init UI
-- On Demand Zstd Write Queue
-- Gallery Dependency Whitelist Ensure UGUI
-- File Manager Convert Simulated Package
-- Gallery Layout Preset Float Kind
-- VPB Translation
-- Bone View Mode Renderer
-- Var Package Scan
-- Va M Texture Load Flags
-- Vam Asset Bundle Queue
-- Gallery Panel Lifecycle Create Left
-- Quick Filters UI Keyboard Try
-- Gallery UI Utils Behaviours Scrollbar
-- Plugin Signature Bridge
-- Vam Hook Plugin Quick Menu
-- CUA Converter Simple Transform
-- Gallery Panel Command Palette Rebuild
-- Gallery Panel Filter Chips Chip
-- Gallery Panel Settings Internal Exit
-- Quick Filters UI Apply Layout
-- Custom Asset Loader
-- Gallery Panel Context Bar Pack
-- Gallery Icon Atlas
-- Gallery Panel Title Search Chips
-- Vector2 Subsystem
-- Atom Gender Utils Is Male
-- Loose Vap Gender Probe Classify
-- Var Package Group
-- Vpb Companion Server
-- Vpb Shortcut Text
-- Vpb Save Cache Support
-- Var Package Mgr
-- Hold To Apply On Hover
-- Gallery Panel User Tags Tag
-- Directory Entry
-- Pose Import Diagnostics
-- Gallery Float Geometry Pair
-- Gallery Panel Creator Ratings Close
-- Pose People Count Index
-- Vpb Perf Hair Hook
-- File Browser Hide
-- Vpb Paths
-- Vam Hook Plugin Interface Gallery
-- I Enumerator
-- Image Loading Mgr Try Load
-- Gallery Panel Category Quick Switch
-- Gallery Panel Title Creator Dropdown
-- Spring Scroll Button
-- Native Texture On Demand Cache
-- Vpb Legacy Layout Sweep Plugins
-- Category Filter State
-- Gallery Panel Import Sidebar Options
-- Tags Manager
-- Vam Hook Plugin Try Clear
-- Gallery Panel Title Search Chips
-- Dependency Extractor
-- JSON Optimization
-- Vpb Random
-- Cache Cleanup Manager
-- Gallery Ui Scale Auto Detect
-- Var Package Serializable
-- Vam Scene Load Phase Profiler
-- Var Preset Path Fixups Resolve
-- Chamfered Rect
-- Kernel32 Subsystem
-- Dependency Whitelist Manager
-- Gallery Panel Content Type Descriptor
-- Gallery Search Query Status Flags
-- Tools Subsystem
-- Auto Load Packages Manager
-- Gallery Panel Tag Editor Detail
-- Gallery Panel Task Chrome State
-- Locked Packages Manager
-- Gallery Panel Detail Strip Try
-- Gallery Panel Fields Clothing Subfilter
-- Gallery Panel Filter Randomizer Randomize
-- Gallery Panel Quick Filter Build
-- Gallery Panel Try On Kind
-- Multiline Input Field Home End
-- Custom Image Loader Threaded Priority
-- Image Loading Mgr Start Bulk
-- Settings Subsystem
-- Hash Set
-- Scene Load Native Ui Bridge
-- Vpb Import Sub Toggle Filter
-- VPB Ui Font
-- Daz Character Texture Blend Hook
-- Gallery Panel Fields Appearance Subfilter
-- Gallery Panel Fields Hair Subfilter
-- Gallery Panel Mode Ambient Sticky
-- Gallery Panel Remove Mode Highlight
-- Gallery Panel Tabs Helpers Add
-- Hub Resource Package Hook Post
-- Perf Mon Silencer Patch
-- Vpb Catalog Refresh Guard
-- Vam Hook Plugin Button Hover
-- Vpb Import Isolation Guard Snapshot
-- Gallery Layout Preset Defaults Append
-- Gallery Panel Command Palette Add
-- Gallery Panel Creator Mode Strip
-- Gallery Panel Tabs Builders Remove
-- Gallery Panel Ux Consistency Grid
-- Gallery Types User Tag Avail
-- Super Controller Hook Parse Node
-- Gallery Panel Creator Mode Strip
-- Gallery Panel Keyboard Focus Region
-- Gallery Panel Toolbox Cleanup Candidate
-- Gallery UI Utils Scene Add
-- Quick Filters UI List Sort
-- VPB Ui Pickers Pick Color
-- Vam On Demand Loader Catalog
-- Image Processing Optimization cs
-- MVR Plugin Manager Hook Pre
-- Super Controller Hook Patch Optional
-- Gallery Layout Preset Build Content
-- Gallery Panel Creator Mode Strip
-- Gallery Panel Fields Browse Filter
-- Gallery Panel Fields Browse Loaded
-- Gallery Panel Fields Pose People
-- Gallery Panel Fields Rating Presence
-- Gallery Panel Fields User Tag
-- Gallery Panel IO Package Filter
-- Gallery Panel Plugins Float Dest
-- Gallery Panel Risk Policy Level
-- Gallery Panel UI Scroll Rect
-- Gallery Panel User Tags Try
-- Var Package Reference Version Option
-- Native Texture On Demand Cache
-- VPB Config Global Source Filter
-- Gallery Panel Tag Editor Detail
-- Vpb Perf Controller Va M
-- Image Loading Mgr Bulk Zstd
-- Image Loading Mgr Disk Cache
-- File Icon
+- GalleryPanel
+- .AddLE
+- VpbLocalDatabase
+- FileManager
+- CreatorStripKeepKind
+- .Init
+- VPB
+- .T
+- .RefreshInternalSettingsListRows
+- .NormalizeGalleryUserTagName
+- .Prepare
+- Vector2
+- .ApplyOutlinerScaledFont
+- .RefreshFiles
+- Text
+- UIDraggableItem
+- VamHookPlugin
+- RoundedRect
+- .RefreshFilesRoutine
+- CustomImageLoaderThreaded
+- ImageLoadingMgr
+- ClothingLoadingUtils
+- FileEntry
+- VamOnDemandLoader
+- List
+- VarFileEntry
+- .LogWarning
+- .RebuildInsightsFloatBody
+- ContentType
+- .ShowTemporaryStatus
+- SuperControllerHook
+- VPBConfig
+- NativeTextureOnDemandCache
+- VarPackage
+- HubBrowse
+- IPointerExitHandler
+- SortType
+- .UpdateLayout
+- .CoCacheTagCountsInternal
+- TextureUtil
+- .Log
+- VpbPerfController
+- HubResourcePackage
+- FileBrowser
+- Atom
+- OutlinerNode
+- GalleryLayoutPreset
+- PackageHidePrefs
+- .Milestone
+- QueuedImage
+- Atom
+- Atom
+- .CreateTabButton
+- .QuickMenuEnsureWatchCanvasBody
+- QueuedImage
+- Gallery
+- ExternMethods
+- .BuildInternalSettingDefinitions
+- .QuickMenuExecuteAssignment
+- .ShowCore
+- .GridCtxBuildRootPage
+- .LogError
+- GalleryThumbnailCache
+- .RefreshPluginsFloatTree
+- .BindFileButton
+- .Update
+- TitleSearchChip
+- GalleryDockLayout
+- .DetailStripCollectMetaFields
+- .ApplyImportSidebarBaseRect
+- .BuildLookFacetTabs
+- DAZHairSwapHook
+- LogUtil
+- .GetSelectionIdentityKey
+- .RebuildOutlinerInspector
+- OnDemandZstdWriteQueue
+- QuickFiltersUI
+- VpbPassthroughLights
+- OutlinerParamDescriptor
+- GameObject
+- .BuildRemapAtomUidsRow
+- .LoadPresetCore
+- .Destroy
+- VpbRandomHistory
+- .EnsureTboxUI
+- VpbPassthroughLightAtoms
+- CleanupCandidate
+- VpbProgressService
+- QuickFilterEntry
+- VpbUpdaterService
+- OutlinerLookPreview
+- TurboJpegNative
+- VamFrameAttributionProfiler
+- ContextMenuPanel
+- .Update
+- VpbSqlite3
+- VpbHubDependencyFetcher
+- .DataPackTablesPresent
+- .RefreshApplyButtonEnabled
+- QuickMenuAssignableAction
+- .IsPersonLikeAtom
+- .LoadThumbnailInternal
+- .WriteSimilarIndex
+- SceneAtomImporter
+- VpbPassthrough
+- .RescaleLayoutPresetsFloatIfOpen
+- VpbPackageInsightStore
+- CUAAtomImporter
+- RatingHandler
+- VpbBusyChrome
+- UserTagPickDragSource
+- SceneUtils
+- .MergeSceneFileRoutine
+- .ApplyOutlinerLayout
+- .GridCtxAddAction
+- PointerEventData
+- UIHoverBorder
+- AtomHook
+- ScanWhitelistManager
+- HubResourceItem
+- JsonUidSetStore
+- VpbSaveCacheSupport
+- VpbOsBusyHeartbeat
+- VpbHubLiveSync
+- .EnsureInAppHelpChrome
+- VPBHelpContent
+- VpbPackageInsightScanner
+- .RefreshModeAmbientChrome
+- VamStartupOptimizations
+- OutlinerPoseMorphs
+- OutlinerTargets
+- PackageReferenceVersionResolver
+- ThirdPartyFixHook
+- .TboxCacheTexturesSelected
+- .AppendHubTypeCategoryBrowseRows
+- SpawnAtomElement
+- HubResourceItemDetail
+- VpbUpdateManifest
+- AppearanceGenderClassifier
+- .SpawnPersonThenLoadAppearanceCo
+- CreatorRatingRowHandler
+- Dictionary
+- PointerEventData
+- VamAssetBundleQueue
+- .FileExists
+- .UpdateTabs
+- .QuickMenuUpdateVrWatch
+- GenericTextureHook
+- VpbShortcut
+- InternalSettingDefinition
+- MonoBehaviour
+- OutlinerResetSnapshot
+- VPBPatcher
+- UIFloatPanelDrag
+- GalleryUserTagYamlBrain
+- FileButton
+- .BuildOutlinerAlignSection
+- PoolManager
+- FileAndDirInfo
+- .DockPaneToSide
+- PointerEventData
+- VpbResourceType
+- VamSceneLoadPhaseProfiler
+- .Start
+- OutlinerSpringAxis
+- HubResourceItemUI
+- .CreateQuickMenuButton
+- GallerySearchQuery
+- HarmonyMethod
+- VPB.Outliner
+- CategoryFilterState
+- VpbImportReadQueue
+- .PostGetVarFileEntryOnDemand
+- SerializableVarPackage
+- LayoutPaneState
+- VpbPerfTelemetry
+- .DockImportSidebar
+- ExclusiveDependencyFinder
+- ZSTD_cParameter
+- VpbClothingReplace
+- TitleSearchChipDragSource
+- OutlinerInspectorSections
+- .CreatorStripImportDefaultSubSceneRoutine
+- GalleryHistoryFilterMode
+- DependencyGraph
+- PluginSignatureBridge
+- DAZClothingHook
+- VamNativePackageListing
+- VPBLogSource
+- OutlinerLock
+- VpbShortcutMap
+- SimpleTransform
+- VpbClothingFootprint
+- VpbDataPackReader
+- MaterialOptionsTextureGuard
+- LooseVapGenderBulkCache
+- .SetImportSidebarActive
+- .RebuildMergeOutfitRows
+- .BuildQuickMenuPositionEditorModal
+- VpbStartupScene
+- VamScanFilter
+- VPBLogger
+- VaMDazImportMaterialExtractor
+- .BuildOrderedCategoriesForQuickSwitch
+- GalleryQuickLaunchHost
+- VpbShutdown
+- RatingsManager
+- JSONExtensions
+- ZSTD_ErrorCode
+- .BuildRemoveResourceTabs
+- VpbLegacyLayout
+- ScrollbarSync
+- .IsPersonLikeAtomType
+- .Parse
+- VamCatalogRefreshProfiler
+- VpbBodyRegion
+- LocalDiskEntryCache
+- MessageKit
+- .ApplyScanWhitelistIncludedBorderVisual
+- UIHoverPreviewTrigger
+- .EnsurePluginThumbPlaceholderUi
+- .DisplayConfirm
+- UIColorPicker
+- CustomAssetLoader
+- .InitUI
+- .TryResolve
+- .EndUiJob
+- FilterChipKind
+- .TryHandleKeyboard
+- RoundedRectOutline
+- BoneViewRenderer
+- JSONClass
+- OutlinerRowDrag
+- .DetailStripToggleHubTagHidden
+- .StartImportSelectedSceneAtoms
+- .ApplyDiagnosticLevelCore
+- .InvalidateInternalSettingsDefsCache
+- .IsMale
+- .OpenGallery
+- OutlinerFilter
+- VamPathFastPaths
+- .HandleDropWithContext
+- LayoutFloatKind
+- .PrepareTypeImport
+- .RemoveModeExit
+- VpbCompanionServer
+- CacheCleanupManager
+- FloatGeometrySlot
+- GalleryIconAtlas
+- .HandleKeyboardInput
+- StatusFlags
+- ItemType
+- PosePeopleCountIndex
+- SpringScrollButton
+- .Refresh
+- .WorkerBuildSelectivePipelineCoroutine
+- AppearancePresetSuppress
+- VpbPaths
+- HoldToApplyOnHover
+- .TickOncePerFrame
+- DirectoryEntry
+- VpbPerfHairHook
+- PoseImportDiagnostics
+- VPBTranslation
+- IEnumerator
+- CreatorRatingsManager
+- PkgIssueFlags
+- ZstdCompressor
+- .SyncDisplayed
+- VpbInsightKeywords
+- OutlinerUndo
+- Vector2
+- AppearanceApplyProbe
+- GalleryPage
+- PostMagicUiCameraFix
+- .TryCountDependentUidsByScan
+- .ExitCreatorMode
+- HoverPreviewPlaceholderDragHandler
+- UIChipDismissClick
+- .Hide
+- .QuickMenuPullWatchSettings
+- VpbSessionLog
+- VpbShortcutText
+- .EnsureHarvested
+- Prime31.MessageKit
+- GalleryDepStatus
+- .BindTitleCreatorVirtButton
+- VpbReleaseCatalog
+- TagsManager
+- GameObject
+- .CapturePerson
+- .TryClearConsole
+- DependencyExtractor
+- VpbRandom
+- .Down
+- .PassesClothingGalleryFiltersForPath
+- SideFilterFieldKind
+- .RandomizeFromFilterPresetRoutine
+- GallerySearchRescue
+- HookBucket
+- ChamferedRect
+- .EnsureHarvested
+- VpbHairFootprint
+- Kernel32
+- .BuildCreatorTabs
+- .ApplyLayoutPresetCo
+- MultilineInputFieldHomeEndFix
+- AspectRatioLayoutElement
+- .Start
+- Tools
+- .CaptureSceneComplete
+- .Apply
+- VPBModule
+- .CaptureQuickFilterState
+- .EvaluateSearchRescueOnWorker
+- TaskChromeState
+- GalleryUiScaleAutoDetect
+- .Prepare
+- .PatchAll
+- .Build
+- Settings
+- .RunGuarded
+- ClothingSubfilter
+- .ApplyGalleryTransparencyVisuals
+- AppearanceOutfitPickItem
+- .QuickMenu_PrepareRandomSampleRoutine
+- .SetPassthroughMode
+- TryOnKind
+- .TryScan
+- .OnDestroy
+- VpbDataPackService
+- .CreateFileButton
+- GallerySearchRescueOption
+- .DisplayColorPicker
+- .SuppressSceneLights
+- .ShowForSceneLoad
+- VrWatchBezelDrag
+- .FilterForType
+- VPBUiFont
+- .TryGetDirectoryLastWriteBinaryFollowingLinks
+- .DetailStripLayoutThumbNavButton
+- AppearanceSubfilter
+- HairSubfilter
+- SceneHubSubfilter
+- InAppHelpIconPreviewFollower
+- StickyToolMode
+- GameObject
+- .IsVrActive
+- .TryGetFileStat
+- .InstallRecursive
+- .KeepRegistrableEntries
+- .PostDownloadComplete
+- .StartBulkZstdCompression
+- .Patch
+- VpbCatalogRefreshGuard
+- OutlinerGroupEdit
+- VpbUpdateStatus
+- IsolationGuardSnapshot
+- OptionKind
+- StripKeepViewFilter
+- GridCtxPage
+- .GetProcessMemoryInfo
+- TransformType
+- .BuildContentTypeDescriptors
+- StripKeepPersonRenameMode
+- DockMenuPlacement
+- PackageFilterMode
+- GalleryKeyboardFocusRegion
+- .BringSlotToPlayer
+- .AppendGalleryPerfSettings
+- CleanupCandidateSourceKind
+- CleanupCandidateType
+- DataPackAtomKind
+- SceneAddMode
+- FileCountGroupMode
+- ListSortMode
+- VpbGalleryFamilyDate
+- .RedirectPackageFolderListing
+- CatalogContentKind
+- ImageProcessingOptimization.cs
+- VpbUpdateConfig
+- VpbScrollTuning
+- .Display
+- .TryClearStalePackagePathFilter
+- .AddCommandPaletteEntry
+- StripKeepCreateFillMode
+- BrowseFilterCycle
+- BrowseLoadedMode
+- RatingPresenceFilterMode
+- UserTagSelectionState
+- PluginsFloatDestKind
+- RemoveRailJob
+- GalleryRiskLevel
+- PackAvailBucketKind
+- ReferenceVersionOption
+- CacheWriteMode
+- OutlinerPlacement
+- GalleryScanWlBadgeKind
+- VpbFrameRate
+- GlobalSourceFilterValue
+- InsightsContentMode
+- GalleryPanel.LayoutPreset.Float.cs
+- GalleryPanel.RemoveMode.cs
+- DetailStripTagMenuMode
+- GalleryUiColorTokens.cs
+- .PatchAll
+- TagFilter
+- FileIcon
+- GalleryUiDesignTokens.cs
+- MVRPluginManagerHook.cs
+- .IsOwnedController
 
 ## God Nodes (most connected - your core abstractions)
-1. `GalleryPanel` - 4233 edges
-2. `VamHookPlugin` - 475 edges
-3. `FileEntry` - 435 edges
-4. `VpbLocalDatabase` - 392 edges
-5. `VPB` - 359 edges
-6. `Text` - 304 edges
-7. `Atom` - 200 edges
-8. `FileManager` - 199 edges
-9. `FileBrowser` - 180 edges
-10. `UIDraggableItem` - 161 edges
+1. `GalleryPanel` - 5219 edges
+2. `VpbLocalDatabase` - 638 edges
+3. `FileEntry` - 498 edges
+4. `VamHookPlugin` - 497 edges
+5. `VPB` - 446 edges
+6. `Text` - 353 edges
+7. `Atom` - 260 edges
+8. `FileManager` - 228 edges
+9. `ImageLoadingMgr` - 188 edges
+10. `Connection` - 184 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `BaResourceEntry` --references--> `List`  [EXTRACTED]
@@ -342,1139 +454,1467 @@
 ## Import Cycles
 - None detected.
 
-## Communities (313 total, 27 thin omitted)
+## Communities (420 total, 51 thin omitted)
 
-### Community 0 - "Gallery Panel"
+### Community 0 - "GalleryPanel"
+Cohesion: 0.00
+Nodes (307): CleanupHashCacheEntry, CleanupHashSample, ClothingChipCounts, CmdPaletteFilterRow, CmdPaletteRowKind, CommandPaletteEntry, FilterFrame, Coroutine (+299 more)
+
+### Community 1 - ".AddLE"
+Cohesion: 0.02
+Nodes (163): DetailStripTagMenuSearchKeys, Direction, GalleryModalTypography, Action, GameObject, BoxCollider, GameObject, RectMask2D (+155 more)
+
+### Community 2 - "VpbLocalDatabase"
+Cohesion: 0.02
+Nodes (70): CacheUsageRow, DeepMtimeCacheEntry, InsightContentSearchResult, Dictionary, VpbLocalDatabase, Connection, HashSet, ContentFileHit (+62 more)
+
+### Community 3 - "FileManager"
+Cohesion: 0.02
+Nodes (47): FileAttributes, FILETIME, TboxHideTargetKind, LocalPreset, LocalSceneJson, None, VarItem, VarPackage (+39 more)
+
+### Community 4 - "CreatorStripKeepKind"
+Cohesion: 0.02
+Nodes (63): ContentSizeFitter, Font, GameObject, LayoutElement, RectMask2D, RectTransform, ScrollRect, Transform (+55 more)
+
+### Community 5 - ".Init"
+Cohesion: 0.02
+Nodes (76): GraphicRaycaster, Image, Color, GameObject, RectMask2D, Sprite, GameObject, Image (+68 more)
+
+### Community 6 - "VPB"
 Cohesion: 0.01
-Nodes (234): CleanupHashCacheEntry, CleanupHashSample, ClothingChipCounts, CmdPaletteFilterRow, CommandPaletteEntry, ContentTypeDescriptorEntry, FilterFrame, Coroutine (+226 more)
+Nodes (4): VPB.src.util, VPB, ThumbPlaceholderLabelParts, MessageDef
 
-### Community 1 - "Gallery UI Utils Load Icon"
+### Community 7 - ".T"
 Cohesion: 0.02
-Nodes (98): Direction, GalleryModalTypography, Action, GameObject, ContentSizeFitter, Scrollbar, ScrollRect, LayoutElement (+90 more)
+Nodes (23): DetailStripAppliedTagRow, DetailStripTagMenuNavRow, CanvasGroup, IEnumerator, Image, InputField, KeyCode, UserTagSelectionState (+15 more)
 
-### Community 2 - "Vpb Local Database Exclusive Deps"
+### Community 8 - ".RefreshInternalSettingsListRows"
 Cohesion: 0.02
-Nodes (53): CacheUsagePkgRow, DeepMtimeCacheEntry, IEnumerator, LayoutElement, Dictionary, ICollection, IEnumerable, IList (+45 more)
+Nodes (35): InputField, InternalSettingDefinition, Color, GameObject, HorizontalLayoutGroup, IEnumerator, InputField, InternalSettingDefinition (+27 more)
 
-### Community 3 - "VPB Help Content Text"
+### Community 9 - ".NormalizeGalleryUserTagName"
 Cohesion: 0.03
-Nodes (31): DetailStripTagMenuMode, DetailStripTagMenuNavRow, DetailStripTagMenuSearchKeys, Vector2, AnchorPresets, AspectRatioFitter, Canvas, Color (+23 more)
+Nodes (34): FileCountGroupMode, GalleryUserTagRowKey, HashSet, IList, IEnumerator, GalleryUserTagRowKey, IEnumerable, IEnumerator (+26 more)
 
-### Community 4 - "Auto Load Packages Manager VPB"
-Cohesion: 0.01
-Nodes (9): Prime31.MessageKit, VPB.src.util, VPB, LayoutPresetsOverlayTick, ThumbPlaceholderLabelParts, Color, GalleryUiColorTokens, GalleryUiDesignTokens (+1 more)
-
-### Community 5 - "Gallery Panel UI Layout Update"
-Cohesion: 0.02
-Nodes (35): RectTransform, Coroutine, Category, Color, GameObject, Image, RectTransform, GameObject (+27 more)
-
-### Community 6 - "Scene Utils Creator Strip Keep"
-Cohesion: 0.02
-Nodes (30): IEnumerator, JSONClass, Dictionary, HashSet, JSONClass, LayoutElement, Dictionary, IEnumerator (+22 more)
-
-### Community 7 - "Gallery Panel Lifecycle Runtime Show"
-Cohesion: 0.02
-Nodes (20): Sprite, Transform, UnityAction, Category, IEnumerator, RectTransform, IEnumerator, Stack (+12 more)
-
-### Community 8 - "Gallery UI Utils Draggable Item"
+### Community 10 - ".Prepare"
 Cohesion: 0.03
-Nodes (40): CanvasRenderer, EventFunction, Camera, Dictionary, GameObject, HashSet, Image, ItemType (+32 more)
+Nodes (33): Candidate, CategoryClassifier, CatMemInsertBatcher, CatMemRow, Connection, DateTime, Func, IDictionary (+25 more)
 
-### Community 9 - "Vam Hook Plugin Gallery Modals"
+### Community 11 - "Vector2"
 Cohesion: 0.03
-Nodes (37): BaseUnityPlugin, DepWhitelistRow, IEnumerable, GalleryPage, QmAssignCatalogEntry, Camera, CanvasGroup, Color (+29 more)
+Nodes (19): DetailStripMetaField, DetailStripTagMenuMode, Canvas, Component, EventTrigger, HorizontalLayoutGroup, LayoutElement, PointerEventData (+11 more)
 
-### Community 10 - "Mono Behaviour"
+### Community 12 - ".ApplyOutlinerScaledFont"
 Cohesion: 0.03
-Nodes (62): DetailStripAppliedTagRow, Action, PointerEventData, SettingsPointerDownAction, SettingsSliderReleaseCommit, PointerEventData, TryOnCompareHandler, Camera (+54 more)
+Nodes (53): GameObject, LayoutElement, HorizontalLayoutGroup, InputField, LayoutElement, RectMask2D, RectTransform, Transform (+45 more)
 
-### Community 11 - "VPB Translation T"
-Cohesion: 0.03
-Nodes (49): HorizontalLayoutGroup, GameObject, Image, LayoutElement, Image, Canvas, CanvasGroup, CanvasScaler (+41 more)
-
-### Community 12 - "Gallery Panel Remove Mode Atom"
-Cohesion: 0.03
-Nodes (39): DAZCharacterSelector, Dictionary, FieldInfo, HashSet, IEnumerable, IEnumerator, JSONClass, JSONNode (+31 more)
-
-### Community 13 - "Scene Utils Loading"
-Cohesion: 0.03
-Nodes (32): EnsureInstalledResult, HashSet, IEnumerator, JSONClass, HashSet, IEnumerator, SceneLoadCleanupState, SceneLoadPrepOutcome (+24 more)
-
-### Community 14 - "Gallery Panel Lifecycle Runtime Update"
-Cohesion: 0.03
-Nodes (18): StringBuilder, InputField, KeyCode, DetailStripTagMenuSearchKeys, InputField, InputField, Transform, InputField (+10 more)
-
-### Community 15 - "Gallery Panel Import Sidebar Options"
-Cohesion: 0.03
-Nodes (14): GameObject, IEnumerator, Color, GameObject, Image, RectTransform, IEnumerator, ImportCUAEntry (+6 more)
-
-### Community 16 - "Gallery Types List"
+### Community 13 - ".RefreshFiles"
 Cohesion: 0.04
-Nodes (35): AppearanceSubfilter, AppearanceSubfilter, HashSet, SystemFileRow, ClothingSubfilter, HairSubfilter, Stopwatch, TagScanTotals (+27 more)
+Nodes (16): ActiveFilterChipSpec, BrowseFilterCycle, BrowseLoadedMode, UnityAction, ActiveFilterChipSpec, BrowseFilterCycle, BrowseLoadedMode, GlobalSourceFilterValue (+8 more)
 
-### Community 17 - "File Entry"
+### Community 14 - "Text"
 Cohesion: 0.03
-Nodes (25): DetailStripMetaField, Dictionary, GalleryFileListSnapshotCache, Epoch, DateTime, Dictionary, HashSet, IList (+17 more)
+Nodes (54): FilterChipKind, Color, ContentSizeFitter, GameObject, HorizontalLayoutGroup, Image, LayoutElement, Transform (+46 more)
 
-### Community 18 - "VPB Config"
-Cohesion: 0.02
-Nodes (79): GlobalSourceFilterValue, Color, JSONNode, Vector3, VPBConfig, ActiveDockSlot, AppearanceClothingApplyMode, ConfigChangedInvocationDepth (+71 more)
+### Community 15 - "UIDraggableItem"
+Cohesion: 0.04
+Nodes (34): PointerEventData, Camera, Dictionary, EventFunction, GameObject, HashSet, Image, ItemType (+26 more)
 
-### Community 19 - "Log Util"
+### Community 16 - "VamHookPlugin"
 Cohesion: 0.03
-Nodes (30): ClothingHairUndoState, HashSet, IEnumerator, SuperController, Action, Color, Func, GameObject (+22 more)
+Nodes (40): BaseUnityPlugin, QmAssignCatalogEntry, QmPreviewReel, Camera, CanvasGroup, Color, Image, InputField (+32 more)
 
-### Community 20 - "File Manager"
+### Community 17 - "RoundedRect"
 Cohesion: 0.03
-Nodes (24): FILETIME, Coroutine, IEnumerator, LinkedList, Regex, Transform, BY_HANDLE_FILE_INFORMATION, FileManager (+16 more)
+Nodes (33): CanvasGroup, Color, GameObject, HorizontalLayoutGroup, LayoutElement, RectMask2D, RectTransform, ScrollRect (+25 more)
 
-### Community 21 - "Gallery UI Utils Add LE"
+### Community 18 - ".RefreshFilesRoutine"
+Cohesion: 0.03
+Nodes (30): Category, DateTime, GameObject, IEnumerator, RectTransform, Stopwatch, ClothingSubfilter, HairSubfilter (+22 more)
+
+### Community 19 - "CustomImageLoaderThreaded"
+Cohesion: 0.04
+Nodes (32): AutoResetEvent, AsyncFlag, Dictionary, GameObject, HashSet, LinkedList, LinkedListNode, Queue (+24 more)
+
+### Community 20 - "ImageLoadingMgr"
+Cohesion: 0.04
+Nodes (38): BulkZstdWorkItem, BulkZstdWorkKind, CachedDecompressed, CachedTexture, CandidateStamp, Action, DAZClothingItem, DecompressedData (+30 more)
+
+### Community 21 - "ClothingLoadingUtils"
+Cohesion: 0.04
+Nodes (36): ClothingHairUndoState, DAZCharacterSelector, DAZHairGroup, Dictionary, FieldInfo, HashSet, IEnumerable, IEnumerator (+28 more)
+
+### Community 22 - "FileEntry"
+Cohesion: 0.04
+Nodes (28): FamilyScanTimes, IEnumerator, Category, DateTime, Dictionary, Func, HashSet, IEnumerable (+20 more)
+
+### Community 23 - "VamOnDemandLoader"
+Cohesion: 0.04
+Nodes (17): CatalogContentKind, GenerateDAZMorphsControlUI, AsyncFlag, DAZCharacterSelector, Dictionary, FieldInfo, HashSet, ICollection (+9 more)
+
+### Community 24 - "List"
+Cohesion: 0.03
+Nodes (21): CreatorNameConsolidation, Group, SystemFileRow, Dictionary, SharedSideMetaSnapshot, IEnumerator, IList, CreatorCacheEntry (+13 more)
+
+### Community 25 - "VarFileEntry"
+Cohesion: 0.03
+Nodes (34): HashSet, IList, FilterFrame, VirtualFileEntry, Dictionary, IList, CleanupFileEntry, MissingPackageListEntry (+26 more)
+
+### Community 26 - ".LogWarning"
+Cohesion: 0.04
+Nodes (21): DataPackStatus, DAZClothingItemControl, DAZHairGroupControl, EnsureInstalledResult, Connection, DataPackStatus, IList, JSONClass (+13 more)
+
+### Community 27 - ".RebuildInsightsFloatBody"
+Cohesion: 0.03
+Nodes (29): Vector2, IEnumerator, Dictionary, HashSet, InsightFileTermResult, HorizontalLayoutGroup, InsightsFloatTab, Content (+21 more)
+
+### Community 28 - "ContentType"
+Cohesion: 0.03
+Nodes (33): Quaternion, Vector3, GameObject, InputField, UnityAction, SideRailChrome, GameObject, RectTransform (+25 more)
+
+### Community 29 - ".ShowTemporaryStatus"
+Cohesion: 0.04
+Nodes (14): IEnumerator, SceneOverwriteSaveContext, HasPrefill, Dictionary, HashSet, IList, IEnumerable, IEnumerator (+6 more)
+
+### Community 30 - "SuperControllerHook"
 Cohesion: 0.05
-Nodes (49): Color, ContentSizeFitter, GameObject, HorizontalLayoutGroup, Image, LayoutElement, Transform, Transform (+41 more)
+Nodes (15): AssetBundleFromFileRequest, Dictionary, GameMode, Harmony, HarmonyPatch, HarmonyPostfix, HarmonyPrefix, QueuedImage (+7 more)
 
-### Community 22 - "Gallery Search Query"
+### Community 31 - "VPBConfig"
 Cohesion: 0.04
-Nodes (38): Row, StatusFlags, GallerySearchBranch, IsEmpty, GallerySearchQuery, Empty, HasStatusFlags, IsEmpty (+30 more)
+Nodes (38): JSONClass, GlobalSourceFilterValue, Dictionary, FieldInfo, Func, HashSet, IEnumerable, JSONArray (+30 more)
 
-### Community 23 - "Native Texture On Demand Cache"
-Cohesion: 0.06
-Nodes (30): AudioClip, AudioSource, DateTime, Dictionary, GameObject, IEnumerator, JSONNode, QueuedImage (+22 more)
-
-### Community 24 - "Gallery Panel IO Refresh Files"
-Cohesion: 0.04
-Nodes (20): HashSet, Category, DateTime, GameObject, IEnumerator, RectTransform, Action, Func (+12 more)
-
-### Community 25 - "Gallery Panel Lifecycle Runtime Update"
-Cohesion: 0.03
-Nodes (24): RectTransform, GraphicRaycaster, Vector3, GameObject, RectTransform, Vector2, Color, GameObject (+16 more)
-
-### Community 26 - "Vpb Import Load Preset Core"
-Cohesion: 0.04
-Nodes (43): ClothingSliceItem, JSONClass, PresetLockStore, PresetParamsSnapshot, JSONNode, JsonSerializationUtil, Dictionary, HashSet (+35 more)
-
-### Community 27 - "Gallery Ui Metrics Apply Font"
-Cohesion: 0.04
-Nodes (24): Color, Sprite, CanvasGroup, ContentSizeFitter, GameObject, GridLayoutGroup, HorizontalLayoutGroup, Image (+16 more)
-
-### Community 28 - "Gallery Panel Settings Internal Refresh"
-Cohesion: 0.04
-Nodes (25): GameObject, HorizontalLayoutGroup, InputField, Transform, UnityAction, VerticalLayoutGroup, IEnumerator, InternalSettingDefinition (+17 more)
-
-### Community 29 - "Vam On Demand Loader"
-Cohesion: 0.05
-Nodes (15): CatalogContentKind, GenerateDAZMorphsControlUI, AsyncFlag, DAZCharacterSelector, Dictionary, FieldInfo, HashSet, ICollection (+7 more)
-
-### Community 30 - "Log Util Warning"
-Cohesion: 0.04
-Nodes (27): DAZClothingItemControl, DAZHairGroupControl, Dictionary, HashSet, IEnumerator, JSONClass, JSONNode, Exception (+19 more)
-
-### Community 31 - "Hub Browse"
-Cohesion: 0.04
-Nodes (30): Browser, EnableHubCallback, EnableWebBrowserCallback, Color, Coroutine, HashSet, JSONStorableAction, JSONStorableFloat (+22 more)
-
-### Community 32 - "Gallery Panel Selection Context Menu"
-Cohesion: 0.05
-Nodes (12): Func, Dictionary, HashSet, IList, IEnumerable, IEnumerator, FileMoveUndoPair, HashSet (+4 more)
-
-### Community 33 - "Vam Startup Profiler Milestone"
-Cohesion: 0.05
-Nodes (19): PackageRefreshApplyState, Exception, Harmony, HarmonyFinalizer, HarmonyPatch, HarmonyPostfix, HarmonyPrefix, HashSet (+11 more)
-
-### Community 34 - "Gallery Panel Import Sidebar Set"
-Cohesion: 0.05
-Nodes (9): JSONClass, RectMask2D, RectTransform, Vector2, GridLayoutGroup, HorizontalLayoutGroup, IEnumerator, Transform (+1 more)
-
-### Community 35 - "Gallery UI Utils"
+### Community 32 - "NativeTextureOnDemandCache"
 Cohesion: 0.07
-Nodes (26): Transform, GameObject, RectTransform, Image, Action, Font, HorizontalLayoutGroup, Action (+18 more)
+Nodes (23): DateTime, Dictionary, IEnumerator, JSONNode, QueuedImage, Regex, TextureFlags, TextureFlags (+15 more)
 
-### Community 36 - "Gallery Panel Plugins Float Tree"
-Cohesion: 0.03
-Nodes (27): PluginsFloatCreatorGroup, DateTime, IEnumerator, HorizontalLayoutGroup, LayoutElement, RectTransform, Vector2, Color (+19 more)
+### Community 33 - "VarPackage"
+Cohesion: 0.04
+Nodes (48): ReferenceVersionOption, DateTime, Dictionary, Exception, HashSet, JSONClass, VarPackage, AreReferenceVersionOptionsLoaded (+40 more)
 
-### Community 37 - "Custom Image Loader Threaded"
+### Community 34 - "HubBrowse"
+Cohesion: 0.04
+Nodes (30): Browser, EnableHubCallback, EnableWebBrowserCallback, Color, Coroutine, JSONStorableAction, JSONStorableBool, JSONStorableFloat (+22 more)
+
+### Community 35 - "IPointerExitHandler"
+Cohesion: 0.04
+Nodes (31): PointerEventData, TboxRandomPreviewScroll, PointerEventData, TryOnCompareHandler, PointerEventData, ScrollRect, GalleryViewportCtrlScrollColumns, IPointerDownHandler (+23 more)
+
+### Community 36 - "SortType"
 Cohesion: 0.05
-Nodes (22): AsyncFlag, Dictionary, GameObject, HashSet, ImageLoaderCallback, LinkedList, LinkedListNode, PriorityQueue (+14 more)
+Nodes (29): Image, GallerySortCache, SortState, SortType, AutoInstall, AutoInstallOnly, Count, Date (+21 more)
 
-### Community 38 - "Vam Hook Plugin Create Quick"
-Cohesion: 0.04
-Nodes (20): IPointerEnterHandler, IPointerExitHandler, Color, PointerEventData, QuickMenuAssignDropTargetHandler, QuickMenuSquareHover, SpriteRenderer, OpenCategoryPlugins (+12 more)
+### Community 37 - ".UpdateLayout"
+Cohesion: 0.05
+Nodes (12): HashSet, StringBuilder, GameObject, Dictionary, IEnumerator, RectTransform, ScrollRect, Vector2 (+4 more)
 
-### Community 39 - "Vpb Perf Controller"
-Cohesion: 0.06
-Nodes (24): AppliedValues, MVRScript, Color, Coroutine, DAZHairGroup, Dictionary, HairSimControl, IEnumerator (+16 more)
+### Community 38 - ".CoCacheTagCountsInternal"
+Cohesion: 0.05
+Nodes (24): Dictionary, AppearanceSubfilter, IEnumerator, HashSet, Coroutine, IEnumerator, Stopwatch, AppearanceSubfilter (+16 more)
 
-### Community 40 - "Hub Resource Package"
-Cohesion: 0.04
-Nodes (43): Texture, Action, Color, Dictionary, FontStyle, GameObject, Image, JSONClass (+35 more)
-
-### Community 41 - "Super Controller Hook"
+### Community 39 - "TextureUtil"
 Cohesion: 0.07
-Nodes (16): GameMode, AssetBundleFromFileRequest, Dictionary, HarmonyPatch, HarmonyPostfix, HarmonyPrefix, HashSet, QueuedImage (+8 more)
+Nodes (8): Dictionary, FileEntry, HashSet, Regex, Texture2D, TextureFormat, TextureUtil, ZstdCacheDirectoryIndexBuilds
 
-### Community 42 - "Gallery UI Utils Behaviours Hover"
+### Community 40 - ".Log"
 Cohesion: 0.04
-Nodes (31): CanvasGroup, Color, GameObject, HorizontalLayoutGroup, LayoutElement, RectMask2D, RectTransform, ScrollRect (+23 more)
+Nodes (27): HashSet, JSONNode, BaImporter, BaMigrationManifest, BaMigrationResult, BaResourceEntry, ManifestHideEntry, ManifestTagEntry (+19 more)
 
-### Community 43 - "File Manager Bridge Refresh"
+### Community 41 - "VpbPerfController"
 Cohesion: 0.05
-Nodes (30): JSONNode, SubScene, HarmonyPatch, HarmonyPostfix, HarmonyPrefix, HashSet, JSONClass, JSONNode (+22 more)
+Nodes (25): AppliedValues, FooterPerfToggleScroll, EventTrigger, GameObject, Image, MVRScript, Color, Coroutine (+17 more)
 
-### Community 44 - "Vpb Local Database Rebuild Core"
-Cohesion: 0.06
-Nodes (6): Category, Connection, CategoryClassifier, CatMemInsertBatcher, Rule, Rule
-
-### Community 45 - "Extern Methods"
-Cohesion: 0.06
-Nodes (23): ZstdNet, Exception, ZSTD_bounds, IntPtr, Compressor, Consts, IDictionary, IntPtr (+15 more)
-
-### Community 46 - "Gallery UI Utils Create Label"
-Cohesion: 0.05
-Nodes (36): Image, LayoutElement, Canvas, CanvasScaler, GameObject, GraphicRaycaster, Outline, RectTransform (+28 more)
-
-### Community 47 - "Gallery UI Utils Add Image"
-Cohesion: 0.06
-Nodes (37): DepWhitelistRow, ContentSizeFitter, Font, GameObject, LayoutElement, RectMask2D, RectTransform, ScrollRect (+29 more)
-
-### Community 49 - "Image Loading Mgr"
-Cohesion: 0.09
-Nodes (18): CachedDecompressed, CandidateStamp, Action, DAZClothingItem, DecompressedData, DiskCacheFailureKind, Coroutine, Dictionary (+10 more)
-
-### Community 50 - "File Browser"
+### Community 42 - "HubResourcePackage"
 Cohesion: 0.04
-Nodes (36): DirectoryOption, FileBrowserCallback, FileBrowserFullCallback, IList, JSONStorableBool, RectTransform, Coroutine, Dictionary (+28 more)
+Nodes (42): Texture, Action, Color, FontStyle, GameObject, Image, JSONClass, JSONStorableAction (+34 more)
 
-### Community 51 - "Gallery Panel UI Layout Update"
-Cohesion: 0.05
-Nodes (10): Action, CanvasGroup, RectTransform, SideButtonLayoutEntry, GameObject, Image, LayoutElement, RectTransform (+2 more)
-
-### Community 52 - "Vpb Local Database Gallery User"
-Cohesion: 0.05
-Nodes (9): IEnumerator, Dictionary, GalleryUserTagRowKey, HashSet, IEnumerable, IEnumerator, HashSet, StringBuilder (+1 more)
-
-### Community 53 - "Gallery Panel User Tags Rebuild"
-Cohesion: 0.06
-Nodes (11): RectTransform, Color, GameObject, HorizontalLayoutGroup, Image, LayoutElement, RectTransform, Transform (+3 more)
-
-### Community 54 - "Var File Entry"
+### Community 43 - "FileBrowser"
 Cohesion: 0.04
-Nodes (23): FileEntryStream, FileEntryStreamReader, DateTime, FileStat, SystemFileEntry, SystemFileEntryStream, SystemFileEntryStreamReader, HashSet (+15 more)
+Nodes (35): DirectoryOption, FileBrowserCallback, FileBrowserFullCallback, RectTransform, Coroutine, GameObject, IEnumerator, InputField (+27 more)
 
-### Community 55 - "Custom Image Loader Threaded Queued"
-Cohesion: 0.05
-Nodes (21): Dictionary, Stack, ByteArrayPool, RetainedBytes, RawImage, UnityWebRequest, QueuedImage, cacheSignature (+13 more)
-
-### Community 56 - "Gallery Subsystem"
-Cohesion: 0.04
-Nodes (21): Coroutine, DateTime, ICollection, IEnumerator, IList, Stopwatch, Category, Gallery (+13 more)
-
-### Community 57 - "Vam Hook Plugin Quick Menu"
-Cohesion: 0.07
-Nodes (11): Canvas, CanvasGroup, CanvasScaler, Color, GameObject, GraphicRaycaster, Image, QuickMenuSquareHover (+3 more)
-
-### Community 58 - "Dictionary Subsystem"
-Cohesion: 0.05
-Nodes (21): CreatorNameConsolidation, Group, Dictionary, SharedSideMetaSnapshot, Dictionary, HashSet, IList, ApplyMode (+13 more)
-
-### Community 59 - "Vpb Shortcut Map"
-Cohesion: 0.05
-Nodes (36): Binding, InternalSettingsSnapshot, Dictionary, KeyCode, Binding, VpbShortcut, Apply, ApplyAlt (+28 more)
-
-### Community 60 - "Game Object"
-Cohesion: 0.07
-Nodes (13): Color, ContentSizeFitter, GameObject, Graphic, Image, LayoutElement, Outline, RectTransform (+5 more)
-
-### Community 61 - "Gallery Panel Toolbox Cleanup Var"
-Cohesion: 0.07
-Nodes (16): CategoryClassifier, CatMemInsertBatcher, CatMemRow, CleanupCandidateSourceKind, LocalFile, LocalScene, StaleCache, VarPackage (+8 more)
-
-### Community 62 - "Context Menu Panel"
-Cohesion: 0.06
-Nodes (35): Camera, Canvas, Color, ContentSizeFitter, Font, GameObject, GraphicRaycaster, HorizontalLayoutGroup (+27 more)
-
-### Community 63 - "Gallery Panel Actions Show Core"
-Cohesion: 0.05
-Nodes (7): Category, GraphicRaycaster, IEnumerator, RectTransform, Quaternion, Vector3, Gallery
-
-### Community 64 - "Gallery Panel Tabs Bind File"
-Cohesion: 0.07
-Nodes (17): EventTrigger, GameObject, Image, RawImage, RectTransform, Transform, FileButtonBinder, EventTrigger (+9 more)
-
-### Community 65 - "Gallery Layout Preset"
+### Community 44 - "Atom"
 Cohesion: 0.08
-Nodes (10): Color, GalleryLayoutPreset, IsVrPreset, HashSet, GalleryLayoutPresetStore, ActiveId, All, SqlAvailable (+2 more)
+Nodes (15): FieldInfo, FreeControllerV3, HSVColor, IEnumerator, IList, JSONClass, JSONStorable, JSONStorableBool (+7 more)
 
-### Community 66 - "DAZ Hair Swap Hook"
+### Community 45 - "OutlinerNode"
+Cohesion: 0.06
+Nodes (35): List, OutlinerCapture, Dictionary, HashSet, List, OutlinerModel, CreatorStripKeepKind, Dictionary (+27 more)
+
+### Community 46 - "GalleryLayoutPreset"
+Cohesion: 0.06
+Nodes (11): Color, StringBuilder, GalleryLayoutPreset, IsVrPreset, HashSet, GalleryLayoutPresetStore, ActiveId, All (+3 more)
+
+### Community 47 - "PackageHidePrefs"
+Cohesion: 0.06
+Nodes (11): SystemFileEntry, Dictionary, HideMarkerWriteSession, PackageHidePrefs, TboxHideTargetKind, Dictionary, HashSet, HideMarkerWriteSession (+3 more)
+
+### Community 48 - ".Milestone"
+Cohesion: 0.06
+Nodes (17): Exception, Harmony, HarmonyFinalizer, HarmonyPatch, HarmonyPostfix, HarmonyPrefix, HashSet, LoadSceneMode (+9 more)
+
+### Community 49 - "QueuedImage"
+Cohesion: 0.09
+Nodes (10): DiskCacheFailureKind, DiskCachePayload, Action, QueuedImage, Texture2D, CachedTexture, DecompressedData, DiskCachePayload (+2 more)
+
+### Community 50 - "Atom"
+Cohesion: 0.08
+Nodes (10): Kind, IList, Action, Atom, GameObject, Image, InputField, JSONStorableFloat (+2 more)
+
+### Community 51 - "Atom"
+Cohesion: 0.04
+Nodes (17): Action, IEnumerator, RemoveTargetKind, Atom, ClothingItem, HairItem, None, DAZCharacterSelector (+9 more)
+
+### Community 52 - ".CreateTabButton"
+Cohesion: 0.07
+Nodes (13): Color, ContentSizeFitter, GameObject, Graphic, Image, LayoutElement, RectTransform, ScrollRect (+5 more)
+
+### Community 53 - ".QuickMenuEnsureWatchCanvasBody"
+Cohesion: 0.07
+Nodes (12): Canvas, CanvasGroup, CanvasScaler, Color, GameObject, GraphicRaycaster, Image, QuickMenuAssignableAction (+4 more)
+
+### Community 54 - "QueuedImage"
+Cohesion: 0.05
+Nodes (22): Dictionary, Stack, ByteArrayPool, RetainedBytes, ImageLoaderCallback, RawImage, UnityWebRequest, QueuedImage (+14 more)
+
+### Community 55 - "Gallery"
+Cohesion: 0.04
+Nodes (22): Coroutine, DateTime, ICollection, IEnumerator, IList, Stopwatch, Category, Gallery (+14 more)
+
+### Community 56 - "ExternMethods"
+Cohesion: 0.07
+Nodes (21): ZstdNet, Exception, ZSTD_bounds, Consts, IDictionary, IntPtr, DecompressionOptions, IntPtr (+13 more)
+
+### Community 57 - ".BuildInternalSettingDefinitions"
+Cohesion: 0.05
+Nodes (6): RectTransform, InternalSettingsSnapshot, HashSet, InternalSettingsSnapshot, Component, Color
+
+### Community 58 - ".QuickMenuExecuteAssignment"
+Cohesion: 0.07
+Nodes (7): Gender, Sprite, CloseAll, OpenCategoryPlugins, QuickMenuAssignableAction, QmAssignCatalogEntry, QuickMenuAssignDragSourceHandler
+
+### Community 59 - ".ShowCore"
+Cohesion: 0.05
+Nodes (11): CultureInfo, CultureScope, Category, GraphicRaycaster, IEnumerator, Gallery, JSONNode, JsonSerializationUtil (+3 more)
+
+### Community 60 - ".GridCtxBuildRootPage"
+Cohesion: 0.06
+Nodes (15): FileMoveUndoPair, HashSet, IList, LocalPresetDeleteItem, LocalPresetDeleteSupport, IList, LocalSceneDeleteItem, Dictionary (+7 more)
+
+### Community 61 - ".LogError"
+Cohesion: 0.06
+Nodes (19): DAZCharacterSelector, DAZDynamicItem, DAZSkinWrap, Object, Ray, Vector3, RemoveModeTriangle, RemoveTarget (+11 more)
+
+### Community 62 - "GalleryThumbnailCache"
+Cohesion: 0.06
+Nodes (28): BakeRequest, CacheEntry, Camera, Canvas, Dictionary, Font, GameObject, Queue (+20 more)
+
+### Community 63 - ".RefreshPluginsFloatTree"
+Cohesion: 0.05
+Nodes (13): Dictionary, HashSet, IList, PluginsFloatCreatorGroup, PluginsFloatRoot, HashSet, IList, PluginsFloatRoot (+5 more)
+
+### Community 64 - ".BindFileButton"
+Cohesion: 0.06
+Nodes (18): EventTrigger, GameObject, Image, RawImage, RectTransform, Transform, FileButtonBinder, GameObject (+10 more)
+
+### Community 65 - ".Update"
+Cohesion: 0.05
+Nodes (10): Vector3, GameObject, RectTransform, Transform, Vector2, KeyCode, Color, GalleryUiScaleHotkey (+2 more)
+
+### Community 66 - "TitleSearchChip"
+Cohesion: 0.06
+Nodes (21): InputField, TitleSearchChipDropZone, TitleSearchCommitKeys, StatusFlags, StringBuilder, GalleryTitleSearchChipUtil, TitleSearchChip, CanExclude (+13 more)
+
+### Community 67 - "GalleryDockLayout"
+Cohesion: 0.07
+Nodes (11): JSONNode, Vector2, GalleryDockLayout, Version, GalleryDockSide, Left, None, Right (+3 more)
+
+### Community 68 - ".DetailStripCollectMetaFields"
+Cohesion: 0.07
+Nodes (3): DateTime, Func, HashSet
+
+### Community 69 - ".ApplyImportSidebarBaseRect"
+Cohesion: 0.07
+Nodes (11): RectMask2D, RectTransform, Vector2, GridLayoutGroup, HorizontalLayoutGroup, IEnumerator, LayoutElement, RectTransform (+3 more)
+
+### Community 70 - ".BuildLookFacetTabs"
+Cohesion: 0.05
+Nodes (11): Color, GameObject, Image, RectTransform, GameObject, HorizontalLayoutGroup, Image, LayoutElement (+3 more)
+
+### Community 71 - "DAZHairSwapHook"
 Cohesion: 0.09
 Nodes (20): HairSwapSession, Component, Coroutine, DAZCharacterSelector, DAZHairGroup, Dictionary, FieldInfo, HairSimControl (+12 more)
 
-### Community 67 - "Log Util"
+### Community 72 - "LogUtil"
 Cohesion: 0.06
-Nodes (14): DateTime, Dictionary, Func, Queue, Stack, Stopwatch, StringBuilder, LogUtil (+6 more)
+Nodes (15): DateTime, Dictionary, Func, MethodImpl, Queue, Stack, Stopwatch, StringBuilder (+7 more)
 
-### Community 68 - "Gallery Panel Ui Scale Apply"
-Cohesion: 0.05
-Nodes (12): GameObject, RectTransform, DockMenuPlacement, Above, LeftOf, RightOf, GameObject, HorizontalLayoutGroup (+4 more)
-
-### Community 69 - "Gallery Sort Manager"
-Cohesion: 0.08
-Nodes (19): FamilyScanTimes, Category, DateTime, Dictionary, Func, HashSet, IEnumerable, FamilyScanTimes (+11 more)
-
-### Community 70 - "Var Package"
-Cohesion: 0.04
-Nodes (43): ReferenceVersionOption, DateTime, Dictionary, VarPackage, AreReferenceVersionOptionsLoaded, ClothingFileEntries, CreationTime, Creator (+35 more)
-
-### Community 71 - "Cleanup Candidate"
+### Community 73 - ".GetSelectionIdentityKey"
 Cohesion: 0.07
-Nodes (11): CleanupCandidate, CleanupCandidateSourceKind, CleanupCandidateType, Dictionary, HashSet, IEnumerable, CleanupCandidate, PrimaryType (+3 more)
+Nodes (4): HashSet, HashSet, IList, HashSet
 
-### Community 72 - "Gallery Panel Quick Filter Active"
+### Community 74 - ".RebuildOutlinerInspector"
+Cohesion: 0.06
+Nodes (5): OutlinerRowLayout, OutlinerRowBind, RectTransform, Atom, Atom
+
+### Community 75 - "OnDemandZstdWriteQueue"
+Cohesion: 0.06
+Nodes (22): Reservation, Reservation, TextureFormat, Job, IsDone, Success, OnDemandBackgroundDecode, IEnumerator (+14 more)
+
+### Community 76 - "QuickFiltersUI"
+Cohesion: 0.08
+Nodes (19): BoxCollider, Color, Dictionary, GameObject, HorizontalLayoutGroup, Image, InputField, LayoutElement (+11 more)
+
+### Community 77 - "VpbPassthroughLights"
+Cohesion: 0.08
+Nodes (14): LightPreset, LightSlot, MutedSceneLight, Action, Color, GameMode, LightPreset, LightSlot (+6 more)
+
+### Community 78 - "OutlinerParamDescriptor"
+Cohesion: 0.09
+Nodes (18): JSONStorable, List, OutlinerParamCatalog, Dictionary, StringBuilder, OutlinerParamLabels, Comparison, List (+10 more)
+
+### Community 79 - "GameObject"
+Cohesion: 0.08
+Nodes (13): Color, GameObject, HorizontalLayoutGroup, Image, LayoutElement, RectTransform, Transform, UserTagSelectionState (+5 more)
+
+### Community 80 - ".BuildRemapAtomUidsRow"
+Cohesion: 0.08
+Nodes (13): Action, BrokenUidRef, Color, Dictionary, EventTrigger, GameObject, HashSet, Image (+5 more)
+
+### Community 81 - ".LoadPresetCore"
+Cohesion: 0.11
+Nodes (14): ClothingSliceItem, PresetParamsSnapshot, Dictionary, HashSet, ICollection, IEnumerable, JSONArray, JSONClass (+6 more)
+
+### Community 82 - ".Destroy"
+Cohesion: 0.06
+Nodes (27): Camera, Canvas, CanvasScaler, GameObject, GraphicRaycaster, Image, Outline, RectTransform (+19 more)
+
+### Community 83 - "VpbRandomHistory"
+Cohesion: 0.06
+Nodes (7): IEnumerator, IEnumerator, JSONClass, Dictionary, Scope, VpbRandomHistory, StorePath
+
+### Community 84 - ".EnsureTboxUI"
+Cohesion: 0.06
+Nodes (15): Color, Sprite, CanvasGroup, ContentSizeFitter, GameObject, GridLayoutGroup, HorizontalLayoutGroup, Image (+7 more)
+
+### Community 85 - "VpbPassthroughLightAtoms"
+Cohesion: 0.08
+Nodes (13): Coroutine, FreeControllerV3, HashSet, IEnumerator, JSONStorable, Light, MonoBehaviour, SuperController (+5 more)
+
+### Community 86 - "CleanupCandidate"
+Cohesion: 0.07
+Nodes (12): CacheUsageDeleteSession, CleanupCandidate, CleanupCandidateSourceKind, CleanupCandidateType, Dictionary, HashSet, IEnumerable, CleanupCandidate (+4 more)
+
+### Community 87 - "VpbProgressService"
+Cohesion: 0.06
+Nodes (13): DisplaySnapshot, GalleryPhase, DateTime, DisplaySnapshot, VpbProgressService, IsBlocking, IsBrowseRefreshActive, IsDeepScanActive (+5 more)
+
+### Community 88 - "QuickFilterEntry"
 Cohesion: 0.08
 Nodes (11): StringBuilder, QuickFilterEntry, Color, HashSet, IList, JSONNode, StringBuilder, IsMerged (+3 more)
 
-### Community 73 - "Pointer Event Data"
-Cohesion: 0.06
-Nodes (23): Coroutine, IEnumerator, CategoryQuickSwitchHeaderBehaviour, IPointerDownHandler, IPointerUpHandler, PointerEventData, QuickMenuAssignableAction, QuickMenuVrWatchMode (+15 more)
-
-### Community 74 - "Gallery Panel UI Update Pagination"
+### Community 89 - "VpbUpdaterService"
 Cohesion: 0.07
-Nodes (22): SortType, AutoInstall, AutoInstallOnly, Count, Date, DateAdded, DateCreated, DateUpdated (+14 more)
+Nodes (24): ManifestItem, PendingStagedFile, Action, Coroutine, Dictionary, IEnumerator, MonoBehaviour, ManifestItem (+16 more)
 
-### Community 75 - "Gallery Panel Thumbnails Load Thumbnail"
-Cohesion: 0.07
-Nodes (10): RawImage, Vector2, AspectRatioFitter, Dictionary, HashSet, IEnumerator, RawImage, Texture2D (+2 more)
-
-### Community 76 - "Gallery Dock Layout"
-Cohesion: 0.08
-Nodes (13): JSONNode, Vector2, GalleryDockLayout, Version, GalleryDockSide, Left, None, Right (+5 more)
-
-### Community 77 - "Gallery Panel UI Overlays Display"
-Cohesion: 0.06
-Nodes (10): Color, Dictionary, Color, UnityAction, KeyValuePair, UnityAction, IList, KeyValuePair (+2 more)
-
-### Community 78 - "Texture Util"
+### Community 90 - "OutlinerLookPreview"
 Cohesion: 0.09
-Nodes (7): FileEntry, HashSet, JSONNode, Regex, Texture2D, TextureFormat, TextureUtil
+Nodes (15): DAZCharacter, DAZCharacterSelector, DAZDynamicItem, FieldInfo, FileEntry, JSONStorableBool, List, MaterialOptions (+7 more)
 
-### Community 79 - "Gallery Panel Tabs Create Tab"
+### Community 91 - "TurboJpegNative"
 Cohesion: 0.06
-Nodes (13): IEnumerator, Color, GameObject, LayoutElement, RectTransform, ScrollRect, Sprite, GameObject (+5 more)
+Nodes (22): D_tjDecompress2, D_tjDecompressHeader3, D_tjDestroy, D_tjGetErrorStr, D_tjGetErrorStr2, D_tjInitDecompress, AspectRatioFitter, GameObject (+14 more)
 
-### Community 80 - "Vpb Sqlite3"
-Cohesion: 0.08
-Nodes (20): D_sqlite3_bind_blob, D_sqlite3_bind_int64, D_sqlite3_bind_text, D_sqlite3_busy_timeout, D_sqlite3_close, D_sqlite3_column_blob, D_sqlite3_column_bytes, D_sqlite3_column_int64 (+12 more)
-
-### Community 81 - "UI Color Picker"
-Cohesion: 0.08
-Nodes (28): Action, GameObject, HorizontalLayoutGroup, RectTransform, Transform, Vector2, VerticalLayoutGroup, InternalSettingControlType (+20 more)
-
-### Community 82 - "Vam Hook Plugin Update"
-Cohesion: 0.06
-Nodes (13): KeyCode, PointerEnterExitAction, HubResourceCreatorSupportUI, KeyCode, KeyUtil, Exception, VpbFrameRate, Current (+5 more)
-
-### Community 83 - "Gallery Panel Toolbox Delete Packages"
-Cohesion: 0.08
-Nodes (15): FileMoveUndoPair, HashSet, IList, LocalPresetDeleteItem, LocalPresetDeleteSupport, Dictionary, Exception, FileMoveUndoPair (+7 more)
-
-### Community 84 - "Vpb Updater Service"
-Cohesion: 0.06
-Nodes (25): ManifestItem, PendingStagedFile, VpbUpdateConfig, Action, Coroutine, Dictionary, IEnumerator, MonoBehaviour (+17 more)
-
-### Community 85 - "Vpb Progress Service"
+### Community 92 - "VamFrameAttributionProfiler"
 Cohesion: 0.07
-Nodes (12): DisplaySnapshot, GalleryPhase, DateTime, DisplaySnapshot, VpbProgressService, IsBlocking, IsBrowseRefreshActive, IsDeepScanActive (+4 more)
+Nodes (21): Assembly, StripKeepSortMode, KeptFirst, Name, Type, TypeThenName, CodeInstruction, Dictionary (+13 more)
 
-### Community 86 - "Gallery Panel IO Refresh Files"
-Cohesion: 0.11
-Nodes (4): BrowseFilterCycle, BrowseLoadedMode, GlobalSourceFilterValue, Image
+### Community 93 - "ContextMenuPanel"
+Cohesion: 0.07
+Nodes (29): Camera, Canvas, Color, ContentSizeFitter, Font, GameObject, GraphicRaycaster, HorizontalLayoutGroup (+21 more)
 
-### Community 87 - "Vpb Busy Chrome"
+### Community 94 - ".Update"
+Cohesion: 0.06
+Nodes (11): PointerEnterExitAction, HubResourceCreatorSupportUI, KeyCode, KeyUtil, Exception, VpbPerfDiag, Dictionary, GraphicRaycaster (+3 more)
+
+### Community 95 - "VpbSqlite3"
+Cohesion: 0.07
+Nodes (23): D_sqlite3_bind_blob, D_sqlite3_bind_int64, D_sqlite3_bind_text, D_sqlite3_busy_timeout, D_sqlite3_close, D_sqlite3_column_blob, D_sqlite3_column_bytes, D_sqlite3_column_int64 (+15 more)
+
+### Community 96 - "VpbHubDependencyFetcher"
+Cohesion: 0.07
+Nodes (30): ConfirmRequest, FetchPlan, FetchResult, Action, Dictionary, HashSet, IEnumerator, IList (+22 more)
+
+### Community 97 - ".DataPackTablesPresent"
 Cohesion: 0.09
-Nodes (12): NativeTextureCacheBuildOverlay, Canvas, CanvasScaler, Color, Font, GameObject, GraphicRaycaster, Image (+4 more)
+Nodes (13): DataPackAtomKind, DataPackLookOverlay, DataPackPackageMetrics, StringBuilder, Dictionary, Func, HashSet, SceneHubSubfilter (+5 more)
 
-### Community 88 - "Scene Atom Importer"
-Cohesion: 0.12
-Nodes (13): LivePluginSlot, SceneAtomEntry, Dictionary, HashSet, IEnumerator, JSONArray, JSONClass, JSONNode (+5 more)
+### Community 98 - ".RefreshApplyButtonEnabled"
+Cohesion: 0.07
+Nodes (3): ImportCUAEntry, ImportCUAChecklistHandles, ImportCUAEntry
 
-### Community 89 - "Pointer Event Data"
-Cohesion: 0.08
-Nodes (15): Action, Canvas, IEnumerator, InputField, PointerEventData, RectTransform, DetailStripHeightDragRelay, DetailStripThumbClickRelay (+7 more)
-
-### Community 90 - "Gallery Panel Tabs Builders User"
-Cohesion: 0.08
-Nodes (8): GameObject, IEnumerator, RectTransform, ScrollRect, Vector2, UserTagAvailScrollSnap, UserTagSideTabEntry, UserTagAvailScrollSnap
-
-### Community 91 - "Vam Hook Plugin Quick Menu"
+### Community 99 - "QuickMenuAssignableAction"
 Cohesion: 0.04
-Nodes (49): QuickMenuAssignableAction, AutoHideGallery, BringFront, Cleanup, CloseAll, CompressCache, CorePageButton, CoreSettingsButton (+41 more)
+Nodes (53): QuickMenuAssignableAction, AutoHideGallery, BringFront, Cleanup, CompressCache, CorePageButton, CoreSettingsButton, CreateGallery (+45 more)
 
-### Community 92 - "CUA Atom Importer"
+### Community 100 - ".IsPersonLikeAtom"
+Cohesion: 0.06
+Nodes (11): Action, Stack, JSONClass, Action, HashSet, SaveMenuOption, SaveMenuOption, JSONClass (+3 more)
+
+### Community 101 - ".LoadThumbnailInternal"
+Cohesion: 0.07
+Nodes (11): RawImage, RawImage, Action, AspectRatioFitter, Dictionary, HashSet, IEnumerator, RawImage (+3 more)
+
+### Community 102 - ".WriteSimilarIndex"
+Cohesion: 0.07
+Nodes (22): Connection, Dictionary, Func, SimilarFeatureSets, SimilarIndexState, Missing, Ready, Stale (+14 more)
+
+### Community 103 - "SceneAtomImporter"
+Cohesion: 0.12
+Nodes (12): LivePluginSlot, SceneAtomEntry, Dictionary, HashSet, IEnumerator, JSONArray, JSONClass, JSONNode (+4 more)
+
+### Community 104 - "VpbPassthrough"
+Cohesion: 0.07
+Nodes (19): Behaviour, CameraClearFlags, CameraState, KeyPreset, Camera, Color, GlowEffectsLevel, HashSet (+11 more)
+
+### Community 105 - ".RescaleLayoutPresetsFloatIfOpen"
+Cohesion: 0.07
+Nodes (10): HorizontalLayoutGroup, LayoutElement, VerticalLayoutGroup, Color, Image, InputField, LayoutElement, Transform (+2 more)
+
+### Community 107 - "VpbPackageInsightStore"
+Cohesion: 0.07
+Nodes (20): Color, InsightRollup, PackageInsightRecord, HasIssues, HasPluginContent, IsFlagged, UndeclaredCount, PkgRiskFlags (+12 more)
+
+### Community 108 - "CUAAtomImporter"
 Cohesion: 0.12
 Nodes (20): CuaEntry, CuaPlan, Placement, Atom, DAZBone, Dictionary, HashSet, IEnumerable (+12 more)
 
-### Community 93 - "Gallery Panel Settings Internal Build"
+### Community 109 - "RatingHandler"
 Cohesion: 0.09
-Nodes (6): JSONClass, InternalSettingsSnapshot, HashSet, InternalSettingsSnapshot, HashSet, JSONClass
+Nodes (18): CanvasGroup, Color, GameObject, GraphicRaycaster, Image, Transform, RatingHandler, CurrentRating (+10 more)
 
-### Community 94 - "Scene Utils Is Person Like"
+### Community 110 - "VpbBusyChrome"
+Cohesion: 0.10
+Nodes (11): Canvas, CanvasScaler, Color, Font, GameObject, GraphicRaycaster, Image, RectTransform (+3 more)
+
+### Community 111 - "UserTagPickDragSource"
+Cohesion: 0.08
+Nodes (16): EventSystem, Camera, Canvas, CanvasGroup, IList, PointerEventData, RaycastResult, UserTagDragSession (+8 more)
+
+### Community 112 - "SceneUtils"
 Cohesion: 0.07
-Nodes (9): Action, Action, SaveMenuOption, Camera, Vector2, SceneUtils, RaycastHit, SaveMenuOption (+1 more)
+Nodes (9): Dictionary, HashSet, IEnumerator, JSONClass, JSONNode, Camera, Vector2, SceneUtils (+1 more)
 
-### Community 95 - "Scan Whitelist Manager"
-Cohesion: 0.07
-Nodes (13): GalleryScanWlBadgeKind, ScanWhitelistData, Dictionary, HashSet, IEnumerable, GalleryScanWlBadgeKind, None, Persistent (+5 more)
+### Community 113 - ".MergeSceneFileRoutine"
+Cohesion: 0.09
+Nodes (10): HashSet, IEnumerator, JSONNode, SceneLoadCleanupState, SceneLoadPrepOutcome, SceneAddMode, SceneLoadCleanupState, SceneLoadPrepOutcome (+2 more)
 
-### Community 96 - "Hub Resource Item"
+### Community 115 - ".GridCtxAddAction"
+Cohesion: 0.09
+Nodes (19): Action, IEnumerator, InputField, DetailStripThumbClickRelay, SearchInputESCHandler, UIAlternateClickBackdrop, UIRightClickDelegate, Font (+11 more)
+
+### Community 116 - "PointerEventData"
+Cohesion: 0.08
+Nodes (18): Camera, Canvas, Color, Image, PointerEventData, ScrollRect, Transform, UnityAction (+10 more)
+
+### Community 117 - "UIHoverBorder"
+Cohesion: 0.09
+Nodes (10): Outline, Color, Graphic, LayoutElement, List, Outline, Selectable, UIHoverBorder (+2 more)
+
+### Community 118 - "AtomHook"
+Cohesion: 0.09
+Nodes (15): SubScene, HarmonyPatch, HarmonyPostfix, HarmonyPrefix, HashSet, JSONClass, JSONNode, JSONStorable (+7 more)
+
+### Community 119 - "ScanWhitelistManager"
+Cohesion: 0.08
+Nodes (10): GalleryScanWlBadgeKind, ScanWhitelistData, Dictionary, HashSet, IEnumerable, ScanWhitelistData, ScanWhitelistManager, Instance (+2 more)
+
+### Community 120 - "HubResourceItem"
 Cohesion: 0.06
 Nodes (23): DateTime, JSONArray, JSONClass, JSONStorableAction, JSONStorableBool, JSONStorableFloat, JSONStorableString, JSONStorableUrl (+15 more)
 
-### Community 97 - "Vpb Os Busy Heartbeat"
-Cohesion: 0.13
-Nodes (11): DllImport, IntPtr, Thread, MSG, RECT, VpbOsBusyHeartbeat, WNDCLASS, MSG (+3 more)
-
-### Community 98 - "Vam Startup Optimizations"
+### Community 121 - "JsonUidSetStore"
 Cohesion: 0.07
-Nodes (17): FieldInfo, HashSet, SuperController, VamStartupOptimizations, DeferGallerySqlRebuildUntilReady, DeferPackageDeepScanUntilReady, DeferredGallerySqlRebuildDelaySec, DeferStartupDependencyGraphRebuild (+9 more)
+Nodes (13): HashSet, AutoLoadPackagesManager, Instance, HashSet, DependencyWhitelistManager, Instance, HashSet, LockedPackagesManager (+5 more)
 
-### Community 99 - "Gallery Panel Scene Overwrite Save"
-Cohesion: 0.07
-Nodes (7): SceneOverwriteSaveContext, HasPrefill, IEnumerator, JSONStorable, JSONStorableBool, Stopwatch, SceneOverwriteSaveContext
-
-### Community 100 - "Gallery Panel IO Deferred Side"
-Cohesion: 0.11
-Nodes (8): Dictionary, GalleryUserTagRowKey, HashSet, IList, IEnumerator, Dictionary, GalleryTagCountSnapshotCache, TagCountSnapshot
-
-### Community 101 - "Quick Filters UI Keyboard"
-Cohesion: 0.13
-Nodes (12): Dictionary, GameObject, Image, InputField, RectTransform, ScrollRect, QuickFiltersUI, ContainerGO (+4 more)
-
-### Community 102 - "Gallery Panel Ux Consistency Grid"
-Cohesion: 0.11
-Nodes (13): HashSet, Font, GameObject, Image, KeyCode, LayoutElement, RectTransform, Sprite (+5 more)
-
-### Community 103 - "Vam Hook Plugin Quick Menu"
+### Community 122 - "VpbSaveCacheSupport"
 Cohesion: 0.08
-Nodes (7): Plane, Camera, StringBuilder, SuperController, Transform, Vector3, VrWatchBezelDrag
+Nodes (9): IEnumerator, JSONStorable, JSONStorableBool, SceneOverwriteSaveContext, Action, HashSet, MethodInfo, VpbSaveCacheSupport (+1 more)
 
-### Community 104 - "File Manager Apply Package Refresh"
+### Community 123 - "VpbOsBusyHeartbeat"
+Cohesion: 0.14
+Nodes (10): DllImport, IntPtr, MSG, RECT, VpbOsBusyHeartbeat, WNDCLASS, MSG, RECT (+2 more)
+
+### Community 124 - "VpbHubLiveSync"
 Cohesion: 0.09
-Nodes (13): BY_HANDLE_FILE_INFORMATION, DateTime, Dictionary, DllImport, HashSet, IList, IntPtr, VarPackage (+5 more)
+Nodes (13): IEnumerator, JSONClass, JSONNode, MonoBehaviour, ApplyJob, PageJob, VpbHubLiveSync, IsRunning (+5 more)
 
-### Community 105 - "Gallery Panel Helpers Rating Handler"
-Cohesion: 0.10
-Nodes (14): CanvasGroup, Color, GameObject, GraphicRaycaster, Image, Transform, RatingHandler, CurrentRating (+6 more)
-
-### Community 106 - "File Manager Get Package"
-Cohesion: 0.10
-Nodes (4): JSONClass, ReferenceVersionOption, Stack, PackageReferenceVersionResolver
-
-### Community 107 - "Third Party Fix Hook"
+### Community 125 - ".EnsureInAppHelpChrome"
 Cohesion: 0.09
-Nodes (13): Exception, InputField, LogEventArgs, LogType, MonoBehaviour, SuperController, ThirdPartyFixHook, AllPatchesApplied (+5 more)
-
-### Community 108 - "Ratings Manager"
-Cohesion: 0.08
-Nodes (14): Dictionary, SerializableRatings, CreatorRatingsManager, DataRevision, Instance, SerializableRating, SerializableRatings, Dictionary (+6 more)
-
-### Community 109 - "Gallery Panel In App Help"
-Cohesion: 0.10
 Nodes (9): ContentSizeFitter, GameObject, GridLayoutGroup, Image, LayoutElement, RectTransform, ScrollRect, Transform (+1 more)
 
-### Community 110 - "Hub Resource Item Detail"
-Cohesion: 0.07
-Nodes (12): JSONClass, JSONStorableAction, JSONStorableBool, JSONStorableString, RectTransform, HubResourceItemDetail, IsDownloading, GameObject (+4 more)
-
-### Community 111 - "VPB Help Content"
-Cohesion: 0.10
+### Community 126 - "VPBHelpContent"
+Cohesion: 0.09
 Nodes (18): HelpContentLine, HelpIconRefCharSpan, HelpIconSpec, HelpInlineKind, HelpInlineSegment, HelpSection, Color, Dictionary (+10 more)
 
-### Community 112 - "Spawn Atom Element"
+### Community 127 - "VpbPackageInsightScanner"
+Cohesion: 0.10
+Nodes (12): HashSet, JSONClass, Thread, ZipEntry, InsightScanItem, VpbPackageInsightScanner, CurrentLabel, IsRunning (+4 more)
+
+### Community 128 - ".RefreshModeAmbientChrome"
+Cohesion: 0.09
+Nodes (7): StringBuilder, Action, CanvasGroup, GameObject, Image, StickyToolMode, TaskChromeState
+
+### Community 129 - "VamStartupOptimizations"
+Cohesion: 0.08
+Nodes (17): FieldInfo, HashSet, SuperController, VamStartupOptimizations, DeferGallerySqlRebuildUntilReady, DeferPackageDeepScanUntilReady, DeferredGallerySqlRebuildDelaySec, DeferStartupDependencyGraphRebuild (+9 more)
+
+### Community 130 - "OutlinerPoseMorphs"
+Cohesion: 0.10
+Nodes (15): Comparison, DAZCharacterSelector, DAZMorph, List, OutlinerPoseBucket, Arms, Count, Expressions (+7 more)
+
+### Community 131 - "OutlinerTargets"
+Cohesion: 0.08
+Nodes (12): FieldInfo, FreeControllerV3, HashSet, List, OutlinerTargetMode, All, Off, Selected (+4 more)
+
+### Community 132 - "PackageReferenceVersionResolver"
+Cohesion: 0.09
+Nodes (12): Func, ICollection, DependencyVersionKind, Exact, Latest, Minimum, DependencyVersionRequest, ForceLatestDependencyPolicy (+4 more)
+
+### Community 133 - "ThirdPartyFixHook"
+Cohesion: 0.10
+Nodes (13): Exception, InputField, LogEventArgs, LogType, MonoBehaviour, SuperController, ThirdPartyFixHook, AllPatchesApplied (+5 more)
+
+### Community 134 - ".TboxCacheTexturesSelected"
+Cohesion: 0.11
+Nodes (6): CacheWriteMode, IEnumerator, NativeTextureCacheBuildOverlay, MonoBehaviour, SuperController, OnDemandTextureCacheHook
+
+### Community 135 - ".AppendHubTypeCategoryBrowseRows"
+Cohesion: 0.07
+Nodes (7): GalleryHubTypeItemScope, Category, Color, GameObject, LayoutElement, RectTransform, Sprite
+
+### Community 136 - "SpawnAtomElement"
 Cohesion: 0.13
 Nodes (20): CollisionToggleState, PhysicsToggleState, RendererToggleState, Action, CharacterController, Collider, GameObject, HashSet (+12 more)
 
-### Community 113 - "Hub Browse Post Request"
-Cohesion: 0.10
-Nodes (10): Action, Dictionary, IList, JSONClass, JSONNode, GameObject, RawImage, HubResourcePackageUI (+2 more)
+### Community 137 - "HubResourceItemDetail"
+Cohesion: 0.07
+Nodes (12): JSONClass, JSONStorableAction, JSONStorableBool, JSONStorableString, RectTransform, HubResourceItemDetail, IsDownloading, GameObject (+4 more)
 
-### Community 114 - "Hub Image Loader Threaded"
-Cohesion: 0.08
-Nodes (13): AutoResetEvent, AsyncFlag, Comparison, Dictionary, PriorityQueue, Queue, Thread, HubImageLoaderThreaded (+5 more)
+### Community 138 - "VpbUpdateManifest"
+Cohesion: 0.11
+Nodes (12): ApplyResult, Action, IList, List, ManifestRow, PendingFileEntry, PendingUpdate, ApplyResult (+4 more)
 
-### Community 115 - "Turbo Jpeg Native"
-Cohesion: 0.10
-Nodes (16): D_tjDecompress2, D_tjDecompressHeader3, D_tjDestroy, D_tjGetErrorStr, D_tjGetErrorStr2, D_tjInitDecompress, Dictionary, DllImport (+8 more)
-
-### Community 116 - "Appearance Gender Classifier"
+### Community 139 - "AppearanceGenderClassifier"
 Cohesion: 0.15
-Nodes (10): Dictionary, HashSet, IEnumerable, List, AppearanceGender, Female, Futa, Male (+2 more)
+Nodes (11): AppearanceSubfilter, Dictionary, HashSet, IEnumerable, List, AppearanceGender, Female, Futa (+3 more)
 
-### Community 117 - "Vpb Random History"
-Cohesion: 0.11
-Nodes (9): Action, Category, Coroutine, IEnumerator, Scope, Dictionary, Scope, VpbRandomHistory (+1 more)
-
-### Community 118 - "Vector2 Subsystem"
-Cohesion: 0.09
-Nodes (10): Action, QuickMenuSaveOption, GameObject, Image, RectTransform, Sprite, Vector2, QuickMenuAssignDragSourceHandler (+2 more)
-
-### Community 119 - "File Button"
-Cohesion: 0.08
-Nodes (10): FileButton, Image, PointerEventData, RawImage, RectTransform, Sprite, FileButton, IEventSystemHandler (+2 more)
-
-### Community 120 - "Gallery Panel Appearance Auto Spawn"
-Cohesion: 0.11
+### Community 140 - ".SpawnPersonThenLoadAppearanceCo"
+Cohesion: 0.10
 Nodes (10): IEnumerator, Vector3, HashSet, IEnumerator, IList, JSONStorable, SuperController, Transform (+2 more)
 
-### Community 121 - "Vpb Perf Telemetry"
-Cohesion: 0.11
-Nodes (11): ProcessMemoryCountersEx, Snapshot, UIntPtr, UnityEventBase, DllImport, FieldInfo, IntPtr, MarshalAs (+3 more)
+### Community 141 - "CreatorRatingRowHandler"
+Cohesion: 0.15
+Nodes (10): CanvasGroup, GameObject, GridLayoutGroup, Image, RectTransform, Transform, CreatorRatingRowHandler, IsSelectorOpen (+2 more)
 
-### Community 122 - "Gallery Panel UI Hover Preview"
+### Community 142 - "Dictionary"
+Cohesion: 0.11
+Nodes (7): Dictionary, HashSet, IList, PathCacheEntry, Dictionary, HashSet, IList
+
+### Community 143 - "PointerEventData"
 Cohesion: 0.08
-Nodes (12): FooterPerfToggleScroll, PointerEventData, TboxRandomPreviewScroll, PointerEventData, HoverPreviewPlaceholderDragHandler, PointerEventData, ScrollRect, GalleryViewportCtrlScrollColumns (+4 more)
+Nodes (11): Action, CanvasGroup, Color, PointerEventData, QuickMenuAssignDropTargetHandler, QuickMenuSquareHover, SpriteRenderer, QuickMenuAssignDragSourceHandler (+3 more)
 
-### Community 123 - "VPB Logger Log Source"
-Cohesion: 0.09
-Nodes (22): ILogListener, ILogSource, LogLevel, Dictionary, LogEventArgs, VPBInGameLogListener, VPBLogEventArgs, ShowInGame (+14 more)
+### Community 144 - "VamAssetBundleQueue"
+Cohesion: 0.17
+Nodes (9): AssetLoader, Entry, AssetBundle, AssetBundleFromFileRequest, Dictionary, FieldInfo, Delivery, VamAssetBundleQueue (+1 more)
 
-### Community 124 - "VPB Patcher"
-Cohesion: 0.11
-Nodes (13): AssemblyDefinition, ManifestRow, ManualLogSource, IEnumerable, List, ManifestRow, PendingFileEntry, PendingUpdate (+5 more)
+### Community 145 - ".FileExists"
+Cohesion: 0.08
+Nodes (3): FileListCacheSnapshot, DateTime, DirectoryButton
 
-### Community 125 - "Generic Texture Hook"
+### Community 146 - ".UpdateTabs"
+Cohesion: 0.08
+Nodes (6): GameObject, IEnumerator, GameObject, RectTransform, IEnumerable, KeyValuePair
+
+### Community 147 - ".QuickMenuUpdateVrWatch"
+Cohesion: 0.10
+Nodes (4): StringBuilder, SuperController, Transform, Vector3
+
+### Community 148 - "GenericTextureHook"
 Cohesion: 0.11
 Nodes (9): BufferPathMap, Dictionary, Texture2D, TextureFormat, BufferPathMap, Count, GenericTextureHook, DataToPathCount (+1 more)
 
-### Community 126 - "Gallery Panel Toolbox Load Unload"
-Cohesion: 0.13
-Nodes (5): CacheWriteMode, IEnumerator, MonoBehaviour, SuperController, OnDemandTextureCacheHook
+### Community 149 - "VpbShortcut"
+Cohesion: 0.06
+Nodes (31): CanvasGroup, VpbShortcut, Apply, ApplyAlt, CommandPalette, Count, DeleteSelection, DeleteSelectionAlt (+23 more)
 
-### Community 127 - "Image Loading Mgr Try Apply"
+### Community 150 - "InternalSettingDefinition"
+Cohesion: 0.10
+Nodes (8): Color, Func, InternalSettingDefinition, InternalSettingDefinition, InternalSettingDefinition, InternalSettingDefinition, InternalSettingDefinition, InternalSettingControlType
+
+### Community 151 - "MonoBehaviour"
+Cohesion: 0.08
+Nodes (16): DetailStripAppliedTagRow, Action, PointerEventData, SettingsPointerDownAction, SettingsSliderReleaseCommit, SettingsValueEllipsis, InputField, SideSearchFocusKeys (+8 more)
+
+### Community 152 - "OutlinerResetSnapshot"
 Cohesion: 0.11
-Nodes (8): CachedTexture, LinkedListNode, Texture2D, TextureFormat, CachedDecompressed, CachedTexture, PendingRuntimeZstdWrite, PendingRuntimeZstdWrite
+Nodes (14): MorphEntry, DAZMorph, HSVColor, List, Vector3, Entry, MorphEntry, OutlinerResetSnapshot (+6 more)
 
-### Community 129 - "File Manager Get Entry"
-Cohesion: 0.09
-Nodes (10): AspectRatioFitter, GameObject, IEnumerator, RawImage, StringBuilder, TextureFormat, Job, IsDone (+2 more)
+### Community 153 - "VPBPatcher"
+Cohesion: 0.10
+Nodes (13): AssemblyDefinition, ManualLogSource, IEnumerable, List, ManifestRow, PendingFileEntry, PendingUpdate, ManifestRow (+5 more)
 
-### Community 130 - "Gallery Panel Modal Remap Atom"
-Cohesion: 0.13
-Nodes (4): Action, BrokenUidRef, Dictionary, HashSet
+### Community 154 - "UIFloatPanelDrag"
+Cohesion: 0.11
+Nodes (15): Action, Camera, Canvas, Func, PointerEventData, RectTransform, Vector2, UIFloatPanelDrag (+7 more)
 
-### Community 131 - "Gallery User Tag Yaml Brain"
+### Community 155 - "GalleryUserTagYamlBrain"
 Cohesion: 0.20
 Nodes (7): Dictionary, IDictionary, IList, StringBuilder, GalleryUserTagCategoryYaml, GalleryUserTagYamlBrain, GalleryUserTagCategoryYaml
 
-### Community 132 - "Zstd Compressor"
-Cohesion: 0.11
-Nodes (8): BulkZstdWorkItem, BulkZstdWorkKind, HashSet, JSONNode, Queue, BulkZstdWorkItem, ZstdCompressor, Process
-
-### Community 133 - "Gallery Panel IO Apply Dependencies"
-Cohesion: 0.10
-Nodes (7): HashSet, IList, FilterFrame, VirtualFileEntry, MissingPackageListEntry, RequestedUid, PackageFilterMode
-
-### Community 134 - "Dependency Graph"
-Cohesion: 0.15
-Nodes (8): Action, Dictionary, HashSet, IEnumerable, Regex, DependencyGraph, Node, Node
-
-### Community 136 - "Gallery Thumbnail Cache"
-Cohesion: 0.15
-Nodes (11): BinaryReader, BinaryWriter, Dictionary, FileStream, IEnumerator, Texture2D, TextureFormat, CacheEntry (+3 more)
-
-### Community 137 - "DAZ Clothing Hook"
+### Community 156 - "FileButton"
 Cohesion: 0.09
-Nodes (13): DAZCharacterSelector, DAZClothingItem, DAZSkinWrap, FieldInfo, Harmony, HashSet, IEnumerator, JSONStorable (+5 more)
+Nodes (7): Image, PointerEventData, RawImage, RectTransform, Sprite, FileButton, IEventSystemHandler
 
-### Community 138 - "Super Controller Hook Post Get"
-Cohesion: 0.11
-Nodes (4): VarFileEntry, VarPackage, VarPackageGroup, PatchAssetLoader
+### Community 157 - ".BuildOutlinerAlignSection"
+Cohesion: 0.12
+Nodes (11): List, Vector3, OutlinerAlign, OutlinerPasteMode, Position, PositionAndRotation, Rotation, Scale (+3 more)
 
-### Community 139 - "Pool Manager"
-Cohesion: 0.10
+### Community 158 - "PoolManager"
+Cohesion: 0.09
 Nodes (14): MonsterLove.Collections, Dictionary, Func, List, ObjectPool, Count, CountUsedItems, ObjectPoolContainer (+6 more)
 
-### Community 140 - "Gallery Layout Preset Pane State"
+### Community 159 - "FileAndDirInfo"
+Cohesion: 0.07
+Nodes (19): FileAndDirInfo, DateTime, Dictionary, FileAndDirInfo, DirectoryEntry, FileEntry, FullName, isAutoInstall (+11 more)
+
+### Community 160 - ".DockPaneToSide"
 Cohesion: 0.12
-Nodes (11): JSONNode, Quaternion, Vector2, Vector3, LayoutDockSlotState, LayoutFloatState, LayoutGlobalState, LayoutPaneState (+3 more)
+Nodes (3): IEnumerator, Sprite, Transform
 
-### Community 141 - "Exclusive Dependency Finder"
-Cohesion: 0.19
-Nodes (8): Dictionary, Func, HashSet, IList, ExclusiveDependencyFinder, ScanInput, ScanResult, ScanInput
-
-### Community 142 - "Vam Scene Load Phase Profiler"
+### Community 161 - "PointerEventData"
 Cohesion: 0.11
+Nodes (8): PointerEventData, DetailStripHeightDragRelay, UIFileEntryLeftReleaseSelect, UIFileEntryPointerForwarder, UILeftClickDelegate, Graphic, PointerEventData, IDragHandler
+
+### Community 162 - "VpbResourceType"
+Cohesion: 0.08
+Nodes (17): PresetManager, VpbResourceType, Appearance, Atoms, BreastPhysics, Clothing, ClothingItem, CUA (+9 more)
+
+### Community 163 - "VamSceneLoadPhaseProfiler"
+Cohesion: 0.10
 Nodes (10): Dictionary, Stopwatch, StringBuilder, Phase, SlowFrame, VamSceneLoadPhaseProfiler, Active, HookBucket (+2 more)
 
-### Community 143 - "Appearance Preset Suppress"
-Cohesion: 0.12
-Nodes (10): Exception, FileEntry, JSONClass, Stopwatch, AppearanceApplyProbe, Atom, IEnumerator, JSONClass (+2 more)
+### Community 164 - ".Start"
+Cohesion: 0.10
+Nodes (17): IList, JSONStorableBool, JSONStorableStringChooser, Color, JSONStorableBool, JSONStorableFloat, JSONStorableStringChooser, MVRPluginManager (+9 more)
 
-### Community 144 - "JSON Extensions"
-Cohesion: 0.12
-Nodes (12): Dictionary, IEnumerable, JSONArray, JSONClass, JSONNode, List, JSONExtensions, TransformType (+4 more)
+### Community 165 - "OutlinerSpringAxis"
+Cohesion: 0.11
+Nodes (13): IInitializePotentialDragHandler, Action, Camera, Canvas, Image, PointerEventData, RectTransform, Kind (+5 more)
 
-### Community 145 - "Gallery Panel Sticky Tooltip Set"
+### Community 166 - "HubResourceItemUI"
 Cohesion: 0.09
-Nodes (4): GameObject, GameObject, IEnumerator, GameObject
+Nodes (18): Color32, EventTrigger, Font, Image, Outline, RectTransform, ScrollRect, GameObject (+10 more)
 
-### Community 146 - "Extern Methods ZSTD c Parameter"
+### Community 167 - ".CreateQuickMenuButton"
+Cohesion: 0.11
+Nodes (15): Action, QuickMenuSaveOption, GameObject, Image, RectTransform, Vector2, QuickMenuRightClickHandler, QuickMenuSaveOption (+7 more)
+
+### Community 168 - "GallerySearchQuery"
+Cohesion: 0.15
+Nodes (11): StatusFlags, GallerySearchBranch, HasDataPackAtoms, IsEmpty, GallerySearchQuery, Empty, HasDataPackAtoms, HasStatusFlags (+3 more)
+
+### Community 169 - "HarmonyMethod"
+Cohesion: 0.09
+Nodes (10): HarmonyMethod, Harmony, Harmony, Harmony, VamLoadPerfHooks, Harmony, Harmony, Harmony (+2 more)
+
+### Community 170 - "VPB.Outliner"
+Cohesion: 0.07
+Nodes (5): VPB.Outliner, HashSet, List, OutlinerSelection, Count
+
+### Community 171 - "CategoryFilterState"
+Cohesion: 0.09
+Nodes (6): CategoryFilterState, SceneHubSubfilter, AppearanceSubfilter, ClothingSubfilter, HairSubfilter, SceneHubSubfilter
+
+### Community 172 - "VpbImportReadQueue"
+Cohesion: 0.12
+Nodes (12): Result, TextReader, Exception, Func, JSONClass, Result, VpbImportReadQueue, VpbImportReadRequest (+4 more)
+
+### Community 173 - ".PostGetVarFileEntryOnDemand"
+Cohesion: 0.11
+Nodes (8): VarFileEntry, VarPackage, VarPackageGroup, HashSet, VarFileEntry, VarPackage, VarPackageGroup, PatchAssetLoader
+
+### Community 174 - "SerializableVarPackage"
+Cohesion: 0.12
+Nodes (8): BinaryReader, BinaryWriter, SerializableVarPackage, Dictionary, ManualResetEvent, AllSerializableVarPackage, VarPackageMgr, IsManifestReady
+
+### Community 175 - "LayoutPaneState"
+Cohesion: 0.14
+Nodes (12): JSONNode, Quaternion, Vector2, Vector3, LayoutDockSlotState, LayoutFloatState, LayoutGlobalState, LayoutPaneState (+4 more)
+
+### Community 176 - "VpbPerfTelemetry"
+Cohesion: 0.14
+Nodes (7): Snapshot, UIntPtr, UnityEventBase, FieldInfo, ProcessMemoryCountersEx, Snapshot, VpbPerfTelemetry
+
+### Community 178 - "ExclusiveDependencyFinder"
+Cohesion: 0.19
+Nodes (9): Dictionary, Func, HashSet, IList, ExclusiveDependencyFinder, ScanInput, ScanResult, ScanInput (+1 more)
+
+### Community 179 - "ZSTD_cParameter"
 Cohesion: 0.07
 Nodes (26): IDictionary, IntPtr, CompressionOptions, Default, MaxCompressionLevel, MinCompressionLevel, ZSTD_cParameter, ZSTD_c_chainLog (+18 more)
 
-### Community 147 - "Ba Importer Run Import"
-Cohesion: 0.12
-Nodes (14): HashSet, JSONNode, BaImporter, BaMigrationManifest, BaMigrationResult, BaResourceEntry, ManifestHideEntry, ManifestTagEntry (+6 more)
-
-### Community 148 - "Gallery Panel Thumb Placeholder Bitmap"
+### Community 180 - "VpbClothingReplace"
 Cohesion: 0.13
-Nodes (14): BakeRequest, CacheEntry, Camera, Canvas, Dictionary, Font, GameObject, Queue (+6 more)
+Nodes (9): JSONClass, VpbClothingReplace, GeometryEnabled, Strictness, VpbReplaceStrictness, Aggressive, Balanced, Strict (+1 more)
 
-### Community 149 - "Gallery Panel Settings Internal Setting"
-Cohesion: 0.09
-Nodes (9): Color, Func, InternalSettingDefinition, Func, InternalSettingDefinition, InternalSettingDefinition, HashSet, InternalSettingDefinition (+1 more)
+### Community 182 - "TitleSearchChipDragSource"
+Cohesion: 0.13
+Nodes (10): Camera, Canvas, CanvasGroup, Color, Image, PointerEventData, RaycastResult, TitleSearchChipDragSource (+2 more)
 
-### Community 150 - "Gallery Panel Settings Internal Build"
-Cohesion: 0.09
-Nodes (7): Dictionary, InternalSettingRowEntry, SettingsGroupTab, IEnumerator, InternalSettingDefinition, InternalSettingRowEntry, SettingsGroupTab
+### Community 183 - "OutlinerInspectorSections"
+Cohesion: 0.13
+Nodes (5): List, OutlinerInspectorSections, Dictionary, List, OutlinerPins
 
-### Community 151 - "Vam Scan Filter"
-Cohesion: 0.08
-Nodes (9): MethodInfo, VamScanFilter, HasRegisterMethodAccess, HasVamRefreshedAtLeastOnce, IsVamRefreshInProgress, ScanAllowedCount, ScanBlockedCount, Exception (+1 more)
+### Community 184 - ".CreatorStripImportDefaultSubSceneRoutine"
+Cohesion: 0.11
+Nodes (11): CanvasRenderer, HashSet, IEnumerator, MethodInfo, SuperController, Canvas, HashSet, IEnumerator (+3 more)
 
-### Community 152 - "File Browser Start"
+### Community 185 - "GalleryHistoryFilterMode"
+Cohesion: 0.11
+Nodes (14): Row, GalleryHistoryFilterMode, Appearance, Body, Clothing, Hair, Misc, MostUsed (+6 more)
+
+### Community 186 - "DependencyGraph"
+Cohesion: 0.19
+Nodes (7): Dictionary, HashSet, IEnumerable, Regex, DependencyGraph, Node, Node
+
+### Community 187 - "PluginSignatureBridge"
+Cohesion: 0.14
+Nodes (9): Stopwatch, Action, Dictionary, Exception, HashSet, MethodInfo, PluginSignatureBridge, PluginSignatureSaveBridge (+1 more)
+
+### Community 188 - "DAZClothingHook"
+Cohesion: 0.10
+Nodes (11): DAZCharacterSelector, DAZClothingItem, DAZSkinWrap, FieldInfo, Harmony, HashSet, IEnumerator, JSONStorableDynamic (+3 more)
+
+### Community 189 - "VamNativePackageListing"
+Cohesion: 0.16
+Nodes (12): FieldInfo, Harmony, ListingOutcome, Snapshot, TreeStamp, VamNativePackageListing, Enabled, LastListingWasCached (+4 more)
+
+### Community 190 - "VPBLogSource"
 Cohesion: 0.12
-Nodes (15): JSONStorableStringChooser, Color, JSONStorableBool, JSONStorableFloat, JSONStorableStringChooser, MVRPluginManager, RectTransform, Transform (+7 more)
+Nodes (12): ILogListener, ILogSource, LogLevel, DateTime, LogEventArgs, VPBInGameLogListener, VPBLogEventArgs, DisplaySourceName (+4 more)
 
-### Community 153 - "Material Options Texture Guard"
-Cohesion: 0.18
+### Community 191 - "OutlinerLock"
+Cohesion: 0.16
+Nodes (8): Dictionary, FreeControllerV3, Vector3, OutlinerLock, PriorState, PositionState, PriorState, RotationState
+
+### Community 192 - "VpbShortcutMap"
+Cohesion: 0.15
+Nodes (6): Binding, InternalSettingsSnapshot, Dictionary, VpbShortcutDef, VpbShortcutMap, Defs
+
+### Community 193 - "SimpleTransform"
+Cohesion: 0.14
+Nodes (10): BoneMeta, Dictionary, JSONClass, List, Quaternion, Vector3, BoneMeta, CUAConverter (+2 more)
+
+### Community 194 - "VpbClothingFootprint"
+Cohesion: 0.16
+Nodes (7): VpbClothingFootprint, CellBits, IsBodySpace, IsDegenerate, IsUsable, Dictionary, VpbClothingFootprintCache
+
+### Community 195 - "VpbDataPackReader"
+Cohesion: 0.15
+Nodes (6): VpbDataPackHeader, VpbDataPackReader, StreamReader, List, Stream, CslistParser
+
+### Community 196 - "MaterialOptionsTextureGuard"
+Cohesion: 0.20
 Nodes (8): DAZSkinWrapMaterialOptions, Dictionary, ImageLoaderCallback, MaterialOptions, QueuedImage, MaterialOptionsTextureGuard, SlotState, SlotState
 
-### Community 154 - "Gallery Panel Creator Ratings Rating"
-Cohesion: 0.21
-Nodes (10): CanvasGroup, GameObject, GridLayoutGroup, Image, RectTransform, Transform, CreatorRatingRowHandler, IsSelectorOpen (+2 more)
-
-### Community 155 - "Gallery Panel Title Search Chips"
-Cohesion: 0.13
-Nodes (3): InputField, LayoutElement, TitleSearchCommitKeys
-
-### Community 156 - "Gallery Panel Tabs Helpers Apply"
+### Community 197 - "LooseVapGenderBulkCache"
 Cohesion: 0.15
-Nodes (6): RawImage, RectMask2D, Transform, GameObject, RawImage, PluginThumbPlaceholderRefs
+Nodes (12): Gender, Dictionary, JSONNode, KeyValuePair, List, Gender, Female, Futa (+4 more)
 
-### Community 157 - "File Browser Sync Displayed"
+### Community 199 - ".RebuildMergeOutfitRows"
+Cohesion: 0.13
+Nodes (8): Color, GameObject, HashSet, Image, JSONClass, RectTransform, Transform, UnityAction
+
+### Community 200 - ".BuildQuickMenuPositionEditorModal"
 Cohesion: 0.11
-Nodes (6): HashSet, HashSet, RawImage, RectTransform, Vector2, FileBrowser
+Nodes (15): Action, GameObject, HorizontalLayoutGroup, RectTransform, Transform, Vector2, VerticalLayoutGroup, InternalSettingControlType (+7 more)
 
-### Community 158 - "Hub Resource Item UI"
-Cohesion: 0.12
-Nodes (15): Color32, EventTrigger, Font, Image, Outline, RectTransform, ScrollRect, GameObject (+7 more)
-
-### Community 159 - "Gallery Panel Remove Mode Target"
-Cohesion: 0.13
-Nodes (11): DAZDynamicItem, DAZCharacterSelector, DAZSkinWrap, Object, Ray, Vector3, RemoveTarget, WrapGeom (+3 more)
-
-### Community 160 - "Gallery Title Search Chip"
-Cohesion: 0.15
-Nodes (13): StatusFlags, StringBuilder, GalleryTitleSearchChipUtil, TitleSearchChip, CanExclude, TitleSearchChipKind, Broad, Creator (+5 more)
-
-### Community 161 - "Vam Frame Attribution Profiler"
-Cohesion: 0.13
-Nodes (11): Assembly, StripKeepSortMode, KeptFirst, Name, Type, TypeThenName, Dictionary, Harmony (+3 more)
-
-### Community 162 - "Gallery Panel Global Source Filter"
-Cohesion: 0.13
-Nodes (11): Action, Canvas, Color, GameObject, HorizontalLayoutGroup, LayoutElement, RectMask2D, RectTransform (+3 more)
-
-### Community 163 - "Gallery Panel User Tags Tag"
+### Community 201 - "VpbStartupScene"
 Cohesion: 0.18
-Nodes (5): Canvas, CanvasGroup, PointerEventData, UserTagPickDragSource, ConsumedByDrag
+Nodes (3): IEnumerator, SuperController, VpbStartupScene
 
-### Community 164 - "Gallery UI Utils Draggable Item"
-Cohesion: 0.08
-Nodes (19): ItemType, Animation, Appearance, BreastPhysics, Clothing, ClothingItem, ClothingPreset, CUA (+11 more)
+### Community 202 - "VamScanFilter"
+Cohesion: 0.09
+Nodes (11): MethodInfo, NativeRegistrationGate, Allowed, Blocked, Unfiltered, VamScanFilter, HasRegisterMethodAccess, HasVamRefreshedAtLeastOnce (+3 more)
 
-### Community 165 - "Va M Daz Import Material"
+### Community 203 - "VPBLogger"
+Cohesion: 0.13
+Nodes (14): IEquatable, Key, Dictionary, Stopwatch, VPBLogger, SessionDirectory, SessionFileName, SessionFilePath (+6 more)
+
+### Community 204 - "VaMDazImportMaterialExtractor"
 Cohesion: 0.21
 Nodes (9): DazTextureEntry, Action, JSONClass, JSONNode, TextureFlags, DazTextureEntry, MaterialState, VaMDazImportMaterialExtractor (+1 more)
 
-### Community 166 - "Extern Methods ZSTD Error Code"
+### Community 205 - ".BuildOrderedCategoriesForQuickSwitch"
+Cohesion: 0.13
+Nodes (6): Category, Coroutine, IEnumerator, PointerEventData, CategoryQuickSwitchHeaderBehaviour, CategoryQuickSwitchRowMarker
+
+### Community 206 - "GalleryQuickLaunchHost"
+Cohesion: 0.12
+Nodes (11): PointerEventData, GalleryQuickLaunchHost, ApplyMode, DoubleClick, SingleClick, GalleryLayoutMode, Grid, TabSide (+3 more)
+
+### Community 207 - "VpbShutdown"
+Cohesion: 0.11
+Nodes (9): Thread, Action, Func, ManualResetEvent, Entry, VpbShutdown, IsQuitting, QuitHandle (+1 more)
+
+### Community 208 - "RatingsManager"
+Cohesion: 0.15
+Nodes (5): Dictionary, SerializableRatings, RatingsManager, Instance, SerializableRating
+
+### Community 209 - "JSONExtensions"
+Cohesion: 0.17
+Nodes (7): Dictionary, IEnumerable, JSONArray, JSONClass, JSONNode, List, JSONExtensions
+
+### Community 210 - "ZSTD_ErrorCode"
 Cohesion: 0.08
 Nodes (24): ZSTD_ErrorCode, ZSTD_error_checksum_wrong, ZSTD_error_corruption_detected, ZSTD_error_dictionary_corrupted, ZSTD_error_dictionary_wrong, ZSTD_error_dictionaryCreation_failed, ZSTD_error_dstBuffer_null, ZSTD_error_dstSize_tooSmall (+16 more)
 
-### Community 167 - "File Browser And Dir Info"
-Cohesion: 0.10
-Nodes (18): FileAndDirInfo, DateTime, FileAndDirInfo, DirectoryEntry, FileEntry, FullName, isAutoInstall, isDirectory (+10 more)
+### Community 211 - ".BuildRemoveResourceTabs"
+Cohesion: 0.13
+Nodes (9): Action, Color, DAZCharacterSelector, Func, GameObject, RemoveTabItem, DAZCharacterSelector, MethodInfo (+1 more)
 
-### Community 168 - "Message Kit"
+### Community 212 - "VpbLegacyLayout"
+Cohesion: 0.13
+Nodes (9): VPB.Shared, VPB.Patcher, VpbCatalogState, Fetching, Ready, Unavailable, Unknown, Action (+1 more)
+
+### Community 213 - "ScrollbarSync"
+Cohesion: 0.13
+Nodes (9): BoxCollider, Scrollbar, Vector3, ScrollbarMinHandleHeight, ScrollbarSync, LastScrollbarDragRealtime, LastScrollbarDragValue, scrollbar (+1 more)
+
+### Community 214 - ".IsPersonLikeAtomType"
+Cohesion: 0.16
+Nodes (9): JSONClass, JSONArray, JSONClass, Dictionary, FileEntry, IList, JSONArray, JSONClass (+1 more)
+
+### Community 215 - ".Parse"
+Cohesion: 0.17
+Nodes (9): HashSet, JSONClass, JSONNode, JSONOptimization, JSONScanResult, HashSet, StringBuilder, VarNameParser (+1 more)
+
+### Community 216 - "VamCatalogRefreshProfiler"
+Cohesion: 0.21
+Nodes (7): CallToken, Exception, Harmony, CallToken, Scope, VamCatalogRefreshProfiler, Scope
+
+### Community 217 - "VpbBodyRegion"
 Cohesion: 0.10
+Nodes (20): Rule, VpbBodyRegion, Abdomen, Chest, Count, Foot, Forearm, Groin (+12 more)
+
+### Community 218 - "LocalDiskEntryCache"
+Cohesion: 0.13
+Nodes (8): DirListing, Dictionary, Stopwatch, DirListing, LocalDiskEntryCache, Exception, HarmonyFinalizer, KeyValuePair
+
+### Community 219 - "MessageKit"
+Cohesion: 0.11
 Nodes (6): Action, Dictionary, IDictionary, List, MessageKit, MessageKitManager
 
-### Community 169 - "Gallery Panel Layout Preset Float"
-Cohesion: 0.13
-Nodes (5): Color, Image, InputField, UnityAction, LayoutPresetRowRefs
+### Community 222 - ".EnsurePluginThumbPlaceholderUi"
+Cohesion: 0.17
+Nodes (10): Color, GameObject, Image, RectMask2D, RectTransform, Transform, Vector2, GameObject (+2 more)
 
-### Community 170 - "Gallery Panel Modal Merge Outfit"
-Cohesion: 0.12
-Nodes (7): Color, GameObject, HashSet, Image, JSONClass, Transform, UnityAction
-
-### Community 171 - "Hub Browse Init UI"
-Cohesion: 0.16
-Nodes (12): GameObject, Image, JSONStorableBool, MVRPluginManager, RectTransform, Sprite, SpriteRenderer, Transform (+4 more)
-
-### Community 172 - "On Demand Zstd Write Queue"
-Cohesion: 0.19
-Nodes (8): JSONClass, Queue, TextureFormat, Job, OnDemandZstdWriteQueue, IsIdle, PendingCount, Job
-
-### Community 173 - "Gallery Dependency Whitelist Ensure UGUI"
-Cohesion: 0.13
-Nodes (12): EventSystem, Canvas, CanvasScaler, GameObject, GraphicRaycaster, HashSet, InputField, RectMask2D (+4 more)
-
-### Community 174 - "File Manager Convert Simulated Package"
-Cohesion: 0.16
-Nodes (3): FileAttributes, FileStream, StreamWriter
-
-### Community 175 - "Gallery Layout Preset Float Kind"
-Cohesion: 0.13
-Nodes (10): LayoutFloatKind, CreatorStrip, DetailStripTagMenu, ImportSidebar, Plugins, QuickFilters, QuickMenuAssign, Settings (+2 more)
-
-### Community 176 - "VPB Translation"
-Cohesion: 0.15
-Nodes (5): RectTransform, Dictionary, VPBTranslation, CurrentLocale, TranslationsDirectory
-
-### Community 177 - "Bone View Mode Renderer"
-Cohesion: 0.15
-Nodes (9): Color, HashSet, Transform, Vector3, BoneViewMode, IsEnabled, BoneViewRenderer, Material (+1 more)
-
-### Community 178 - "Var Package Scan"
+### Community 223 - ".DisplayConfirm"
 Cohesion: 0.14
-Nodes (3): Exception, ZipFile, ZipNameEncodingCacheItem
+Nodes (5): KeyValuePair, UnityAction, IList, KeyValuePair, GalleryUserTagEditorText
 
-### Community 179 - "Va M Texture Load Flags"
+### Community 224 - "UIColorPicker"
+Cohesion: 0.16
+Nodes (9): Action, Canvas, Color, GraphicRaycaster, Image, InputField, Transform, UIColorPicker (+1 more)
+
+### Community 225 - "CustomAssetLoader"
+Cohesion: 0.16
+Nodes (8): Action, AssetBundle, AssetBundleFromFileRequest, Dictionary, HashSet, IEnumerator, SceneLoadIntoTransformRequest, CustomAssetLoader
+
+### Community 226 - ".InitUI"
+Cohesion: 0.17
+Nodes (11): GameObject, Image, MVRPluginManager, RectTransform, Sprite, SpriteRenderer, Transform, UIDynamicButton (+3 more)
+
+### Community 227 - ".TryResolve"
 Cohesion: 0.26
 Nodes (5): JSONClass, JSONClass, JSONNode, TextureFlags, VaMTextureLoadFlags
 
-### Community 180 - "Vam Asset Bundle Queue"
-Cohesion: 0.21
-Nodes (9): AssetLoader, Entry, AssetBundle, AssetBundleFromFileRequest, Dictionary, FieldInfo, IEnumerator, Entry (+1 more)
-
-### Community 181 - "Gallery Panel Lifecycle Create Left"
-Cohesion: 0.20
-Nodes (5): Action, GameObject, Image, RectTransform, Transform
-
-### Community 183 - "Gallery UI Utils Behaviours Scrollbar"
+### Community 228 - ".EndUiJob"
 Cohesion: 0.15
-Nodes (8): BoxCollider, Scrollbar, ScrollbarMinHandleHeight, ScrollbarSync, LastScrollbarDragRealtime, LastScrollbarDragValue, scrollbar, scrollRect
+Nodes (5): AudioClip, AudioSource, GameObject, StringBuilder, ZstdStats
 
-### Community 184 - "Plugin Signature Bridge"
-Cohesion: 0.19
-Nodes (8): Action, Dictionary, Exception, HashSet, MethodInfo, PluginSignatureBridge, PluginSignatureSaveBridge, PluginSignatureSceneSaveBridge
-
-### Community 185 - "Vam Hook Plugin Quick Menu"
-Cohesion: 0.14
-Nodes (4): QmPreviewReel, Dictionary, QuickMenuAssignableAction, QmPreviewReel
-
-### Community 186 - "CUA Converter Simple Transform"
-Cohesion: 0.17
-Nodes (9): BoneMeta, Dictionary, JSONClass, List, Quaternion, Vector3, BoneMeta, CUAConverter (+1 more)
-
-### Community 187 - "Gallery Panel Command Palette Rebuild"
-Cohesion: 0.16
-Nodes (8): CmdPaletteRowKind, BoxCollider, GameObject, LayoutElement, RectMask2D, RectTransform, VerticalLayoutGroup, CmdPaletteFilterRow
-
-### Community 188 - "Gallery Panel Filter Chips Chip"
+### Community 229 - "FilterChipKind"
 Cohesion: 0.10
-Nodes (20): FilterChipKind, AlwaysLoaded, ClearAll, Creator, HiddenOnly, HideOldVersions, License, Overflow (+12 more)
+Nodes (21): FilterChipKind, AlwaysLoaded, ClearAll, Creator, HiddenOnly, HideOldVersions, License, Overflow (+13 more)
 
-### Community 190 - "Quick Filters UI Apply Layout"
-Cohesion: 0.14
-Nodes (6): BoxCollider, Color, HorizontalLayoutGroup, LayoutElement, Transform, VerticalLayoutGroup
-
-### Community 191 - "Custom Asset Loader"
-Cohesion: 0.18
-Nodes (7): Action, AssetBundle, AssetBundleFromFileRequest, Dictionary, IEnumerator, SceneLoadIntoTransformRequest, CustomAssetLoader
-
-### Community 192 - "Gallery Panel Context Bar Pack"
-Cohesion: 0.13
-Nodes (6): ActiveFilterChipSpec, FilterChipKind, GameObject, RectTransform, UnityAction, ActiveFilterChipSpec
-
-### Community 193 - "Gallery Icon Atlas"
-Cohesion: 0.18
-Nodes (7): Dictionary, Rect, Texture2D, GalleryIconAtlas, IconCount, IsLoaded, LoadError
-
-### Community 194 - "Gallery Panel Title Search Chips"
-Cohesion: 0.21
-Nodes (6): Canvas, CanvasGroup, PointerEventData, RaycastResult, TitleSearchChipDragSource, ConsumedByDrag
-
-### Community 196 - "Atom Gender Utils Is Male"
-Cohesion: 0.24
-Nodes (5): Atom, DAZCharacter, AtomGenderUtils, Atom, VpbCreatorStripPossessable
-
-### Community 197 - "Loose Vap Gender Probe Classify"
-Cohesion: 0.18
-Nodes (8): Gender, Dictionary, Gender, Female, Futa, Male, Unknown, LooseVapGenderProbe
-
-### Community 198 - "Var Package Group"
+### Community 231 - "RoundedRectOutline"
 Cohesion: 0.12
-Nodes (9): VarPackageGroup, Name, NewestEnabledPackage, NewestEnabledVersion, NewestPackage, NewestVersion, Packages, UserNotes (+1 more)
+Nodes (11): GameObject, Image, RectTransform, Transform, Rect, VertexHelper, RoundedRectOutline, borderThickness (+3 more)
 
-### Community 199 - "Vpb Companion Server"
+### Community 232 - "BoneViewRenderer"
+Cohesion: 0.15
+Nodes (9): Color, HashSet, Transform, Vector3, BoneViewMode, IsEnabled, BoneViewRenderer, Material (+1 more)
+
+### Community 233 - "JSONClass"
+Cohesion: 0.14
+Nodes (8): Action, Dictionary, IList, JSONClass, GameObject, RawImage, HubResourcePackageUI, HubResourcePackageUI
+
+### Community 234 - "OutlinerRowDrag"
+Cohesion: 0.17
+Nodes (7): EventFunction, Func, GameObject, OutlinerRowBind, PointerEventData, ScrollRect, OutlinerRowDrag
+
+### Community 235 - ".DetailStripToggleHubTagHidden"
+Cohesion: 0.15
+Nodes (6): DataPackTagPrefSnapshot, Connection, Dictionary, HashSet, DataPackTagPrefSnapshot, Any
+
+### Community 236 - ".StartImportSelectedSceneAtoms"
 Cohesion: 0.16
+Nodes (6): BrokenUidRef, Dictionary, HashSet, ImportPluginEntry, ImportSceneAtomEntry, ImportPluginEntry
+
+### Community 237 - ".ApplyDiagnosticLevelCore"
+Cohesion: 0.13
+Nodes (3): ConfigEntry, InternalSettingsSnapshot, VpbDiagnosticLogLevel
+
+### Community 238 - ".InvalidateInternalSettingsDefsCache"
+Cohesion: 0.18
+Nodes (5): InternalSettingDefinition, VpbRelease, DatePart, DaysAgo, DisplayLabel
+
+### Community 239 - ".IsMale"
+Cohesion: 0.21
+Nodes (6): Atom, DAZCharacter, Gender, AtomGenderUtils, Atom, VpbCreatorStripPossessable
+
+### Community 241 - "OutlinerFilter"
+Cohesion: 0.20
+Nodes (4): List, OutlinerFilter, OutlinerFilterQuery, IsEmpty
+
+### Community 242 - "VamPathFastPaths"
+Cohesion: 0.13
+Nodes (9): ConstructorInfo, CodeInstruction, Harmony, IEnumerable, MethodInfo, VamPathFastPaths, RedirectedRegexCalls, Harmony (+1 more)
+
+### Community 243 - ".HandleDropWithContext"
+Cohesion: 0.19
+Nodes (5): CharacterController, Collider, IEnumerator, Rigidbody, Vector3
+
+### Community 244 - "LayoutFloatKind"
+Cohesion: 0.15
+Nodes (10): LayoutFloatKind, CreatorStrip, DetailStripTagMenu, ImportSidebar, Plugins, QuickFilters, QuickMenuAssign, Settings (+2 more)
+
+### Community 245 - ".PrepareTypeImport"
+Cohesion: 0.13
+Nodes (10): JSONClass, JSONClass, JSONNode, PreparedImport, ClothingApplyMode, ClothingOnly, Keep, Merge (+2 more)
+
+### Community 246 - ".RemoveModeExit"
+Cohesion: 0.15
+Nodes (6): Color, JSONStorableFloat, MaterialOptions, Renderer, RemoveModeHighlight, MaterialPropertyBlock
+
+### Community 247 - "VpbCompanionServer"
+Cohesion: 0.15
 Nodes (11): GalleryPhase, Incremental, Indexes, Packages, Pending, NamedPipeServerStream, ManualResetEvent, Queue (+3 more)
 
-### Community 200 - "Vpb Shortcut Text"
-Cohesion: 0.19
-Nodes (3): Dictionary, VpbShortcutText, Revision
+### Community 248 - "CacheCleanupManager"
+Cohesion: 0.18
+Nodes (7): CacheUsagePkgRow, Dictionary, HashSet, CacheCleanupManager, IsScanning, IEnumerable, CacheUsagePkgRow
 
-### Community 201 - "Vpb Save Cache Support"
-Cohesion: 0.21
-Nodes (5): Action, HashSet, MethodInfo, VpbSaveCacheSupport, GameFileManagerType
+### Community 249 - "FloatGeometrySlot"
+Cohesion: 0.18
+Nodes (8): JSONClass, JSONNode, FloatGeometryKeys, FloatGeometryPair, Current, FloatGeometrySlot, SavedPos, FloatPanelCoords
 
-### Community 202 - "Var Package Mgr"
+### Community 250 - "GalleryIconAtlas"
+Cohesion: 0.20
+Nodes (7): Dictionary, Rect, Texture2D, GalleryIconAtlas, IconCount, IsLoaded, LoadError
+
+### Community 252 - "StatusFlags"
+Cohesion: 0.11
+Nodes (18): StatusFlags, AutoInstall, CompleteDeps, Flagged, Hidden, Issues, Loaded, MissingDeps (+10 more)
+
+### Community 253 - "ItemType"
+Cohesion: 0.11
+Nodes (18): ItemType, Animation, Appearance, BreastPhysics, Clothing, ClothingItem, ClothingPreset, CUA (+10 more)
+
+### Community 254 - "PosePeopleCountIndex"
+Cohesion: 0.14
+Nodes (7): Dictionary, PosePeopleCountIndex, IndexPath, Instance, GlobalInfo, AutoInstallPath, PluginInfoDirectory
+
+### Community 255 - "SpringScrollButton"
+Cohesion: 0.18
+Nodes (8): BoxCollider, Canvas, Color, Image, PointerEventData, RectTransform, ScrollRect, SpringScrollButton
+
+### Community 256 - ".Refresh"
+Cohesion: 0.17
+Nodes (9): ICollection, ICollection, IEnumerator, FileManagerBridge, RefreshScope, Both, InstallOnly, NativeOnly (+1 more)
+
+### Community 257 - ".WorkerBuildSelectivePipelineCoroutine"
+Cohesion: 0.18
+Nodes (11): Dictionary, Func, IEnumerable, IEnumerator, KeyValuePair, Queue, Stack, NestedPump (+3 more)
+
+### Community 258 - "AppearancePresetSuppress"
+Cohesion: 0.26
+Nodes (5): Atom, IEnumerator, JSONClass, List, AppearancePresetSuppress
+
+### Community 259 - "VpbPaths"
 Cohesion: 0.15
-Nodes (5): Dictionary, ManualResetEvent, AllSerializableVarPackage, VarPackageMgr, IsManifestReady
+Nodes (7): VpbPaths, Assets, Clips, LegacyRoot, Native, Net, Root
 
-### Community 203 - "Hold To Apply On Hover"
+### Community 260 - "HoldToApplyOnHover"
 Cohesion: 0.20
 Nodes (6): Coroutine, GameObject, IEnumerator, Image, PointerEventData, HoldToApplyOnHover
 
-### Community 204 - "Gallery Panel User Tags Tag"
+### Community 261 - ".TickOncePerFrame"
 Cohesion: 0.15
-Nodes (9): TitleSearchChipDropZone, UserTagApplyDropZone, UserTagDragSession, HasPendingTags, IsTitleSearchChipMoveActive, IsTitleSearchDropActive, IsTitleSearchTagDropActive, UserTagRemoveDropZone (+1 more)
+Nodes (8): IScrollHandler, ScrollRect, FieldInfo, MethodInfo, ScrollRect, SuperController, GalleryVrThumbstickScroll, ShouldSuppressFreeNavigate
 
-### Community 205 - "Directory Entry"
+### Community 262 - "DirectoryEntry"
 Cohesion: 0.12
 Nodes (10): DateTime, DirectoryEntry, Files, LastWriteTime, Name, Parent, Path, SubDirectories (+2 more)
 
-### Community 206 - "Pose Import Diagnostics"
+### Community 263 - "VpbPerfHairHook"
+Cohesion: 0.18
+Nodes (7): DAZCharacterSelector, DAZHairGroup, Harmony, JSONClass, JSONStorableDynamic, MethodInfo, VpbPerfHairHook
+
+### Community 264 - "PoseImportDiagnostics"
 Cohesion: 0.25
 Nodes (5): Atom, DAZBone, JSONClass, SuperController, PoseImportDiagnostics
 
-### Community 207 - "Gallery Float Geometry Pair"
-Cohesion: 0.21
-Nodes (6): JSONClass, JSONNode, FloatGeometryKeys, FloatGeometryPair, Current, FloatGeometrySlot
+### Community 265 - "VPBTranslation"
+Cohesion: 0.18
+Nodes (4): Dictionary, VPBTranslation, CurrentLocale, TranslationsDirectory
 
-### Community 209 - "Pose People Count Index"
+### Community 266 - "IEnumerator"
+Cohesion: 0.23
+Nodes (8): BinaryRequestStartedCallback, BinaryRequestSuccessCallback, DownloadRequest, IEnumerator, DownloadRequest, RequestErrorCallback, RequestProgressCallback, RequestSuccessCallback
+
+### Community 267 - "CreatorRatingsManager"
 Cohesion: 0.17
-Nodes (7): Dictionary, PosePeopleCountIndex, IndexPath, Instance, GlobalInfo, AutoInstallPath, PluginInfoDirectory
+Nodes (9): Dictionary, SerializableRatings, CreatorRatingsManager, DataRevision, Instance, SerializableRating, SerializableRatings, SerializableRatings (+1 more)
 
-### Community 210 - "Vpb Perf Hair Hook"
-Cohesion: 0.19
-Nodes (7): DAZCharacterSelector, DAZHairGroup, Harmony, JSONClass, JSONStorableDynamic, MethodInfo, VpbPerfHairHook
+### Community 268 - "PkgIssueFlags"
+Cohesion: 0.13
+Nodes (13): PkgIssueFlags, ForeignAssets, LocalReferences, MetaMissing, MetaUnparsable, MorphBloat, NameFormatBad, NameMismatch (+5 more)
 
-### Community 212 - "Vpb Paths"
+### Community 270 - ".SyncDisplayed"
+Cohesion: 0.20
+Nodes (4): HashSet, HashSet, RawImage, Vector2
+
+### Community 271 - "VpbInsightKeywords"
+Cohesion: 0.20
+Nodes (7): VpbInsightKeywords, High, Low, SourceLabel, UserFilePath, VpbKeywordMatcher, Count
+
+### Community 272 - "OutlinerUndo"
 Cohesion: 0.16
-Nodes (7): VpbPaths, Assets, Clips, LegacyRoot, Native, Net, Root
+Nodes (5): OutlinerUndoRecord, List, OutlinerUndo, RedoCount, UndoCount
 
-### Community 213 - "Vam Hook Plugin Interface Gallery"
+### Community 274 - "AppearanceApplyProbe"
+Cohesion: 0.16
+Nodes (6): Exception, FileEntry, JSONClass, Stopwatch, AppearanceApplyProbe, Detailed
+
+### Community 275 - "GalleryPage"
 Cohesion: 0.12
 Nodes (16): GalleryPage, CategoryClothing, CategoryCUA, CategoryHair, CategoryPlugins, CategoryPose, CategoryScene, CustomPersonPreset (+8 more)
 
-### Community 214 - "I Enumerator"
-Cohesion: 0.24
-Nodes (7): BinaryRequestStartedCallback, BinaryRequestSuccessCallback, DownloadRequest, IEnumerator, DownloadRequest, RequestErrorCallback, RequestProgressCallback
-
-### Community 215 - "Image Loading Mgr Try Load"
-Cohesion: 0.26
-Nodes (4): DiskCachePayload, DiskCachePayload, MetadataEntry, MetadataEntry
-
-### Community 216 - "Gallery Panel Category Quick Switch"
-Cohesion: 0.20
-Nodes (3): Category, PointerEventData, CategoryQuickSwitchRowMarker
-
-### Community 217 - "Gallery Panel Title Creator Dropdown"
-Cohesion: 0.19
-Nodes (9): CanvasGroup, GameObject, Image, InputField, LayoutElement, RectMask2D, RectTransform, Scrollbar (+1 more)
-
-### Community 218 - "Spring Scroll Button"
-Cohesion: 0.24
-Nodes (6): Canvas, Color, Image, PointerEventData, RectTransform, SpringScrollButton
-
-### Community 219 - "Native Texture On Demand Cache"
-Cohesion: 0.20
-Nodes (10): Dictionary, Func, IEnumerable, IEnumerator, KeyValuePair, Queue, Stack, NestedPump (+2 more)
-
-### Community 220 - "Vpb Legacy Layout Sweep Plugins"
+### Community 276 - "PostMagicUiCameraFix"
 Cohesion: 0.22
-Nodes (4): VPB.Shared, VPB.Patcher, Action, VpbLegacyLayout
+Nodes (7): BindingFlags, Camera, Harmony, MethodInfo, MonoBehaviour, PropertyInfo, PostMagicUiCameraFix
 
-### Community 222 - "Gallery Panel Import Sidebar Options"
-Cohesion: 0.29
-Nodes (3): BrokenUidRef, Dictionary, HashSet
+### Community 277 - ".TryCountDependentUidsByScan"
+Cohesion: 0.19
+Nodes (10): DependentFamilyCount, DependentPrefix, DependentTargetCount, Connection, Dictionary, DependentFamilyCount, DependentPrefix, DependentPrefixComparer (+2 more)
 
-### Community 223 - "Tags Manager"
+### Community 278 - ".ExitCreatorMode"
+Cohesion: 0.30
+Nodes (4): FieldInfo, IList, StringBuilder, VpbLoadingIconUtil
+
+### Community 280 - "UIChipDismissClick"
+Cohesion: 0.20
+Nodes (5): Action, PointerEventData, Vector2, UIChipDismissClick, UIDragBlocker
+
+### Community 282 - ".QuickMenuPullWatchSettings"
+Cohesion: 0.13
+Nodes (9): QuickMenuVrWatchMode, LeftOnly, OppositeToMenu, RightOnly, SameAsMenu, QuickMenuVrWatchShowWhen, Always, Glance (+1 more)
+
+### Community 283 - "VpbSessionLog"
+Cohesion: 0.17
+Nodes (6): Timer, Exception, Regex, StreamWriter, VpbSessionLog, FilePath
+
+### Community 284 - "VpbShortcutText"
+Cohesion: 0.25
+Nodes (3): Dictionary, VpbShortcutText, Revision
+
+### Community 285 - ".EnsureHarvested"
+Cohesion: 0.22
+Nodes (4): DAZCharacterSelector, DAZSkinV2, Vector3, VpbSkinAreaMap
+
+### Community 286 - "Prime31.MessageKit"
+Cohesion: 0.14
+Nodes (6): Prime31.MessageKit, MorphOwnerLookupResult, Ambiguous, IndexIncomplete, NotFound, Unique
+
+### Community 287 - "GalleryDepStatus"
+Cohesion: 0.20
+Nodes (5): Dictionary, HashSet, Queue, GalleryDepStatus, PendingCount
+
+### Community 289 - "VpbReleaseCatalog"
+Cohesion: 0.20
+Nodes (4): VpbReleaseCatalog, IsEmpty, Latest, Releases
+
+### Community 290 - "TagsManager"
 Cohesion: 0.24
 Nodes (5): Dictionary, HashSet, TagsManager, Instance, tagsPath
 
-### Community 224 - "Vam Hook Plugin Try Clear"
+### Community 291 - "GameObject"
+Cohesion: 0.21
+Nodes (4): OutlinerPlugins, Canvas, GameObject, RectTransform
+
+### Community 292 - ".CapturePerson"
+Cohesion: 0.22
+Nodes (6): DAZHairGroup, JSONStorable, VpbGlobalPerfSnapshot, VpbHairPerfSnapshot, VpbPerfSnapshot, VpbPersonPerfSnapshot
+
+### Community 293 - ".TryClearConsole"
 Cohesion: 0.29
 Nodes (7): CONSOLE_SCREEN_BUFFER_INFO, COORD, SMALL_RECT, DllImport, IntPtr, CONSOLE_SCREEN_BUFFER_INFO, COORD
 
-### Community 225 - "Gallery Panel Title Search Chips"
-Cohesion: 0.15
-Nodes (7): Camera, Color, Image, TitleSearchDropRaycastGate, Camera, UserTagDropRaycastGate, ICanvasRaycastFilter
-
-### Community 226 - "Dependency Extractor"
+### Community 295 - "DependencyExtractor"
 Cohesion: 0.29
 Nodes (5): HashSet, JSONClass, JSONNode, Regex, DependencyExtractor
 
-### Community 227 - "JSON Optimization"
+### Community 297 - ".Down"
+Cohesion: 0.27
+Nodes (3): KeyCode, Binding, VpbShortcutGate
+
+### Community 298 - ".PassesClothingGalleryFiltersForPath"
 Cohesion: 0.29
-Nodes (6): HashSet, JSONClass, JSONNode, JSONOptimization, JSONScanResult, JSONScanResult
+Nodes (3): ClothingSubfilter, HairSubfilter, ResourceGender
 
-### Community 229 - "Cache Cleanup Manager"
-Cohesion: 0.21
-Nodes (6): CacheUsageRow, Dictionary, HashSet, CacheCleanupManager, IsScanning, CacheUsagePkgRow
+### Community 299 - "SideFilterFieldKind"
+Cohesion: 0.17
+Nodes (12): SideFilterFieldKind, Category, Creator, History, Lookapedia, None, Path, RemoveAtom (+4 more)
 
-### Community 232 - "Var Package Serializable"
-Cohesion: 0.35
-Nodes (3): BinaryReader, BinaryWriter, SerializableVarPackage
-
-### Community 233 - "Vam Scene Load Phase Profiler"
+### Community 303 - "HookBucket"
 Cohesion: 0.17
 Nodes (12): HookBucket, BundleCreate, BundleFetch, BundleLoadAsset, BundleNames, BundleUnload, Count, FileExists (+4 more)
 
-### Community 234 - "Var Preset Path Fixups Resolve"
-Cohesion: 0.30
-Nodes (6): OwnerlessMorphReference, JSONClass, JSONNode, List, OwnerlessMorphReference, VarPresetPathFixups
-
-### Community 235 - "Chamfered Rect"
+### Community 304 - "ChamferedRect"
 Cohesion: 0.18
 Nodes (9): ChamferSide, VertexHelper, ChamferedRect, ChamferSide, Bottom, Left, Right, Top (+1 more)
 
-### Community 236 - "Kernel32 Subsystem"
+### Community 305 - ".EnsureHarvested"
+Cohesion: 0.29
+Nodes (3): DAZCharacterSelector, DAZSkinV2, VpbSkinRegionMap
+
+### Community 306 - "VpbHairFootprint"
+Cohesion: 0.25
+Nodes (5): DAZHairGroup, DAZSkinWrap, Dictionary, VpbHairFootprint, RuntimeHairGeometryCreator
+
+### Community 307 - "Kernel32"
 Cohesion: 0.31
 Nodes (5): VPB.Native, DllImport, IntPtr, MarshalAs, Kernel32
 
-### Community 237 - "Dependency Whitelist Manager"
-Cohesion: 0.27
-Nodes (3): HashSet, DependencyWhitelistManager, Instance
+### Community 310 - "MultilineInputFieldHomeEndFix"
+Cohesion: 0.25
+Nodes (3): InputField, InputField, MultilineInputFieldHomeEndFix
 
-### Community 238 - "Gallery Panel Content Type Descriptor"
+### Community 311 - "AspectRatioLayoutElement"
 Cohesion: 0.18
-Nodes (11): SideFilterFieldKind, Category, Creator, History, None, Path, RemoveAtom, RemoveClothing (+3 more)
+Nodes (9): AspectRatioLayoutElement, flexibleHeight, flexibleWidth, layoutPriority, minHeight, minWidth, preferredHeight, preferredWidth (+1 more)
 
-### Community 239 - "Gallery Search Query Status Flags"
-Cohesion: 0.18
-Nodes (11): StatusFlags, AutoInstall, Hidden, Loaded, None, ScanExcluded, Starred, Tagged (+3 more)
-
-### Community 240 - "Tools Subsystem"
+### Community 313 - "Tools"
 Cohesion: 0.29
 Nodes (5): GameObject, Object, Queue, Transform, Tools
 
-### Community 241 - "Auto Load Packages Manager"
-Cohesion: 0.27
-Nodes (3): HashSet, AutoLoadPackagesManager, Instance
-
-### Community 242 - "Gallery Panel Tag Editor Detail"
+### Community 314 - ".CaptureSceneComplete"
 Cohesion: 0.31
-Nodes (6): AspectRatioFitter, GameObject, HorizontalLayoutGroup, LayoutElement, RectTransform, VerticalLayoutGroup
+Nodes (5): Action, Camera, Object, Transform, VpbVrUiDiagnostics
 
-### Community 243 - "Gallery Panel Task Chrome State"
+### Community 315 - ".Apply"
+Cohesion: 0.29
+Nodes (6): OwnerlessMorphReference, JSONClass, JSONNode, List, OwnerlessMorphReference, VarPresetPathFixups
+
+### Community 316 - "VPBModule"
+Cohesion: 0.18
+Nodes (10): VPBModule, Config, Custom, Files, Gallery, Hooks, Hub, Main (+2 more)
+
+### Community 319 - "TaskChromeState"
 Cohesion: 0.20
 Nodes (10): TaskChromeState, ArmedApply, Browse, Selection, Settings, StickyCleanup, StickyCreator, StickyImport (+2 more)
 
-### Community 245 - "Locked Packages Manager"
-Cohesion: 0.27
-Nodes (3): HashSet, LockedPackagesManager, Instance
+### Community 321 - ".Prepare"
+Cohesion: 0.29
+Nodes (4): Dictionary, JSONNode, ZipEntry, VpbVacImport
 
-### Community 248 - "Gallery Panel Fields Clothing Subfilter"
-Cohesion: 0.22
-Nodes (9): ClothingSubfilter, Custom, CustomPreset, Decals, Female, Items, Male, Presets (+1 more)
-
-### Community 251 - "Gallery Panel Try On Kind"
-Cohesion: 0.22
-Nodes (9): TryOnKind, Appearance, Clothing, Hair, Morphs, None, Plugins, Pose (+1 more)
-
-### Community 253 - "Custom Image Loader Threaded Priority"
+### Community 322 - ".PatchAll"
 Cohesion: 0.28
-Nodes (3): Comparison, PriorityQueue, Count
+Nodes (5): BlendReadableTemps, Harmony, Texture2D, BlendReadableTemps, DazCharacterTextureBlendHook
 
-### Community 255 - "Settings Subsystem"
+### Community 323 - ".Build"
+Cohesion: 0.22
+Nodes (3): Component, DAZClothingItem, DAZSkinWrap
+
+### Community 325 - "Settings"
 Cohesion: 0.39
 Nodes (5): ConfigFile, ConfigEntry, Vector2, Settings, Instance
 
-### Community 258 - "Vpb Import Sub Toggle Filter"
+### Community 326 - ".RunGuarded"
+Cohesion: 0.28
+Nodes (6): Delivery, IEnumerator, Entry, LoadResult, LoadResult, Worker
+
+### Community 327 - "ClothingSubfilter"
+Cohesion: 0.22
+Nodes (9): ClothingSubfilter, Custom, CustomPreset, Decals, Female, Items, Male, Presets (+1 more)
+
+### Community 329 - "AppearanceOutfitPickItem"
+Cohesion: 0.28
+Nodes (5): AppearanceOutfitPickItem, AppearanceOutfitPickKind, Clothing, Hair, Skin
+
+### Community 330 - ".QuickMenu_PrepareRandomSampleRoutine"
+Cohesion: 0.25
+Nodes (4): Action, Category, Coroutine, IEnumerator
+
+### Community 332 - "TryOnKind"
+Cohesion: 0.22
+Nodes (9): TryOnKind, Appearance, Clothing, Hair, Morphs, None, Plugins, Pose (+1 more)
+
+### Community 333 - ".TryScan"
+Cohesion: 0.31
+Nodes (5): MethodBase, VamIlCallScanner, Module, OpCode, Predicate
+
+### Community 336 - ".CreateFileButton"
+Cohesion: 0.36
+Nodes (3): FileButton, Quaternion, Vector3
+
+### Community 337 - "GallerySearchRescueOption"
+Cohesion: 0.29
+Nodes (6): GallerySearchRescueKind, AllCategories, AnyWord, ClearFilters, DidYouMean, GallerySearchRescueOption
+
+### Community 338 - ".DisplayColorPicker"
+Cohesion: 0.25
+Nodes (5): Color, UnityAction, Color, UnityAction, VPBUiPickers
+
+### Community 339 - ".SuppressSceneLights"
+Cohesion: 0.46
+Nodes (3): JSONStorableBool, Light, MutedSceneLight
+
+### Community 341 - "VrWatchBezelDrag"
+Cohesion: 0.32
+Nodes (3): Plane, Camera, VrWatchBezelDrag
+
+### Community 343 - ".FilterForType"
 Cohesion: 0.43
 Nodes (3): JSONClass, SubToggleOptions, VpbImportSubToggleFilter
 
-### Community 260 - "Daz Character Texture Blend Hook"
+### Community 345 - ".TryGetDirectoryLastWriteBinaryFollowingLinks"
 Cohesion: 0.38
-Nodes (4): BlendReadableTemps, Texture2D, BlendReadableTemps, DazCharacterTextureBlendHook
+Nodes (4): BY_HANDLE_FILE_INFORMATION, DllImport, IntPtr, SafeFileHandle
 
-### Community 261 - "Gallery Panel Fields Appearance Subfilter"
+### Community 347 - "AppearanceSubfilter"
 Cohesion: 0.29
 Nodes (7): AppearanceSubfilter, Custom, Female, Futa, Male, Presets, Unknown
 
-### Community 262 - "Gallery Panel Fields Hair Subfilter"
+### Community 348 - "HairSubfilter"
 Cohesion: 0.29
 Nodes (7): HairSubfilter, Custom, CustomPreset, Female, Items, Male, Presets
 
-### Community 263 - "Gallery Panel Mode Ambient Sticky"
+### Community 349 - "SceneHubSubfilter"
+Cohesion: 0.29
+Nodes (7): SceneHubSubfilter, All, DefaultOn, HubLooks, HubScenes, Other, Unclassified
+
+### Community 350 - "InAppHelpIconPreviewFollower"
+Cohesion: 0.38
+Nodes (3): Canvas, RectTransform, InAppHelpIconPreviewFollower
+
+### Community 351 - "StickyToolMode"
 Cohesion: 0.29
 Nodes (7): StickyToolMode, Cleanup, Creator, Import, None, Remove, TryOn
 
-### Community 264 - "Gallery Panel Remove Mode Highlight"
-Cohesion: 0.43
-Nodes (5): JSONStorableFloat, MaterialOptions, Renderer, RemoveModeHighlight, MaterialPropertyBlock
+### Community 356 - ".KeepRegistrableEntries"
+Cohesion: 0.29
+Nodes (3): IDictionary, VarPackage, NativeRegistrationGate
 
-### Community 265 - "Gallery Panel Tabs Helpers Add"
-Cohesion: 0.33
-Nodes (5): Color, GameObject, Image, RectTransform, Vector2
-
-### Community 266 - "Hub Resource Package Hook Post"
+### Community 357 - ".PostDownloadComplete"
 Cohesion: 0.29
 Nodes (5): Dictionary, HarmonyPatch, HarmonyPostfix, HubResourcePackage, HubResourcePackageHook
 
-### Community 269 - "Vpb Catalog Refresh Guard"
+### Community 360 - "VpbCatalogRefreshGuard"
 Cohesion: 0.38
 Nodes (3): Action, VpbCatalogRefreshGuard, SkipPackageMorphRefresh
 
-### Community 270 - "Vam Hook Plugin Button Hover"
-Cohesion: 0.33
-Nodes (4): Color, PointerEventData, UIDynamicButton, ButtonHoverHandler
+### Community 361 - "OutlinerGroupEdit"
+Cohesion: 0.38
+Nodes (5): List, Quaternion, Vector3, OutlinerGroupEdit, Count
 
-### Community 271 - "Vpb Import Isolation Guard Snapshot"
+### Community 362 - "VpbUpdateStatus"
+Cohesion: 0.29
+Nodes (7): VpbUpdateStatus, Checking, Downloading, Error, Idle, Staged, UpToDate
+
+### Community 363 - "IsolationGuardSnapshot"
 Cohesion: 0.48
 Nodes (3): Dictionary, IsolationGuardSnapshot, VpbImportIsolationGuard
 
-### Community 273 - "Gallery Panel Command Palette Add"
-Cohesion: 0.47
-Nodes (3): Action, Func, CommandPaletteEntry
+### Community 364 - "OptionKind"
+Cohesion: 0.33
+Nodes (6): OptionKind, Destructive, Header, Normal, Primary, Quiet
 
-### Community 274 - "Gallery Panel Creator Mode Strip"
+### Community 365 - "StripKeepViewFilter"
 Cohesion: 0.33
 Nodes (6): StripKeepViewFilter, All, DroppedOnly, KeptOnly, RenamedOnly, TriggersOnly
 
-### Community 275 - "Gallery Panel Tabs Builders Remove"
-Cohesion: 0.47
-Nodes (3): DAZCharacterSelector, RemoveTabItem, RemoveTabItem
-
-### Community 276 - "Gallery Panel Ux Consistency Grid"
+### Community 366 - "GridCtxPage"
 Cohesion: 0.33
 Nodes (6): GridCtxPage, Rate, Root, Select, Tags, Tools
 
-### Community 277 - "Gallery Types User Tag Avail"
-Cohesion: 0.33
-Nodes (5): UserTagAvailMode, FilterByTags, FilterTaggedOnly, FilterUntagged, Tag
+### Community 367 - ".GetProcessMemoryInfo"
+Cohesion: 0.40
+Nodes (4): ProcessMemoryCountersEx, DllImport, IntPtr, MarshalAs
 
-### Community 279 - "Gallery Panel Creator Mode Strip"
+### Community 368 - "TransformType"
+Cohesion: 0.33
+Nodes (5): TransformType, Container, Local, RelativeRoot, Root
+
+### Community 369 - ".BuildContentTypeDescriptors"
+Cohesion: 0.40
+Nodes (4): ContentTypeDescriptorEntry, Dictionary, ContentTypeDescriptorEntry, SideFilterFieldKind
+
+### Community 370 - "StripKeepPersonRenameMode"
 Cohesion: 0.40
 Nodes (5): StripKeepPersonRenameMode, ActorNumber, Off, PrefixGender, RenameGender
 
-### Community 280 - "Gallery Panel Keyboard Focus Region"
+### Community 371 - "DockMenuPlacement"
+Cohesion: 0.40
+Nodes (4): DockMenuPlacement, Above, LeftOf, RightOf
+
+### Community 372 - "PackageFilterMode"
+Cohesion: 0.40
+Nodes (5): PackageFilterMode, Dependencies, Dependents, None, Similar
+
+### Community 373 - "GalleryKeyboardFocusRegion"
 Cohesion: 0.40
 Nodes (5): GalleryKeyboardFocusRegion, Grid, OtherInput, SettingsSideSearch, TitleSearch
 
-### Community 281 - "Gallery Panel Toolbox Cleanup Candidate"
+### Community 376 - "CleanupCandidateSourceKind"
+Cohesion: 0.40
+Nodes (5): CleanupCandidateSourceKind, LocalFile, LocalScene, StaleCache, VarPackage
+
+### Community 377 - "CleanupCandidateType"
 Cohesion: 0.40
 Nodes (5): CleanupCandidateType, Damaged, Duplicate, OldVersion, StaleCache
 
-### Community 282 - "Gallery UI Utils Scene Add"
+### Community 378 - "DataPackAtomKind"
+Cohesion: 0.40
+Nodes (5): DataPackAtomKind, Any, HubCategory, HubTag, Subject
+
+### Community 379 - "SceneAddMode"
 Cohesion: 0.40
 Nodes (5): SceneAddMode, FullMerge, NonPersons, NonPersonsMergeLoad, PersonsOnly
 
-### Community 284 - "Quick Filters UI List Sort"
+### Community 380 - "FileCountGroupMode"
+Cohesion: 0.40
+Nodes (5): FileCountGroupMode, Creator, DataPackHubCategory, DataPackHubTag, DataPackSubject
+
+### Community 381 - "ListSortMode"
 Cohesion: 0.40
 Nodes (5): ListSortMode, Manual, NameAsc, NameDesc, PinnedFirst
 
-### Community 285 - "VPB Ui Pickers Pick Color"
+### Community 383 - ".RedirectPackageFolderListing"
 Cohesion: 0.40
-Nodes (3): Color, UnityAction, VPBUiPickers
+Nodes (3): CodeInstruction, IEnumerable, MethodInfo
 
-### Community 286 - "Vam On Demand Loader Catalog"
+### Community 384 - "CatalogContentKind"
 Cohesion: 0.40
 Nodes (5): CatalogContentKind, Clothing, Hair, Morphs, None
 
-### Community 287 - "Image Processing Optimization cs"
+### Community 385 - "ImageProcessingOptimization.cs"
 Cohesion: 0.60
 Nodes (3): FastBitmapCopy(), FastBitmapCopyScaled(), FastBitmapCopyUnscaled()
 
-### Community 288 - "MVR Plugin Manager Hook Pre"
+### Community 387 - "VpbScrollTuning"
 Cohesion: 0.40
-Nodes (3): HarmonyPatch, HarmonyPrefix, MVRPluginManagerHook
+Nodes (3): ScrollRect, VpbScrollTuning, VrActive
 
-### Community 291 - "Gallery Panel Creator Mode Strip"
+### Community 390 - ".AddCommandPaletteEntry"
+Cohesion: 0.83
+Nodes (3): Action, Func, CommandPaletteEntry
+
+### Community 391 - "StripKeepCreateFillMode"
 Cohesion: 0.50
 Nodes (4): StripKeepCreateFillMode, Default3P, ImportSubScene, None
 
-### Community 292 - "Gallery Panel Fields Browse Filter"
+### Community 392 - "BrowseFilterCycle"
 Cohesion: 0.50
 Nodes (4): BrowseFilterCycle, Apply, Off, Only
 
-### Community 293 - "Gallery Panel Fields Browse Loaded"
+### Community 393 - "BrowseLoadedMode"
 Cohesion: 0.50
 Nodes (4): BrowseLoadedMode, LoadedOnly, Off, UnloadedOnly
 
-### Community 294 - "Gallery Panel Fields Pose People"
-Cohesion: 0.50
-Nodes (4): PosePeopleFilter, All, Dual, Single
-
-### Community 295 - "Gallery Panel Fields Rating Presence"
+### Community 394 - "RatingPresenceFilterMode"
 Cohesion: 0.50
 Nodes (4): RatingPresenceFilterMode, Off, RatedOnly, UnratedOnly
 
-### Community 296 - "Gallery Panel Fields User Tag"
+### Community 395 - "UserTagSelectionState"
 Cohesion: 0.50
 Nodes (4): UserTagSelectionState, Mixed, Off, On
 
-### Community 297 - "Gallery Panel IO Package Filter"
-Cohesion: 0.50
-Nodes (4): PackageFilterMode, Dependencies, Dependents, None
-
-### Community 298 - "Gallery Panel Plugins Float Dest"
+### Community 396 - "PluginsFloatDestKind"
 Cohesion: 0.50
 Nodes (4): PluginsFloatDestKind, None, Person, Session
 
-### Community 299 - "Gallery Panel Risk Policy Level"
+### Community 397 - "RemoveRailJob"
+Cohesion: 0.50
+Nodes (4): RemoveRailJob, SceneEraser, UnequipClothing, UnequipHair
+
+### Community 398 - "GalleryRiskLevel"
 Cohesion: 0.50
 Nodes (4): GalleryRiskLevel, High, Low, Medium
 
-### Community 303 - "Var Package Reference Version Option"
+### Community 399 - "PackAvailBucketKind"
+Cohesion: 0.50
+Nodes (4): PackAvailBucketKind, HubCategory, HubTag, LooksLike
+
+### Community 401 - "ReferenceVersionOption"
 Cohesion: 0.50
 Nodes (4): ReferenceVersionOption, Exact, Latest, Minimum
 
-### Community 304 - "Native Texture On Demand Cache"
+### Community 402 - "CacheWriteMode"
 Cohesion: 0.50
 Nodes (4): CacheWriteMode, NativeAndZstd, NativeOnly, ZstdOnly
 
-### Community 305 - "VPB Config Global Source Filter"
+### Community 403 - "OutlinerPlacement"
+Cohesion: 0.50
+Nodes (4): OutlinerPlacement, Float, RailLeft, RailRight
+
+### Community 404 - "GalleryScanWlBadgeKind"
+Cohesion: 0.50
+Nodes (4): GalleryScanWlBadgeKind, None, Persistent, Temporary
+
+### Community 406 - "GlobalSourceFilterValue"
 Cohesion: 0.50
 Nodes (4): GlobalSourceFilterValue, All, Local, Var
 
-### Community 306 - "Gallery Panel Tag Editor Detail"
+### Community 408 - "InsightsContentMode"
+Cohesion: 0.67
+Nodes (3): InsightsContentMode, Duplicates, Files
+
+### Community 411 - "DetailStripTagMenuMode"
 Cohesion: 0.67
 Nodes (3): DetailStripTagMenuMode, Apply, Database
 
-### Community 307 - "Vpb Perf Controller Va M"
-Cohesion: 0.67
-Nodes (3): GlowEffectsLevel, VaMQualityStep, ShaderLOD
-
-### Community 308 - "Image Loading Mgr Bulk Zstd"
-Cohesion: 0.67
-Nodes (3): BulkZstdWorkKind, NativeToZstd, RecompressZstd
-
-### Community 309 - "Image Loading Mgr Disk Cache"
-Cohesion: 0.67
-Nodes (3): DiskCacheFailureKind, VaMNative, VpbZstd
-
 ## Knowledge Gaps
-- **1039 isolated node(s):** `Instance`, `BaMigrationResult`, `RetainedBytes`, `Unknown`, `Female` (+1034 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2315 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **27 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1278 isolated node(s):** `Instance`, `BaMigrationResult`, `RetainedBytes`, `Unknown`, `Female` (+1273 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2856 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **51 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `GalleryPanel` connect `Gallery Panel` to `Gallery UI Utils Load Icon`, `Vpb Local Database Exclusive Deps`, `VPB Help Content Text`, `Auto Load Packages Manager VPB`, `Gallery Panel UI Layout Update`, `Scene Utils Creator Strip Keep`, `Gallery Panel Lifecycle Runtime Show`, `Gallery UI Utils Draggable Item`, `Vam Hook Plugin Gallery Modals`, `Mono Behaviour`, `VPB Translation T`, `Gallery Panel Remove Mode Atom`, `Scene Utils Loading`, `Gallery Panel Lifecycle Runtime Update`, `Gallery Panel Import Sidebar Options`, `Gallery Types List`, `File Entry`, `VPB Config`, `Log Util`, `File Manager`, `Gallery UI Utils Add LE`, `Gallery Search Query`, `Gallery Panel IO Refresh Files`, `Gallery Panel Lifecycle Runtime Update`, `Vpb Import Load Preset Core`, `Gallery Ui Metrics Apply Font`, `Gallery Panel Settings Internal Refresh`, `Log Util Warning`, `Gallery Panel Selection Context Menu`, `Gallery Panel Import Sidebar Set`, `Gallery UI Utils`, `Gallery Panel Plugins Float Tree`, `Vam Hook Plugin Create Quick`, `Vpb Perf Controller`, `Hub Resource Package`, `Gallery UI Utils Behaviours Hover`, `File Manager Bridge Refresh`, `Gallery UI Utils Create Label`, `Gallery UI Utils Add Image`, `Gallery Panel Detail Strip Refresh`, `Gallery Panel UI Layout Update`, `Vpb Local Database Gallery User`, `Gallery Panel User Tags Rebuild`, `Var File Entry`, `Custom Image Loader Threaded Queued`, `Gallery Subsystem`, `Dictionary Subsystem`, `Vpb Shortcut Map`, `Game Object`, `Gallery Panel Toolbox Cleanup Var`, `Gallery Panel Actions Show Core`, `Gallery Panel Tabs Bind File`, `Gallery Layout Preset`, `Gallery Panel Ui Scale Apply`, `Gallery Sort Manager`, `Cleanup Candidate`, `Gallery Panel Quick Filter Active`, `Pointer Event Data`, `Gallery Panel UI Update Pagination`, `Gallery Panel Thumbnails Load Thumbnail`, `Gallery Dock Layout`, `Gallery Panel UI Overlays Display`, `Gallery Panel Tabs Create Tab`, `UI Color Picker`, `Vam Hook Plugin Update`, `Gallery Panel Toolbox Delete Packages`, `Vpb Updater Service`, `Vpb Progress Service`, `Gallery Panel IO Refresh Files`, `Pointer Event Data`, `Gallery Panel Tabs Builders User`, `Gallery Panel Settings Internal Build`, `Scene Utils Is Person Like`, `Gallery Panel Scene Overwrite Save`, `Gallery Panel IO Deferred Side`, `Quick Filters UI Keyboard`, `Gallery Panel Ux Consistency Grid`, `Gallery Panel Helpers Rating Handler`, `Gallery Panel In App Help`, `VPB Help Content`, `Appearance Gender Classifier`, `Vpb Random History`, `Vector2 Subsystem`, `Gallery Panel Appearance Auto Spawn`, `Vpb Perf Telemetry`, `Gallery Panel UI Hover Preview`, `VPB Logger Log Source`, `Gallery Panel Toolbox Load Unload`, `Gallery Panel Filter Chips Collect`, `File Manager Get Entry`, `Gallery Panel Modal Remap Atom`, `Gallery Panel IO Apply Dependencies`, `Dependency Graph`, `Gallery Layout Preset Pane State`, `Gallery Panel Sticky Tooltip Set`, `Ba Importer Run Import`, `Gallery Panel Thumb Placeholder Bitmap`, `Gallery Panel Settings Internal Setting`, `Gallery Panel Settings Internal Build`, `Gallery Panel Creator Ratings Rating`, `Gallery Panel Title Search Chips`, `Gallery Panel Tabs Helpers Apply`, `Gallery Panel Remove Mode Target`, `Gallery Title Search Chip`, `Vam Frame Attribution Profiler`, `Gallery Panel Global Source Filter`, `Gallery Panel User Tags Tag`, `Gallery Panel Layout Preset Float`, `Gallery Panel Modal Merge Outfit`, `Gallery Layout Preset Float Kind`, `VPB Translation`, `Gallery Panel Lifecycle Create Left`, `Quick Filters UI Keyboard Try`, `Vam Hook Plugin Quick Menu`, `Gallery Panel Command Palette Rebuild`, `Gallery Panel Filter Chips Chip`, `Gallery Panel Settings Internal Exit`, `Gallery Panel Context Bar Pack`, `Gallery Panel Title Search Chips`, `Atom Gender Utils Is Male`, `Hold To Apply On Hover`, `Gallery Panel User Tags Tag`, `Gallery Panel Creator Ratings Close`, `Gallery Panel Category Quick Switch`, `Gallery Panel Title Creator Dropdown`, `Category Filter State`, `Gallery Panel Import Sidebar Options`, `Gallery Panel Quick Filter Apply`, `Gallery Panel Content Type Descriptor`, `Gallery Panel Tag Editor Detail`, `Gallery Panel Task Chrome State`, `Gallery Panel Detail Strip Try`, `Gallery Panel Creator Filter Multi`, `Gallery Panel Fields Clothing Subfilter`, `Gallery Panel Filter Randomizer Randomize`, `Gallery Panel Quick Filter Build`, `Gallery Panel Try On Kind`, `Vpb Import Sub Toggle Filter`, `Gallery Panel Fields Appearance Subfilter`, `Gallery Panel Fields Hair Subfilter`, `Gallery Panel Mode Ambient Sticky`, `Gallery Panel Remove Mode Highlight`, `Gallery Panel Tabs Helpers Add`, `Gallery Panel Command Palette Add`, `Gallery Panel Creator Mode Strip`, `Gallery Panel Tabs Builders Remove`, `Gallery Panel Ux Consistency Grid`, `Gallery Types User Tag Avail`, `Gallery Panel Creator Mode Strip`, `Gallery Panel Keyboard Focus Region`, `Gallery Panel Toolbox Cleanup Candidate`, `VPB Ui Pickers Pick Color`, `Gallery Panel Creator Mode Strip`, `Gallery Panel Fields Browse Filter`, `Gallery Panel Fields Browse Loaded`, `Gallery Panel Fields Pose People`, `Gallery Panel Fields Rating Presence`, `Gallery Panel Fields User Tag`, `Gallery Panel IO Package Filter`, `Gallery Panel Plugins Float Dest`, `Gallery Panel Risk Policy Level`, `Gallery Panel Tabs Sync Live`, `Gallery Panel UI Scroll Rect`, `Gallery Panel User Tags Try`, `Gallery Panel Tag Editor Detail`, `Gallery Panel User Tags drag`?**
-  _High betweenness centrality (0.597) - this node is a cross-community bridge._
-- **Why does `List` connect `Gallery Types List` to `Gallery Panel`, `Gallery UI Utils Load Icon`, `Vpb Local Database Exclusive Deps`, `VPB Help Content Text`, `Gallery Panel UI Layout Update`, `Scene Utils Creator Strip Keep`, `Gallery UI Utils Draggable Item`, `Vam Hook Plugin Gallery Modals`, `Gallery Panel Remove Mode Atom`, `Scene Utils Loading`, `Gallery Panel Lifecycle Runtime Update`, `Gallery Panel Import Sidebar Options`, `File Entry`, `Log Util`, `File Manager`, `Gallery UI Utils Add LE`, `Gallery Search Query`, `Native Texture On Demand Cache`, `Gallery Panel IO Refresh Files`, `Vpb Import Load Preset Core`, `Gallery Ui Metrics Apply Font`, `Gallery Panel Settings Internal Refresh`, `Vam On Demand Loader`, `Log Util Warning`, `Hub Browse`, `Gallery Panel Selection Context Menu`, `Vam Startup Profiler Milestone`, `Gallery UI Utils`, `Gallery Panel Plugins Float Tree`, `Custom Image Loader Threaded`, `Vam Hook Plugin Create Quick`, `Vpb Perf Controller`, `Super Controller Hook`, `Gallery UI Utils Behaviours Hover`, `File Manager Bridge Refresh`, `Vpb Local Database Rebuild Core`, `Extern Methods`, `Gallery UI Utils Create Label`, `Gallery Panel Detail Strip Refresh`, `Image Loading Mgr`, `File Browser`, `Gallery Panel UI Layout Update`, `Vpb Local Database Gallery User`, `Gallery Panel User Tags Rebuild`, `Var File Entry`, `Gallery Subsystem`, `Dictionary Subsystem`, `Game Object`, `Gallery Panel Toolbox Cleanup Var`, `Context Menu Panel`, `Gallery Panel Actions Show Core`, `Gallery Layout Preset`, `DAZ Hair Swap Hook`, `Log Util`, `Gallery Panel Ui Scale Apply`, `Gallery Sort Manager`, `Var Package`, `Cleanup Candidate`, `Gallery Panel Quick Filter Active`, `Gallery Panel UI Update Pagination`, `Gallery Panel Thumbnails Load Thumbnail`, `Gallery Panel UI Overlays Display`, `Gallery Panel Tabs Create Tab`, `Vpb Sqlite3`, `Vam Hook Plugin Update`, `Gallery Panel Toolbox Delete Packages`, `Vpb Updater Service`, `Scene Atom Importer`, `Pointer Event Data`, `Gallery Panel Tabs Builders User`, `CUA Atom Importer`, `Gallery Panel Settings Internal Build`, `Scene Utils Is Person Like`, `Scan Whitelist Manager`, `Hub Resource Item`, `Gallery Panel Scene Overwrite Save`, `Gallery Panel IO Deferred Side`, `Quick Filters UI Keyboard`, `Gallery Panel Ux Consistency Grid`, `File Manager Apply Package Refresh`, `Gallery Panel Helpers Rating Handler`, `Ratings Manager`, `Hub Resource Item Detail`, `VPB Help Content`, `Spawn Atom Element`, `Hub Browse Post Request`, `Hub Image Loader Threaded`, `Turbo Jpeg Native`, `Vpb Random History`, `Vector2 Subsystem`, `Gallery Panel Appearance Auto Spawn`, `VPB Patcher`, `Generic Texture Hook`, `Gallery Panel Toolbox Load Unload`, `Gallery Panel Filter Chips Collect`, `Gallery Panel Modal Remap Atom`, `Gallery User Tag Yaml Brain`, `Zstd Compressor`, `Gallery Panel IO Apply Dependencies`, `Dependency Graph`, `File Browser List Cache Build`, `Gallery Thumbnail Cache`, `Gallery Layout Preset Pane State`, `Exclusive Dependency Finder`, `Vam Scene Load Phase Profiler`, `Appearance Preset Suppress`, `JSON Extensions`, `Ba Importer Run Import`, `Gallery Panel Settings Internal Setting`, `Gallery Panel Settings Internal Build`, `Vam Scan Filter`, `File Browser Start`, `File Browser Sync Displayed`, `Hub Resource Item UI`, `Gallery Panel Remove Mode Target`, `Gallery Title Search Chip`, `Vam Frame Attribution Profiler`, `Gallery Panel User Tags Tag`, `Va M Daz Import Material`, `File Browser And Dir Info`, `Message Kit`, `Gallery Panel Modal Merge Outfit`, `Gallery Dependency Whitelist Ensure UGUI`, `Gallery Layout Preset Float Kind`, `VPB Translation`, `Bone View Mode Renderer`, `Var Package Scan`, `Vam Asset Bundle Queue`, `Gallery Panel Lifecycle Create Left`, `Quick Filters UI Keyboard Try`, `Vam Hook Plugin Quick Menu`, `CUA Converter Simple Transform`, `Gallery Panel Settings Internal Exit`, `Quick Filters UI Apply Layout`, `Custom Asset Loader`, `Gallery Panel Context Bar Pack`, `Gallery Panel Title Search Chips`, `Var Package Group`, `Var Package Mgr`, `Gallery Panel User Tags Tag`, `Directory Entry`, `I Enumerator`, `Gallery Panel Category Quick Switch`, `Native Texture On Demand Cache`, `Category Filter State`, `Gallery Panel Import Sidebar Options`, `Tags Manager`, `Vpb Random`, `Cache Cleanup Manager`, `Gallery Panel Quick Filter Apply`, `Var Package Serializable`, `Var Preset Path Fixups Resolve`, `Dependency Whitelist Manager`, `Auto Load Packages Manager`, `Locked Packages Manager`, `Gallery Panel Detail Strip Try`, `Gallery Panel Creator Filter Multi`, `Gallery Panel Filter Randomizer Randomize`, `Gallery Panel Quick Filter Build`, `Custom Image Loader Threaded Priority`, `Hash Set`, `Gallery Panel Remove Mode Highlight`, `Gallery Panel Tabs Helpers Add`, `Image Loading Mgr Prepare For`, `Gallery Layout Preset Defaults Append`, `Gallery Panel Command Palette Add`, `Gallery Panel Tabs Builders Remove`, `Gallery Panel Tabs Sync Live`, `Gallery Panel User Tags drag`?**
-  _High betweenness centrality (0.251) - this node is a cross-community bridge._
-- **Why does `VamHookPlugin` connect `Vam Hook Plugin Gallery Modals` to `Gallery Panel`, `Gallery UI Utils Load Icon`, `VPB Help Content Text`, `Auto Load Packages Manager VPB`, `Mono Behaviour`, `VPB Translation T`, `Gallery Panel Remove Mode Atom`, `Perf Mon Silencer Patch`, `Vam Hook Plugin Button Hover`, `Gallery Types List`, `File Entry`, `Log Util`, `File Manager`, `Gallery UI Utils Add LE`, `Gallery Panel Lifecycle Runtime Update`, `File Browser Sync Displayed`, `Log Util Warning`, `Hub Browse`, `Gallery UI Utils Draggable Item`, `Vam Hook Plugin Create Quick`, `Message Kit`, `Extern Methods`, `Gallery Dependency Whitelist Ensure UGUI`, `Gallery UI Utils Add Image`, `File Browser`, `Vam Hook Plugin Quick Menu`, `Vam Hook Plugin Quick Menu`, `Pointer Event Data`, `Vam Hook Plugin Update`, `File Browser Hide`, `Vpb Updater Service`, `Vam Hook Plugin Interface Gallery`, `Vam Hook Plugin Quick Menu`, `Vam Hook Plugin Try Clear`, `Vam Hook Plugin Quick Menu`, `Third Party Fix Hook`, `Vpb Progress Service Shutdown For`, `Vector2 Subsystem`, `Image Loading Mgr Start Bulk`?**
-  _High betweenness centrality (0.094) - this node is a cross-community bridge._
-- **Are the 39 inferred relationships involving `List` (e.g. with `.Save()` and `.Save()`) actually correct?**
-  _`List` has 39 INFERRED edges - model-reasoned connections that need verification._
+- **Why does `GalleryPanel` connect `GalleryPanel` to `.AddLE`, `VpbLocalDatabase`, `FileManager`, `CreatorStripKeepKind`, `.Init`, `VPB`, `.T`, `.RefreshInternalSettingsListRows`, `.NormalizeGalleryUserTagName`, `Vector2`, `.ApplyOutlinerScaledFont`, `.RefreshFiles`, `Text`, `UIDraggableItem`, `VamHookPlugin`, `RoundedRect`, `.RefreshFilesRoutine`, `ClothingLoadingUtils`, `FileEntry`, `List`, `VarFileEntry`, `.LogWarning`, `.RebuildInsightsFloatBody`, `ContentType`, `.ShowTemporaryStatus`, `VPBConfig`, `IPointerExitHandler`, `SortType`, `.UpdateLayout`, `.CoCacheTagCountsInternal`, `.Log`, `VpbPerfController`, `HubResourcePackage`, `Atom`, `OutlinerNode`, `GalleryLayoutPreset`, `PackageHidePrefs`, `Atom`, `Atom`, `.CreateTabButton`, `Gallery`, `.BuildInternalSettingDefinitions`, `.QuickMenuExecuteAssignment`, `.ShowCore`, `.GridCtxBuildRootPage`, `.LogError`, `GalleryThumbnailCache`, `.RefreshPluginsFloatTree`, `.BindFileButton`, `.Update`, `TitleSearchChip`, `GalleryDockLayout`, `.DetailStripCollectMetaFields`, `.ApplyImportSidebarBaseRect`, `.BuildLookFacetTabs`, `.GetSelectionIdentityKey`, `.RebuildOutlinerInspector`, `QuickFiltersUI`, `VpbPassthroughLights`, `OutlinerParamDescriptor`, `GameObject`, `.BuildRemapAtomUidsRow`, `.Destroy`, `VpbRandomHistory`, `.EnsureTboxUI`, `CleanupCandidate`, `VpbProgressService`, `QuickFilterEntry`, `OutlinerLookPreview`, `TurboJpegNative`, `VamFrameAttributionProfiler`, `.Update`, `VpbHubDependencyFetcher`, `.RefreshApplyButtonEnabled`, `.IsPersonLikeAtom`, `.LoadThumbnailInternal`, `.WriteSimilarIndex`, `VpbPassthrough`, `.RescaleLayoutPresetsFloatIfOpen`, `.GetGridItemLabelLines`, `VpbPackageInsightStore`, `RatingHandler`, `UserTagPickDragSource`, `SceneUtils`, `.MergeSceneFileRoutine`, `.ApplyOutlinerLayout`, `.GridCtxAddAction`, `PointerEventData`, `UIHoverBorder`, `VpbSaveCacheSupport`, `.EnsureInAppHelpChrome`, `VPBHelpContent`, `VpbPackageInsightScanner`, `.RefreshModeAmbientChrome`, `OutlinerPoseMorphs`, `OutlinerTargets`, `.TboxCacheTexturesSelected`, `.AppendHubTypeCategoryBrowseRows`, `AppearanceGenderClassifier`, `.SpawnPersonThenLoadAppearanceCo`, `CreatorRatingRowHandler`, `Dictionary`, `.FileExists`, `.UpdateTabs`, `VpbShortcut`, `InternalSettingDefinition`, `MonoBehaviour`, `OutlinerResetSnapshot`, `UIFloatPanelDrag`, `.BuildOutlinerAlignSection`, `.DockPaneToSide`, `PointerEventData`, `VpbResourceType`, `.CreateQuickMenuButton`, `GallerySearchQuery`, `VPB.Outliner`, `CategoryFilterState`, `VpbImportReadQueue`, `LayoutPaneState`, `VpbPerfTelemetry`, `.DockImportSidebar`, `.CreateFilterButton`, `TitleSearchChipDragSource`, `OutlinerInspectorSections`, `.CreatorStripImportDefaultSubSceneRoutine`, `GalleryHistoryFilterMode`, `PluginSignatureBridge`, `VPBLogSource`, `OutlinerLock`, `VpbShortcutMap`, `.SetImportSidebarActive`, `.RebuildMergeOutfitRows`, `.BuildQuickMenuPositionEditorModal`, `VpbStartupScene`, `.BuildOrderedCategoriesForQuickSwitch`, `GalleryQuickLaunchHost`, `.BuildRemoveResourceTabs`, `.ApplyScanWhitelistIncludedBorderVisual`, `UIHoverPreviewTrigger`, `.EnsurePluginThumbPlaceholderUi`, `.DisplayConfirm`, `FilterChipKind`, `.TryHandleKeyboard`, `RoundedRectOutline`, `OutlinerRowDrag`, `.DetailStripToggleHubTagHidden`, `.StartImportSelectedSceneAtoms`, `.ApplyDiagnosticLevelCore`, `.InvalidateInternalSettingsDefsCache`, `.IsMale`, `LayoutFloatKind`, `.PrepareTypeImport`, `.RemoveModeExit`, `.HandleKeyboardInput`, `HoldToApplyOnHover`, `.TickOncePerFrame`, `PkgIssueFlags`, `OutlinerUndo`, `.ExitCreatorMode`, `HoverPreviewPlaceholderDragHandler`, `GalleryDepStatus`, `.BindTitleCreatorVirtButton`, `VpbReleaseCatalog`, `GameObject`, `.PassesClothingGalleryFiltersForPath`, `SideFilterFieldKind`, `.ApplyGridLabelStripLayout`, `.RandomizeFromFilterPresetRoutine`, `.BuildCreatorTabs`, `.ApplyLayoutPresetCo`, `MultilineInputFieldHomeEndFix`, `.CaptureQuickFilterState`, `.EvaluateSearchRescueOnWorker`, `TaskChromeState`, `ClothingSubfilter`, `.ApplyGalleryTransparencyVisuals`, `AppearanceOutfitPickItem`, `.QuickMenu_PrepareRandomSampleRoutine`, `.SetPassthroughMode`, `TryOnKind`, `VpbDataPackService`, `GallerySearchRescueOption`, `.DisplayColorPicker`, `.FilterForType`, `.DetailStripLayoutThumbNavButton`, `AppearanceSubfilter`, `HairSubfilter`, `SceneHubSubfilter`, `InAppHelpIconPreviewFollower`, `StickyToolMode`, `GameObject`, `.IsVrActive`, `OutlinerGroupEdit`, `StripKeepViewFilter`, `GridCtxPage`, `.BuildContentTypeDescriptors`, `StripKeepPersonRenameMode`, `DockMenuPlacement`, `PackageFilterMode`, `GalleryKeyboardFocusRegion`, `.BringSlotToPlayer`, `.AppendGalleryPerfSettings`, `CleanupCandidateSourceKind`, `CleanupCandidateType`, `.TryClearStalePackagePathFilter`, `.AddCommandPaletteEntry`, `StripKeepCreateFillMode`, `BrowseFilterCycle`, `BrowseLoadedMode`, `RatingPresenceFilterMode`, `UserTagSelectionState`, `PluginsFloatDestKind`, `RemoveRailJob`, `GalleryRiskLevel`, `PackAvailBucketKind`, `OutlinerPlacement`, `.SaveSessionArrangementSnapshotNow`, `InsightsContentMode`, `GalleryPanel.LayoutPreset.Float.cs`, `GalleryPanel.RemoveMode.cs`, `DetailStripTagMenuMode`?**
+  _High betweenness centrality (0.590) - this node is a cross-community bridge._
+- **Why does `List` connect `List` to `GalleryPanel`, `.AddLE`, `VpbLocalDatabase`, `FileManager`, `CreatorStripKeepKind`, `.Init`, `.T`, `.RefreshInternalSettingsListRows`, `.NormalizeGalleryUserTagName`, `.Prepare`, `Vector2`, `.RefreshFiles`, `Text`, `UIDraggableItem`, `VamHookPlugin`, `RoundedRect`, `.RefreshFilesRoutine`, `CustomImageLoaderThreaded`, `ImageLoadingMgr`, `ClothingLoadingUtils`, `FileEntry`, `VarFileEntry`, `.LogWarning`, `.RebuildInsightsFloatBody`, `ContentType`, `.ShowTemporaryStatus`, `SuperControllerHook`, `NativeTextureOnDemandCache`, `VarPackage`, `HubBrowse`, `SortType`, `.UpdateLayout`, `.CoCacheTagCountsInternal`, `TextureUtil`, `.Log`, `FileBrowser`, `OutlinerNode`, `GalleryLayoutPreset`, `.Milestone`, `QueuedImage`, `Atom`, `.CreateTabButton`, `Gallery`, `.BuildInternalSettingDefinitions`, `.QuickMenuExecuteAssignment`, `.ShowCore`, `.GridCtxBuildRootPage`, `.LogError`, `GalleryThumbnailCache`, `.RefreshPluginsFloatTree`, `.Update`, `TitleSearchChip`, `.DetailStripCollectMetaFields`, `.BuildLookFacetTabs`, `DAZHairSwapHook`, `LogUtil`, `.GetSelectionIdentityKey`, `.RebuildOutlinerInspector`, `QuickFiltersUI`, `VpbPassthroughLights`, `OutlinerParamDescriptor`, `GameObject`, `.BuildRemapAtomUidsRow`, `.LoadPresetCore`, `.Destroy`, `VpbRandomHistory`, `.EnsureTboxUI`, `CleanupCandidate`, `QuickFilterEntry`, `VpbUpdaterService`, `TurboJpegNative`, `VamFrameAttributionProfiler`, `ContextMenuPanel`, `.Update`, `VpbSqlite3`, `VpbHubDependencyFetcher`, `.DataPackTablesPresent`, `.RefreshApplyButtonEnabled`, `.IsPersonLikeAtom`, `.LoadThumbnailInternal`, `.WriteSimilarIndex`, `SceneAtomImporter`, `VpbPassthrough`, `VpbPackageInsightStore`, `CUAAtomImporter`, `RatingHandler`, `UserTagPickDragSource`, `SceneUtils`, `.MergeSceneFileRoutine`, `AtomHook`, `ScanWhitelistManager`, `HubResourceItem`, `JsonUidSetStore`, `VpbSaveCacheSupport`, `VpbHubLiveSync`, `VPBHelpContent`, `VpbPackageInsightScanner`, `.TboxCacheTexturesSelected`, `.AppendHubTypeCategoryBrowseRows`, `SpawnAtomElement`, `HubResourceItemDetail`, `VpbUpdateManifest`, `.SpawnPersonThenLoadAppearanceCo`, `Dictionary`, `PointerEventData`, `VamAssetBundleQueue`, `.FileExists`, `.UpdateTabs`, `GenericTextureHook`, `InternalSettingDefinition`, `OutlinerResetSnapshot`, `VPBPatcher`, `GalleryUserTagYamlBrain`, `FileButton`, `FileAndDirInfo`, `VamSceneLoadPhaseProfiler`, `.Start`, `HubResourceItemUI`, `.CreateQuickMenuButton`, `GallerySearchQuery`, `CategoryFilterState`, `VpbImportReadQueue`, `SerializableVarPackage`, `LayoutPaneState`, `ExclusiveDependencyFinder`, `VpbClothingReplace`, `.CreateFilterButton`, `TitleSearchChipDragSource`, `OutlinerInspectorSections`, `.CreatorStripImportDefaultSubSceneRoutine`, `GalleryHistoryFilterMode`, `DependencyGraph`, `SimpleTransform`, `VpbDataPackReader`, `.RebuildMergeOutfitRows`, `VPBLogger`, `VaMDazImportMaterialExtractor`, `.BuildOrderedCategoriesForQuickSwitch`, `GalleryQuickLaunchHost`, `VpbShutdown`, `JSONExtensions`, `.BuildRemoveResourceTabs`, `MessageKit`, `.EnsurePluginThumbPlaceholderUi`, `.DisplayConfirm`, `CustomAssetLoader`, `.TryHandleKeyboard`, `RoundedRectOutline`, `BoneViewRenderer`, `JSONClass`, `.StartImportSelectedSceneAtoms`, `.InvalidateInternalSettingsDefsCache`, `.HandleDropWithContext`, `LayoutFloatKind`, `.PrepareTypeImport`, `.RemoveModeExit`, `CacheCleanupManager`, `.WorkerBuildSelectivePipelineCoroutine`, `AppearancePresetSuppress`, `DirectoryEntry`, `VPBTranslation`, `IEnumerator`, `CreatorRatingsManager`, `ZstdCompressor`, `.SyncDisplayed`, `VpbInsightKeywords`, `.TryCountDependentUidsByScan`, `.BindTitleCreatorVirtButton`, `TagsManager`, `.CapturePerson`, `VpbRandom`, `.RandomizeFromFilterPresetRoutine`, `GallerySearchRescue`, `VpbHairFootprint`, `.BuildCreatorTabs`, `.CaptureQuickFilterState`, `.EvaluateSearchRescueOnWorker`, `.Prepare`, `.Build`, `.FromVabBytes`, `.RunGuarded`, `AppearanceOutfitPickItem`, `.QuickMenu_PrepareRandomSampleRoutine`, `GallerySearchRescueOption`, `.InstallRecursive`, `.AppendGalleryPerfSettings`, `.BuildSqliteNativeCandidates`, `TagFilter`?**
+  _High betweenness centrality (0.292) - this node is a cross-community bridge._
+- **Why does `VamHookPlugin` connect `VamHookPlugin` to `GalleryPanel`, `.AddLE`, `.Refresh`, `FileManager`, `ThirdPartyFixHook`, `VPB`, `Text`, `PointerEventData`, `Vector2`, `.QuickMenuUpdateVrWatch`, `GalleryPage`, `FileEntry`, `List`, `.Hide`, `.QuickMenuPullWatchSettings`, `.RebuildInsightsFloatBody`, `HubBrowse`, `IPointerExitHandler`, `.TryClearConsole`, `.CreateQuickMenuButton`, `.Log`, `HarmonyMethod`, `FileBrowser`, `Atom`, `.QuickMenuEnsureWatchCanvasBody`, `Gallery`, `ExternMethods`, `.Start`, `.QuickMenuExecuteAssignment`, `.ShowCore`, `.LogError`, `.OnDestroy`, `VrWatchBezelDrag`, `VpbUpdaterService`, `MessageKit`, `.Update`, `.IsVrActive`, `QuickMenuAssignableAction`, `.Patch`, `.OpenGallery`, `PointerEventData`?**
+  _High betweenness centrality (0.065) - this node is a cross-community bridge._
+- **Are the 20 inferred relationships involving `List` (e.g. with `.RemoveCreatorFromActiveFilter()` and `.TryNavigateStripKeepSubScenePickCategory()`) actually correct?**
+  _`List` has 20 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Instance`, `BaMigrationResult`, `RetainedBytes` to the rest of the system?**
-  _1039 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Gallery Panel` be split into smaller, more focused modules?**
-  _Cohesion score 0.005512914230019493 - nodes in this community are weakly interconnected._
-- **Should `Gallery UI Utils Load Icon` be split into smaller, more focused modules?**
-  _Cohesion score 0.024302649930264993 - nodes in this community are weakly interconnected._
+  _1278 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `GalleryPanel` be split into smaller, more focused modules?**
+  _Cohesion score 0.004677295627474965 - nodes in this community are weakly interconnected._
+- **Should `.AddLE` be split into smaller, more focused modules?**
+  _Cohesion score 0.02010016470034621 - nodes in this community are weakly interconnected._
