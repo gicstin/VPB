@@ -1,10 +1,18 @@
 {
   "IndexVersion": 1,
-  "UpdatedUtc": "2026-10-25T21:07:23Z",
+  "UpdatedUtc": "2026-11-07T15:08:27Z",
   "MinRollbackVersion": "0.32.406",
   "ExcludedBelowMin": 0,
   "Keep": 60,
   "Releases": [
+    {
+      "Version": "0.32.898",
+      "Tag": "build-0.32.898-70a4e57",
+      "Commit": "70a4e572311d522674233a1d07a0688f8eac2e85",
+      "DateUtc": "2026-11-07T15:08:15Z",
+      "Notes": "fix(cleanup): preserve scan during toolbar refresh, fixes #110",
+      "Schema": 13
+    },
     {
       "Version": "0.32.897",
       "Tag": "build-0.32.897-c474bd8",
