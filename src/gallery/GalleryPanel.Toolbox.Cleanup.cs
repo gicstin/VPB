@@ -1246,6 +1246,14 @@ namespace VPB
             try { UpdateTabs(); } catch { }
         }
 
+        internal static bool ShouldExitCleanupForBrowseItems(bool cleanupActive, bool scanInProgress, List<FileEntry> files)
+        {
+            if (!cleanupActive || scanInProgress || files == null || files.Count == 0) return false;
+            for (int i = 0; i < files.Count; i++)
+                if (files[i] is CleanupFileEntry) return false;
+            return true;
+        }
+
         private void RebuildCleanupCandidates(bool clearSelection, bool showSummaryStatus, bool testMode = false)
         {
             if (!cleanupModeActive) return;

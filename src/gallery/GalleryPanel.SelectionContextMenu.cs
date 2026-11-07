@@ -2290,21 +2290,9 @@ namespace VPB
             bool anyPkgInstalled = false;
             bool anyPkgNotInstalled = false;
 
-            if (cleanupModeActive && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+            if (ShouldExitCleanupForBrowseItems(cleanupModeActive, cleanupScanInProgress, currentFilteredFiles))
             {
-                bool anyCleanupEntry = false;
-                for (int i = 0; i < currentFilteredFiles.Count; i++)
-                {
-                    if (currentFilteredFiles[i] is CleanupFileEntry)
-                    {
-                        anyCleanupEntry = true;
-                        break;
-                    }
-                }
-                if (!anyCleanupEntry)
-                {
-                    try { ExitCleanupModeForSidePanelNavigation(); } catch { }
-                }
+                try { ExitCleanupModeForSidePanelNavigation(); } catch { }
             }
             bool isCleanup = cleanupModeActive;
             bool isCreator = creatorModeActive;
