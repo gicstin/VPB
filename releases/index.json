@@ -1,10 +1,18 @@
 {
   "IndexVersion": 1,
-  "UpdatedUtc": "2026-11-07T15:08:27Z",
+  "UpdatedUtc": "2026-11-08T16:46:44Z",
   "MinRollbackVersion": "0.32.406",
   "ExcludedBelowMin": 0,
   "Keep": 60,
   "Releases": [
+    {
+      "Version": "0.32.900",
+      "Tag": "build-0.32.900-3ea623f",
+      "Commit": "3ea623f4401a23d3b19667650ac0f3aeea9a878f",
+      "DateUtc": "2026-11-08T16:46:32Z",
+      "Notes": "chore(release): ship VPB 0.32.900",
+      "Schema": 13
+    },
     {
       "Version": "0.32.898",
       "Tag": "build-0.32.898-70a4e57",
