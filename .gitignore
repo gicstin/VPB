@@ -8,6 +8,7 @@
 !/tests/VPB.Tests.Runtime/Suites/AppearanceImportSuite.cs
 !/tests/VPB.Tests.Vam/Suites/AppearanceImportTests.cs
 !/tests/VPB.Tests.Runtime/Suites/CleanupModeSuite.cs
+!/tests/VPB.Tests.Runtime/Suites/LayoutArrangementSuite.cs
 !/tests/VPB.Tests.Vam/Suites/CleanupModeTests.cs
 /bin/
 tests/**/bin/

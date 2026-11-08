@@ -180,7 +180,7 @@ namespace VPB
                 }
 
                 int docked = CountDockedPanes(snap);
-                int wanted = GalleryDockLayout.WantedSideCount();
+                int wanted = snap.IsVrPreset ? 0 : GalleryDockLayout.WantedSideCount();
                 if (docked < wanted)
                 {
                     LogUtil.LogWarning("[VPB][Layout] arrangement not saved: " + docked
@@ -275,6 +275,8 @@ namespace VPB
 
         private IEnumerator TopUpWantedDocksAfterRestoreCo(int mode)
         {
+            if (mode == (int)LayoutPresetMode.VR) yield break;
+
             for (float waited = 0f; waited < TopUpWatchSeconds; waited += TopUpPollSeconds)
             {
                 yield return s_topUpPollWait;

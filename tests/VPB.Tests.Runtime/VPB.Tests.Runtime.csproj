@@ -62,6 +62,7 @@
     <Reference Include="UnityEngine"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UI"><HintPath>$(VaMPath)\VaM_Data\Managed\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
 
     <Reference Include="BepInEx"><HintPath>$(VaMPath)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
